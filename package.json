@@ -11,7 +11,7 @@
     "dev:api": "npm run dev --workspace=@amarktai/api",
     "dev:worker": "npm run dev --workspace=@amarktai/worker",
     "build": "next build",
-    "build:packages": "npm run build --workspace=@amarktai/core && npm run build --workspace=@amarktai/db && npm run build --workspace=@amarktai/artifacts",
+    "build:packages": "npm run build --workspace=@amarktai/core && npm run build --workspace=@amarktai/db && npm run build --workspace=@amarktai/providers && npm run build --workspace=@amarktai/artifacts",
     "build:api": "npm run build --workspace=@amarktai/api",
     "build:worker": "npm run build --workspace=@amarktai/worker",
     "build:all": "npm run build:packages && npm run build:api && npm run build:worker && npm run build",
