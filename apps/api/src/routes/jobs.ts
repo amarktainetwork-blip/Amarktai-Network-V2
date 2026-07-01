@@ -99,7 +99,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
   function getQueue(): Queue {
     if (!queue) {
       if (!app.redis) throw new Error('Redis is required for job queue')
-      queue = new Queue(QUEUE_NAMES.JOBS, { connection: app.redis })
+      queue = new Queue(QUEUE_NAMES.JOBS, { connection: app.redis as never })
     }
     return queue
   }

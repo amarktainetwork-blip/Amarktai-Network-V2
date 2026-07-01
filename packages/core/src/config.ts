@@ -44,3 +44,38 @@ export const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 6
 // ── Worker ────────────────────────────────────────────────────────────────────
 
 export const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 5)
+
+// ── Provider API Keys ─────────────────────────────────────────────────────────
+
+export function getGroqApiKey(): string {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error('GROQ_API_KEY environment variable is required')
+  return key
+}
+
+export function getTogetherApiKey(): string {
+  const key = process.env.TOGETHER_API_KEY
+  if (!key) throw new Error('TOGETHER_API_KEY environment variable is required')
+  return key
+}
+
+export function getGenxApiKey(): string {
+  const key = process.env.GENX_API_KEY
+  if (!key) throw new Error('GENX_API_KEY environment variable is required')
+  return key
+}
+
+export function getGenxBaseUrl(): string {
+  return process.env.GENX_BASE_URL ?? 'https://query.genx.sh'
+}
+
+// ── Provider Defaults ─────────────────────────────────────────────────────────
+
+export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
+export const TOGETHER_BASE_URL = 'https://api.together.xyz/v1'
+
+export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+export const GROQ_STT_MODEL = 'whisper-large-v3'
+export const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english'
+export const TOGETHER_DEFAULT_IMAGE_MODEL = 'black-forest-labs/FLUX.1-schnell-Free'
+export const GROQ_TTS_MAX_CHARS = 200
