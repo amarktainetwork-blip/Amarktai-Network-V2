@@ -3,18 +3,19 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Reveal, Stagger, StaggerItem } from '@/components/amarkt/kit'
 import { ParticleField } from '@/components/amarkt/particles'
+import { SiteNav, SiteFooter } from '@/components/amarkt/site-nav'
 import { Button } from '@/components/ui/button'
 import {
-  Zap, Boxes, Server, Database, Workflow, ShieldCheck, ArrowRight, Cpu, Layers, Radio, Sparkles,
+  Boxes, Server, Database, Workflow, ShieldCheck, ArrowRight, Cpu, Layers, Sparkles,
 } from 'lucide-react'
 
 const FEATURES = [
-  { icon: Workflow, title: 'AI Orchestration', desc: 'Route any capability — text, image, video, audio — across GenX, Together AI and Groq from one control plane.' },
+  { icon: Workflow, title: 'AI Orchestration', desc: 'Route any capability — text, image, video, audio — through a single control plane with intelligent provider selection.' },
   { icon: Server, title: 'Background Jobs', desc: 'Durable task queue with worker pipelines, progress tracking, retries and full artifact lineage.' },
   { icon: Database, title: 'Asset Storage', desc: 'Every generated asset persisted, versioned and retrievable through secure signed paths.' },
-  { icon: Layers, title: 'Capability Contracts', desc: 'Strict Zod-typed input/output schemas per capability. Connected apps stay lightweight clients.' },
+  { icon: Layers, title: 'Capability Contracts', desc: 'Strict typed input/output schemas per capability. Connected apps stay lightweight clients.' },
   { icon: ShieldCheck, title: 'Tenant Isolation', desc: 'Absolute data isolation between apps with per-connection keys, scopes and daily budgets.' },
-  { icon: Cpu, title: 'Multi-Provider', desc: 'Core pathways plus isolated experimental workbenches — swap providers without touching clients.' },
+  { icon: Cpu, title: 'Multi-Provider', desc: 'Swap underlying providers without touching client code. Fallback chains are automatic.' },
 ]
 
 const PIPELINE = [
@@ -42,32 +43,7 @@ export default function Landing() {
       </div>
       <ParticleField />
 
-      {/* Nav */}
-      <header className="relative z-20">
-        <div className="container flex items-center justify-between py-5">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 text-black">
-              <Zap className="h-5 w-5" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight">AmarktAI <span className="text-muted-foreground font-normal">Network</span></span>
-          </Link>
-          <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-            <a href="#capabilities" className="hover:text-foreground transition">Capabilities</a>
-            <a href="#pipeline" className="hover:text-foreground transition">Pipeline</a>
-            <Link href="/about" className="hover:text-foreground transition">About</Link>
-            <Link href="/contact" className="hover:text-foreground transition">Contact</Link>
-          </nav>
-          {isAuthed ? (
-            <Link href="/dashboard/command-center">
-              <Button className="bg-white text-black hover:bg-white/90">Open Console <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
-            </Link>
-          ) : (
-            <Link href="/login">
-              <Button className="bg-white text-black hover:bg-white/90">Sign In <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
-            </Link>
-          )}
-        </div>
-      </header>
+      <SiteNav />
 
       {/* Hero */}
       <section className="relative z-10">
@@ -97,18 +73,11 @@ export default function Landing() {
               </Button>
             </Link>
           </div>
-
-          <div className="animate-fade-in mt-14 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm text-muted-foreground" style={{ animationDelay: '0.4s' }}>
-            <span className="text-xs uppercase tracking-widest">Orchestrating</span>
-            {['GenX', 'Together AI', 'Groq', 'MiMo'].map((n) => (
-              <span key={n} className="flex items-center gap-2 font-medium text-foreground/70"><Radio className="h-3.5 w-3.5 text-cyan-300" />{n}</span>
-            ))}
-          </div>
         </div>
       </section>
 
       {/* Features */}
-      <section id="capabilities" className="relative z-10 border-t border-white/[0.06] py-24">
+      <section className="relative z-10 border-t border-white/[0.06] py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">One infrastructure. Every capability.</h2>
@@ -131,7 +100,7 @@ export default function Landing() {
       </section>
 
       {/* Pipeline */}
-      <section id="pipeline" className="relative z-10 border-t border-white/[0.06] py-24">
+      <section className="relative z-10 border-t border-white/[0.06] py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">A pipeline that runs itself</h2>
@@ -152,7 +121,7 @@ export default function Landing() {
       </section>
 
       {/* CTA */}
-      <section id="providers" className="relative z-10 border-t border-white/[0.06] py-24">
+      <section className="relative z-10 border-t border-white/[0.06] py-24">
         <div className="container">
           <Reveal>
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent p-10 text-center md:p-16">
@@ -172,16 +141,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="relative z-10 border-t border-white/[0.06] py-8">
-        <div className="container flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
-          <span>&copy; 2025 AmarktAI Network</span>
-          <div className="flex gap-6">
-            <Link href="/about" className="hover:text-foreground transition">About</Link>
-            <Link href="/contact" className="hover:text-foreground transition">Contact</Link>
-            <Link href="/login" className="hover:text-foreground transition">Login</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

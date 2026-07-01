@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { ParticleField } from '@/components/amarkt/particles'
+import { SiteNav, SiteFooter } from '@/components/amarkt/site-nav'
 import {
-  Zap, ArrowRight, Send, Mail, MessageSquare, MapPin,
+  Send, Mail, MessageSquare, MapPin,
   CheckCircle2, Loader2, AlertCircle,
 } from 'lucide-react'
 
@@ -60,25 +61,7 @@ export default function ContactPage() {
       </div>
       <ParticleField />
 
-      {/* Nav */}
-      <header className="relative z-20">
-        <div className="container flex items-center justify-between py-5">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 text-black">
-              <Zap className="h-5 w-5" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight">AmarktAI <span className="text-muted-foreground font-normal">Network</span></span>
-          </Link>
-          <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-            <Link href="/about" className="hover:text-foreground transition">About</Link>
-            <Link href="/contact" className="text-foreground transition">Contact</Link>
-            <Link href="/login" className="hover:text-foreground transition">Login</Link>
-          </nav>
-          <Link href="/dashboard/command-center">
-            <Button className="bg-white text-black hover:bg-white/90">Open Console <ArrowRight className="ml-1.5 h-4 w-4" /></Button>
-          </Link>
-        </div>
-      </header>
+      <SiteNav />
 
       {/* Content */}
       <section className="relative z-10">
@@ -166,17 +149,7 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-white/[0.06] py-8">
-        <div className="container flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
-          <span>&copy; 2025 AmarktAI Network</span>
-          <div className="flex gap-6">
-            <Link href="/about" className="hover:text-foreground transition">About</Link>
-            <Link href="/contact" className="hover:text-foreground transition">Contact</Link>
-            <Link href="/login" className="hover:text-foreground transition">Login</Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
