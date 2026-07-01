@@ -18,13 +18,6 @@ const FEATURES = [
   { icon: Cpu, title: 'Multi-Provider', desc: 'Swap underlying providers without touching client code. Fallback chains are automatic.' },
 ]
 
-const PIPELINE = [
-  { step: '01', title: 'Connect', desc: 'Apps request a capability with a scoped API key.' },
-  { step: '02', title: 'Enqueue', desc: 'AmarktAI validates the contract and enqueues a background job.' },
-  { step: '03', title: 'Orchestrate', desc: 'Workers execute against the right provider and stream progress.' },
-  { step: '04', title: 'Deliver', desc: 'Artifacts land in storage; clients retrieve via secure paths.' },
-]
-
 export default function Landing() {
   const [isAuthed, setIsAuthed] = useState(false)
 
@@ -35,7 +28,6 @@ export default function Landing() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 obsidian-grid radial-fade" />
-      {/* Swirl effects */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-40 top-0 h-[600px] w-[600px] rounded-full swirl-1" />
         <div className="absolute -right-40 top-1/3 h-[500px] w-[500px] rounded-full swirl-2" />
@@ -49,7 +41,7 @@ export default function Landing() {
       <section className="relative z-10">
         <div className="container flex flex-col items-center pb-20 pt-16 text-center md:pt-24">
           <div className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-cyan-300" /> Enterprise AI capability infrastructure
+            <Sparkles className="h-3.5 w-3.5 text-cyan-300" /> Enterprise AI Capability Infrastructure
           </div>
 
           <h1 className="animate-fade-up max-w-4xl text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl" style={{ animationDelay: '0.08s' }}>
@@ -67,9 +59,9 @@ export default function Landing() {
                 {isAuthed ? 'Launch Command Center' : 'Get Started'} <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/about">
+            <Link href="/features">
               <Button size="lg" variant="outline" className="h-12 border-white/15 bg-white/[0.02] px-7 transition-transform duration-200 hover:scale-105 hover:bg-white/[0.05]">
-                Learn More
+                Explore Features
               </Button>
             </Link>
           </div>
@@ -96,27 +88,13 @@ export default function Landing() {
               </StaggerItem>
             ))}
           </Stagger>
-        </div>
-      </section>
-
-      {/* Pipeline */}
-      <section className="relative z-10 border-t border-white/[0.06] py-24">
-        <div className="container">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">A pipeline that runs itself</h2>
-            <p className="mt-3 text-muted-foreground">From request to delivered artifact — fully orchestrated.</p>
+          <Reveal className="mt-12 text-center">
+            <Link href="/features">
+              <Button variant="outline" className="border-white/15 bg-white/[0.02]">
+                View All Capabilities <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            </Link>
           </Reveal>
-          <Stagger className="mt-14 grid gap-5 md:grid-cols-4">
-            {PIPELINE.map((s) => (
-              <StaggerItem key={s.step}>
-                <div className="relative h-full rounded-xl border border-white/[0.07] bg-white/[0.02] p-6">
-                  <div className="mb-3 font-mono text-2xl text-gradient font-bold">{s.step}</div>
-                  <h3 className="font-semibold">{s.title}</h3>
-                  <p className="mt-1.5 text-sm text-muted-foreground">{s.desc}</p>
-                </div>
-              </StaggerItem>
-            ))}
-          </Stagger>
         </div>
       </section>
 
