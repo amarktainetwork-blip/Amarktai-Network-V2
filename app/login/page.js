@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Zap, Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -33,32 +35,36 @@ export default function LoginPage() {
         return
       }
 
-      // Store JWT token
       localStorage.setItem('amarktai_token', data.token)
       localStorage.setItem('amarktai_user', JSON.stringify(data.user))
-
-      // Redirect to dashboard
       router.push('/dashboard/command-center')
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#050810] px-4">
-      {/* Background gradient */}
-      <div className="pointer-events-none fixed inset-0">
-        <div className="absolute left-1/2 top-1/3 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-cyan-500/10 to-violet-500/10 blur-[120px]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050810] px-4">
+      {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-1/3 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full swirl-1" />
+        <div className="absolute right-0 bottom-0 h-[400px] w-[400px] rounded-full swirl-2" />
       </div>
+
+      {/* Back link */}
+      <Link href="/" className="absolute left-6 top-6 z-20">
+        <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back to site
+        </Button>
+      </Link>
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-md"
+        className="relative z-10 w-full max-w-md"
       >
-        {/* Card */}
         <div className="rounded-2xl border border-white/[0.06] bg-[hsl(240_14%_3.5%)] p-8 shadow-2xl shadow-black/40">
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center gap-3">
@@ -76,7 +82,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Error message */}
+          {/* Error */}
           <AnimatePresence>
             {error && (
               <motion.div
@@ -94,9 +100,7 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-muted-foreground">
-                Email
-              </label>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-muted-foreground">Email</label>
               <input
                 id="email"
                 type="email"
@@ -104,14 +108,12 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@amarktai.co.za"
                 required
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 input-focus-ring"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-muted-foreground">
-                Password
-              </label>
+              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-muted-foreground">Password</label>
               <div className="relative">
                 <input
                   id="password"
@@ -120,7 +122,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   required
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground/50 input-focus-ring"
                 />
                 <button
                   type="button"
@@ -140,17 +142,13 @@ export default function LoginPage() {
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2.5 text-sm font-semibold text-black shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>
               ) : (
                 'Sign In'
               )}
             </motion.button>
           </form>
 
-          {/* Footer */}
           <div className="mt-6 text-center text-xs text-muted-foreground">
             Secure admin access only. All sessions are encrypted.
           </div>
