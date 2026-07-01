@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { PROVIDERS } from '@/lib/appdata'
 import { PageTransition, PageHeader, StatusPill, Reveal } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,8 @@ import { Cpu, RefreshCw, FlaskConical } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ProvidersModels() {
-  const [providers, setProviders] = useState([])
+  const [providers] = useState(PROVIDERS)
   const [syncing, setSyncing] = useState(false)
-  useEffect(() => { fetch('/api/providers').then((r) => r.json()).then((d) => setProviders(d.providers || [])) }, [])
   const sync = () => { setSyncing(true); toast.loading('Synchronizing catalog…', { id: 's' }); setTimeout(() => { setSyncing(false); toast.success('Catalog synchronized', { id: 's' }) }, 1400) }
 
   const core = providers.filter((p) => p.tier === 'core')
@@ -25,7 +24,7 @@ export default function ProvidersModels() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         {core.map((p, i) => (
-          <motion.div key={p.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
+          <div key={p.id} className="animate-fade-up" style={{ animationDelay: `${i * 0.08}s` }}>
             <Card className="relative h-full overflow-hidden border-white/[0.07] bg-white/[0.02] p-6">
               <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-500/10 blur-2xl" />
               <div className="flex items-center justify-between">
@@ -42,7 +41,7 @@ export default function ProvidersModels() {
                 ))}
               </div>
             </Card>
-          </motion.div>
+          </div>
         ))}
       </div>
 

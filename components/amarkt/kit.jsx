@@ -1,57 +1,20 @@
 'use client'
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-export function Reveal({ children, delay = 0, y = 18, className }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  )
+export function Reveal({ children, className }) {
+  return <div className={cn('animate-fade-up', className)}>{children}</div>
 }
 
-export function Stagger({ children, className, delayChildren = 0.05, stagger = 0.08 }) {
-  return (
-    <motion.div
-      className={className}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: '-60px' }}
-      variants={{ hidden: {}, show: { transition: { delayChildren, staggerChildren: stagger } } }}
-    >
-      {children}
-    </motion.div>
-  )
+export function Stagger({ children, className }) {
+  return <div className={cn('amk-stagger', className)}>{children}</div>
 }
 
 export function StaggerItem({ children, className }) {
-  return (
-    <motion.div
-      className={className}
-      variants={{ hidden: { opacity: 0, y: 22 }, show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } } }}
-    >
-      {children}
-    </motion.div>
-  )
+  return <div className={className}>{children}</div>
 }
 
 export function PageTransition({ children, className }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  )
+  return <div className={cn('animate-fade-up', className)}>{children}</div>
 }
 
 const STATUS_MAP = {

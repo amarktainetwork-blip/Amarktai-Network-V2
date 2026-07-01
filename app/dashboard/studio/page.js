@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { fetchJSON } from '@/lib/fetchJSON'
 import { PageTransition, PageHeader, Field, DropZone } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,8 +20,7 @@ function RunBar({ type, payload, disabled }) {
   const run = async () => {
     setBusy(true)
     try {
-      const r = await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, label: type, payload: payload() }) })
-      const d = await r.json()
+      await fetchJSON('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, label: type, payload: payload() }) })
       toast.success('Job enqueued (Mock)', { description: `${type} · track it in Jobs & Artifacts` })
     } catch (e) { toast.error('Failed to enqueue') }
     setBusy(false)
@@ -29,17 +28,17 @@ function RunBar({ type, payload, disabled }) {
   return (
     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4">
       <span className="text-xs text-muted-foreground">Executes as a background job in mock mode.</span>
-      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+      <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button onClick={run} disabled={disabled || busy} className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90">
           <Sparkles className="mr-1.5 h-4 w-4" /> Run (Mock)
         </Button>
-      </motion.div>
+      </div>
     </div>
   )
 }
 
 function Bench({ children }) {
-  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="space-y-5">{children}</motion.div>
+  return <div className="animate-fade-up space-y-5">{children}</div>
 }
 
 export default function Studio() {

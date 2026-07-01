@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { CAPABILITIES } from '@/lib/appdata'
 import { PageTransition, PageHeader, StatusPill, Reveal } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,8 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescri
 import { ChevronRight } from 'lucide-react'
 
 export default function Capabilities() {
-  const [caps, setCaps] = useState([])
-  useEffect(() => { fetch('/api/capabilities').then((r) => r.json()).then((d) => setCaps(d.capabilities || [])) }, [])
+  const [caps] = useState(CAPABILITIES)
   const cats = [...new Set(caps.map((c) => c.category))]
   return (
     <PageTransition className="space-y-8">
