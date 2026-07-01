@@ -1,5 +1,8 @@
 /**
  * GET /health — Live health check reporting status for MariaDB, Redis, and Qdrant.
+ *
+ * MariaDB and Redis are critical — API reports unhealthy if either is down.
+ * Qdrant is optional (used for RAG) — reported as degraded, not blocking.
  */
 
 import type { FastifyInstance } from 'fastify'
@@ -8,9 +11,9 @@ import { prisma } from '@amarktai/db'
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/health', async (_request, reply) => {
     const checks: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {}
-    let overall = true
+    let criticalHealthy = true
 
-    // MariaDB check
+    // MariaDB check (CRITICAL)
     const dbStart = Date.now()
     try {
       await prisma.$queryRaw`SELECT 1`
@@ -21,10 +24,10 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
         latencyMs: Date.now() - dbStart,
         error: err instanceof Error ? err.message : 'unknown',
       }
-      overall = false
+      criticalHealthy = false
     }
 
-    // Redis check
+    // Redis check (CRITICAL)
     const redisStart = Date.now()
     try {
       if (app.redis) {
@@ -32,7 +35,7 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
         checks.redis = { ok: pong === 'PONG', latencyMs: Date.now() - redisStart }
       } else {
         checks.redis = { ok: false, latencyMs: 0, error: 'not configured' }
-        overall = false
+        criticalHealthy = false
       }
     } catch (err) {
       checks.redis = {
@@ -40,28 +43,26 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
         latencyMs: Date.now() - redisStart,
         error: err instanceof Error ? err.message : 'unknown',
       }
-      overall = false
+      criticalHealthy = false
     }
 
-    // Qdrant check
+    // Qdrant check (OPTIONAL — used for RAG, not critical for API boot)
     const qdrantStart = Date.now()
     try {
       const qdrantUrl = process.env.QDRANT_URL ?? 'http://127.0.0.1:6333'
       const resp = await fetch(`${qdrantUrl}/healthz`, { signal: AbortSignal.timeout(3000) })
       checks.qdrant = { ok: resp.ok, latencyMs: Date.now() - qdrantStart }
-      if (!resp.ok) overall = false
-    } catch (err) {
+    } catch {
       checks.qdrant = {
         ok: false,
         latencyMs: Date.now() - qdrantStart,
-        error: err instanceof Error ? err.message : 'unreachable',
+        error: 'unavailable — RAG features disabled',
       }
-      overall = false
     }
 
-    const statusCode = overall ? 200 : 503
+    const statusCode = criticalHealthy ? 200 : 503
     return reply.status(statusCode).send({
-      status: overall ? 'healthy' : 'degraded',
+      status: criticalHealthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       checks,
     })

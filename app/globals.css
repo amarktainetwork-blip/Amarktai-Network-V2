@@ -126,3 +126,57 @@
 .amk-stagger > *:nth-child(8) { animation-delay: 0.54s; }
 
 .amk-eq-bar { animation: amk-eq 1.6s ease-in-out infinite; }
+
+/* Swirl / vortex animation for premium backgrounds */
+@keyframes amk-swirl-1 {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.15; }
+  33% { transform: translate(30px, -20px) rotate(120deg) scale(1.1); opacity: 0.25; }
+  66% { transform: translate(-20px, 15px) rotate(240deg) scale(0.95); opacity: 0.18; }
+  100% { transform: translate(0, 0) rotate(360deg) scale(1); opacity: 0.15; }
+}
+@keyframes amk-swirl-2 {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.12; }
+  33% { transform: translate(-25px, 25px) rotate(-120deg) scale(1.05); opacity: 0.2; }
+  66% { transform: translate(15px, -30px) rotate(-240deg) scale(0.9); opacity: 0.14; }
+  100% { transform: translate(0, 0) rotate(-360deg) scale(1); opacity: 0.12; }
+}
+@keyframes amk-swirl-3 {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0.08; }
+  50% { transform: translate(20px, 10px) rotate(180deg); opacity: 0.18; }
+  100% { transform: translate(0, 0) rotate(360deg); opacity: 0.08; }
+}
+
+.swirl-1 {
+  animation: amk-swirl-1 20s ease-in-out infinite;
+  background: radial-gradient(ellipse at center, rgba(34,211,238,0.2), transparent 70%);
+}
+.swirl-2 {
+  animation: amk-swirl-2 25s ease-in-out infinite;
+  background: radial-gradient(ellipse at center, rgba(167,139,250,0.18), transparent 70%);
+}
+.swirl-3 {
+  animation: amk-swirl-3 30s ease-in-out infinite;
+  background: radial-gradient(ellipse at center, rgba(240,171,252,0.12), transparent 70%);
+}
+
+/* Animated gradient border */
+@keyframes amk-border-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+.animate-border-glow { animation: amk-border-glow 3s ease-in-out infinite; }
+
+/* Smooth section reveal on scroll */
+@keyframes amk-section-in {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-section-in { animation: amk-section-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Contact form focus ring */
+.input-focus-ring {
+  @apply transition-all duration-200;
+}
+.input-focus-ring:focus {
+  @apply border-cyan-500/40 outline-none ring-1 ring-cyan-500/20;
+}
