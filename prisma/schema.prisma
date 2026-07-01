@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -1747,13 +1747,15 @@ model RecurringCampaignSchedule {
 /// External app connection — links an external product to the AmarktAI Network engine.
 /// Each connection gets its own API keys, capability allowlist, and budget limits.
 model AppConnection {
-  id                   Int      @id @default(autoincrement())
+  id                   String   @id @default(uuid())
   appSlug              String   @unique @map("app_slug")
   appName              String   @map("app_name")
   status               String   @default("active") // active | paused | suspended | unconfigured
   /// JSON array of allowed capability keys for this app
   allowedCapabilities  String   @default("[]") @map("allowed_capabilities")
   dailyBudgetCents     Int      @default(0) @map("daily_budget_cents") // 0 = unlimited
+  /// Token ledger — remaining paid request credits for this connection
+  tokenBalance         Int      @default(1000) @map("token_balance")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
@@ -1766,8 +1768,8 @@ model AppConnection {
 /// API key for authenticating external apps against the job pipeline.
 /// Keys are hashed at rest; only the prefix is stored for identification.
 model AppApiKey {
-  id              Int      @id @default(autoincrement())
-  connectionId    Int      @map("connection_id")
+  id              String   @id @default(uuid())
+  connectionId    String   @map("connection_id")
   appConnection   AppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   key             String   @unique
   label           String   @default("default")

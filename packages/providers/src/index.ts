@@ -38,3 +38,21 @@ export {
   type GenxVideoResult,
   type GenxLongPollCallbacks,
 } from './genx-client.js'
+
+// Qdrant — vector database for RAG
+export {
+  ensureCollection,
+  upsertPoints,
+  searchVectors,
+  getCollectionInfo,
+  type QdrantPoint,
+  type QdrantSearchResult,
+  type QdrantUpsertResult,
+} from './qdrant-client.js'
+
+// Together AI — text embeddings for RAG
+export {
+  generateEmbeddings,
+  type EmbeddingRequest,
+  type EmbeddingResponse,
+} from './embeddings-client.js'

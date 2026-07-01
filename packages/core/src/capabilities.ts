@@ -18,6 +18,8 @@ export const CAPABILITY_CATEGORIES = [
   'code',
   'multimodal',
   'system_ops',
+  'scraping',
+  'retrieval',
 ] as const
 
 export type CapabilityCategory = (typeof CAPABILITY_CATEGORIES)[number]
@@ -41,6 +43,9 @@ export const CAPABILITY_KEYS = [
   'multimodal',
   'tool_use',
   'structured_output',
+  'brand_scrape',
+  'rag_ingest',
+  'rag_search',
 ] as const
 
 export type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
@@ -64,6 +69,9 @@ export const CAPABILITY_CATEGORY_MAP: Record<CapabilityKey, CapabilityCategory> 
   multimodal: 'multimodal',
   tool_use: 'system_ops',
   structured_output: 'system_ops',
+  brand_scrape: 'scraping',
+  rag_ingest: 'retrieval',
+  rag_search: 'retrieval',
 }
 
 // ── Capability → Prefix Mapping (for job routing) ─────────────────────────────
@@ -85,6 +93,9 @@ export const CAPABILITY_PREFIX_MAP: Record<CapabilityKey, string> = {
   multimodal: 'text',
   tool_use: 'text',
   structured_output: 'text',
+  brand_scrape: 'scrape',
+  rag_ingest: 'rag',
+  rag_search: 'rag',
 }
 
 // ── Capability Definition Schema ──────────────────────────────────────────────

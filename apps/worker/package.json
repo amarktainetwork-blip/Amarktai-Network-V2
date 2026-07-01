@@ -16,7 +16,9 @@
     "@amarktai/artifacts": "*",
     "@amarktai/providers": "*",
     "bullmq": "^5.73.0",
-    "ioredis": "^5.10.1"
+    "crawlee": "^3.12.1",
+    "ioredis": "^5.10.1",
+    "playwright": "^1.60.0"
   },
   "devDependencies": {
     "tsx": "^4.22.4",

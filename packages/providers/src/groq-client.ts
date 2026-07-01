@@ -96,7 +96,7 @@ export async function groqStt(audioBuffer: Buffer, filename: string): Promise<Gr
   const apiKey = getGroqApiKey()
 
   const formData = new FormData()
-  formData.append('file', new Blob([audioBuffer], { type: 'audio/wav' }), filename)
+  formData.append('file', new Blob([new Uint8Array(audioBuffer)], { type: 'audio/wav' }), filename)
   formData.append('model', GROQ_STT_MODEL)
   formData.append('response_format', 'verbose_json')
 

@@ -14,10 +14,12 @@ import rateLimit from '@fastify/rate-limit'
 import cors from '@fastify/cors'
 import { API_PORT, API_HOST, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '@amarktai/core'
 import { redisPluginDecorated } from './plugins/redis.js'
+import { jwtPluginDecorated } from './plugins/jwt.js'
 import { errorHandlerPlugin } from './plugins/error-handler.js'
 import { healthRoutes } from './routes/health.js'
 import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
+import { authRoutes } from './routes/auth.js'
 
 async function main(): Promise<void> {
   const app = Fastify({
@@ -39,11 +41,13 @@ async function main(): Promise<void> {
     timeWindow: RATE_LIMIT_WINDOW_MS,
   })
   await app.register(redisPluginDecorated)
+  await app.register(jwtPluginDecorated)
   await app.register(errorHandlerPlugin)
 
   // ── Routes ───────────────────────────────────────────────────────────────
 
   await app.register(healthRoutes)
+  await app.register(authRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
 

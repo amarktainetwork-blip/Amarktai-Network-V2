@@ -1,13 +1,14 @@
 /**
  * Provider adapter registry — routes capabilities to the correct adapter.
  *
- * Phase 3: Real provider integrations replace simulation adapters.
+ * Phase 4: Added brand.scrape (Crawlee) and RAG (Qdrant + Together embeddings).
  * - text.* → Groq LLM inference
  * - voice.stt → Groq Whisper
  * - voice.tts → Groq Orpheus (with 200-char chunking)
  * - image.* → Together AI FLUX
  * - video.* → GenX long-polling engine
- * - music_generation → Groq fallback (simulation until live provider available)
+ * - scrape.* → Crawlee + Playwright brand extraction
+ * - rag.* → Qdrant + Together AI embeddings pipeline
  */
 
 import { getCapabilityPrefix, type CapabilityKey } from '@amarktai/core'
@@ -16,6 +17,8 @@ import { GroqTextAdapter } from './groq-text-adapter.js'
 import { GroqVoiceAdapter } from './groq-voice-adapter.js'
 import { TogetherImageAdapter } from './together-image-adapter.js'
 import { GenxVideoAdapter } from './genx-video-adapter.js'
+import { ScrapeAdapter } from './scrape-adapter.js'
+import { RagAdapter } from './rag-adapter.js'
 
 // ── Adapter Registry ──────────────────────────────────────────────────────────
 
@@ -24,6 +27,8 @@ const adapters: ProviderAdapter[] = [
   new GroqVoiceAdapter(),
   new TogetherImageAdapter(),
   new GenxVideoAdapter(),
+  new ScrapeAdapter(),
+  new RagAdapter(),
 ]
 
 // ── Lookup ────────────────────────────────────────────────────────────────────
