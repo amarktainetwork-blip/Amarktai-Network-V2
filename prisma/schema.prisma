@@ -1,0 +1,1809 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model Product {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  slug                  String    @unique
+  category              String    @default("app")
+  shortDescription      String    @map("short_description")
+  longDescription       String    @default("") @map("long_description")
+  status                String    @default("coming_soon")
+  accessType            String    @default("public") @map("access_type")
+  featured              Boolean   @default(false)
+  primaryUrl            String    @default("") @map("primary_url")
+  hostedHere            Boolean   @default(false) @map("hosted_here")
+  hostingScope          String    @default("external_domain") @map("hosting_scope")
+  subdomain             String    @default("")
+  customDomain          String    @default("") @map("custom_domain")
+  environment           String    @default("production")
+  publicVisibility      Boolean   @default(true) @map("public_visibility")
+  monitoringEnabled     Boolean   @default(false) @map("monitoring_enabled")
+  integrationEnabled    Boolean   @default(false) @map("integration_enabled")
+  appType               String    @default("app") @map("app_type")
+  readyToDeploy         Boolean   @default(false) @map("ready_to_deploy")
+  aiEnabled             Boolean   @default(false) @map("ai_enabled")
+  connectedToBrain      Boolean   @default(false) @map("connected_to_brain")
+  onboardingStatus      String    @default("unconfigured") @map("onboarding_status")
+  onboardingCompletedAt DateTime? @map("onboarding_completed_at")
+  appSecret             String    @default("") @map("app_secret")
+  customInstructions    String    @default("") @map("custom_instructions")
+  sortOrder             Int       @default(99) @map("sort_order")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  integration       AppIntegration?
+  metricDefinitions AppMetricDefinition[]
+  metricPoints      AppMetricPoint[]
+  events            AppEvent[]
+  widgetConfigs     DashboardWidgetConfig[]
+  vpsSnapshots      VpsResourceSnapshot[]
+
+  @@map("products")
+}
+
+model ApiKey {
+  id        Int      @id @default(autoincrement())
+  provider  String
+  label     String
+  apiKey    String   @map("api_key")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("api_keys")
+}
+
+model AppIntegration {
+  id               Int       @id @default(autoincrement())
+  productId        Int       @unique @map("product_id")
+  integrationToken String    @unique @map("integration_token")
+  heartbeatEnabled Boolean   @default(true) @map("heartbeat_enabled")
+  metricsEnabled   Boolean   @default(true) @map("metrics_enabled")
+  eventsEnabled    Boolean   @default(true) @map("events_enabled")
+  vpsEnabled       Boolean   @default(false) @map("vps_enabled")
+  lastHeartbeatAt  DateTime? @map("last_heartbeat_at")
+  healthStatus     String    @default("unknown") @map("health_status")
+  uptime           Float?
+  version          String    @default("")
+  environment      String    @default("production")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("app_integrations")
+}
+
+model AppMetricDefinition {
+  id               Int     @id @default(autoincrement())
+  productId        Int     @map("product_id")
+  metricKey        String  @map("metric_key")
+  metricLabel      String  @map("metric_label")
+  metricType       String  @default("number") @map("metric_type")
+  defaultChartType String  @default("line") @map("default_chart_type")
+  isEnabled        Boolean @default(true) @map("is_enabled")
+  sortOrder        Int     @default(0) @map("sort_order")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("app_metric_definitions")
+}
+
+model AppMetricPoint {
+  id          Int      @id @default(autoincrement())
+  productId   Int      @map("product_id")
+  metricKey   String   @map("metric_key")
+  metricValue Float    @map("metric_value")
+  metricLabel String   @default("") @map("metric_label")
+  timestamp   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("app_metric_points")
+}
+
+model AppEvent {
+  id        Int      @id @default(autoincrement())
+  productId Int      @map("product_id")
+  eventType String   @map("event_type")
+  severity  String   @default("info")
+  title     String
+  message   String   @default("")
+  timestamp DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("app_events")
+}
+
+model VpsResourceSnapshot {
+  id          Int      @id @default(autoincrement())
+  productId   Int      @map("product_id")
+  cpuPercent  Float    @default(0) @map("cpu_percent")
+  ramPercent  Float    @default(0) @map("ram_percent")
+  ramUsedMb   Float    @default(0) @map("ram_used_mb")
+  ramTotalMb  Float    @default(0) @map("ram_total_mb")
+  diskPercent Float    @default(0) @map("disk_percent")
+  diskUsedGb  Float    @default(0) @map("disk_used_gb")
+  diskTotalGb Float    @default(0) @map("disk_total_gb")
+  netInKbps   Float    @default(0) @map("net_in_kbps")
+  netOutKbps  Float    @default(0) @map("net_out_kbps")
+  timestamp   DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("vps_resource_snapshots")
+}
+
+model DashboardWidgetConfig {
+  id           Int     @id @default(autoincrement())
+  productId    Int?    @map("product_id")
+  widgetKey    String  @map("widget_key")
+  widgetType   String  @map("widget_type")
+  isVisible    Boolean @default(true) @map("is_visible")
+  sortOrder    Int     @default(0) @map("sort_order")
+  settingsJson String  @default("{}") @map("settings_json")
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@map("dashboard_widget_configs")
+}
+
+model ContactSubmission {
+  id               Int      @id @default(autoincrement())
+  name             String
+  email            String
+  companyOrProject String   @default("") @map("company_or_project")
+  message          String
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("contact_submissions")
+}
+
+model WaitlistEntry {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  interest  String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("waitlist_entries")
+}
+
+model AiProvider {
+  id            Int       @id @default(autoincrement())
+  providerKey   String    @unique @map("provider_key") // active provider key
+  displayName   String    @map("display_name")
+  enabled       Boolean   @default(false)
+  apiKey        String    @default("") @map("api_key") // stored server-side only — never returned raw
+  maskedPreview String    @default("") @map("masked_preview") // e.g. sk-proj-••••••••••••abcd
+  baseUrl       String    @default("") @map("base_url")
+  defaultModel  String    @default("") @map("default_model")
+  fallbackModel String    @default("") @map("fallback_model")
+  healthStatus  String    @default("unconfigured") @map("health_status") // unconfigured|configured|healthy|degraded|error|disabled
+  healthMessage String    @default("") @map("health_message")
+  lastCheckedAt DateTime? @map("last_checked_at")
+  notes         String    @default("")
+  sortOrder     Int       @default(99) @map("sort_order")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("ai_providers")
+}
+
+model BrainEvent {
+  id                 Int      @id @default(autoincrement())
+  traceId            String   @map("trace_id")
+  productId          Int?     @map("product_id") // nullable — app may not be in registry
+  appSlug            String   @default("") @map("app_slug")
+  taskType           String   @default("") @map("task_type")
+  executionMode      String   @default("direct") @map("execution_mode") // direct|specialist|review|consensus
+  classificationJson String   @default("{}") @map("classification_json") // JSON: ClassificationResult
+  routedProvider     String?  @map("routed_provider")
+  routedModel        String?  @map("routed_model")
+  validationUsed     Boolean  @default(false) @map("validation_used")
+  consensusUsed      Boolean  @default(false) @map("consensus_used")
+  confidenceScore    Float?   @map("confidence_score")
+  success            Boolean  @default(false)
+  errorMessage       String?  @map("error_message")
+  warningsJson       String   @default("[]") @map("warnings_json") // JSON: string[]
+  latencyMs          Int?     @map("latency_ms")
+  timestamp          DateTime @default(now())
+
+  @@index([appSlug])
+  @@index([traceId])
+  @@index([timestamp])
+  @@map("brain_events")
+}
+
+/// Memory Layer — stores retrievable context, summaries, and learned patterns
+/// per connected app. Used by the Brain Gateway to provide context-aware execution.
+model MemoryEntry {
+  id         Int       @id @default(autoincrement())
+  appSlug    String    @map("app_slug") // which app this memory belongs to
+  memoryType String    @default("event") @map("memory_type") // event|summary|context|learned
+  key        String    @default("") // optional lookup key
+  content    String // the stored memory content
+  importance Float     @default(0.5) // 0.0–1.0 priority weight
+  expiresAt  DateTime? @map("expires_at") // null = permanent
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([appSlug])
+  @@index([memoryType])
+  @@map("memory_entries")
+}
+
+/// Per-provider monthly budget configuration and spend tracking.
+model ProviderBudget {
+  id                   Int      @id @default(autoincrement())
+  providerKey          String   @unique @map("provider_key")
+  monthlyBudgetUsd     Float?   @map("monthly_budget_usd") // null = unlimited
+  currentSpendUsd      Float    @default(0) @map("current_spend_usd")
+  warningThresholdPct  Float    @default(75) @map("warning_threshold_pct")
+  criticalThresholdPct Float    @default(90) @map("critical_threshold_pct")
+  notes                String   @default("")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@map("provider_budgets")
+}
+
+/// Playground/Developer Workspace project storage.
+model PlaygroundProject {
+  id                Int       @id @default(autoincrement())
+  name              String
+  type              String    @default("general") // prompt_test|agent_prototype|workflow|code_assistant|comparison|general
+  status            String    @default("draft") // draft|active|archived
+  description       String    @default("")
+  promptHistoryJson String    @default("[]") @map("prompt_history_json")
+  filesJson         String    @default("[]") @map("files_json")
+  agentConfigsJson  String    @default("[]") @map("agent_configs_json")
+  workflowsJson     String    @default("[]") @map("workflows_json")
+  tagsJson          String    @default("[]") @map("tags_json")
+  githubRepo        String?   @map("github_repo")
+  githubBranch      String?   @map("github_branch")
+  lastPushedAt      DateTime? @map("last_pushed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  pushLogs GitHubPushLog[]
+
+  @@index([status])
+  @@index([type])
+  @@map("playground_projects")
+}
+
+/// GitHub integration configuration (single-admin PAT-based).
+model GitHubConfig {
+  id              Int       @id @default(autoincrement())
+  username        String    @default("")
+  accessToken     String    @default("") @map("access_token")
+  defaultOwner    String    @default("") @map("default_owner")
+  lastValidatedAt DateTime? @map("last_validated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("github_configs")
+}
+
+/// Audit log for all GitHub push actions from the developer workspace.
+model GitHubPushLog {
+  id            Int      @id @default(autoincrement())
+  projectId     Int      @map("project_id")
+  repoFullName  String   @map("repo_full_name")
+  branch        String
+  commitSha     String?  @map("commit_sha")
+  commitMessage String   @map("commit_message")
+  filesChanged  Int      @default(0) @map("files_changed")
+  success       Boolean  @default(false)
+  error         String?
+  pushedAt      DateTime @default(now()) @map("pushed_at")
+
+  project PlaygroundProject @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([pushedAt])
+  @@map("github_push_logs")
+}
+
+/// Persistent local checkout managed by Repo Workbench.
+model RepoWorkspace {
+  id            String   @id @default(cuid())
+  provider      String   @default("github")
+  owner         String
+  repo          String
+  branch        String
+  remoteUrl     String   @map("remote_url")
+  localPath     String   @map("local_path")
+  currentCommit String   @default("") @map("current_commit")
+  status        String   @default("ready") // importing | ready | failed | dirty
+  lastSyncedAt  DateTime? @map("last_synced_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tasks   RepoTask[]
+  patches RepoPatch[]
+
+  @@unique([owner, repo, branch])
+  @@index([status])
+  @@index([updatedAt])
+  @@map("repo_workspaces")
+}
+
+/// A coding-agent task run against a repo workspace.
+model RepoTask {
+  id                String   @id @default(cuid())
+  repoWorkspaceId   String   @map("repo_workspace_id")
+  title             String
+  userRequest       String   @default("") @map("user_request")
+  agentMode         String   @map("agent_mode")
+  selectedModel     String   @default("") @map("selected_model")
+  selectedModelTier String   @default("") @map("selected_model_tier")
+  status            String   @default("pending") // pending | running | completed | failed
+  planJson          String   @default("{}") @map("plan_json")
+  changedFilesJson  String   @default("[]") @map("changed_files_json")
+  testStatus        String   @default("") @map("test_status")
+  buildStatus       String   @default("") @map("build_status")
+  artifactIdsJson   String   @default("[]") @map("artifact_ids_json")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  workspace RepoWorkspace @relation(fields: [repoWorkspaceId], references: [id], onDelete: Cascade)
+  patches   RepoPatch[]
+
+  @@index([repoWorkspaceId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("repo_tasks")
+}
+
+/// Proposed or applied patch generated by a coding agent.
+model RepoPatch {
+  id              String   @id @default(cuid())
+  repoWorkspaceId String   @map("repo_workspace_id")
+  repoTaskId      String?  @map("repo_task_id")
+  title           String
+  diffText        String   @map("diff_text")
+  status          String   @default("proposed") // proposed | applied | failed | committed | pushed | pr_created
+  branchName      String   @default("") @map("branch_name")
+  commitSha       String?  @map("commit_sha")
+  prUrl           String?  @map("pr_url")
+  artifactId      String?  @map("artifact_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  workspace RepoWorkspace @relation(fields: [repoWorkspaceId], references: [id], onDelete: Cascade)
+  task      RepoTask?     @relation(fields: [repoTaskId], references: [id], onDelete: SetNull)
+
+  @@index([repoWorkspaceId])
+  @@index([repoTaskId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("repo_patches")
+}
+
+model VideoGenerationJob {
+  id            String   @id @default(cuid())
+  provider      String
+  modelId       String   @map("model_id")
+  prompt        String
+  style         String?
+  duration      Int?
+  aspectRatio   String?  @map("aspect_ratio")
+  appSlug       String?  @map("app_slug")
+  status        String   @default("pending") // pending | processing | succeeded | failed
+  providerJobId String?  @map("provider_job_id")
+  resultUrl     String?  @map("result_url")
+  resultMeta    String?  @map("result_meta") // JSON metadata from provider
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([appSlug])
+  @@index([createdAt])
+  @@map("video_generation_jobs")
+}
+
+model ModelRegistryEntry {
+  id            Int    @id @default(autoincrement())
+  provider      String
+  modelId       String @map("model_id")
+  displayName   String @map("display_name")
+  family        String @default("")
+  category      String @default("text") // text|image|video|voice|code|multimodal|embeddings|reranking|research
+  primaryRole   String @default("chat") @map("primary_role")
+  costTier      String @default("low") @map("cost_tier") // free|very_low|low|medium|high|premium
+  latencyTier   String @default("medium") @map("latency_tier") // ultra_low|low|medium|high
+  contextWindow Int    @default(4096) @map("context_window")
+
+  // Capability flags
+  supportsText             Boolean @default(false) @map("supports_text")
+  supportsReasoning        Boolean @default(false) @map("supports_reasoning")
+  supportsCode             Boolean @default(false) @map("supports_code")
+  supportsChat             Boolean @default(false) @map("supports_chat")
+  supportsImageGeneration  Boolean @default(false) @map("supports_image_generation")
+  supportsImageEditing     Boolean @default(false) @map("supports_image_editing")
+  supportsVideoPlanning    Boolean @default(false) @map("supports_video_planning")
+  supportsVideoGeneration  Boolean @default(false) @map("supports_video_generation")
+  supportsStt              Boolean @default(false) @map("supports_stt")
+  supportsTts              Boolean @default(false) @map("supports_tts")
+  supportsRealtimeVoice    Boolean @default(false) @map("supports_realtime_voice")
+  supportsEmbeddings       Boolean @default(false) @map("supports_embeddings")
+  supportsReranking        Boolean @default(false) @map("supports_reranking")
+  supportsResearch         Boolean @default(false) @map("supports_research")
+  supportsMultimodal       Boolean @default(false) @map("supports_multimodal")
+  supportsToolUse          Boolean @default(false) @map("supports_tool_use")
+  supportsStructuredOutput Boolean @default(false) @map("supports_structured_output")
+
+  // Metadata
+  estimatedUnitCost Float?  @map("estimated_unit_cost")
+  enabled           Boolean @default(true)
+  hidden            Boolean @default(false)
+  notes             String  @default("")
+  safetyTags        String  @default("") @map("safety_tags")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, modelId])
+  @@index([provider])
+  @@index([category])
+  @@index([enabled])
+  @@map("model_registry_entries")
+}
+
+model AppAiProfile {
+  id      Int    @id @default(autoincrement())
+  appSlug String @unique @map("app_slug")
+  appName String @map("app_name")
+  appType String @default("general") @map("app_type")
+  domain  String @default("general")
+
+  // Routing
+  defaultRoutingMode String @default("direct") @map("default_routing_mode")
+  allowedProviders   String @default("[]") @map("allowed_providers") // JSON array
+  allowedModels      String @default("[]") @map("allowed_models") // JSON array
+  preferredModels    String @default("[]") @map("preferred_models") // JSON array
+  fallbackChain      String @default("[]") @map("fallback_chain") // JSON array
+
+  // Cost & Budget
+  costMode          String @default("balanced") @map("cost_mode") // cheap|balanced|premium|custom
+  maxCostPerRequest Float? @map("max_cost_per_request")
+  monthlyBudgetCap  Float? @map("monthly_budget_cap")
+
+  // Safety
+  safeMode       Boolean @default(true) @map("safe_mode")
+  /// Allows lawful non-harmful adult 18+ content. Requires safeMode=false. CSAM/violence/terrorism always blocked.
+  adultMode      Boolean @default(false) @map("adult_mode")
+  /// Allows lingerie, swimwear, fashion poses, topless nudity. Blocks explicit sex, genitalia, minors. Requires safeMode=false.
+  suggestiveMode Boolean @default(false) @map("suggestive_mode")
+
+  // Capabilities (JSON array of enabled capability strings)
+  enabledCapabilities String @default("[]") @map("enabled_capabilities")
+  enabledAgents       String @default("[]") @map("enabled_agents")
+
+  // Routing strategy
+  routingStrategy String  @default("balanced") @map("routing_strategy") // balanced|cheapest|fastest|quality
+  allowBenchmark  Boolean @default(false) @map("allow_benchmark")
+
+  // Personality — used by the emotion engine as the app's base tone.
+  // Values: professional|analytical|friendly|empathetic|assertive|calm|flirty|upbeat
+  // Empty string = auto-detect from app category via mapAppPersonality().
+  basePersonality String @default("") @map("base_personality")
+
+  // Context window for the emotion engine (0 = use default of 5)
+  emotionContextWindow Int @default(0) @map("emotion_context_window")
+
+  // Escalation & Validation (JSON)
+  escalationRules String @default("[]") @map("escalation_rules")
+  validatorRules  String @default("[]") @map("validator_rules")
+
+  // Permissions (JSON arrays)
+  agentPermissions      String @default("[]") @map("agent_permissions")
+  multimodalPermissions String @default("[]") @map("multimodal_permissions")
+
+  // Memory
+  memoryNamespace    String @default("") @map("memory_namespace")
+  retrievalNamespace String @default("") @map("retrieval_namespace")
+
+  // Operational
+  budgetSensitivity   String @default("medium") @map("budget_sensitivity")
+  latencySensitivity  String @default("medium") @map("latency_sensitivity")
+  loggingPrivacyRules String @default("[]") @map("logging_privacy_rules") // JSON array
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_ai_profiles")
+}
+
+// ── Fine-Tuning Jobs ─────────────────────────────────────────────────────────
+
+/// Persisted fine-tuning job metadata for active provider integrations.
+model FineTuneJob {
+  id              Int       @id @default(autoincrement())
+  jobId           String    @unique @map("job_id")
+  provider        String
+  status          String    @default("pending")
+  baseModel       String    @map("base_model")
+  trainingFile    String    @map("training_file")
+  hyperparameters String    @default("{}") @map("hyperparameters") // JSON
+  appSlug         String?   @map("app_slug")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  finishedAt      DateTime? @map("finished_at")
+  trainedTokens   Int?      @map("trained_tokens")
+  resultModel     String?   @map("result_model")
+  error           String?
+
+  @@index([appSlug])
+  @@map("fine_tune_jobs")
+}
+
+// ── Batch Processing Jobs ────────────────────────────────────────────────────
+
+/// Batch job header row; item payloads are stored separately in BatchJobItem.
+model BatchJob {
+  id          String    @id // UUID
+  appSlug     String    @map("app_slug")
+  status      String    @default("pending")
+  config      String    @default("{}") // JSON BatchConfig
+  progress    String    @default("{}") // JSON BatchProgress
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  error       String?
+
+  items BatchJobItem[]
+
+  @@index([appSlug])
+  @@map("batch_jobs")
+}
+
+/// Individual item within a batch job.
+model BatchJobItem {
+  id        Int     @id @default(autoincrement())
+  batchId   String  @map("batch_id")
+  batch     BatchJob @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  itemId    String  @map("item_id") // original UUID from BatchItem.id
+  itemIndex Int     @map("item_index")
+  input     String  // prompt text
+  taskType  String  @map("task_type")
+  status    String  @default("pending")
+  output    String?
+  error     String?
+  provider  String?
+  model     String?
+  latencyMs Int?    @map("latency_ms")
+  tokens    Int?
+
+  @@index([batchId])
+  @@map("batch_job_items")
+}
+
+// ── Workflow Engine ──────────────────────────────────────────────────────────
+
+/// Workflow definition (steps stored as JSON).
+model WorkflowDefinition {
+  id          String   @id // UUID
+  name        String
+  description String   @default("")
+  appSlug     String   @map("app_slug")
+  version     Int      @default(1)
+  steps       String   @default("{}") // JSON map<stepId, WorkflowStep>
+  entryStepId String   @map("entry_step_id")
+  status      String   @default("draft") // draft|active|archived
+  metadata    String   @default("{}") // JSON
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  runs WorkflowRun[]
+
+  @@index([appSlug])
+  @@map("workflow_definitions")
+}
+
+/// Single execution run of a workflow.
+model WorkflowRun {
+  id           String    @id // UUID
+  workflowId   String    @map("workflow_id")
+  workflow     WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status       String    @default("running") // running|completed|failed|cancelled
+  input        String    @default("{}") // JSON
+  output       String?   // JSON
+  stepResults  String    @default("{}") // JSON map<stepId, StepResult>
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  totalLatency Int       @default(0) @map("total_latency")
+  error        String?
+
+  @@index([workflowId])
+  @@map("workflow_runs")
+}
+
+// ── Prompt Studio ────────────────────────────────────────────────────────────
+
+/// Prompt template with versioning.
+model PromptTemplate {
+  id           String   @id // UUID
+  name         String
+  description  String   @default("")
+  appSlug      String   @map("app_slug")
+  template     String
+  systemPrompt String?  @map("system_prompt")
+  variables    String   @default("[]") // JSON PromptVariable[]
+  version      Int      @default(1)
+  parentVersion Int?    @map("parent_version")
+  tags         String   @default("[]") // JSON string[]
+  category     String   @default("custom")
+  isActive     Boolean  @default(true) @map("is_active")
+  metrics      String   @default("{}") // JSON PromptMetrics
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  versions PromptTemplateVersion[]
+  abTests  PromptABTest[]
+
+  @@index([appSlug])
+  @@map("prompt_templates")
+}
+
+/// Historical version snapshot of a prompt template.
+model PromptTemplateVersion {
+  id           Int      @id @default(autoincrement())
+  templateId   String   @map("template_id")
+  template     PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version      Int
+  content      String   // template text at this version
+  systemPrompt String?  @map("system_prompt")
+  metrics      String   @default("{}") // JSON PromptMetrics
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([templateId])
+  @@map("prompt_template_versions")
+}
+
+/// A/B test comparing two prompt template versions.
+model PromptABTest {
+  id          String    @id // UUID
+  templateId  String    @map("template_id")
+  template    PromptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name        String
+  variantA    Int       @map("variant_a") // version number
+  variantB    Int       @map("variant_b") // version number
+  status      String    @default("draft") // draft|running|completed
+  results     String    @default("{}") // JSON ABTestResults
+  createdAt   DateTime  @default(now()) @map("created_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([templateId])
+  @@map("prompt_ab_tests")
+}
+
+// ── Strategy Engine ──────────────────────────────────────────────────────────
+
+/// Per-app strategy: goals, KPIs, recommendations.
+model AppStrategyRecord {
+  id              Int      @id @default(autoincrement())
+  appSlug         String   @unique @map("app_slug")
+  appName         String   @map("app_name")
+  appType         String   @default("general") @map("app_type")
+  goals           String   @default("[]") // JSON AppGoal[]
+  kpis            String   @default("[]") // JSON KpiTarget[]
+  recommendations String   @default("[]") // JSON StrategyRecommendation[]
+  strategyState   String   @default("not_configured") @map("strategy_state")
+  lastUpdated     DateTime @default(now()) @updatedAt @map("last_updated")
+
+  @@map("app_strategy_records")
+}
+
+// ── Webhook Manager ──────────────────────────────────────────────────────────
+
+/// Registered webhook endpoint for an app.
+model WebhookRegistrationRecord {
+  id        String   @id // UUID
+  appSlug   String   @map("app_slug")
+  url       String
+  secret    String
+  events    String   @default("[]") // JSON WebhookEventType[]
+  active    Boolean  @default(true)
+  metadata  String   @default("{}") // JSON
+  createdAt DateTime @default(now()) @map("created_at")
+
+  deliveries WebhookDeliveryRecord[]
+
+  @@index([appSlug])
+  @@map("webhook_registrations")
+}
+
+/// Delivery attempt log for a webhook event.
+model WebhookDeliveryRecord {
+  id            Int      @id @default(autoincrement())
+  webhookId     String   @map("webhook_id")
+  webhook       WebhookRegistrationRecord @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  eventId       String   @map("event_id")
+  eventType     String   @map("event_type")
+  url           String
+  status        String   @default("pending") // pending|success|failed|retrying
+  statusCode    Int?     @map("status_code")
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(5) @map("max_attempts")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  nextRetryAt   DateTime? @map("next_retry_at")
+  error         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([webhookId])
+  @@map("webhook_delivery_log")
+}
+
+// ── App Agent (per-app dedicated specialist) ────────────────────────────────
+
+/// A dedicated AI agent created for each connected app.
+/// Routes through the AmarktAI runtime layer — never calls providers directly.
+model AppAgent {
+  id        String   @id @default(cuid())
+  appSlug   String   @unique @map("app_slug")
+  appName   String   @map("app_name")
+  appUrl    String   @default("") @map("app_url")
+  appType   String   @default("general") @map("app_type")
+  purpose   String   @default("") // admin plain-English description of what the app does
+  active    Boolean  @default(true)
+
+  // AI behavior
+  tone           String @default("professional") // formal|friendly|warm|professional|playful
+  responseLength String @default("balanced") @map("response_length") // short|balanced|detailed
+  creativity     String @default("balanced") // creative|balanced|strictly_factual
+
+  // Source and quote behavior
+  mustShowSourceForQuotes Boolean @default(false) @map("must_show_source_for_quotes")
+  mustUseTrustedSources   Boolean @default(false) @map("must_use_trusted_sources")
+  canAnswerWithoutSource  String  @default("sometimes") @map("can_answer_without_source") // never|sometimes|allowed
+  separateQuoteFromExplanation Boolean @default(false) @map("separate_quote_from_explanation")
+
+  // Safety and restrictions
+  adultMode         Boolean @default(false) @map("adult_mode")
+  sensitiveTopicMode String @default("standard") @map("sensitive_topic_mode") // standard|strict|very_strict
+  mustHandoffSeriousTopics Boolean @default(false) @map("must_handoff_serious_topics")
+  topicsNeedingCare  String @default("[]") @map("topics_needing_care") // JSON array
+
+  // Human handoff
+  humanExpertAvailable Boolean @default(false) @map("human_expert_available")
+  handoffTriggers      String @default("[]") @map("handoff_triggers") // JSON array
+  humanContactMethod   String @default("") @map("human_contact_method")
+
+  // Knowledge
+  knowledgeCategories String @default("[]") @map("knowledge_categories") // JSON array
+  knowledgeNotes      String @default("") @map("knowledge_notes") // admin notes about what AI must know
+
+  // Must always do / never do
+  mustAlwaysDo  String @default("[]") @map("must_always_do") // JSON array
+  mustNeverDo   String @default("[]") @map("must_never_do") // JSON array
+
+  // Extra rules (admin plain-English notes → structured rules)
+  adminNotes       String @default("") @map("admin_notes") // raw admin notes
+  structuredRules  String @default("[]") @map("structured_rules") // JSON array of parsed rules
+
+  // Budget
+  budgetMode         String  @default("balanced") @map("budget_mode") // low_cost|balanced|best_quality
+  allowPremiumOnlyWhenNeeded Boolean @default(true) @map("allow_premium_only_when_needed")
+
+  // Learning
+  learningEnabled        Boolean @default(false) @map("learning_enabled")
+  autoImprovementEnabled Boolean @default(false) @map("auto_improvement_enabled")
+  adminReviewRequired    Boolean @default(true) @map("admin_review_required")
+  lastLearningCycleAt    DateTime? @map("last_learning_cycle_at")
+  specialtyProfile       String  @default("{}") @map("specialty_profile") // JSON object
+  weakAreas              String  @default("[]") @map("weak_areas") // JSON array
+
+  // Religious specialist fields
+  religiousMode        String  @default("none") @map("religious_mode") // none|christian|muslim|multi_faith
+  religiousBranch      String  @default("") @map("religious_branch") // e.g. sunni, catholic, etc.
+  approvedSourcePacks  String  @default("[]") @map("approved_source_packs") // JSON array
+  doctrineAwareRouting Boolean @default(false) @map("doctrine_aware_routing")
+
+  // Firecrawl integration
+  crawlStatus     String    @default("none") @map("crawl_status") // none|pending|crawling|completed|failed
+  lastCrawlAt     DateTime? @map("last_crawl_at")
+  crawlSummary    String    @default("") @map("crawl_summary")
+  detectedNiche   String    @default("") @map("detected_niche")
+  detectedCapabilities String @default("[]") @map("detected_capabilities") // JSON array
+
+  // Capability permissions (which capabilities this agent is allowed to use)
+  allowedCapabilities String @default("[\"chat\",\"reasoning\",\"code\"]") @map("allowed_capabilities") // JSON array
+
+  // Routing preferences
+  preferredProviders String @default("[]") @map("preferred_providers") // JSON array
+  preferredModels    String @default("[]") @map("preferred_models") // JSON array
+  fallbackChain      String @default("[]") @map("fallback_chain") // JSON array
+
+  // Voice persona (per-app voice style for TTS/realtime)
+  voiceStyle       String @default("neutral") @map("voice_style") // neutral|warm|authoritative|gentle|energetic
+  voiceTone        String @default("professional") @map("voice_tone") // professional|casual|empathetic|cheerful
+  voicePersonality String @default("helpful") @map("voice_personality") // helpful|playful|serious|caring
+  voiceSpeed       String @default("normal") @map("voice_speed") // slow|normal|fast
+  voiceGender      String @default("neutral") @map("voice_gender") // male|female|neutral
+  voiceAccent      String @default("") @map("voice_accent") // optional: british|american|australian|etc.
+
+  // Memory boundaries
+  memoryNamespace    String @default("") @map("memory_namespace")
+  retrievalNamespace String @default("") @map("retrieval_namespace")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  learningLogs AppAgentLearningLog[]
+
+  @@index([appType])
+  @@index([active])
+  @@map("app_agents")
+}
+
+/// System alerts for operator visibility (provider failures, cost spikes, etc.)
+model SystemAlert {
+  id          Int      @id @default(autoincrement())
+  alertType   String   @map("alert_type") // provider_failure|routing_failure|no_eligible_model|queue_backlog|job_failure|cost_spike|repeated_fallback|agent_failure
+  severity    String   @default("warning") // info|warning|critical
+  title       String
+  message     String
+  appSlug     String?  @map("app_slug")
+  metadata    String   @default("{}") // JSON: extra context
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([alertType])
+  @@index([severity])
+  @@index([resolved])
+  @@index([createdAt])
+  @@map("system_alerts")
+}
+
+/// Learning log entry for an app agent's daily improvement cycle.
+model AppAgentLearningLog {
+  id          Int      @id @default(autoincrement())
+  agentId     String   @map("agent_id")
+  agent       AppAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  cycleDate   DateTime @map("cycle_date")
+  cycleType   String   @default("daily") @map("cycle_type") // daily|manual|triggered
+  summary     String   @default("")
+  improvements String  @default("[]") // JSON array of improvement descriptions
+  metrics     String   @default("{}") // JSON: { successRate, avgLatency, costPerRequest, etc. }
+  status      String   @default("completed") // completed|pending_review|rejected
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([agentId])
+  @@index([cycleDate])
+  @@map("app_agent_learning_logs")
+}
+
+/// Runtime integration configuration — stores API keys and URLs for external services.
+/// Keys are encrypted at rest using the same crypto-vault as AI provider keys.
+model IntegrationConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique // e.g. firecrawl, mem0, graphiti, litellm, posthog, langgraph, qdrant
+  displayName String   @map("display_name")
+  apiKey      String   @default("") @map("api_key") // encrypted via crypto-vault
+  apiUrl      String   @default("") @map("api_url")
+  enabled     Boolean  @default(true)
+  notes       String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("integration_configs")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Artifact System, Usage Metering, App Budgets, Manager Agents
+// ════════════════════════════════════════════════════════════════════════════════
+
+/// Unified artifact record for every generated output (image, audio, video, code, doc).
+model Artifact {
+  id            String   @id @default(uuid())
+  appSlug       String   @map("app_slug")
+  type          String   // image | audio | music | video | code | document | report | transcript
+  subType       String   @default("") @map("sub_type") // e.g. tts, stt, cover_art, image_edit, suggestive
+  title         String   @default("")
+  description   String   @default("")
+
+  /// Provider and model that created this artifact
+  provider      String   @default("")
+  model         String   @default("")
+  traceId       String   @default("") @map("trace_id")
+
+  /// Storage location
+  storageDriver String   @default("local") @map("storage_driver") // local | s3 | r2
+  storagePath   String   @default("") @map("storage_path")
+  storageUrl    String   @default("") @map("storage_url")
+  mimeType      String   @default("") @map("mime_type")
+  fileSizeBytes Int      @default(0) @map("file_size_bytes")
+
+  /// Rendering flags
+  previewable   Boolean  @default(true)
+  downloadable  Boolean  @default(true)
+
+  /// Status
+  status        String   @default("completed") // pending | processing | completed | failed | expired
+  errorMessage  String   @default("") @map("error_message")
+
+  /// Cost tracking
+  costUsdCents  Int      @default(0) @map("cost_usd_cents")
+
+  /// Metadata (JSON blob for type-specific extras like genre, duration, dimensions)
+  metadata      String   @default("{}") // JSON
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("artifacts")
+}
+
+/// Per-app budget and limit configuration (DB-backed, replaces in-memory caps).
+model AppBudgetConfig {
+  id                  Int      @id @default(autoincrement())
+  appSlug             String   @unique @map("app_slug")
+
+  /// Monthly spend ceiling (USD cents). 0 = unlimited.
+  monthlyBudgetCents  Int      @default(0) @map("monthly_budget_cents")
+  /// Daily spend ceiling (USD cents). 0 = unlimited.
+  dailyBudgetCents    Int      @default(0) @map("daily_budget_cents")
+
+  /// Request rate caps
+  requestsPerMinute   Int      @default(100) @map("requests_per_minute")
+  requestsPerDay      Int      @default(10000) @map("requests_per_day")
+
+  /// Capability-level quotas (JSON: { "image_generation": 500, "video": 50 })
+  capabilityQuotas    String   @default("{}") @map("capability_quotas")
+
+  /// Premium capability toggles (JSON: { "adult_image": false, "video": true })
+  premiumToggles      String   @default("{}") @map("premium_toggles")
+
+  /// Emergency controls
+  paused              Boolean  @default(false)
+  pauseReason         String   @default("") @map("pause_reason")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("app_budget_configs")
+}
+
+/// Usage metering record — one row per app per day per capability per provider.
+model UsageMeter {
+  id              Int      @id @default(autoincrement())
+  appSlug         String   @map("app_slug")
+  date            DateTime @db.Date
+  capability      String   // chat | image_generation | tts | stt | video | code | research | music | etc.
+  provider        String
+  model           String   @default("")
+
+  requestCount    Int      @default(0) @map("request_count")
+  successCount    Int      @default(0) @map("success_count")
+  errorCount      Int      @default(0) @map("error_count")
+  inputTokens     Int      @default(0) @map("input_tokens")
+  outputTokens    Int      @default(0) @map("output_tokens")
+  costUsdCents    Int      @default(0) @map("cost_usd_cents")
+  artifactCount   Int      @default(0) @map("artifact_count")
+  latencyMsSum    Int      @default(0) @map("latency_ms_sum")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([appSlug, date, capability, provider, model], name: "usage_meter_unique")
+  @@index([appSlug])
+  @@index([date])
+  @@index([capability])
+  @@map("usage_meters")
+}
+
+/// Manager agent log — records subsystem manager decisions, checks, and escalations.
+model ManagerAgentLog {
+  id            Int      @id @default(autoincrement())
+  managerType   String   @map("manager_type") // routing | queue | artifact | app | learning | growth
+  action        String   // health_check | escalation | recovery | coordination | signal
+  summary       String   @default("")
+  details       String   @default("{}") // JSON
+  severity      String   @default("info") // info | warning | critical
+  resolved      Boolean  @default(false)
+  resolvedAt    DateTime? @map("resolved_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([managerType])
+  @@index([severity])
+  @@index([createdAt])
+  @@map("manager_agent_logs")
+}
+
+// ── GenX Workspace Configuration ─────────────────────────────────────────────
+
+/// Global workspace AI configuration.
+/// Controls which GenX model policy applies to workspace-level tasks (admin run-tasks,
+/// builder operations, etc.).  Apps define their own policy via AppAiProfile.costMode.
+model WorkspaceConfig {
+  id Int @id @default(autoincrement())
+
+  /// GenX model selection policy for workspace tasks.
+  /// Values: best | cheap | balanced | fixed
+  /// 'best' is the default — workspace always uses the highest-capability model.
+  modelPolicy String @default("best") @map("model_policy")
+
+  /// When modelPolicy = 'fixed', this holds the explicit GenX model ID to use.
+  fixedModel String? @map("fixed_model")
+
+  /// JSON array of enabled workspace features, e.g. ["github", "deploy", "file_edit"]
+  enabledFeatures String @default("[]") @map("enabled_features")
+
+  /// JSON array of recent workspace session summaries (last N sessions).
+  workspaceSessions String @default("[]") @map("workspace_sessions")
+
+  /// JSON array of file context entries currently loaded in the workspace editor.
+  fileContexts String @default("[]") @map("file_contexts")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("workspace_configs")
+}
+
+/// Workspace AI execution session log — one row per task run.
+model WorkspaceSession {
+  id           String   @id @default(uuid())
+  traceId      String   @map("trace_id")
+  modelPolicy  String   @default("best") @map("model_policy")
+  resolvedModel String  @default("") @map("resolved_model")
+  taskType     String   @default("chat") @map("task_type")
+  input        String   @default("")
+  output       String?
+  fileContexts String   @default("[]") @map("file_contexts") // JSON FileContext[]
+  success      Boolean  @default(false)
+  latencyMs    Int?     @map("latency_ms")
+  error        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([traceId])
+  @@map("workspace_sessions")
+}
+
+// ── AmarktAI Assistant persistence ─────────────────────────────────────────
+
+/// AmarktAI Assistant conversation session (persisted chat history)
+model AssistantConversation {
+  id        String   @id @default(cuid())
+  title     String   @default("New Conversation")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages AssistantMessage[]
+
+  @@map("aiva_conversations")
+}
+
+/// Individual message in an AmarktAI Assistant conversation
+model AssistantMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  role           String   // user | assistant | system
+  content        String
+  capability     String   @default("") // capability used for this message
+  provider       String   @default("") // provider that responded
+  model          String   @default("") // model used
+  outputType     String   @default("text") @map("output_type")
+  artifactId     String?  @map("artifact_id")
+  fallbackUsed   Boolean  @default(false) @map("fallback_used")
+  warning        String?
+  errorMessage   String?  @map("error_message")
+  metadata       String   @default("{}") // JSON
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("aiva_messages")
+}
+
+/// AmarktAI Assistant persistent memory entries (user preferences, learned facts, etc.)
+model AssistantMemory {
+  id          String   @id @default(cuid())
+  memoryType  String   @default("preference") @map("memory_type") // preference | fact | summary | app | workspace | artifact | capability
+  key         String   @default("")
+  content     String
+  importance  Float    @default(0.5) // 0.0–1.0
+  tags        String   @default("[]") @map("tags") // JSON string[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([memoryType])
+  @@map("aiva_memories")
+}
+
+// ── PHASE 3 — App Intelligence Profiles ─────────────────────────────────────
+
+/// Per-app intelligence profile generated by Firecrawl + Brain summarisation.
+/// Stores structured business context used by AmarktAI Assistant, workspace, and agents.
+model AppIntelligenceProfile {
+  id                      String    @id @default(cuid())
+  /// App slug this profile belongs to (matches Product.slug / AppAgent.appSlug)
+  appSlug                 String    @unique @map("app_slug")
+  websiteUrl              String    @default("") @map("website_url")
+  businessType            String    @default("") @map("business_type")
+  brandSummary            String    @default("") @map("brand_summary")
+  brandTone               String    @default("") @map("brand_tone")
+  /// JSON string[]
+  targetUsers             String    @default("[]") @map("target_users")
+  /// JSON string[]
+  productsServices        String    @default("[]") @map("products_services")
+  supportKnowledge        String    @default("") @map("support_knowledge")
+  /// JSON string[]
+  contentTopics           String    @default("[]") @map("content_topics")
+  /// JSON string[]
+  risks                   String    @default("[]")
+  /// JSON string[]
+  recommendedCapabilities String    @default("[]") @map("recommended_capabilities")
+  /// JSON object — model package recommendation
+  recommendedModelPackage String    @default("{}") @map("recommended_model_package")
+  crawlSummary            String    @default("") @map("crawl_summary")
+  crawlArtifactId         String?   @map("crawl_artifact_id")
+  lastCrawledAt           DateTime? @map("last_crawled_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@map("app_intelligence_profiles")
+}
+
+// ── AmarktAI Assistant avatar config ─────────────────────────────────────────
+
+/// Per-state avatar config for AmarktAI Assistant.
+/// Stores artifact IDs and image URLs for each avatar state so AmarktAI Assistant can load
+/// dynamically-generated images instead of requiring manual file placement.
+model AssistantAvatarConfig {
+  id         Int      @id @default(autoincrement())
+  /// Avatar state: idle | listening | thinking | speaking | error
+  state      String   @unique
+  artifactId String?  @map("artifact_id")
+  imageUrl   String   @default("") @map("image_url")
+  prompt     String   @default("")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("aiva_avatar_configs")
+}
+
+// ── PHASE 1 — Self-Healing Persistence ───────────────────────────────────────
+
+/// Persisted self-healing issue record.
+/// Each call to runHealingChecks() upserts records per category+affectedResource key.
+model HealingRecord {
+  id               String    @id @default(cuid())
+  /// Detection category
+  category         String    // provider_failure | route_failure | missing_credentials | stale_config | fallback_overuse | agent_degraded | budget_threshold | model_unavailable
+  severity         String    // info | warning | critical
+  title            String
+  description      String
+  affectedResource String    @map("affected_resource")
+  /// Action the system took or suggested
+  actionTaken      String?   @map("action_taken") // auto_disabled | traffic_shifted | alert_surfaced | repair_suggested | config_invalidated | fallback_promoted
+  actionDetail     String?   @map("action_detail")
+  autoHealed       Boolean   @default(false) @map("auto_healed")
+  resolved         Boolean   @default(false)
+  resolvedAt       DateTime? @map("resolved_at")
+  detectedAt       DateTime  @default(now()) @map("detected_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@unique([category, affectedResource], name: "healing_record_key")
+  @@index([category])
+  @@index([severity])
+  @@index([resolved])
+  @@index([detectedAt])
+  @@map("healing_records")
+}
+
+// ── PHASE 1 — Music Generation Async Jobs ────────────────────────────────────
+
+/// Async music generation job.
+/// Supports multi-genre and multi-mood inputs (max 5 each) as per Phase 1 spec.
+model MusicGenerationJob {
+  id              String    @id @default(cuid())
+  appSlug         String    @map("app_slug")
+
+  // Status lifecycle
+  status          String    @default("pending") // pending | processing | completed | failed | cancelled
+
+  // Input request
+  title           String    @default("")
+  theme           String
+  /// JSON MusicGenre[] — max 5 genres
+  genres          String    @default("[]")
+  /// JSON string[] — max 5 moods
+  moods           String    @default("[]")
+  vocalStyle      String    @default("") @map("vocal_style")
+  bpm             Int       @default(0)
+  language        String    @default("en")
+  durationSeconds Int       @default(180) @map("duration_seconds")
+  instrumental    Boolean   @default(false)
+  /// auto | custom | none
+  coverArtChoice  String    @default("auto") @map("cover_art_choice")
+  existingLyrics  String    @default("") @map("existing_lyrics")
+  productionNotes String    @default("") @map("production_notes")
+
+  // Output
+  /// Artifact.id when completed (music artifact)
+  artifactId      String?   @map("artifact_id")
+  /// JSON MusicStudioResult when completed
+  resultJson      String?   @map("result_json")
+  errorMessage    String?   @map("error_message")
+
+  // Tracking
+  provider        String    @default("")
+  model           String    @default("")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([status])
+  @@index([createdAt])
+  @@map("music_generation_jobs")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Runtime Registry Foundation
+// ════════════════════════════════════════════════════════════════════════════════
+
+/// Canonical capability registry — single source of truth for all platform capabilities.
+/// Each capability is defined once here and referenced by routing, dashboard, and agents.
+model CapabilityRegistry {
+  id                String   @id @default(cuid())
+  /// Unique capability key (e.g. 'chat', 'image_generation', 'tts')
+  capabilityKey     String   @unique @map("capability_key")
+  /// Human-readable label
+  label             String
+  /// Description of what this capability does
+  description       String   @default("")
+  /// Category grouping (text, image, video, audio, adult, system_ops, etc.)
+  category          String   @default("text")
+  /// JSON array of required feature flags
+  requiredFlags     String   @default("[]") @map("required_flags")
+  /// JSON array of allowed provider keys
+  allowedProviders  String   @default("[]") @map("allowed_providers")
+  /// Whether this capability is enabled for routing
+  enabled           Boolean  @default(true)
+  /// Proof status: LIVE_PROVEN | SOURCE_WIRED | PARTIAL | BLOCKED | SPECULATIVE
+  proofStatus       String   @default("SPECULATIVE") @map("proof_status")
+  /// Source file where this capability is implemented
+  sourceFile        String   @default("") @map("source_file")
+  /// Proof file or test that verifies this capability
+  proofFile         String   @default("") @map("proof_file")
+  /// Known issues or limitations
+  knownIssues       String   @default("") @map("known_issues")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  providerMaps ProviderCapabilityMap[]
+
+  @@index([category])
+  @@index([enabled])
+  @@index([proofStatus])
+  @@map("capability_registry")
+}
+
+/// Maps providers to their supported capabilities with model and endpoint details.
+/// Each row represents a provider's ability to fulfill a specific capability.
+model ProviderCapabilityMap {
+  id              String   @id @default(cuid())
+  /// Provider key (e.g. 'genx', 'huggingface', 'groq')
+  providerKey     String   @map("provider_key")
+  /// Capability key reference
+  capabilityKey   String   @map("capability_key")
+  /// JSON array of model IDs that support this capability
+  models          String   @default("[]")
+  /// JSON array of endpoints for this capability
+  endpoints       String   @default("[]")
+  /// Whether this provider+capability combination is proven working
+  proven          Boolean  @default(false)
+  /// Type of proof: vps_test | source_code | manual_test | inferred
+  proofType       String   @default("inferred") @map("proof_type")
+  /// Source file or test that proves this mapping
+  proofSource     String   @default("") @map("proof_source")
+  /// When this mapping was last verified
+  lastVerified    DateTime? @map("last_verified")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  capability CapabilityRegistry @relation(fields: [capabilityKey], references: [capabilityKey], onDelete: Cascade)
+
+  @@unique([providerKey, capabilityKey], name: "provider_capability_unique")
+  @@index([providerKey])
+  @@index([capabilityKey])
+  @@index([proven])
+  @@map("provider_capability_map")
+}
+
+/// Cache of discovered models from provider APIs.
+/// Used for dynamic model discovery and capability inference.
+model ModelDiscoveryCache {
+  id              String   @id @default(cuid())
+  /// Provider key
+  providerKey     String   @map("provider_key")
+  /// Model ID from provider API
+  modelId         String   @map("model_id")
+  /// JSON array of capability keys this model supports
+  capabilities    String   @default("[]")
+  /// Cost tier: free | very_low | low | medium | high | premium
+  costTier        String   @default("medium") @map("cost_tier")
+  /// Latency tier: ultra_low | low | medium | high
+  latencyTier     String   @default("medium") @map("latency_tier")
+  /// Context window size in tokens
+  contextWindow   Int      @default(4096) @map("context_window")
+  /// Whether this model is enabled for routing
+  enabled         Boolean  @default(true)
+  /// JSON metadata blob for model-specific details
+  metadata        String   @default("{}")
+  /// When this model was last seen from provider API
+  lastSeen        DateTime @default(now()) @map("last_seen")
+  /// When this cache entry expires
+  expiresAt       DateTime? @map("expires_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([providerKey, modelId], name: "model_discovery_unique")
+  @@index([providerKey])
+  @@index([enabled])
+  @@index([lastSeen])
+  @@map("model_discovery_cache")
+}
+
+/// Budget profiles define cost/quality/latency preferences for routing decisions.
+/// Apps and workspaces reference these profiles to determine provider selection.
+model BudgetProfile {
+  id                    String   @id @default(cuid())
+  /// Unique profile key (e.g. 'low_cost', 'balanced', 'premium')
+  profileKey            String   @unique @map("profile_key")
+  /// Human-readable display name
+  displayName           String   @map("display_name")
+  /// Cost tier preference: low | medium | high | premium
+  costTier              String   @default("medium") @map("cost_tier")
+  /// Quality preference: low | medium | high | best
+  qualityPreference     String   @default("medium") @map("quality_preference")
+  /// Latency preference: low | medium | high
+  latencyPreference     String   @default("medium") @map("latency_preference")
+  /// Max cost per request in USD cents (0 = unlimited)
+  maxCostPerRequest     Int      @default(0) @map("max_cost_per_request")
+  /// Max fallback depth before giving up
+  maxFallbackDepth      Int      @default(3) @map("max_fallback_depth")
+  /// Whether premium providers are allowed
+  allowPremium          Boolean  @default(false) @map("allow_premium")
+  /// Whether streaming is allowed
+  allowStreaming         Boolean  @default(true) @map("allow_streaming")
+  /// Whether long-running jobs are allowed
+  allowLongRunningJobs  Boolean  @default(true) @map("allow_long_running_jobs")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([costTier])
+  @@map("budget_profiles")
+}
+
+/// Avatar library for AI assistant visual personas.
+/// Stores avatar definitions with provider and style metadata.
+model AvatarLibrary {
+  id           String   @id @default(cuid())
+  /// Unique avatar identifier
+  avatarId     String   @unique @map("avatar_id")
+  /// Human-readable name
+  name         String
+  /// Visual style (e.g. 'realistic', 'cartoon', 'anime', '3d')
+  style        String   @default("realistic")
+  /// Provider that generates this avatar (e.g. 'genx', 'huggingface')
+  provider     String   @default("genx")
+  /// URL to thumbnail image
+  thumbnailUrl String   @default("") @map("thumbnail_url")
+  /// Voice ID for TTS pairing
+  voiceId      String   @default("") @map("voice_id")
+  /// Whether this avatar is enabled
+  enabled      Boolean  @default(true)
+  /// JSON metadata blob for avatar-specific details
+  metadata     String   @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([provider])
+  @@index([enabled])
+  @@map("avatar_library")
+}
+
+/// Voice library for TTS and realtime voice personas.
+/// Stores voice definitions with provider, model, and style metadata.
+model VoiceLibrary {
+  id          String   @id @default(cuid())
+  /// Unique voice identifier
+  voiceId     String   @unique @map("voice_id")
+  /// Human-readable name
+  name        String
+  /// Provider that hosts this voice (e.g. 'genx', 'elevenlabs', 'deepgram')
+  provider    String   @default("genx")
+  /// Model used for this voice
+  model       String   @default("")
+  /// Gender: male | female | neutral
+  gender      String   @default("neutral")
+  /// Accent (e.g. 'american', 'british', 'australian')
+  accent      String   @default("")
+  /// Language code (e.g. 'en', 'es', 'fr')
+  language    String   @default("en")
+  /// Style (e.g. 'warm', 'professional', 'energetic')
+  style       String   @default("neutral")
+  /// URL to preview audio
+  previewUrl  String   @default("") @map("preview_url")
+  /// Whether this voice is enabled
+  enabled     Boolean  @default(true)
+  /// JSON metadata blob for voice-specific details
+  metadata    String   @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([provider])
+  @@index([enabled])
+  @@index([language])
+  @@map("voice_library")
+}
+
+// ── Marketing Campaigns ───────────────────────────────────────────────────────
+
+/// A marketing campaign owned by a workspace/app/brand scope.
+model Campaign {
+  id              String   @id @default(cuid())
+  workspaceId     String   @default("") @map("workspace_id")
+  appSlug         String   @map("app_slug")
+  brandId         String   @default("") @map("brand_id")
+  name            String
+  goal            String
+  targetAudience  String   @default("") @map("target_audience")
+  /// JSON string[] of platform names
+  platforms       String   @default("[]")
+  /// JSON string[] of content types
+  contentTypes    String   @default("[]") @map("content_types")
+  budgetTier      String   @default("balanced") @map("budget_tier")  // cheap|balanced|premium
+  qualityTier     String   @default("standard") @map("quality_tier") // basic|standard|high|premium
+  /// draft|active|completed|partial_failure|failed|archived
+  status          String   @default("draft")
+  approvalMode    String   @default("auto") @map("approval_mode") // auto|manual_review
+  durationDays    Int      @default(7) @map("duration_days")
+  websiteUrl      String   @default("") @map("website_url")
+  workflowId      String   @default("") @map("workflow_id")
+  /// JSON metadata blob
+  metadata        String   @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  items    CampaignItem[]
+  assets   GeneratedAsset[]
+
+  @@index([appSlug])
+  @@index([status])
+  @@index([createdAt])
+  @@map("campaigns")
+}
+
+/// A single content item within a campaign (one post, image, video, etc.)
+model CampaignItem {
+  id             String    @id @default(cuid())
+  campaignId     String    @map("campaign_id")
+  campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  platform       String    // instagram|tiktok|youtube_shorts|facebook|linkedin|x|pinterest|generic
+  contentType    String    @map("content_type") // social_post|image|short_video|reel|caption|script|music|voiceover|avatar_presenter
+  title          String    @default("")
+  caption        String    @default("")
+  script         String    @default("")
+  /// JSON string[] of hashtags
+  hashtags       String    @default("[]")
+  /// Prompt used for asset generation
+  promptSummary  String    @default("") @map("prompt_summary")
+  scheduledFor   DateTime? @map("scheduled_for")
+  /// draft|pending_review|approved|rejected|needs_changes|published|failed
+  status         String    @default("draft")
+  approvalStatus String    @default("draft") @map("approval_status")
+  approvalNotes  String    @default("") @map("approval_notes")
+  /// JSON metadata blob
+  metadata       String    @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  assets GeneratedAsset[]
+
+  @@index([campaignId])
+  @@index([platform])
+  @@index([status])
+  @@map("campaign_items")
+}
+
+/// A generated asset produced by the capability runtime.
+/// Provider/model fields store what the RUNTIME selected — never app-provided.
+model GeneratedAsset {
+  id                     String    @id @default(cuid())
+  workspaceId            String    @default("") @map("workspace_id")
+  appSlug                String    @map("app_slug")
+  brandId                String    @default("") @map("brand_id")
+  campaignId             String?   @map("campaign_id")
+  campaign               Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignItemId         String?   @map("campaign_item_id")
+  campaignItem           CampaignItem? @relation(fields: [campaignItemId], references: [id], onDelete: SetNull)
+  assetType              String    @map("asset_type") // image|video|audio|text|avatar
+  capability             String    // image_generation|video_generation|music_generation|tts|avatar_generation|chat
+  /// draft|processing|completed|failed|pending_review|approved|rejected|needs_changes|published
+  status                 String    @default("processing")
+  approvalStatus         String    @default("draft") @map("approval_status")
+  approvalNotes          String    @default("") @map("approval_notes")
+  /// Set by RUNTIME only — never app-provided
+  runtimeSelectedProvider String   @default("") @map("runtime_selected_provider")
+  runtimeSelectedModel   String   @default("") @map("runtime_selected_model")
+  fallbackUsed           Boolean  @default(false) @map("fallback_used")
+  generationMode         String   @default("") @map("generation_mode")
+  promptSummary          String   @default("") @map("prompt_summary")
+  /// JSON of source inputs used (brand context, RAG context, etc.)
+  sourceInputs           String   @default("{}") @map("source_inputs")
+  resultUrl              String?  @map("result_url")
+  resultFilePath         String?  @map("result_file_path")
+  thumbnailUrl           String?  @map("thumbnail_url")
+  mimeType               String?  @map("mime_type")
+  durationSeconds        Float?   @map("duration_seconds")
+  width                  Int?
+  height                 Int?
+  costCredits            Float?   @map("cost_credits")
+  latencyMs              Int?     @map("latency_ms")
+  error                  String?
+  /// JSON metadata blob
+  metadata               String   @default("{}")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  versions AssetVersion[]
+
+  @@index([appSlug])
+  @@index([campaignId])
+  @@index([campaignItemId])
+  @@index([status])
+  @@index([assetType])
+  @@map("generated_assets")
+}
+
+/// Versioned snapshot of a generated asset (for rollback / approval history).
+model AssetVersion {
+  id             String         @id @default(cuid())
+  assetId        String         @map("asset_id")
+  asset          GeneratedAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  versionNumber  Int            @map("version_number")
+  status         String         @default("draft") // draft|approved|rejected|superseded
+  resultUrl      String?        @map("result_url")
+  resultFilePath String?        @map("result_file_path")
+  thumbnailUrl   String?        @map("thumbnail_url")
+  promptSummary  String         @default("") @map("prompt_summary")
+  /// JSON of source inputs used
+  sourceInputs   String         @default("{}") @map("source_inputs")
+  provider       String         @default("")
+  model          String         @default("")
+  costCredits    Float?         @map("cost_credits")
+  latencyMs      Int?           @map("latency_ms")
+  /// JSON metadata blob
+  metadata       String         @default("{}")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([assetId])
+  @@index([versionNumber])
+  @@map("asset_versions")
+}
+
+// ── Publishing Scheduler ──────────────────────────────────────────────────────
+
+/// A scheduled publishing job for a campaign item or asset.
+/// Approval gating enforced before any publish attempt.
+model PublishingSchedule {
+  id              String    @id @default(cuid())
+  workspaceId     String    @default("") @map("workspace_id")
+  appSlug         String    @map("app_slug")
+  campaignId      String?   @map("campaign_id")
+  campaignItemId  String?   @map("campaign_item_id")
+  assetId         String?   @map("asset_id")
+  agentId         String?   @map("agent_id")
+  platform        String    @default("generic_export")
+  scheduledFor    DateTime  @map("scheduled_for")
+  timezone        String    @default("UTC")
+  /// draft|scheduled|ready|blocked_approval_required|processing|completed|failed|cancelled|retrying
+  status          String    @default("draft")
+  blockReason     String?   @map("block_reason")
+  attemptCount    Int       @default(0) @map("attempt_count")
+  maxAttempts     Int       @default(3) @map("max_attempts")
+  lastAttemptAt   DateTime? @map("last_attempt_at")
+  nextRetryAt     DateTime? @map("next_retry_at")
+  error           String?
+  /// JSON metadata blob
+  metadata        String    @default("{}")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([campaignId])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("publishing_schedules")
+}
+
+/// Result of a publishing/export attempt.
+model PublishingResult {
+  id               String    @id @default(cuid())
+  workspaceId      String    @default("") @map("workspace_id")
+  appSlug          String    @map("app_slug")
+  campaignId       String?   @map("campaign_id")
+  campaignItemId   String?   @map("campaign_item_id")
+  /// JSON string[] of asset IDs included
+  assetIds         String    @default("[]") @map("asset_ids")
+  platform         String    @default("generic_export")
+  /// not_ready|approval_required|export_ready|published|failed|provider_not_configured|cancelled
+  status           String    @default("not_ready")
+  provider         String    @default("") // platform name or 'generic_export'
+  externalPostId   String?   @map("external_post_id")
+  externalPostUrl  String?   @map("external_post_url")
+  exportPackageId  String?   @map("export_package_id")
+  error            String?
+  publishedAt      DateTime? @map("published_at")
+  /// JSON export package or provider response
+  metadata         String    @default("{}")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([campaignId])
+  @@index([status])
+  @@map("publishing_results")
+}
+
+/// Analytics record for a campaign, item, or asset.
+model CampaignAnalytics {
+  id               String   @id @default(cuid())
+  workspaceId      String   @default("") @map("workspace_id")
+  appSlug          String   @map("app_slug")
+  campaignId       String?  @map("campaign_id")
+  campaignItemId   String?  @map("campaign_item_id")
+  assetId          String?  @map("asset_id")
+  platform         String   @default("generic")
+  externalPostId   String?  @map("external_post_id")
+  /// impressions|reach|views|likes|comments|shares|saves|clicks|ctr|watch_time|completion_rate|engagement_rate|followers_gained|conversions|revenue|cost|manual_score
+  metricName       String   @map("metric_name")
+  metricValue      Float    @map("metric_value")
+  metricUnit       String?  @map("metric_unit")
+  capturedAt       DateTime @default(now()) @map("captured_at")
+  /// manual|platform_api|computed
+  source           String   @default("manual")
+  /// JSON metadata blob
+  metadata         String   @default("{}")
+
+  @@index([appSlug])
+  @@index([campaignId])
+  @@index([platform])
+  @@index([metricName])
+  @@index([capturedAt])
+  @@map("campaign_analytics")
+}
+
+/// Recurring campaign automation run schedule.
+model RecurringCampaignSchedule {
+  id            String    @id @default(cuid())
+  workspaceId   String    @default("") @map("workspace_id")
+  appSlug       String    @map("app_slug")
+  campaignId    String?   @map("campaign_id")
+  name          String
+  /// daily|weekly|monthly|custom
+  frequency     String    @default("weekly")
+  /// Optional custom cron string (e.g. '0 9 * * 1' for every Monday at 9am)
+  cronExpression String?  @map("cron_expression")
+  startDate     DateTime  @map("start_date")
+  endDate       DateTime? @map("end_date")
+  maxRuns       Int?      @map("max_runs")
+  runCount      Int       @default(0) @map("run_count")
+  lastRunAt     DateTime? @map("last_run_at")
+  nextRunAt     DateTime? @map("next_run_at")
+  /// active|paused|completed|cancelled|failed
+  status        String    @default("active")
+  error         String?
+  /// JSON metadata blob for run configuration
+  metadata      String    @default("{}")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([status])
+  @@index([nextRunAt])
+  @@map("recurring_campaign_schedules")
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PHASE 2 — App Connection, API Keys, and Job Pipeline
+// ════════════════════════════════════════════════════════════════════════════════
+
+/// External app connection — links an external product to the AmarktAI Network engine.
+/// Each connection gets its own API keys, capability allowlist, and budget limits.
+model AppConnection {
+  id                   Int      @id @default(autoincrement())
+  appSlug              String   @unique @map("app_slug")
+  appName              String   @map("app_name")
+  status               String   @default("active") // active | paused | suspended | unconfigured
+  /// JSON array of allowed capability keys for this app
+  allowedCapabilities  String   @default("[]") @map("allowed_capabilities")
+  dailyBudgetCents     Int      @default(0) @map("daily_budget_cents") // 0 = unlimited
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  apiKeys AppApiKey[]
+
+  @@index([status])
+  @@map("app_connections")
+}
+
+/// API key for authenticating external apps against the job pipeline.
+/// Keys are hashed at rest; only the prefix is stored for identification.
+model AppApiKey {
+  id              Int      @id @default(autoincrement())
+  connectionId    Int      @map("connection_id")
+  appConnection   AppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  key             String   @unique
+  label           String   @default("default")
+  active          Boolean  @default(true)
+  lastUsedAt      DateTime? @map("last_used_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([connectionId])
+  @@map("app_api_keys")
+}
+
+/// Job record — tracks every capability request flowing through the pipeline.
+model Job {
+  id              String    @id @default(uuid())
+  appSlug         String    @map("app_slug")
+  capability      String
+  prompt          String
+  inputJson       String    @default("{}") @map("input_json")
+  metadataJson    String    @default("{}") @map("metadata_json")
+  traceId         String    @default("") @map("trace_id")
+  status          String    @default("queued") // queued | processing | completed | failed | cancelled
+  provider        String?   @default("")
+  model           String?   @default("")
+  artifactId      String?   @map("artifact_id")
+  progress        Int       @default(0) // 0-100
+  output          String?   @default("")
+  error           String?
+  callbackUrl     String?   @map("callback_url")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([appSlug])
+  @@index([status])
+  @@index([traceId])
+  @@index([createdAt])
+  @@map("jobs")
+}
