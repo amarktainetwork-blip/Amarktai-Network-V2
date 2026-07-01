@@ -1,5 +1,5 @@
 /**
- * GET /health — Live health check reporting status for PostgreSQL, Redis, and Qdrant.
+ * GET /health — Live health check reporting status for MariaDB, Redis, and Qdrant.
  */
 
 import type { FastifyInstance } from 'fastify'
@@ -10,15 +10,15 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     const checks: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {}
     let overall = true
 
-    // PostgreSQL check
-    const pgStart = Date.now()
+    // MariaDB check
+    const dbStart = Date.now()
     try {
       await prisma.$queryRaw`SELECT 1`
-      checks.postgresql = { ok: true, latencyMs: Date.now() - pgStart }
+      checks.mariadb = { ok: true, latencyMs: Date.now() - dbStart }
     } catch (err) {
-      checks.postgresql = {
+      checks.mariadb = {
         ok: false,
-        latencyMs: Date.now() - pgStart,
+        latencyMs: Date.now() - dbStart,
         error: err instanceof Error ? err.message : 'unknown',
       }
       overall = false

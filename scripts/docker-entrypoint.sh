@@ -10,6 +10,18 @@ SERVICE="${1:-api}"
 MAX_RETRIES=30
 RETRY_INTERVAL=2
 
+echo "[entrypoint] AmarktAI Network V2 — Starting $SERVICE"
+echo "[entrypoint] NODE_ENV=$NODE_ENV"
+
+# ── Validate required environment variables ────────────────────
+for var in DATABASE_URL REDIS_URL; do
+  if [ -z "$(eval echo \$$var)" ]; then
+    echo "[entrypoint] ERROR: Required environment variable $var is not set"
+    exit 1
+  fi
+done
+echo "[entrypoint] Environment variables validated"
+
 # ── Extract host:port from DATABASE_URL ────────────────────────
 DB_HOST=$(node -e "const u=new URL(process.env.DATABASE_URL);console.log(u.hostname)")
 DB_PORT=$(node -e "const u=new URL(process.env.DATABASE_URL);console.log(u.port||3306)")
@@ -56,13 +68,19 @@ s.setTimeout(3000, () => { s.destroy(); process.exit(1); });
 done
 echo "[entrypoint] Redis is ready"
 
-# ── Run Prisma migrations ─────────────────────────────────────
-echo "[entrypoint] Running Prisma migrations..."
-npx prisma migrate deploy --schema=./prisma/schema.prisma 2>&1 || {
-  echo "[entrypoint] WARNING: Prisma migrate deploy failed, attempting db push..."
-  npx prisma db push --schema=./prisma/schema.prisma --accept-data-loss 2>&1
-}
-echo "[entrypoint] Database schema is up to date"
+# ── Sync database schema ──────────────────────────────────────
+# Try migrate deploy first (for databases with migration history)
+# Fall back to db push for fresh databases
+echo "[entrypoint] Syncing database schema..."
+PRISMA="./node_modules/.bin/prisma"
+
+if $PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1; then
+  echo "[entrypoint] Migrations applied successfully"
+else
+  echo "[entrypoint] No migration history found, pushing schema directly..."
+  $PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss 2>&1
+  echo "[entrypoint] Schema pushed successfully"
+fi
 
 # ── Start the service ──────────────────────────────────────────
 echo "[entrypoint] Starting $SERVICE..."
@@ -74,7 +92,7 @@ case "$SERVICE" in
     exec node apps/worker/dist/worker.js
     ;;
   *)
-    echo "[entrypoint] Unknown service: $SERVICE"
+    echo "[entrypoint] ERROR: Unknown service: $SERVICE"
     exit 1
     ;;
 esac
