@@ -1,0 +1,24 @@
+{
+  "name": "@amarktai/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/worker.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/worker.ts",
+    "start": "node dist/worker.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@amarktai/core": "*",
+    "@amarktai/db": "*",
+    "@amarktai/artifacts": "*",
+    "bullmq": "^5.73.0",
+    "ioredis": "^5.10.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4",
+    "typescript": "^5"
+  }
+}
