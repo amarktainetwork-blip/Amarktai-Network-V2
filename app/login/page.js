@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ParticleField } from '@/components/amarkt/particles'
 import { Zap, Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -45,19 +46,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050810] px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4">
       {/* Background effects */}
+      <div className="pointer-events-none absolute inset-0 obsidian-grid radial-fade" />
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/2 top-1/3 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full swirl-1" />
         <div className="absolute right-0 bottom-0 h-[400px] w-[400px] rounded-full swirl-2" />
       </div>
+      <ParticleField />
 
-      {/* Back link */}
-      <Link href="/" className="absolute left-6 top-6 z-20">
-        <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to site
-        </Button>
-      </Link>
+      {/* Top bar */}
+      <div className="absolute left-0 top-0 z-20 flex w-full items-center justify-between px-6 py-5">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 text-black">
+            <Zap className="h-5 w-5" />
+          </div>
+          <span className="text-lg font-semibold tracking-tight">
+            AmarktAI <span className="text-muted-foreground font-normal">Network</span>
+          </span>
+        </Link>
+        <Link href="/">
+          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Back to site
+          </Button>
+        </Link>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -67,18 +80,18 @@ export default function LoginPage() {
       >
         <div className="rounded-2xl border border-white/[0.06] bg-[hsl(240_14%_3.5%)] p-8 shadow-2xl shadow-black/40">
           {/* Logo */}
-          <div className="mb-8 flex flex-col items-center gap-3">
+          <div className="mb-8 flex flex-col items-center gap-4">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-              className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 text-black"
+              className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 text-black"
             >
-              <Zap className="h-6 w-6" />
+              <Zap className="h-7 w-7" />
             </motion.div>
             <div className="text-center">
-              <h1 className="text-xl font-semibold tracking-tight">AmarktAI Network</h1>
-              <p className="mt-1 text-xs text-muted-foreground">Enterprise AI Capability Infrastructure</p>
+              <h1 className="text-2xl font-bold tracking-tight">AmarktAI Network</h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">Enterprise AI Capability Infrastructure</p>
             </div>
           </div>
 
@@ -154,6 +167,11 @@ export default function LoginPage() {
           </div>
         </div>
       </motion.div>
+
+      {/* Footer */}
+      <div className="absolute bottom-6 z-20 text-center text-xs text-muted-foreground">
+        &copy; 2026 AmarktAI Network
+      </div>
     </div>
   )
 }

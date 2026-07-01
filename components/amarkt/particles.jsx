@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react'
 /**
  * Lightweight canvas-based particle effect.
  * Uses requestAnimationFrame with automatic pause when tab is hidden.
- * Particles are small dots that drift slowly with subtle connections.
+ * Particles are small dots that drift with subtle connections.
  * Designed for premium aesthetic without compromising LCP.
  */
 export function ParticleField({ className = '' }) {
@@ -18,8 +18,9 @@ export function ParticleField({ className = '' }) {
     const ctx = canvas.getContext('2d')
     let animId
     let particles = []
-    const PARTICLE_COUNT = 60
-    const CONNECTION_DIST = 120
+    const PARTICLE_COUNT = 100
+    const CONNECTION_DIST = 140
+    const VELOCITY = 0.6
 
     function resize() {
       canvas.width = canvas.offsetWidth * window.devicePixelRatio
@@ -33,8 +34,8 @@ export function ParticleField({ className = '' }) {
       particles = Array.from({ length: PARTICLE_COUNT }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
+        vx: (Math.random() - 0.5) * VELOCITY,
+        vy: (Math.random() - 0.5) * VELOCITY,
         r: Math.random() * 1.5 + 0.5,
         opacity: Math.random() * 0.4 + 0.1,
       }))
@@ -52,7 +53,7 @@ export function ParticleField({ className = '' }) {
           const dy = particles[i].y - particles[j].y
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist < CONNECTION_DIST) {
-            const alpha = (1 - dist / CONNECTION_DIST) * 0.12
+            const alpha = (1 - dist / CONNECTION_DIST) * 0.15
             ctx.strokeStyle = `rgba(34, 211, 238, ${alpha})`
             ctx.lineWidth = 0.5
             ctx.beginPath()
