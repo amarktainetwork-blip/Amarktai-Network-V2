@@ -16,6 +16,7 @@ import {
   parseBearerToken,
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
+  TOKEN_COST_MULTIPLIER,
   type JobPayload,
   type CreateJobResponse,
   type JobStatusResponse,
@@ -27,9 +28,11 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   ok: boolean
   statusCode: number
   error?: string
-  app?: { id: number; name: string; slug: string }
+  app?: { id: string; name: string; slug: string }
   allowedCapabilities?: string[]
   dailyBudgetCents?: number
+  tokenBalance?: number
+  connectionId?: string
 }> {
   if (!bearerHeader) {
     return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
@@ -51,6 +54,7 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
           appName: true,
           status: true,
           allowedCapabilities: true,
+          tokenBalance: true,
         },
       },
     },
@@ -88,6 +92,8 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
     app: { id: conn.id, name: conn.appName, slug: conn.appSlug },
     allowedCapabilities: allowedCaps,
     dailyBudgetCents: budget?.dailyBudgetCents ?? 0,
+    tokenBalance: conn.tokenBalance,
+    connectionId: conn.id,
   }
 }
 
@@ -165,7 +171,18 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // 6. Create Job record in PostgreSQL
+    // 6. TOKEN TOLLBOOTH: Check token ledger balance
+    const costMultiplier = TOKEN_COST_MULTIPLIER[capability] ?? 1
+    if (auth.tokenBalance !== undefined && auth.tokenBalance < costMultiplier) {
+      return reply.status(402).send({
+        error: true,
+        message: `Insufficient token balance. This capability requires ${costMultiplier} tokens, but only ${auth.tokenBalance} remain. Please top up your account.`,
+        required: costMultiplier,
+        remaining: auth.tokenBalance,
+      })
+    }
+
+    // 7. Create Job record in MySQL
     const traceId = `trace_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
     const job = await prisma.job.create({
       data: {
@@ -180,7 +197,15 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       },
     })
 
-    // 7. Push to BullMQ queue
+    // 8. Deduct tokens from ledger (pre-paid model)
+    if (auth.connectionId && costMultiplier > 0) {
+      await prisma.appConnection.update({
+        where: { id: auth.connectionId },
+        data: { tokenBalance: { decrement: costMultiplier } },
+      })
+    }
+
+    // 9. Push to BullMQ queue
     const payload: JobPayload = {
       jobId: job.id,
       appSlug: auth.app!.slug,
@@ -208,7 +233,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
     }
 
-    // 8. Return tracking ID
+    // 10. Return tracking ID
     const response: CreateJobResponse = {
       jobId: job.id,
       status: 'queued',
