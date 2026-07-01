@@ -5,23 +5,23 @@
  * Or:       npx tsx prisma/seed.ts
  */
 
-const { PrismaClient } = require('@prisma/client')
-const bcrypt = require('bcryptjs')
+import { PrismaClient } from '@prisma/client'
+import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
-async function main() {
-  const email = 'amarktainetwork@gmail.com'
-  const password = 'Ashmor12@'
+const ADMIN_EMAIL = 'amarktainetwork@gmail.com'
+const ADMIN_PASSWORD = 'Ashmor12@'
 
-  console.log(`[seed] Ensuring admin account exists for ${email}...`)
+async function main(): Promise<void> {
+  console.log(`[seed] Ensuring admin account exists for ${ADMIN_EMAIL}...`)
 
-  const passwordHash = await bcrypt.hash(password, 12)
+  const passwordHash = await hash(ADMIN_PASSWORD, 12)
 
   const admin = await prisma.adminUser.upsert({
-    where: { email },
+    where: { email: ADMIN_EMAIL },
     update: { passwordHash },
-    create: { email, passwordHash },
+    create: { email: ADMIN_EMAIL, passwordHash },
   })
 
   console.log(`[seed] Admin account ready: ${admin.email} (id: ${admin.id})`)
