@@ -1,4 +1,5 @@
 const nextConfig = {
+  output: 'standalone',
   allowedDevOrigins: [
     '*.preview.emergentagent.com',
     '*.emergentagent.com',

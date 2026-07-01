@@ -1,0 +1,162 @@
+# ═══════════════════════════════════════════════════════════════
+# AmarktAI Network V2 — Production Docker Compose
+# ═══════════════════════════════════════════════════════════════
+# Usage:
+#   cp .env.example .env   # Fill in real values
+#   docker compose build --no-cache
+#   docker compose up -d
+#   docker compose logs -f
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ── MariaDB ─────────────────────────────────────────────────
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-amarktai}
+      MYSQL_USER: ${MYSQL_USER:-amarktai}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - amarktai
+
+  # ── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amarktai
+
+  # ── Qdrant ──────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amarktai
+
+  # ── API (Fastify) ───────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    image: amarktai/api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://${MYSQL_USER:-amarktai}:${MYSQL_PASSWORD}@mariadb:3306/${MYSQL_DATABASE:-amarktai}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    ports:
+      - "3001:3001"
+    volumes:
+      - api_storage:/var/www/amarktai/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - amarktai
+
+  # ── Worker (BullMQ) ─────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    image: amarktai/worker:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://${MYSQL_USER:-amarktai}:${MYSQL_PASSWORD}@mariadb:3306/${MYSQL_DATABASE:-amarktai}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    volumes:
+      - worker_storage:/var/www/amarktai/storage
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - amarktai
+
+  # ── Dashboard (Next.js) ─────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dashboard
+    image: amarktai/dashboard:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - amarktai
+
+# ── Volumes ──────────────────────────────────────────────────
+volumes:
+  mariadb_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  api_storage:
+    driver: local
+  worker_storage:
+    driver: local
+
+# ── Networks ─────────────────────────────────────────────────
+networks:
+  amarktai:
+    driver: bridge
