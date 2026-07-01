@@ -21,16 +21,16 @@ function RunBar({ type, payload, disabled }) {
     setBusy(true)
     try {
       await fetchJSON('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, label: type, payload: payload() }) })
-      toast.success('Job enqueued (Mock)', { description: `${type} · track it in Jobs & Artifacts` })
+      toast.success('Job enqueued', { description: `${type} · track in Proof Runner` })
     } catch (e) { toast.error('Failed to enqueue') }
     setBusy(false)
   }
   return (
     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4">
-      <span className="text-xs text-muted-foreground">Executes as a background job in mock mode.</span>
+      <span className="text-xs text-muted-foreground">Executes as a background job.</span>
       <div className="transition-transform duration-200 hover:scale-105 active:scale-95">
         <Button onClick={run} disabled={disabled || busy} className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90">
-          <Sparkles className="mr-1.5 h-4 w-4" /> Run (Mock)
+          <Sparkles className="mr-1.5 h-4 w-4" /> Execute
         </Button>
       </div>
     </div>
