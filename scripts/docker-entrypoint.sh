@@ -43,7 +43,13 @@ echo "[boot] Schema synced"
 # ── Seed admin (API only) ─────────────────────────────────────
 if [ "$SERVICE" = "api" ]; then
   echo "[boot] Seeding admin..."
-  $PRISMA db seed --schema=./prisma/schema.prisma 2>&1 || echo "[boot] Seed skipped (non-fatal)"
+  if ! $PRISMA db seed --schema=./prisma/schema.prisma 2>&1; then
+    echo "[boot] ERROR: Admin seed failed — login will not work"
+    # Do NOT exit — allow the API to start so healthcheck passes,
+    # but the error is visible in logs for debugging.
+  else
+    echo "[boot] Admin seed complete"
+  fi
 fi
 
 # ── Launch ────────────────────────────────────────────────────
