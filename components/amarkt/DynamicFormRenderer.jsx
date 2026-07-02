@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client'
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
@@ -10,28 +9,8 @@ import { Field, DropZone } from '@/components/amarkt/kit'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Settings } from 'lucide-react'
 
-// ─── Schema Types ──────────────────────────────────────────────
-export interface FieldSchema {
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'multiselect' | 'file'
-  label: string
-  placeholder?: string
-  hint?: string
-  multiline?: boolean
-  min?: number
-  max?: number
-  step?: number
-  unit?: string
-  options?: string[] | { value: string; label: string }[]
-  accept?: string
-  kind?: string
-  advanced?: boolean
-  visibleWhen?: { field: string; value: unknown }
-}
-
-export type FormSchema = Record<string, FieldSchema>
-
 // ─── Field Renderers ───────────────────────────────────────────
-function EnumField({ schema, value, onChange }: { schema: FieldSchema; value: string; onChange: (v: string) => void }) {
+function EnumField({ schema, value, onChange }) {
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger className="bg-black/20"><SelectValue placeholder={schema.placeholder || 'Select…'} /></SelectTrigger>
@@ -46,9 +25,9 @@ function EnumField({ schema, value, onChange }: { schema: FieldSchema; value: st
   )
 }
 
-function MultiSelectField({ schema, value, onChange }: { schema: FieldSchema; value: string[]; onChange: (v: string[]) => void }) {
+function MultiSelectField({ schema, value, onChange }) {
   const selected = value || []
-  const toggle = (item: string) => {
+  const toggle = (item) => {
     const next = selected.includes(item) ? selected.filter((s) => s !== item) : [...selected, item]
     onChange(next)
   }
@@ -69,7 +48,7 @@ function MultiSelectField({ schema, value, onChange }: { schema: FieldSchema; va
   )
 }
 
-function NumberField({ schema, value, onChange }: { schema: FieldSchema; value: number; onChange: (v: number) => void }) {
+function NumberField({ schema, value, onChange }) {
   const val = value ?? schema.min ?? 0
   if (schema.min !== undefined && schema.max !== undefined) {
     return (
@@ -86,16 +65,10 @@ function NumberField({ schema, value, onChange }: { schema: FieldSchema; value: 
 }
 
 // ─── Main Renderer ─────────────────────────────────────────────
-interface DynamicFormRendererProps {
-  schema: FormSchema
-  values: Record<string, unknown>
-  onChange: (values: Record<string, unknown>) => void
-}
+export default function DynamicFormRenderer({ schema, values, onChange }) {
+  const set = (key, val) => onChange({ ...values, [key]: val })
 
-export default function DynamicFormRenderer({ schema, values, onChange }: DynamicFormRendererProps) {
-  const set = (key: string, val: unknown) => onChange({ ...values, [key]: val })
-
-  const isVisible = (def: FieldSchema): boolean => {
+  const isVisible = (def) => {
     if (!def.visibleWhen) return true
     return values[def.visibleWhen.field] === def.visibleWhen.value
   }
@@ -103,7 +76,7 @@ export default function DynamicFormRenderer({ schema, values, onChange }: Dynami
   const mainFields = Object.entries(schema).filter(([, def]) => !def.advanced && isVisible(def))
   const advancedFields = Object.entries(schema).filter(([, def]) => def.advanced && isVisible(def))
 
-  const renderField = (key: string, def: FieldSchema) => {
+  const renderField = (key, def) => {
     const value = values[key]
 
     if (def.type === 'boolean') {
@@ -115,27 +88,27 @@ export default function DynamicFormRenderer({ schema, values, onChange }: Dynami
       )
     }
 
-    let control: React.ReactNode
+    let control
     switch (def.type) {
       case 'string':
         control = def.multiline
-          ? <Textarea value={(value as string) || ''} onChange={(e) => set(key, e.target.value)} placeholder={def.placeholder || ''} className="min-h-[80px] bg-black/20" />
-          : <Input value={(value as string) || ''} onChange={(e) => set(key, e.target.value)} placeholder={def.placeholder || ''} className="bg-black/20" />
+          ? <Textarea value={value || ''} onChange={(e) => set(key, e.target.value)} placeholder={def.placeholder || ''} className="min-h-[80px] bg-black/20" />
+          : <Input value={value || ''} onChange={(e) => set(key, e.target.value)} placeholder={def.placeholder || ''} className="bg-black/20" />
         break
       case 'number':
-        control = <NumberField schema={def} value={value as number} onChange={(v) => set(key, v)} />
+        control = <NumberField schema={def} value={value} onChange={(v) => set(key, v)} />
         break
       case 'enum':
-        control = <EnumField schema={def} value={value as string} onChange={(v) => set(key, v)} />
+        control = <EnumField schema={def} value={value} onChange={(v) => set(key, v)} />
         break
       case 'multiselect':
-        control = <MultiSelectField schema={def} value={value as string[]} onChange={(v) => set(key, v)} />
+        control = <MultiSelectField schema={def} value={value} onChange={(v) => set(key, v)} />
         break
       case 'file':
         control = <DropZone accept={def.accept || '*'} label={def.placeholder || `Drop ${def.kind || 'file'}`} kind={def.kind || 'file'} compact />
         break
       default:
-        control = <Input value={(value as string) || ''} onChange={(e) => set(key, e.target.value)} className="bg-black/20" />
+        control = <Input value={value || ''} onChange={(e) => set(key, e.target.value)} className="bg-black/20" />
     }
 
     return (

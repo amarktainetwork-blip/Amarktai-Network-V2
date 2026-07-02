@@ -1,14 +1,13 @@
-// @ts-nocheck
 'use client'
 import { useState } from 'react'
-import { useStudioStore, type GeneratedAsset } from '@/lib/useStudioStore'
+import { useStudioStore } from '@/lib/useStudioStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/amarkt/EmptyState'
 import { X, Image as ImageIcon, Film, Music, FileText, GripVertical, Search, Package } from 'lucide-react'
 
-const TYPE_ICONS: Record<string, React.ElementType> = { image: ImageIcon, video: Film, audio: Music, document: FileText }
+const TYPE_ICONS = { image: ImageIcon, video: Film, audio: Music, document: FileText }
 const TYPE_FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'image', label: 'Images' },
@@ -16,17 +15,17 @@ const TYPE_FILTERS = [
   { value: 'audio', label: 'Audio' },
 ]
 
-export default function AssetLibraryDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function AssetLibraryDrawer({ open, onClose }) {
   const { generatedAssets } = useStudioStore()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragId, setDragId] = useState(null)
 
   const filtered = generatedAssets
     .filter((a) => filter === 'all' || a.type === filter)
     .filter((a) => !search || a.name.toLowerCase().includes(search.toLowerCase()))
 
-  const handleDragStart = (e: React.DragEvent, asset: GeneratedAsset) => {
+  const handleDragStart = (e, asset) => {
     setDragId(asset.id)
     e.dataTransfer.setData('text/plain', JSON.stringify(asset))
     e.dataTransfer.effectAllowed = 'copy'

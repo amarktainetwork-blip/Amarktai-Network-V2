@@ -1,7 +1,6 @@
-// @ts-nocheck
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { useStudioStore, type GeneratedAsset } from '@/lib/useStudioStore'
+import { useStudioStore } from '@/lib/useStudioStore'
 import { PageTransition, PageHeader, Field } from '@/components/amarkt/kit'
 import { DropZone, MediaPreview, ExtractedDataCard } from '@/components/amarkt/StudioComponents'
 import AssetLibraryDrawer from '@/components/amarkt/AssetLibraryDrawer'

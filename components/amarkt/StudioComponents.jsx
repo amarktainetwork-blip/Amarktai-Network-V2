@@ -1,37 +1,28 @@
-// @ts-nocheck
 'use client'
-import { useState, useRef, type DragEvent, type ChangeEvent } from 'react'
+import { useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Upload, X, Image as ImageIcon, Film, Music, FileText, Play, Pause, Download, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 // ─── DropZone ──────────────────────────────────────────────────
-interface DropZoneProps {
-  accept?: string
-  label?: string
-  kind?: string
-  compact?: boolean
-  onFile?: (file: File | null) => void
-}
-
-export function DropZone({ accept = '*', label = 'Drop files or click to browse', kind = 'file', compact = false, onFile }: DropZoneProps) {
-  const [file, setFile] = useState<File | null>(null)
+export function DropZone({ accept = '*', label = 'Drop files or click to browse', kind = 'file', compact = false, onFile }) {
+  const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef(null)
 
-  const handleDrop = (e: DragEvent) => {
+  const handleDrop = (e) => {
     e.preventDefault()
     setDragOver(false)
     const f = e.dataTransfer.files[0]
     if (f) { setFile(f); onFile?.(f) }
   }
 
-  const handleSelect = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleSelect = (e) => {
     const f = e.target.files?.[0]
     if (f) { setFile(f); onFile?.(f) }
   }
 
-  const clear = (e: React.MouseEvent) => {
+  const clear = (e) => {
     e.stopPropagation()
     setFile(null)
     onFile?.(null)
@@ -85,15 +76,7 @@ export function DropZone({ accept = '*', label = 'Drop files or click to browse'
 }
 
 // ─── MediaPreview ──────────────────────────────────────────────
-interface MediaPreviewProps {
-  type: 'image' | 'video' | 'audio' | 'text'
-  title?: string
-  loading?: boolean
-  data?: { url?: string; text?: string; markdown?: string }
-  className?: string
-}
-
-export function MediaPreview({ type, title, loading, data, className }: MediaPreviewProps) {
+export function MediaPreview({ type = 'image', title, loading, data, className }) {
   const [playing, setPlaying] = useState(false)
 
   if (loading) {
@@ -178,10 +161,9 @@ export function MediaPreview({ type, title, loading, data, className }: MediaPre
     )
   }
 
-  // text/markdown
   return (
     <div className={cn('rounded-lg border border-white/[0.06] bg-black/20 p-4 min-h-[200px] max-h-[400px] overflow-y-auto', className)}>
-      <div className="prose prose-invert prose-sm max-w-none text-foreground/80 text-sm whitespace-pre-wrap">
+      <div className="text-foreground/80 text-sm whitespace-pre-wrap">
         {data?.markdown || data?.text || 'No content'}
       </div>
     </div>
@@ -189,14 +171,7 @@ export function MediaPreview({ type, title, loading, data, className }: MediaPre
 }
 
 // ─── ExtractedDataCard ─────────────────────────────────────────
-interface ExtractedDataCardProps {
-  icon?: React.ElementType
-  title: string
-  items: string[]
-  className?: string
-}
-
-export function ExtractedDataCard({ icon: Icon, title, items, className }: ExtractedDataCardProps) {
+export function ExtractedDataCard({ icon: Icon, title, items, className }) {
   return (
     <div className={cn('rounded-lg border border-white/[0.06] bg-black/20 p-4', className)}>
       <div className="flex items-center gap-2 mb-3">
