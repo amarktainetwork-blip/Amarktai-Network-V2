@@ -1,9 +1,10 @@
 'use client'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Reveal, Stagger, StaggerItem } from '@/components/amarkt/kit'
 import { ParticleField } from '@/components/amarkt/particles'
 import { SiteNav, SiteFooter } from '@/components/amarkt/site-nav'
+import ParticleEntry from '@/components/amarkt/ParticleEntry'
 import { Button } from '@/components/ui/button'
 import {
   Boxes, Server, Database, Workflow, ShieldCheck, ArrowRight, Cpu, Layers, Sparkles,
@@ -20,13 +21,21 @@ const FEATURES = [
 
 export default function Landing() {
   const [isAuthed, setIsAuthed] = useState(false)
+  const [entryComplete, setEntryComplete] = useState(false)
 
   useEffect(() => {
     setIsAuthed(!!localStorage.getItem('amarktai_token'))
   }, [])
 
+  const handleEntryComplete = useCallback(() => {
+    setEntryComplete(true)
+  }, [])
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* Particle Entry Animation */}
+      <ParticleEntry onComplete={handleEntryComplete} />
+
       <div className="pointer-events-none absolute inset-0 obsidian-grid radial-fade" />
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-40 top-0 h-[600px] w-[600px] rounded-full swirl-1" />
@@ -34,6 +43,18 @@ export default function Landing() {
         <div className="absolute left-1/3 bottom-0 h-[400px] w-[400px] rounded-full swirl-3" />
       </div>
       <ParticleField />
+
+      {/* Main content wrapper with entry transition */}
+      <main
+        id="mainContent"
+        style={{
+          opacity: entryComplete ? 1 : 0,
+          transform: entryComplete ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'opacity 1.5s ease-out, transform 1.5s ease-out',
+          position: 'relative',
+          zIndex: 10,
+        }}
+      >
 
       <SiteNav />
 
@@ -120,6 +141,7 @@ export default function Landing() {
       </section>
 
       <SiteFooter />
+      </main>
     </div>
   )
 }
