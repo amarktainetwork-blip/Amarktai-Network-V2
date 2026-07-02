@@ -144,9 +144,19 @@ function CheckboxGrid({ schema, value, onChange }) {
 export default function DynamicFormRenderer({ schema, values, onChange }) {
   const set = (key, val) => onChange({ ...values, [key]: val })
 
+  // Check if a field should be visible based on its `visibleWhen` condition
+  const isVisible = (def) => {
+    if (!def.visibleWhen) return true
+    const { field, value: expectedValue } = def.visibleWhen
+    return values[field] === expectedValue
+  }
+
   return (
     <div className="space-y-5">
       {Object.entries(schema).map(([key, def]) => {
+        // Skip hidden fields (conditional visibility)
+        if (!isVisible(def)) return null
+
         const value = values[key]
 
         // Boolean renders its own container (no Field wrapper)

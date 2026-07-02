@@ -1,15 +1,16 @@
 'use client'
 import { useState } from 'react'
 import { PageTransition, PageHeader, Field } from '@/components/amarkt/kit'
+import SystemHealthCard from '@/components/amarkt/SystemHealthCard'
+import TestConnectionButton from '@/components/amarkt/TestConnectionButton'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { KeyRound, Cpu, Clock, HardDrive, ShieldCheck, Save, Eye, EyeOff, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
-function MaskedKeyInput({ label, value, onChange, placeholder }) {
+function MaskedKeyInput({ label, value, onChange, placeholder, providerName }) {
   const [visible, setVisible] = useState(false)
   const hasValue = value && value.length > 0
   return (
@@ -55,10 +56,10 @@ export default function SettingsPage() {
   }
 
   const providerKeys = [
-    { key: 'genx_key', label: 'GenX API Key', placeholder: 'gx_…', status: 'ready' },
-    { key: 'together_key', label: 'Together AI Key', placeholder: 'tg_…', status: 'ready' },
-    { key: 'groq_key', label: 'Groq API Key', placeholder: 'gsk_…', status: 'ready' },
-    { key: 'mimo_key', label: 'MiMo API Key', placeholder: 'mimo_…', status: 'experimental' },
+    { key: 'genx_key', label: 'GenX API Key', placeholder: 'gx_…', status: 'ready', providerName: 'GenX' },
+    { key: 'together_key', label: 'Together AI Key', placeholder: 'tg_…', status: 'ready', providerName: 'Together AI' },
+    { key: 'groq_key', label: 'Groq API Key', placeholder: 'gsk_…', status: 'ready', providerName: 'Groq' },
+    { key: 'mimo_key', label: 'MiMo API Key', placeholder: 'mimo_…', status: 'experimental', providerName: 'MiMo' },
   ]
 
   return (
@@ -69,6 +70,9 @@ export default function SettingsPage() {
         </Button>
       </PageHeader>
 
+      {/* System Health */}
+      <SystemHealthCard />
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* API Credentials */}
         <Card className="border-white/[0.07] bg-white/[0.02] p-6">
@@ -76,12 +80,18 @@ export default function SettingsPage() {
           <div className="space-y-4">
             {providerKeys.map((pk) => (
               <div key={pk.key} className="space-y-1">
-                <MaskedKeyInput
-                  label={pk.label}
-                  value={s[pk.key]}
-                  onChange={(v) => set(pk.key, v)}
-                  placeholder={pk.placeholder}
-                />
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <MaskedKeyInput
+                      label={pk.label}
+                      value={s[pk.key]}
+                      onChange={(v) => set(pk.key, v)}
+                      placeholder={pk.placeholder}
+                      providerName={pk.providerName}
+                    />
+                  </div>
+                  <TestConnectionButton providerName={pk.providerName} hasKey={s[pk.key]?.length > 0} />
+                </div>
                 <div className="flex items-center gap-1.5 text-[10px]">
                   {pk.status === 'ready' ? (
                     <span className="flex items-center gap-1 text-emerald-400/70"><CheckCircle2 className="h-3 w-3" /> Connected</span>

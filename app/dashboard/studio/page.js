@@ -79,18 +79,27 @@ function DirectorChat() {
   ])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [attachedKB, setAttachedKB] = useState(null)
+  const [kbOpen, setKbOpen] = useState(false)
   const scrollRef = useRef(null)
+
+  const knowledgeBases = [
+    { id: 'brand-guide', name: 'Brand Guide', entries: 142 },
+    { id: 'product-docs', name: 'Product Documentation', entries: 87 },
+  ]
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [messages])
 
   const send = () => {
     if (!input.trim()) return
-    const userMsg = { role: 'user', content: input }
+    const kbNote = attachedKB ? `\n\n[Attached: ${attachedKB.name} knowledge base]` : ''
+    const userMsg = { role: 'user', content: input + kbNote }
     setMessages((p) => [...p, userMsg])
     setInput('')
     setStreaming(true)
-    // Simulate streaming response
-    const fullResponse = `I'll help you with that. Let me analyze your request and create an execution plan.\n\n**Step 1:** Analyze input requirements\n**Step 2:** Select optimal providers\n**Step 3:** Execute pipeline\n\nReady to proceed?`
+    const fullResponse = attachedKB
+      ? `I'll analyze your request using the **${attachedKB.name}** knowledge base for context.\n\n**Step 1:** Retrieve relevant context from ${attachedKB.name}\n**Step 2:** Analyze input requirements\n**Step 3:** Select optimal providers\n**Step 4:** Execute pipeline\n\nReady to proceed?`
+      : `I'll help you with that. Let me analyze your request and create an execution plan.\n\n**Step 1:** Analyze input requirements\n**Step 2:** Select optimal providers\n**Step 3:** Execute pipeline\n\nReady to proceed?`
     let idx = 0
     const interval = setInterval(() => {
       idx += 3
@@ -121,8 +130,33 @@ function DirectorChat() {
         ))}
       </div>
       <div className="border-t border-white/[0.06] p-3">
+        {attachedKB && (
+          <div className="mb-2 flex items-center gap-2">
+            <Badge variant="outline" className="border-violet-500/30 text-[10px] text-violet-300 gap-1">
+              <Database className="h-3 w-3" /> {attachedKB.name}
+              <button onClick={() => setAttachedKB(null)} className="ml-1 hover:text-foreground"><X className="h-2.5 w-2.5" /></button>
+            </Badge>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button className="rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition" title="Voice input"><MicIcon className="h-4 w-4" /></button>
+          <div className="relative">
+            <button onClick={() => setKbOpen(!kbOpen)} className={`rounded-md p-2 transition ${attachedKB ? 'text-violet-300 bg-violet-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.06]'}`} title="Attach knowledge base">
+              <Database className="h-4 w-4" />
+            </button>
+            {kbOpen && (
+              <div className="absolute bottom-full left-0 mb-2 w-56 rounded-lg border border-white/[0.08] bg-[hsl(240_14%_5%)] shadow-xl p-2 space-y-1 z-10">
+                <div className="text-[10px] text-muted-foreground px-2 py-1">Select Knowledge Base</div>
+                {knowledgeBases.map((kb) => (
+                  <button key={kb.id} onClick={() => { setAttachedKB(kb); setKbOpen(false) }}
+                    className={`w-full flex items-center justify-between rounded-md px-2 py-1.5 text-xs transition ${attachedKB?.id === kb.id ? 'bg-violet-500/10 text-violet-300' : 'text-foreground/80 hover:bg-white/[0.06]'}`}>
+                    <span>{kb.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{kb.entries} entries</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Describe your creative task…" className="bg-black/20 flex-1" />
           <Button onClick={send} size="sm" className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black"><Send className="h-4 w-4" /></Button>
         </div>
@@ -135,13 +169,15 @@ function DirectorChat() {
 }
 
 // ─── Timeline (Bottom Panel) ──────────────────────────────────
-function Timeline() {
+function Timeline({ hasClips }) {
   const tracks = [
-    { id: 'video', label: 'Video', color: 'cyan', clips: [{ start: 0, width: 40, label: 'Scene 1' }, { start: 42, width: 30, label: 'Scene 2' }] },
-    { id: 'voice', label: 'Voice', color: 'violet', clips: [{ start: 5, width: 35, label: 'VO Track' }] },
-    { id: 'music', label: 'Music', color: 'amber', clips: [{ start: 0, width: 72, label: 'BGM' }] },
-    { id: 'captions', label: 'Captions', color: 'emerald', clips: [{ start: 2, width: 20, label: 'Sub 1' }, { start: 28, width: 25, label: 'Sub 2' }] },
+    { id: 'video', label: 'Video', color: 'cyan', clips: hasClips ? [{ start: 0, width: 40, label: 'Scene 1' }, { start: 42, width: 30, label: 'Scene 2' }] : [] },
+    { id: 'voice', label: 'Voice', color: 'violet', clips: hasClips ? [{ start: 5, width: 35, label: 'VO Track' }] : [] },
+    { id: 'music', label: 'Music', color: 'amber', clips: hasClips ? [{ start: 0, width: 72, label: 'BGM' }] : [] },
+    { id: 'captions', label: 'Captions', color: 'emerald', clips: hasClips ? [{ start: 2, width: 20, label: 'Sub 1' }, { start: 28, width: 25, label: 'Sub 2' }] : [] },
   ]
+
+  const isEmpty = tracks.every((t) => t.clips.length === 0)
 
   return (
     <div className="h-full overflow-auto">
@@ -150,32 +186,41 @@ function Timeline() {
         <span className="text-xs font-medium text-muted-foreground">Timeline</span>
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]"><Play className="h-3 w-3" /></Button>
-          <span className="text-[10px] text-muted-foreground font-mono">00:00 / 00:15</span>
+          <span className="text-[10px] text-muted-foreground font-mono">00:00 / {hasClips ? '00:15' : '00:00'}</span>
         </div>
       </div>
-      <div className="p-2 space-y-1">
-        {tracks.map((track) => (
-          <div key={track.id} className="flex items-center gap-2">
-            <div className="w-16 shrink-0 flex items-center gap-1">
-              <GripVertical className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[10px] text-muted-foreground truncate">{track.label}</span>
-            </div>
-            <div className="relative h-8 flex-1 rounded bg-white/[0.02] border border-white/[0.04]">
-              {track.clips.map((clip, i) => (
-                <div key={i} className={`absolute top-1 bottom-1 rounded bg-${track.color}-500/20 border border-${track.color}-500/30 flex items-center px-1.5 cursor-grab`}
-                  style={{ left: `${clip.start}%`, width: `${clip.width}%` }}>
-                  <span className="text-[9px] text-foreground/70 truncate">{clip.label}</span>
-                  <div className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 rounded-l" />
-                  <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 rounded-r" />
-                </div>
-              ))}
-            </div>
-            <div className="w-8 flex items-center justify-center">
-              <Volume2 className="h-3 w-3 text-muted-foreground/50" />
-            </div>
+      {isEmpty ? (
+        <div className="flex flex-col items-center justify-center h-[calc(100%-36px)] p-4 text-center">
+          <div className="rounded-lg border border-dashed border-white/12 bg-white/[0.015] px-6 py-8 max-w-xs">
+            <GripVertical className="mx-auto mb-2 h-6 w-6 text-muted-foreground/30" />
+            <p className="text-xs text-muted-foreground">Drag assets from the library or run a generation to populate the timeline.</p>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="p-2 space-y-1">
+          {tracks.map((track) => (
+            <div key={track.id} className="flex items-center gap-2">
+              <div className="w-16 shrink-0 flex items-center gap-1">
+                <GripVertical className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-[10px] text-muted-foreground truncate">{track.label}</span>
+              </div>
+              <div className="relative h-8 flex-1 rounded bg-white/[0.02] border border-white/[0.04]">
+                {track.clips.map((clip, i) => (
+                  <div key={i} className={`absolute top-1 bottom-1 rounded bg-${track.color}-500/20 border border-${track.color}-500/30 flex items-center px-1.5 cursor-grab`}
+                    style={{ left: `${clip.start}%`, width: `${clip.width}%` }}>
+                    <span className="text-[9px] text-foreground/70 truncate">{clip.label}</span>
+                    <div className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 rounded-l" />
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-white/20 rounded-r" />
+                  </div>
+                ))}
+              </div>
+              <div className="w-8 flex items-center justify-center">
+                <Volume2 className="h-3 w-3 text-muted-foreground/50" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -542,7 +587,7 @@ export default function Studio() {
           {/* Bottom Panel — Timeline */}
           {bottomPanelOpen && (
             <div className="h-48 shrink-0 rounded-lg border border-white/[0.06] bg-[hsl(240_14%_3.5%)] overflow-hidden">
-              <Timeline />
+              <Timeline hasClips={false} />
             </div>
           )}
         </div>

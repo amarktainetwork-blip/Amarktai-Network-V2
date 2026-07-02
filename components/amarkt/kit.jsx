@@ -61,6 +61,17 @@ export function Field({ label, hint, children }) {
   )
 }
 
+export function EmptyState({ icon: Icon, title, description, action, className }) {
+  return (
+    <div className={cn('flex flex-col items-center justify-center p-12 text-center', className)}>
+      {Icon && <Icon className="mx-auto mb-4 h-10 w-10 text-muted-foreground/40" />}
+      <h3 className="text-lg font-semibold">{title}</h3>
+      {description && <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>}
+      {action && <div className="mt-6">{action}</div>}
+    </div>
+  )
+}
+
 export function DropZone({ label = 'Drop files or click to browse', kind = 'asset' }) {
   return (
     <div className="group flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-white/12 bg-white/[0.015] px-6 py-8 text-center transition hover:border-cyan-500/40 hover:bg-cyan-500/[0.03]">
