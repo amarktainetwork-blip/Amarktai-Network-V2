@@ -120,8 +120,8 @@ export const jwtPluginDecorated = fp(jwtPlugin, { name: 'jwt' })
 // ── Auth Guard Hook ───────────────────────────────────────────────────────────
 
 export async function jwtAuthGuard(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const authHeader = request.headers.authorization
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const authHeader = request.headers?.authorization
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
     reply.status(401).send({ error: true, message: 'Missing or invalid Authorization header' })
     return
   }

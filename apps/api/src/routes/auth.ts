@@ -79,8 +79,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // ── GET /api/v1/auth/verify ───────────────────────────────────────────────
 
   app.get('/api/v1/auth/verify', async (request, reply) => {
-    const authHeader = request.headers.authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authHeader = request.headers?.authorization
+    if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
       return reply.status(401).send({ error: true, message: 'Missing token' })
     }
 
