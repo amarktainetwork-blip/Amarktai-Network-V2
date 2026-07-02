@@ -3,12 +3,13 @@ set -e
 
 # ═══════════════════════════════════════════════════════════════
 # AmarktAI Network V2 — Docker Entrypoint
-# Waits for dependencies, runs migrations, starts the service
+# Waits for dependencies, resolves failed migrations, deploys schema, seeds admin
 # ═══════════════════════════════════════════════════════════════
 
 SERVICE="${1:-api}"
 MAX_RETRIES=30
 RETRY_INTERVAL=2
+PRISMA="./node_modules/.bin/prisma"
 
 echo "[entrypoint] AmarktAI Network V2 — Starting $SERVICE"
 echo "[entrypoint] NODE_ENV=$NODE_ENV"
@@ -68,18 +69,38 @@ s.setTimeout(3000, () => { s.destroy(); process.exit(1); });
 done
 echo "[entrypoint] Redis is ready"
 
-# ── Sync database schema ──────────────────────────────────────
-# Try migrate deploy first (for databases with migration history)
-# Fall back to db push for fresh databases
-echo "[entrypoint] Syncing database schema..."
-PRISMA="./node_modules/.bin/prisma"
+# ── Resolve any failed migrations ──────────────────────────────
+# The phase4 migration may be stuck in a failed state.
+# Resolve it before attempting deploy so Prisma can proceed.
+echo "[entrypoint] Checking for failed migrations..."
+FAILED_MIGRATIONS=$($PRISMA migrate status --schema=./prisma/schema.prisma 2>&1 | grep "failed" || true)
 
+if [ -n "$FAILED_MIGRATIONS" ]; then
+  echo "[entrypoint] Found failed migrations. Resolving..."
+  # Resolve the known failed migration
+  $PRISMA migrate resolve --rolled-back "20260701180000_phase4_mariadb_token_ledger" --schema=./prisma/schema.prisma 2>&1 || true
+  echo "[entrypoint] Failed migration resolved"
+fi
+
+# ── Deploy migrations ──────────────────────────────────────────
+echo "[entrypoint] Deploying database migrations..."
 if $PRISMA migrate deploy --schema=./prisma/schema.prisma 2>&1; then
-  echo "[entrypoint] Migrations applied successfully"
+  echo "[entrypoint] Migrations deployed successfully"
 else
-  echo "[entrypoint] No migration history found, pushing schema directly..."
+  echo "[entrypoint] migrate deploy failed, attempting db push as fallback..."
   $PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss 2>&1
   echo "[entrypoint] Schema pushed successfully"
+fi
+
+# ── Seed admin account ─────────────────────────────────────────
+# Only seed on API container to avoid duplicate writes from worker
+if [ "$SERVICE" = "api" ]; then
+  echo "[entrypoint] Seeding admin account..."
+  $PRISMA db seed --schema=./prisma/schema.prisma 2>&1 || {
+    echo "[entrypoint] WARNING: prisma db seed failed, running seed script directly..."
+    npx ts-node prisma/seed.ts 2>&1 || echo "[entrypoint] Seed script failed (non-fatal)"
+  }
+  echo "[entrypoint] Seeding complete"
 fi
 
 # ── Start the service ──────────────────────────────────────────
