@@ -21,12 +21,12 @@
     "proof": "npx tsx scripts/run-core-proof.ts",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
-    "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
   "prisma": {
-    "seed": "npx tsx prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -101,6 +101,7 @@
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
+    "ts-node": "^10.9.2",
     "typescript": "^5",
     "vitest": "^4.1.1"
   },
