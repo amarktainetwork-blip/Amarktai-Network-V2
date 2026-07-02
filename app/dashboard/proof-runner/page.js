@@ -1,31 +1,46 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { PageTransition, PageHeader, StatusPill } from '@/components/amarkt/kit'
+import { EmptyState, SkeletonList } from '@/components/amarkt/EmptyState'
 import { Card } from '@/components/ui/card'
-import { Boxes, FileText, Image, Film, Music, Mic, Download, ExternalLink } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Boxes, FileText, Image, Film, Music, Mic, Download, ExternalLink, Sparkles } from 'lucide-react'
+import Link from 'next/link'
 
 const TYPE_ICONS = { image: Image, audio: Mic, music: Music, video: Film, document: FileText, transcript: FileText, code: FileText, report: FileText }
 
 export default function ProofRunnerPage() {
-  const [artifacts, setArtifacts] = useState([])
+  const [artifacts, setArtifacts] = useState(null)
 
   useEffect(() => {
-    fetch('/api/artifacts').then((r) => r.json()).then((d) => setArtifacts(d?.artifacts || [])).catch(() => {})
+    fetch('/api/artifacts').then((r) => r.json()).then((d) => setArtifacts(d?.artifacts || [])).catch(() => setArtifacts([]))
   }, [])
 
   return (
     <PageTransition className="space-y-8">
       <PageHeader title="Proof Runner" subtitle="Validation view for all system-generated artifacts. Proof of work." />
 
-      {artifacts.length === 0 ? (
-        <Card className="border-white/[0.07] bg-white/[0.02] p-12 text-center">
-          <Boxes className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
-          <h3 className="text-lg font-semibold">No Artifacts Yet</h3>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            Run a capability from the Studio to generate your first artifact. Completed artifacts will appear here with full lineage tracking.
-          </p>
-        </Card>
-      ) : (
+      {/* Loading */}
+      {artifacts === null && <SkeletonList count={4} />}
+
+      {/* Empty */}
+      {artifacts !== null && artifacts.length === 0 && (
+        <EmptyState
+          icon={Boxes}
+          title="No Artifacts Yet"
+          description="Run a capability from the Studio to generate your first artifact. Completed artifacts will appear here with full lineage tracking."
+          action={
+            <Link href="/dashboard/studio">
+              <Button className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
+                <Sparkles className="mr-1.5 h-4 w-4" /> Open Studio
+              </Button>
+            </Link>
+          }
+        />
+      )}
+
+      {/* Artifact list */}
+      {artifacts !== null && artifacts.length > 0 && (
         <div className="space-y-3">
           {artifacts.map((a) => {
             const Icon = TYPE_ICONS[a.type] || FileText

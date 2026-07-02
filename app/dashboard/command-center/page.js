@@ -58,7 +58,22 @@ export default function CommandCenterPage() {
 
   return (
     <PageTransition className="space-y-8">
-      <PageHeader title="Command Center" subtitle="Real-time system health and operational overview." />
+      <PageHeader title="Command Center" subtitle="Real-time system health and operational overview.">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="border-white/10 text-xs"
+            onClick={() => {
+              const types = ['text.chat', 'image.generate', 'video.generate', 'music.generate', 'voice.tts', 'avatar.generate']
+              const type = types[Math.floor(Math.random() * types.length)]
+              toast.success('Job completed', { description: `${type} · artifact ready · Proof Runner` })
+            }}>
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Simulate Job Complete
+          </Button>
+          <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-300 text-xs"
+            onClick={() => toast.warning('Provider degraded', { description: 'Groq latency > 2s · fallback to Together AI' })}>
+            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Simulate Alert
+          </Button>
+        </div>
+      </PageHeader>
 
       {/* System Status */}
       <div className="grid gap-4 sm:grid-cols-3">
