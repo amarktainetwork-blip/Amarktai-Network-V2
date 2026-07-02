@@ -9,7 +9,8 @@
 
 export const BEARER_TOKEN_PATTERN = /^Bearer\s+(.+)$/
 
-export function parseBearerToken(header: string): string | null {
+export function parseBearerToken(header: string | undefined | null): string | null {
+  if (!header || typeof header !== 'string') return null
   const match = header.match(BEARER_TOKEN_PATTERN)
   return match?.[1] ?? null
 }
