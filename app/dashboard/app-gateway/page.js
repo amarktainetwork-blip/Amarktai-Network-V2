@@ -131,7 +131,7 @@ export default function AppGatewayPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
                 <div className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
                   <div className="text-[10px] text-muted-foreground mb-1">API Keys</div>
                   <div className="text-sm font-semibold">{conn.apiKeys?.length || 0}</div>
@@ -141,8 +141,12 @@ export default function AppGatewayPage() {
                   <div className="text-sm font-semibold">{conn.tokenBalance?.toLocaleString() || 'Unlimited'}</div>
                 </div>
                 <div className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
-                  <div className="text-[10px] text-muted-foreground mb-1">Daily Budget</div>
-                  <div className="text-sm font-semibold">Unlimited</div>
+                  <div className="text-[10px] text-muted-foreground mb-1">Daily Budget (USD)</div>
+                  <Input type="number" defaultValue={0} className="bg-transparent border-0 p-0 h-5 text-sm font-semibold focus:ring-0" />
+                </div>
+                <div className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+                  <div className="text-[10px] text-muted-foreground mb-1">Rate Limit (req/min)</div>
+                  <Input type="number" defaultValue={100} className="bg-transparent border-0 p-0 h-5 text-sm font-semibold focus:ring-0" />
                 </div>
               </div>
 
