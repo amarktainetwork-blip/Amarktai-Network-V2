@@ -1,12 +1,11 @@
 'use client'
 import { useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Upload, X, Image as ImageIcon, Film, Music, FileText, Play, Pause, Download } from 'lucide-react'
+import { Upload, X, Image as ImageIcon, Film, Music, FileText, Play, Pause, Download, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-/**
- * Enhanced DropZone with file acceptance, preview, and clear.
- */
-export function DropZone({ accept = '*', label = 'Drop files or click to browse', kind = 'file', onFile, compact = false }) {
+// ─── DropZone ──────────────────────────────────────────────────
+export function DropZone({ accept = '*', label = 'Drop files or click to browse', kind = 'file', compact = false, onFile }) {
   const [file, setFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef(null)
@@ -19,7 +18,7 @@ export function DropZone({ accept = '*', label = 'Drop files or click to browse'
   }
 
   const handleSelect = (e) => {
-    const f = e.target.files[0]
+    const f = e.target.files?.[0]
     if (f) { setFile(f); onFile?.(f) }
   }
 
@@ -76,23 +75,49 @@ export function DropZone({ accept = '*', label = 'Drop files or click to browse'
   )
 }
 
-/**
- * MediaPreview — shows a placeholder player for image/video/audio outputs.
- */
-export function MediaPreview({ type = 'image', title, src, className }) {
+// ─── MediaPreview ──────────────────────────────────────────────
+export function MediaPreview({ type = 'image', title, loading, data, className }) {
   const [playing, setPlaying] = useState(false)
+
+  if (loading) {
+    return (
+      <div className={cn('flex flex-col items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 min-h-[200px]', className)}>
+        <Loader2 className="h-8 w-8 text-cyan-400 animate-spin mb-3" />
+        <span className="text-xs text-muted-foreground">Generating…</span>
+        <div className="mt-4 w-48 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-cyan-500 to-violet-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (!data && !loading) {
+    return (
+      <div className={cn('flex flex-col items-center justify-center rounded-lg border border-dashed border-white/10 bg-black/10 min-h-[200px] text-muted-foreground', className)}>
+        {type === 'image' && <ImageIcon className="h-10 w-10 mb-2 opacity-30" />}
+        {type === 'video' && <Film className="h-10 w-10 mb-2 opacity-30" />}
+        {type === 'audio' && <Music className="h-10 w-10 mb-2 opacity-30" />}
+        {type === 'text' && <FileText className="h-10 w-10 mb-2 opacity-30" />}
+        <span className="text-xs">{title || `${type} preview`}</span>
+      </div>
+    )
+  }
 
   if (type === 'image') {
     return (
-      <div className={cn('relative overflow-hidden rounded-lg border border-white/[0.06] bg-black/30', className)}>
-        {src ? (
-          <img src={src} alt={title} className="w-full h-full object-cover" />
+      <div className={cn('relative overflow-hidden rounded-lg border border-white/[0.06] bg-black/30 group', className)}>
+        {data?.url ? (
+          <img src={data.url} alt={title} className="w-full h-full object-cover" />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-muted-foreground">
-            <ImageIcon className="h-10 w-10 mb-2 opacity-30" />
-            <span className="text-xs">Image preview</span>
+          <div className="flex flex-col items-center justify-center h-full min-h-[200px] bg-gradient-to-br from-cyan-500/10 to-violet-500/10">
+            <ImageIcon className="h-12 w-12 text-foreground/20 mb-2" />
+            <span className="text-xs text-foreground/40">Generated image</span>
           </div>
         )}
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition flex gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/20 bg-black/50"><Download className="mr-1 h-3 w-3" /> Download</Button>
+          <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/20 bg-black/50">Upscale 2x</Button>
+        </div>
       </div>
     )
   }
@@ -100,13 +125,10 @@ export function MediaPreview({ type = 'image', title, src, className }) {
   if (type === 'video') {
     return (
       <div className={cn('relative overflow-hidden rounded-lg border border-white/[0.06] bg-black/30', className)}>
-        <div className="flex flex-col items-center justify-center h-full min-h-[240px] text-muted-foreground">
-          <Film className="h-12 w-12 mb-3 opacity-30" />
-          <span className="text-xs mb-3">Video preview</span>
-          <button
-            onClick={() => setPlaying(!playing)}
-            className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs hover:bg-white/20 transition"
-          >
+        <div className="flex flex-col items-center justify-center h-full min-h-[240px]">
+          <Film className="h-12 w-12 mb-3 text-foreground/20" />
+          <span className="text-xs text-foreground/40 mb-3">Video preview</span>
+          <button onClick={() => setPlaying(!playing)} className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs hover:bg-white/20 transition">
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             {playing ? 'Pause' : 'Play'}
           </button>
@@ -119,19 +141,16 @@ export function MediaPreview({ type = 'image', title, src, className }) {
     return (
       <div className={cn('rounded-lg border border-white/[0.06] bg-black/20 p-4', className)}>
         <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => setPlaying(!playing)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500/20 to-violet-500/20 hover:from-cyan-500/30 hover:to-violet-500/30 transition"
-          >
+          <button onClick={() => setPlaying(!playing)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500/20 to-violet-500/20 hover:from-cyan-500/30 hover:to-violet-500/30 transition">
             {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
           </button>
           <div className="flex-1">
             <div className="text-xs font-medium">{title || 'Audio track'}</div>
             <div className="text-[10px] text-muted-foreground">0:00 / 0:15</div>
           </div>
-          <button className="text-muted-foreground hover:text-foreground transition"><Download className="h-4 w-4" /></button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0"><Download className="h-3.5 w-3.5" /></Button>
         </div>
-        {/* Waveform placeholder */}
         <div className="flex items-end gap-px h-10">
           {Array.from({ length: 60 }).map((_, i) => {
             const h = Math.sin(i * 0.3) * 30 + 40 + Math.random() * 20
@@ -142,12 +161,16 @@ export function MediaPreview({ type = 'image', title, src, className }) {
     )
   }
 
-  return null
+  return (
+    <div className={cn('rounded-lg border border-white/[0.06] bg-black/20 p-4 min-h-[200px] max-h-[400px] overflow-y-auto', className)}>
+      <div className="text-foreground/80 text-sm whitespace-pre-wrap">
+        {data?.markdown || data?.text || 'No content'}
+      </div>
+    </div>
+  )
 }
 
-/**
- * ExtractedDataCard — shows scraped/extracted data in a card format.
- */
+// ─── ExtractedDataCard ─────────────────────────────────────────
 export function ExtractedDataCard({ icon: Icon, title, items, className }) {
   return (
     <div className={cn('rounded-lg border border-white/[0.06] bg-black/20 p-4', className)}>
