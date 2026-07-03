@@ -6,24 +6,24 @@ import { EmptyState, SkeletonList } from '@/components/amarkt/EmptyState'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Boxes, CheckCircle2, AlertTriangle, XCircle, Zap, ArrowRight } from 'lucide-react'
+import { Boxes, CheckCircle2, AlertTriangle, XCircle, Zap, ArrowRight, Key, Server } from 'lucide-react'
 import Link from 'next/link'
 
 const CAPABILITY_MAP = [
-  { id: 'text.chat', label: 'Chat / Text', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text' },
-  { id: 'text.reasoning', label: 'Reasoning', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text' },
-  { id: 'text.code', label: 'Code Generation', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Code' },
-  { id: 'image.generate', label: 'Image Generation', category: 'Vision', provider: 'Together AI', inputs: 'Prompt, Reference', outputs: 'Image' },
-  { id: 'image.edit', label: 'Image Edit', category: 'Vision', provider: 'Together AI', inputs: 'Image, Prompt', outputs: 'Image' },
-  { id: 'video.generate', label: 'Video Generation', category: 'Motion', provider: 'GenX', inputs: 'Prompt, First Frame', outputs: 'Video' },
-  { id: 'video.longform', label: 'Long-form Video', category: 'Motion', provider: 'GenX', inputs: 'Script, Scenes', outputs: 'Video' },
-  { id: 'music.generate', label: 'Music / Song', category: 'Audio', provider: 'GenX', inputs: 'Prompt, Lyrics', outputs: 'Audio' },
-  { id: 'voice.tts', label: 'Text-to-Speech', category: 'Audio', provider: 'Groq', inputs: 'Text, Voice', outputs: 'Audio' },
-  { id: 'voice.stt', label: 'Speech-to-Text', category: 'Audio', provider: 'Groq', inputs: 'Audio', outputs: 'Text' },
-  { id: 'avatar.generate', label: 'Avatar', category: 'Vision', provider: 'GenX', inputs: 'Face Image, Audio', outputs: 'Video' },
-  { id: 'brand.scrape', label: 'Brand Scrape', category: 'Intelligence', provider: 'Internal', inputs: 'URL', outputs: 'Brand Pack' },
-  { id: 'rag.ingest', label: 'RAG Ingest', category: 'Knowledge', provider: 'Together AI', inputs: 'Documents', outputs: 'Vector Store' },
-  { id: 'rag.search', label: 'RAG Search', category: 'Knowledge', provider: 'Together AI', inputs: 'Query', outputs: 'Cited Results' },
+  { id: 'text.chat', label: 'Chat / Text', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
+  { id: 'text.reasoning', label: 'Reasoning', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
+  { id: 'text.code', label: 'Code Generation', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Code', requiresKey: 'GROQ_API_KEY' },
+  { id: 'image.generate', label: 'Image Generation', category: 'Vision', provider: 'Together AI', inputs: 'Prompt, Reference', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'image.edit', label: 'Image Edit', category: 'Vision', provider: 'Together AI', inputs: 'Image, Prompt', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'video.generate', label: 'Video Generation', category: 'Motion', provider: 'GenX', inputs: 'Prompt, First Frame', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'video.longform', label: 'Long-form Video', category: 'Motion', provider: 'GenX', inputs: 'Script, Scenes', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'music.generate', label: 'Music / Song', category: 'Audio', provider: 'GenX', inputs: 'Prompt, Lyrics', outputs: 'Audio', requiresKey: 'GENX_API_KEY' },
+  { id: 'voice.tts', label: 'Text-to-Speech', category: 'Audio', provider: 'Groq', inputs: 'Text, Voice', outputs: 'Audio', requiresKey: 'GROQ_API_KEY' },
+  { id: 'voice.stt', label: 'Speech-to-Text', category: 'Audio', provider: 'Groq', inputs: 'Audio', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
+  { id: 'avatar.generate', label: 'Avatar', category: 'Vision', provider: 'GenX', inputs: 'Face Image, Audio', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'brand.scrape', label: 'Brand Scrape', category: 'Intelligence', provider: 'Internal', inputs: 'URL', outputs: 'Brand Pack', requiresKey: null },
+  { id: 'rag.ingest', label: 'RAG Ingest', category: 'Knowledge', provider: 'Together AI', inputs: 'Documents', outputs: 'Vector Store', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'rag.search', label: 'RAG Search', category: 'Knowledge', provider: 'Together AI', inputs: 'Query', outputs: 'Cited Results', requiresKey: 'TOGETHER_API_KEY' },
 ]
 
 export default function CapabilitiesPage() {
@@ -41,11 +41,18 @@ export default function CapabilitiesPage() {
     return { status: 'needs-config', label: 'Needs Config', color: 'border-amber-500/30 text-amber-400' }
   }
 
+  const getBlocker = (cap) => {
+    const provider = providers.find((p) => p.id === cap.provider.toLowerCase().replace(' ', ''))
+    if (!provider && cap.provider !== 'Internal') return { blocked: true, reason: `Missing provider: ${cap.provider}`, icon: Server }
+    if (cap.requiresKey && provider && provider.status !== 'active') return { blocked: true, reason: `Missing API key: ${cap.requiresKey}`, icon: Key }
+    return { blocked: false, reason: null, icon: null }
+  }
+
   if (loading) return <PageTransition className="space-y-8"><PageHeader title="Capabilities" subtitle="Complete catalogue of all AI capabilities." /><SkeletonList count={6} /></PageTransition>
 
   return (
     <PageTransition className="space-y-8">
-      <PageHeader title="Capabilities" subtitle="Complete catalogue of all AI capabilities." />
+      <PageHeader title="Capabilities" subtitle="Complete catalogue of all AI capabilities with status and blockers." />
 
       <div className="rounded-lg border border-white/[0.06] overflow-hidden">
         <div className="overflow-x-auto">
@@ -58,11 +65,13 @@ export default function CapabilitiesPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Provider</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Inputs</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Outputs</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Blocker</th>
               </tr>
             </thead>
             <tbody>
               {CAPABILITY_MAP.map((cap) => {
                 const s = getStatus(cap)
+                const b = getBlocker(cap)
                 return (
                   <tr key={cap.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition">
                     <td className="px-4 py-3">
@@ -74,6 +83,16 @@ export default function CapabilitiesPage() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">{cap.provider}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{cap.inputs}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{cap.outputs}</td>
+                    <td className="px-4 py-3">
+                      {b.blocked ? (
+                        <div className="flex items-center gap-1.5 text-[10px] text-rose-400">
+                          <b.icon className="h-3 w-3 shrink-0" />
+                          <span>{b.reason}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Ready</span>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
