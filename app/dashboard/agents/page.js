@@ -13,7 +13,7 @@ import { DropZone } from '@/components/amarkt/StudioComponents'
 import {
   Bot, ShieldCheck, Clock, Activity, AlertTriangle, CheckCircle2, Settings, Zap, BookOpen,
   Plus, Trash2, Upload, Database, FileText, Globe, MessageSquare, Image as ImageIcon,
-  Video, Music, Mic, Play, Loader2, Eye, Edit3, ChevronRight,
+  Video, Music, Mic, Play, Loader2, Eye, Edit3, ChevronRight, Palette, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -80,8 +80,11 @@ function AgentEditor({ agent, onBack }) {
   const [systemPrompt, setSystemPrompt] = useState(agent ? `You are ${agent.name}. ${agent.description}` : '')
   const [capabilities, setCapabilities] = useState(agent?.capabilities || [])
   const [knowledgeFiles, setKnowledgeFiles] = useState([])
+  const [brandVaultFiles, setBrandVaultFiles] = useState(agent?.brandVault || [])
+  const [crossAppAccess, setCrossAppAccess] = useState(agent?.crossAppAccess || false)
   const [autoLearn, setAutoLearn] = useState(false)
   const [approvalRequired, setApprovalRequired] = useState(true)
+  const [activeTab, setActiveTab] = useState('knowledge')
 
   const toggleCapability = (cap) => {
     setCapabilities((prev) => prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap])
@@ -93,6 +96,13 @@ function AgentEditor({ agent, onBack }) {
     setKnowledgeFiles((prev) => [...prev, newFile])
     setTimeout(() => setKnowledgeFiles((prev) => prev.map((f) => f.id === newFile.id ? { ...f, status: 'ready' } : f)), 2000)
     toast.success('File added', { description: `${file.name} is being processed` })
+  }
+
+  const handleBrandDrop = (file) => {
+    if (!file) return
+    const newFile = { id: `bv-${Date.now()}`, name: file.name, size: `${(file.size / 1024).toFixed(1)} KB`, type: file.type || 'document' }
+    setBrandVaultFiles((prev) => [...prev, newFile])
+    toast.success('Added to Brand Vault', { description: file.name })
   }
 
   return (
@@ -123,20 +133,62 @@ function AgentEditor({ agent, onBack }) {
           </Field>
         </Card>
 
-        {/* Knowledge & Memory */}
-        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Database className="h-4 w-4 text-emerald-300" /> Knowledge & Memory</h3>
-          <div className="space-y-3">
-            <DropZone accept=".pdf,.json,.csv,.txt,.md,.js,.ts,.py" label="Drop PDF, JSON, CSV, Code, or Text files" kind="documents" onFile={handleFileDrop} compact />
-            {knowledgeFiles.length > 0 && (
-              <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                {knowledgeFiles.map((f) => <KnowledgeFile key={f.id} file={f} onRemove={() => setKnowledgeFiles((p) => p.filter((x) => x.id !== f.id))} />)}
-              </div>
-            )}
-            {knowledgeFiles.length === 0 && (
-              <p className="text-[10px] text-muted-foreground text-center py-4">No knowledge files. Drop documents above to give this agent memory.</p>
-            )}
+        {/* Knowledge & Brand Vault (Tabbed) */}
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5 lg:col-span-2">
+          <div className="flex items-center gap-1 mb-4">
+            <button onClick={() => setActiveTab('knowledge')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${activeTab === 'knowledge' ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Database className="h-3 w-3" /> Knowledge & Memory
+            </button>
+            <button onClick={() => setActiveTab('brandvault')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${activeTab === 'brandvault' ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Palette className="h-3 w-3" /> Brand Vault
+            </button>
           </div>
+
+          {activeTab === 'knowledge' && (
+            <div className="space-y-3">
+              <DropZone accept=".pdf,.json,.csv,.txt,.md,.js,.ts,.py" label="Drop PDF, JSON, CSV, Code, or Text files" kind="documents" onFile={handleFileDrop} compact />
+              {knowledgeFiles.length > 0 && (
+                <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                  {knowledgeFiles.map((f) => <KnowledgeFile key={f.id} file={f} onRemove={() => setKnowledgeFiles((p) => p.filter((x) => x.id !== f.id))} />)}
+                </div>
+              )}
+              {knowledgeFiles.length === 0 && (
+                <p className="text-[10px] text-muted-foreground text-center py-4">No knowledge files. Drop documents above to give this agent memory.</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'brandvault' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-muted-foreground">Logos, fonts, brand guidelines uploaded during Workspace Onboarding.</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Cross-App Access</span>
+                  <Switch checked={crossAppAccess} onCheckedChange={setCrossAppAccess} />
+                </div>
+              </div>
+              <DropZone accept="image/*,.pdf,.json,.csv,.txt" label="Drop Logos, Fonts, Brand Guidelines" kind="brand assets" onFile={handleBrandDrop} compact />
+              {brandVaultFiles.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {brandVaultFiles.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate">{f.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{f.size}</div>
+                      </div>
+                      <button onClick={() => setBrandVaultFiles((p) => p.filter((x) => x.id !== f.id))} className="text-muted-foreground hover:text-rose-400"><X className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {brandVaultFiles.length === 0 && (
+                <p className="text-[10px] text-muted-foreground text-center py-4">No brand assets. Upload logos, fonts, and guidelines above.</p>
+              )}
+            </div>
+          )}
         </Card>
 
         {/* Allowed Capabilities */}
@@ -171,7 +223,7 @@ function AgentEditor({ agent, onBack }) {
         </Card>
 
         {/* Automations */}
-        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5 lg:col-span-2">
           <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><Clock className="h-4 w-4 text-amber-300" /> Automations</h3>
           <div className="space-y-3">
             <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
