@@ -1,6 +1,8 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { useStudioStore } from '@/lib/useStudioStore'
+import { CAPABILITY_SCHEMAS } from '@/lib/mockSchemas'
+import DynamicFormRenderer from '@/components/amarkt/DynamicFormRenderer'
 import { PageTransition, PageHeader, Field } from '@/components/amarkt/kit'
 import { DropZone, MediaPreview, ExtractedDataCard } from '@/components/amarkt/StudioComponents'
 import AssetLibraryDrawer from '@/components/amarkt/AssetLibraryDrawer'
@@ -19,7 +21,7 @@ import {
   Play, Plus, Trash2, Send, MicIcon, Layers, Clock, Volume2,
   GripVertical, PanelLeftOpen, PanelRightOpen, Wand2, Package, Sliders,
   Settings, Palette, Type, Sparkles, Loader2, X, Search, Eye, Download,
-  Upload, FileText, ChevronDown
+  Upload, FileText, ChevronDown, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import { MUSIC_GENRES } from '@/lib/appdata'
 import { toast } from 'sonner'
@@ -40,20 +42,47 @@ function IOLayout({ input, output, inputLabel = 'Controls', outputLabel = 'Previ
   )
 }
 
-// ─── Generate Button ───────────────────────────────────────────
-function GenerateButton({ capability, label = 'Generate', disabled, onGenerate }) {
+// ─── Creator / Pro Mode Toggle ─────────────────────────────────
+function UxModeToggle() {
+  const { uxMode, setUxMode } = useStudioStore()
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+      <button
+        onClick={() => setUxMode('creator')}
+        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${uxMode === 'creator' ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <Sparkles className="h-3 w-3" /> Creator
+      </button>
+      <button
+        onClick={() => setUxMode('pro')}
+        className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${uxMode === 'pro' ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <Settings className="h-3 w-3" /> Pro
+      </button>
+    </div>
+  )
+}
+
+// ─── Generate Button (with proper lifecycle) ───────────────────
+function GenerateButton({ capability, label = 'Generate', disabled, onGenerate, formValues }) {
   const { generating, simulateGeneration } = useStudioStore()
   const key = capability.split('.')[0]
   const busy = generating[key]
+
   const handleGenerate = async () => {
     if (onGenerate) { onGenerate(); return }
-    await simulateGeneration(capability, { title: `${capability} output` })
-    toast.success('Generation complete', { description: `${capability} · asset added to library` })
+    // Step A + B: Loading state + 2.5s delay (inside simulateGeneration)
+    const asset = await simulateGeneration(capability, { title: `${capability} output` })
+    // Step C: Success toast
+    toast.success('Generation complete', {
+      description: `${capability} · ${asset.name} · added to library`,
+    })
   }
+
   return (
     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4">
       <span className="text-xs text-muted-foreground">Runs as a background job.</span>
-      <Button onClick={handleGenerate} disabled={disabled || busy} className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90">
+      <Button onClick={handleGenerate} disabled={disabled || busy} className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90 transition-all">
         {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
         {busy ? 'Generating…' : label}
       </Button>
@@ -150,18 +179,27 @@ function SceneCard({ scene, index, onUpdate, onRemove }) {
 
 // ─── MAIN STUDIO PAGE ──────────────────────────────────────────
 export default function Studio() {
-  const { generating, generatedAssets, simulateGeneration } = useStudioStore()
+  const { generating, generatedAssets, simulateGeneration, uxMode } = useStudioStore()
   const getAssets = (type) => generatedAssets.filter((a) => a.type === type)
 
   // Chat state
-  const [chatPrompt, setChatPrompt] = useState('')
-  const [chatSystem, setChatSystem] = useState('')
+  const [chatValues, setChatValues] = useState({})
   const [chatMessages, setChatMessages] = useState([])
 
-  // Long-form scenes
+  // Dynamic form values per tab
+  const [imageValues, setImageValues] = useState({})
+  const [videoValues, setVideoValues] = useState({})
+  const [longvideoValues, setLongvideoValues] = useState({})
+  const [musicValues, setMusicValues] = useState({})
+  const [voiceValues, setVoiceValues] = useState({})
+  const [avatarValues, setAvatarValues] = useState({})
+  const [scrapeValues, setScrapeValues] = useState({})
+  const [ragValues, setRagValues] = useState({})
+
+  // Long-form scenes (special case: array of objects)
   const [scenes, setScenes] = useState([{ prompt: '', duration: 5, transition: 'Cut' }, { prompt: '', duration: 5, transition: 'Fade' }])
 
-  // RAG
+  // RAG search
   const [ragQuery, setRagQuery] = useState('')
   const [ragResults, setRagResults] = useState([])
 
@@ -187,15 +225,19 @@ export default function Studio() {
     <PageTransition className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <PageHeader title="Studio" subtitle="Unified creative environment — generate, preview, and manage all AI capabilities." />
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={() => setLeftPanelOpen(!leftPanelOpen)} className={`border-white/10 ${leftPanelOpen ? 'bg-white/10' : ''}`}><PanelLeftOpen className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => setBottomPanelOpen(!bottomPanelOpen)} className={`border-white/10 ${bottomPanelOpen ? 'bg-white/10' : ''}`}><Layers className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => setRightPanelOpen(!rightPanelOpen)} className={`border-white/10 ${rightPanelOpen ? 'bg-white/10' : ''}`}><PanelRightOpen className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => setAssetDrawerOpen(!assetDrawerOpen)} className={`border-white/10 ${assetDrawerOpen ? 'bg-white/10' : ''}`}><Package className="h-4 w-4" /></Button>
+        <div className="flex items-center gap-2">
+          <UxModeToggle />
+          <div className="flex items-center gap-1 ml-2">
+            <Button variant="outline" size="sm" onClick={() => setLeftPanelOpen(!leftPanelOpen)} className={`border-white/10 ${leftPanelOpen ? 'bg-white/10' : ''}`}><PanelLeftOpen className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setBottomPanelOpen(!bottomPanelOpen)} className={`border-white/10 ${bottomPanelOpen ? 'bg-white/10' : ''}`}><Layers className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setRightPanelOpen(!rightPanelOpen)} className={`border-white/10 ${rightPanelOpen ? 'bg-white/10' : ''}`}><PanelRightOpen className="h-4 w-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setAssetDrawerOpen(!assetDrawerOpen)} className={`border-white/10 ${assetDrawerOpen ? 'bg-white/10' : ''}`}><Package className="h-4 w-4" /></Button>
+          </div>
         </div>
       </div>
 
       <div className="flex gap-2" style={{ minHeight: 'calc(100vh - 220px)' }}>
+        {/* Left Panel — Node Canvas */}
         {leftPanelOpen && <div className="w-56 shrink-0 rounded-lg border border-white/[0.06] bg-[hsl(240_14%_3.5%)] overflow-hidden flex flex-col">
           <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2"><Layers className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-xs font-medium text-muted-foreground">Canvas</span></div>
           <div className="flex-1 flex items-center justify-center p-4"><div className="text-center text-muted-foreground"><Layers className="h-8 w-8 mx-auto mb-2 opacity-30" /><p className="text-xs">Drag nodes here</p></div></div>
@@ -210,29 +252,18 @@ export default function Studio() {
               </TabsList>
             </div>
 
-            {/* ── 1. CHAT/TEXT ── */}
+            {/* ── 1. CHAT/TEXT (DynamicFormRenderer) ── */}
             <TabsContent value="chat" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <Field label="Prompt"><Textarea value={chatPrompt} onChange={(e) => setChatPrompt(e.target.value)} placeholder="Ask anything…" className="min-h-[80px] bg-black/20" /></Field>
-                  <Field label="System Instruction"><Textarea value={chatSystem} onChange={(e) => setChatSystem(e.target.value)} placeholder="You are a helpful enterprise assistant…" className="min-h-[60px] bg-black/20" /></Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Purpose"><Select defaultValue="general"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="general">General</SelectItem><SelectItem value="creative">Creative Writing</SelectItem><SelectItem value="analysis">Analysis</SelectItem><SelectItem value="code">Code Generation</SelectItem><SelectItem value="summarize">Summarize</SelectItem></SelectContent></Select></Field>
-                    <Field label="Tone"><Select defaultValue="professional"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="professional">Professional</SelectItem><SelectItem value="casual">Casual</SelectItem><SelectItem value="friendly">Friendly</SelectItem><SelectItem value="authoritative">Authoritative</SelectItem><SelectItem value="creative">Creative</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Language"><Select defaultValue="en"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="es">Spanish</SelectItem><SelectItem value="fr">French</SelectItem><SelectItem value="de">German</SelectItem><SelectItem value="pt">Portuguese</SelectItem><SelectItem value="zh">Chinese</SelectItem></SelectContent></Select></Field>
-                    <Field label="Brand Voice"><Select defaultValue="default"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="default">Default</SelectItem><SelectItem value="corporate">Corporate</SelectItem><SelectItem value="startup">Startup</SelectItem><SelectItem value="luxury">Luxury</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <Field label="Output Length"><div className="flex items-center gap-3"><Slider defaultValue={[50]} min={0} max={100} step={1} className="flex-1" /><span className="text-xs text-muted-foreground w-12">Medium</span></div></Field>
-                  <Field label="Audience"><Input placeholder="e.g. Enterprise buyers, developers…" className="bg-black/20" /></Field>
-                  <Field label="Forbidden Words"><Textarea placeholder="Words to exclude, one per line…" className="min-h-[40px] bg-black/20" /></Field>
-                  <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-sm">JSON mode</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-sm">Strict schema</span><Switch /></div>
-                    <Field label="Temperature"><Slider defaultValue={[70]} min={0} max={100} step={1} /></Field>
-                  </AccordionContent></AccordionItem></Accordion>
-                  <Button onClick={() => { if (!chatPrompt.trim()) return; setChatMessages((p) => [...p, { role: 'user', content: chatPrompt }]); setChatPrompt(''); setTimeout(() => setChatMessages((p) => [...p, { role: 'assistant', content: 'This is a simulated response. In production, this will be powered by the AI provider pipeline.' }]), 1500) }} disabled={!chatPrompt.trim()} className="w-full bg-gradient-to-r from-cyan-400 to-violet-500 text-black"><Send className="mr-1.5 h-4 w-4" /> Send</Button>
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.chat} values={chatValues} onChange={setChatValues} mode={uxMode} capability="chat" />
+                  <Button onClick={() => {
+                    const prompt = chatValues.prompt
+                    if (!prompt?.trim()) return
+                    setChatMessages((p) => [...p, { role: 'user', content: prompt }])
+                    setChatValues((v) => ({ ...v, prompt: '' }))
+                    setTimeout(() => setChatMessages((p) => [...p, { role: 'assistant', content: 'This is a simulated response. In production, this will be powered by the AI provider pipeline.' }]), 1500)
+                  }} disabled={!chatValues.prompt?.trim()} className="w-full bg-gradient-to-r from-cyan-400 to-violet-500 text-black"><Send className="mr-1.5 h-4 w-4" /> Send</Button>
                 </div>}
                 output={<div className="rounded-lg border border-white/[0.06] bg-black/20 p-4 min-h-[400px] max-h-[500px] overflow-y-auto space-y-3">
                   {chatMessages.length === 0 && <div className="flex flex-col items-center justify-center h-full text-muted-foreground"><MessageSquare className="h-8 w-8 mb-2 opacity-30" /><span className="text-xs">Send a message to start</span></div>}
@@ -241,33 +272,12 @@ export default function Studio() {
               /></Card>
             </TabsContent>
 
-            {/* ── 2. IMAGE ── */}
+            {/* ── 2. IMAGE (DynamicFormRenderer) ── */}
             <TabsContent value="image" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <Field label="Prompt"><Textarea placeholder="A cinematic obsidian data center…" className="min-h-[80px] bg-black/20" /></Field>
-                  <Field label="Negative Prompt"><Textarea placeholder="Elements to exclude…" className="min-h-[50px] bg-black/20" /></Field>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Field label="Style"><Select defaultValue="photorealistic"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="photorealistic">Photorealistic</SelectItem><SelectItem value="anime">Anime</SelectItem><SelectItem value="3d">3D Render</SelectItem><SelectItem value="oil">Oil Painting</SelectItem><SelectItem value="illustration">Illustration</SelectItem></SelectContent></Select></Field>
-                    <Field label="Aspect Ratio"><Select defaultValue="1:1"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1:1">1:1</SelectItem><SelectItem value="16:9">16:9</SelectItem><SelectItem value="9:16">9:16</SelectItem><SelectItem value="4:3">4:3</SelectItem></SelectContent></Select></Field>
-                    <Field label="Quality"><Select defaultValue="standard"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="hd">HD</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Field label="Reference Image"><DropZone accept="image/*" label="Drop image" kind="image" compact /></Field>
-                    <Field label="Logo Asset"><DropZone accept="image/*" label="Drop logo" kind="image" compact /></Field>
-                    <Field label="Product Image"><DropZone accept="image/*" label="Drop product" kind="image" compact /></Field>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Brand Palette Lock</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Remove Background</span><Switch /></div>
-                    <Field label="Upscale"><Select defaultValue="none"><SelectTrigger className="bg-black/20 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="2x">2x</SelectItem><SelectItem value="4x">4x</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                    <Field label="Seed (0 = random)"><Input type="number" defaultValue={0} className="bg-black/20" /></Field>
-                    <Field label="Steps"><Slider defaultValue={[30]} min={1} max={100} step={1} /></Field>
-                    <Field label="Guidance"><Slider defaultValue={[7]} min={1} max={20} step={0.5} /></Field>
-                  </AccordionContent></AccordionItem></Accordion>
-                  <GenerateButton capability="image.generate" />
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.image} values={imageValues} onChange={setImageValues} mode={uxMode} capability="image" />
+                  <GenerateButton capability="image.generate" formValues={imageValues} />
                 </div>}
                 output={<div className="space-y-4">
                   {generating.image ? <div className="space-y-2"><div className="h-48 w-full rounded-lg bg-white/[0.04] animate-pulse" /><div className="flex gap-2"><div className="h-3 w-24 rounded bg-white/[0.04] animate-pulse" /><div className="h-3 w-16 rounded bg-white/[0.04] animate-pulse" /></div></div> :
@@ -277,59 +287,26 @@ export default function Studio() {
               /></Card>
             </TabsContent>
 
-            {/* ── 3. VIDEO ── */}
+            {/* ── 3. VIDEO (DynamicFormRenderer) ── */}
             <TabsContent value="video" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <Field label="Mode"><Select defaultValue="text-to-video"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="text-to-video">Text to Video</SelectItem><SelectItem value="image-to-video">Image to Video</SelectItem><SelectItem value="first-last-frame">First / Last Frame</SelectItem><SelectItem value="reel">Reel</SelectItem><SelectItem value="ad">Ad</SelectItem></SelectContent></Select></Field>
-                  <Field label="Prompt"><Textarea placeholder="Slow dolly across neon skyline…" className="min-h-[80px] bg-black/20" /></Field>
-                  <Field label="Negative Prompt"><Textarea placeholder="Elements to exclude…" className="min-h-[40px] bg-black/20" /></Field>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Field label="Style"><Select defaultValue="cinematic"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cinematic">Cinematic</SelectItem><SelectItem value="realistic">Realistic</SelectItem><SelectItem value="anime">Anime</SelectItem><SelectItem value="3d">3D</SelectItem></SelectContent></Select></Field>
-                    <Field label="Duration"><Select defaultValue="5s"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="4s">4 seconds</SelectItem><SelectItem value="8s">8 seconds</SelectItem><SelectItem value="16s">16 seconds</SelectItem><SelectItem value="30s">30 seconds</SelectItem></SelectContent></Select></Field>
-                    <Field label="Camera"><Select defaultValue="dolly"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="static">Static</SelectItem><SelectItem value="pan-left">Pan Left</SelectItem><SelectItem value="pan-right">Pan Right</SelectItem><SelectItem value="zoom-in">Zoom In</SelectItem><SelectItem value="zoom-out">Zoom Out</SelectItem><SelectItem value="drone">Drone</SelectItem><SelectItem value="orbit">Orbit</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Field label="First Frame"><DropZone accept="image/*" label="Drop image" kind="image" compact /></Field>
-                    <Field label="Last Frame"><DropZone accept="image/*" label="Drop image" kind="image" compact /></Field>
-                    <Field label="Audio Input"><DropZone accept="audio/*" label="Drop audio" kind="audio" compact /></Field>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Logo Overlay</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Subtitles</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">CTA End Card</span><Switch /></div>
-                  </div>
-                  <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                    <Field label="Lens Type"><Select defaultValue="standard"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="wide">Wide</SelectItem><SelectItem value="standard">Standard</SelectItem><SelectItem value="telephoto">Telephoto</SelectItem></SelectContent></Select></Field>
-                    <Field label="Motion Strength"><Slider defaultValue={[50]} min={0} max={100} step={1} /></Field>
-                  </AccordionContent></AccordionItem></Accordion>
-                  <GenerateButton capability="video.generate" />
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.video} values={videoValues} onChange={setVideoValues} mode={uxMode} capability="video" />
+                  <GenerateButton capability="video.generate" formValues={videoValues} />
                 </div>}
                 output={<div className="space-y-4">{generating.video ? <div className="h-64 w-full rounded-lg bg-white/[0.04] animate-pulse" /> : <MediaPreview type="video" title="Generated video" />}</div>}
               /></Card>
             </TabsContent>
 
-            {/* ── 4. LONG-FORM VIDEO (STORYBOARD) ── */}
+            {/* ── 4. LONG-FORM VIDEO (Storyboard + DynamicFormRenderer) ── */}
             <TabsContent value="longvideo" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <Field label="Source"><Select defaultValue="prompt"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="prompt">Prompt</SelectItem><SelectItem value="script">Script</SelectItem><SelectItem value="website">Website</SelectItem><SelectItem value="brand-pack">Brand Pack</SelectItem></SelectContent></Select></Field>
-                    <Field label="Target Duration"><Select defaultValue="60s"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="30s">30 seconds</SelectItem><SelectItem value="60s">1 minute</SelectItem><SelectItem value="120s">2 minutes</SelectItem><SelectItem value="300s">5 minutes</SelectItem></SelectContent></Select></Field>
-                    <Field label="Scene Count"><Select defaultValue="4"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="2">2 scenes</SelectItem><SelectItem value="4">4 scenes</SelectItem><SelectItem value="6">6 scenes</SelectItem><SelectItem value="8">8 scenes</SelectItem></SelectContent></Select></Field>
-                  </div>
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.longvideo} values={longvideoValues} onChange={setLongvideoValues} mode={uxMode} capability="longvideo" />
+                  {/* Scene Planner (special: array of objects) */}
                   <div className="flex items-center justify-between"><span className="text-sm font-medium">Scene Planner</span><Button variant="outline" size="sm" onClick={() => setScenes((p) => [...p, { prompt: '', duration: 5, transition: 'Cut' }])} className="border-white/10 text-xs"><Plus className="mr-1 h-3 w-3" /> Add Scene</Button></div>
                   <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                     {scenes.map((scene, i) => <SceneCard key={i} scene={scene} index={i} onUpdate={(d) => setScenes((p) => p.map((s, idx) => idx === i ? d : s))} onRemove={() => setScenes((p) => p.filter((_, idx) => idx !== i))} />)}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Voiceover"><Select defaultValue="none"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="male">Male Voice</SelectItem><SelectItem value="female">Female Voice</SelectItem><SelectItem value="ai">AI Voice</SelectItem></SelectContent></Select></Field>
-                    <Field label="Music Bed"><Select defaultValue="none"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="ambient">Ambient</SelectItem><SelectItem value="cinematic">Cinematic</SelectItem><SelectItem value="upbeat">Upbeat</SelectItem></SelectContent></Select></Field>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Subtitles</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Logo Overlay</span><Switch /></div>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-xs">Cutdown Pack (9:16)</span><Switch /></div>
                   </div>
                   <GenerateButton capability="video.longform" label="Generate Video" />
                 </div>}
@@ -337,28 +314,15 @@ export default function Studio() {
               /></Card>
             </TabsContent>
 
-            {/* ── 5. MUSIC ── */}
+            {/* ── 5. MUSIC (DynamicFormRenderer) ── */}
             <TabsContent value="music" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6">
                 <Tabs defaultValue="song" className="mb-4">
                   <TabsList className="bg-white/[0.03]"><TabsTrigger value="song">Song</TabsTrigger><TabsTrigger value="lyrics">Lyrics</TabsTrigger><TabsTrigger value="instrumental">Instrumental</TabsTrigger><TabsTrigger value="cover">Cover Art</TabsTrigger><TabsTrigger value="video">Music Video</TabsTrigger><TabsTrigger value="promo">Promo Pack</TabsTrigger></TabsList>
                   <TabsContent value="song" className="mt-4"><IOLayout
                     input={<div className="space-y-4">
-                      <Field label="Describe Your Song"><Textarea placeholder="An upbeat electronic track with synth pads…" className="min-h-[80px] bg-black/20" /></Field>
-                      <Field label="Genre"><div className="flex flex-wrap gap-1.5">{MUSIC_GENRES.map((g) => <Badge key={g} variant="outline" className="border-white/10 cursor-pointer hover:border-cyan-500/30 hover:text-cyan-300 transition text-[10px]">{g}</Badge>)}</div></Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Mood"><Select defaultValue="happy"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="happy">Happy</SelectItem><SelectItem value="sad">Sad</SelectItem><SelectItem value="epic">Epic</SelectItem><SelectItem value="chill">Chill</SelectItem><SelectItem value="dark">Dark</SelectItem></SelectContent></Select></Field>
-                        <Field label="Vocal Style"><Select defaultValue="instrumental"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem><SelectItem value="group">Group</SelectItem><SelectItem value="rap">Rap</SelectItem><SelectItem value="choir">Choir</SelectItem><SelectItem value="instrumental">Instrumental</SelectItem></SelectContent></Select></Field>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Tempo"><Select defaultValue="medium"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="slow">Slow</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="fast">Fast</SelectItem></SelectContent></Select></Field>
-                        <Field label="Reference Track"><DropZone accept="audio/*" label="Drop audio" kind="audio" compact /></Field>
-                      </div>
-                      <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                        <Field label="Vibe"><Select defaultValue="auto"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">Auto</SelectItem><SelectItem value="bright">Bright</SelectItem><SelectItem value="dark">Dark</SelectItem><SelectItem value="warm">Warm</SelectItem></SelectContent></Select></Field>
-                        <Field label="Exact BPM"><Input type="number" defaultValue={120} className="bg-black/20" /></Field>
-                      </AccordionContent></AccordionItem></Accordion>
-                      <GenerateButton capability="music.generate" />
+                      <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.music} values={musicValues} onChange={setMusicValues} mode={uxMode} capability="music" />
+                      <GenerateButton capability="music.generate" formValues={musicValues} />
                     </div>}
                     output={<div className="space-y-4">{generating.music ? <div className="h-24 w-full rounded-lg bg-white/[0.04] animate-pulse" /> : getAssets('audio').length > 0 ? <MediaPreview type="audio" title="Generated track" /> : <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-muted-foreground rounded-lg border border-dashed border-white/10"><Music className="h-10 w-10 mb-2 opacity-30" /><span className="text-xs">Generated tracks will appear here</span></div>}</div>}
                   /></TabsContent>
@@ -371,26 +335,15 @@ export default function Studio() {
               </Card>
             </TabsContent>
 
-            {/* ── 6. VOICE ── */}
+            {/* ── 6. VOICE (DynamicFormRenderer) ── */}
             <TabsContent value="voice" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6">
                 <Tabs defaultValue="tts" className="mb-4">
                   <TabsList className="bg-white/[0.03]"><TabsTrigger value="tts">Text-to-Speech</TabsTrigger><TabsTrigger value="stt">Speech-to-Text</TabsTrigger><TabsTrigger value="dubbing">Dubbing</TabsTrigger><TabsTrigger value="library">Voice Library</TabsTrigger><TabsTrigger value="subtitles">Subtitles</TabsTrigger></TabsList>
                   <TabsContent value="tts" className="mt-4"><IOLayout
                     input={<div className="space-y-4">
-                      <Field label="Script"><Textarea placeholder="Enter text to synthesize…" className="min-h-[100px] bg-black/20" /></Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Voice Type"><Select defaultValue="female"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem><SelectItem value="child">Child</SelectItem><SelectItem value="elderly">Elderly</SelectItem></SelectContent></Select></Field>
-                        <Field label="Emotion"><Select defaultValue="neutral"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="neutral">Neutral</SelectItem><SelectItem value="happy">Happy</SelectItem><SelectItem value="angry">Angry</SelectItem><SelectItem value="whisper">Whisper</SelectItem><SelectItem value="authoritative">Authoritative</SelectItem></SelectContent></Select></Field>
-                      </div>
-                      <Field label="Speed"><div className="flex items-center gap-3"><Slider defaultValue={[100]} min={50} max={200} step={10} className="flex-1" /><span className="text-xs text-muted-foreground w-10">1.0x</span></div></Field>
-                      <Field label="Clone Voice Audio"><DropZone accept="audio/*" label="Drop audio for cloning" kind="audio" compact /></Field>
-                      <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                        <Field label="Sample Rate"><Select defaultValue="44100"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="22050">22050 Hz</SelectItem><SelectItem value="44100">44100 Hz</SelectItem><SelectItem value="48000">48000 Hz</SelectItem></SelectContent></Select></Field>
-                        <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-sm">Diarization</span><Switch /></div>
-                        <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-sm">SSML Mode</span><Switch /></div>
-                      </AccordionContent></AccordionItem></Accordion>
-                      <GenerateButton capability="voice.tts" />
+                      <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.voice} values={voiceValues} onChange={setVoiceValues} mode={uxMode} capability="voice" />
+                      <GenerateButton capability="voice.tts" formValues={voiceValues} />
                     </div>}
                     output={<div className="space-y-4">{generating.voice ? <div className="h-24 w-full rounded-lg bg-white/[0.04] animate-pulse" /> : <MediaPreview type="audio" title="Synthesized voice" />}<Button variant="outline" size="sm" className="w-full border-white/10 text-xs"><Download className="mr-1 h-3 w-3" /> Export SRT</Button></div>}
                   /></TabsContent>
@@ -402,22 +355,15 @@ export default function Studio() {
               </Card>
             </TabsContent>
 
-            {/* ── 7. AVATAR ── */}
+            {/* ── 7. AVATAR (DynamicFormRenderer) ── */}
             <TabsContent value="avatar" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6">
                 <Tabs defaultValue="talking" className="mb-4">
                   <TabsList className="bg-white/[0.03]"><TabsTrigger value="library">Library</TabsTrigger><TabsTrigger value="create">Create</TabsTrigger><TabsTrigger value="talking">Talking Head</TabsTrigger><TabsTrigger value="presenter">Presenter</TabsTrigger><TabsTrigger value="lipsync">Lipsync</TabsTrigger><TabsTrigger value="voice">Voice Binding</TabsTrigger></TabsList>
                   <TabsContent value="talking" className="mt-4"><IOLayout
                     input={<div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Reference Face"><DropZone accept="image/*" label="Drop face image" kind="image" compact /></Field>
-                        <Field label="Lip-Sync Audio"><DropZone accept="audio/*" label="Drop audio" kind="audio" compact /></Field>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Background"><Select defaultValue="studio"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="office">Office</SelectItem><SelectItem value="studio">Studio</SelectItem><SelectItem value="green-screen">Green Screen</SelectItem><SelectItem value="custom">Custom</SelectItem></SelectContent></Select></Field>
-                        <Field label="Gesture Intensity"><Select defaultValue="subtle"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="subtle">Subtle</SelectItem><SelectItem value="expressive">Expressive</SelectItem></SelectContent></Select></Field>
-                      </div>
-                      <GenerateButton capability="avatar.generate" label="Generate Talking Head" />
+                      <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.avatar} values={avatarValues} onChange={setAvatarValues} mode={uxMode} capability="avatar" />
+                      <GenerateButton capability="avatar.generate" label="Generate Talking Head" formValues={avatarValues} />
                     </div>}
                     output={<div className="space-y-4">{generating.avatar ? <div className="h-64 w-full rounded-lg bg-white/[0.04] animate-pulse" /> : <MediaPreview type="video" title="Talking head video" />}</div>}
                   /></TabsContent>
@@ -430,22 +376,16 @@ export default function Studio() {
               </Card>
             </TabsContent>
 
-            {/* ── 8. SCRAPE/BRAND ── */}
+            {/* ── 8. SCRAPE/BRAND (DynamicFormRenderer) ── */}
             <TabsContent value="scrape" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <Field label="Website URL"><Input placeholder="https://brand.example.com" className="bg-black/20" /></Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Crawl Depth"><Slider defaultValue={[2]} min={1} max={5} step={1} /></Field>
-                    <Field label="Max Pages"><Input type="number" defaultValue={50} className="bg-black/20" /></Field>
-                  </div>
-                  <Field label="Extract Elements"><div className="grid grid-cols-3 gap-2">{['Logo', 'Colors', 'Fonts', 'Hero Images', 'Products', 'Services', 'Pricing', 'Testimonials', 'FAQs', 'Social Links', 'Contact Info', 'CTAs', 'Offers', 'Competitors'].map((el) => <label key={el} className="flex items-center gap-1.5 text-xs"><Switch defaultChecked={['Logo', 'Colors', 'Fonts'].includes(el)} /> {el}</label>)}</div></Field>
-                  <Field label="Brand Guide PDF"><DropZone accept=".pdf" label="Drop brand guide" kind="PDF" compact /></Field>
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.scrape} values={scrapeValues} onChange={setScrapeValues} mode={uxMode} capability="scrape" />
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="flex-1 border-cyan-500/30 text-cyan-300 text-xs"><Sparkles className="mr-1 h-3 w-3" /> Save as Brand Pack</Button>
                     <Button variant="outline" size="sm" className="flex-1 border-violet-500/30 text-violet-300 text-xs"><Database className="mr-1 h-3 w-3" /> Create RAG Knowledge Set</Button>
                   </div>
-                  <GenerateButton capability="scrape.crawl" label="Start Scraping" />
+                  <GenerateButton capability="scrape.crawl" label="Start Scraping" formValues={scrapeValues} />
                 </div>}
                 output={<div className="space-y-3">
                   {generating.scrape ? <div className="space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-20 w-full rounded-lg bg-white/[0.04] animate-pulse" />)}</div> : <>
@@ -458,21 +398,12 @@ export default function Studio() {
               /></Card>
             </TabsContent>
 
-            {/* ── 9. RAG/KNOWLEDGE ── */}
+            {/* ── 9. RAG/KNOWLEDGE (DynamicFormRenderer) ── */}
             <TabsContent value="rag" className="mt-4">
               <Card className="border-white/[0.07] bg-white/[0.02] p-6"><IOLayout
                 input={<div className="space-y-4">
-                  <Field label="Knowledge Set Name"><Input placeholder="e.g. Product Documentation" className="bg-black/20" /></Field>
-                  <Field label="Upload Documents"><DropZone accept=".pdf,.doc,.docx,.txt" label="Drop PDFs, DOCX, or text files" kind="documents" /></Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Chunking Size"><Select defaultValue="medium"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="small">Small (200 tokens)</SelectItem><SelectItem value="medium">Medium (500 tokens)</SelectItem><SelectItem value="large">Large (1000 tokens)</SelectItem></SelectContent></Select></Field>
-                    <Field label="Top Results"><Slider defaultValue={[5]} min={1} max={10} step={1} /></Field>
-                  </div>
-                  <Accordion type="single" collapsible><AccordionItem value="adv" className="border-white/[0.06]"><AccordionTrigger className="text-xs text-muted-foreground py-2"><span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span></AccordionTrigger><AccordionContent className="space-y-3 pt-2">
-                    <Field label="Overlap"><Select defaultValue="10%"><SelectTrigger className="bg-black/20"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0%">None</SelectItem><SelectItem value="5%">5%</SelectItem><SelectItem value="10%">10%</SelectItem><SelectItem value="20%">20%</SelectItem></SelectContent></Select></Field>
-                    <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2"><span className="text-sm">Rerank Results</span><Switch defaultChecked /></div>
-                  </AccordionContent></AccordionItem></Accordion>
-                  <GenerateButton capability="rag.ingest" label="Build Knowledge Set" />
+                  <DynamicFormRenderer schema={CAPABILITY_SCHEMAS.rag} values={ragValues} onChange={setRagValues} mode={uxMode} capability="rag" />
+                  <GenerateButton capability="rag.ingest" label="Build Knowledge Set" formValues={ragValues} />
                 </div>}
                 output={<div className="space-y-4">
                   <div className="flex gap-2">
@@ -488,9 +419,11 @@ export default function Studio() {
             </TabsContent>
           </Tabs>
 
+          {/* Bottom Panel — Timeline */}
           {bottomPanelOpen && <div className="h-48 shrink-0 rounded-lg border border-white/[0.06] bg-[hsl(240_14%_3.5%)] overflow-hidden"><Timeline /></div>}
         </div>
 
+        {/* Right Panel — Director Chat */}
         {rightPanelOpen && <div className="w-80 shrink-0 rounded-lg border border-white/[0.06] bg-[hsl(240_14%_3.5%)] overflow-hidden"><DirectorChat /></div>}
       </div>
 
