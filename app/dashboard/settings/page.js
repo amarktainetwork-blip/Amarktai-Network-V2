@@ -37,7 +37,7 @@ function MaskedKeyInput({ label, value, onChange, placeholder, providerName }) {
 
 export default function SettingsPage() {
   const [s, setS] = useState({
-    genx_key: '', together_key: '', groq_key: '', mimo_key: '',
+    genx_key: '', together_key: '', groq_key: '', deepinfra_key: '', mimo_key: '',
     default_text_model: 'llama-3.3-70b-versatile', default_image_model: 'flux-1-schnell',
     asset_retention_days: 30, local_storage_path: '/var/www/amarktai/storage',
     rate_limit_max: 100, rate_limit_window: 60,
@@ -55,6 +55,7 @@ export default function SettingsPage() {
     { key: 'genx_key', label: 'GenX API Key', placeholder: 'gx_…', status: 'ready', providerName: 'GenX' },
     { key: 'together_key', label: 'Together AI Key', placeholder: 'tg_…', status: 'ready', providerName: 'Together AI' },
     { key: 'groq_key', label: 'Groq API Key', placeholder: 'gsk_…', status: 'ready', providerName: 'Groq' },
+    { key: 'deepinfra_key', label: 'DeepInfra API Key', placeholder: 'di_…', status: 'ready', providerName: 'DeepInfra' },
     { key: 'mimo_key', label: 'MiMo API Key', placeholder: 'mimo_…', status: 'experimental', providerName: 'MiMo' },
   ]
 

@@ -27,6 +27,7 @@ const MODES = [
   { v: 'avatar', label: 'Avatar', icon: User, capability: 'avatar.generate' },
   { v: 'scrape', label: 'Scrape', icon: Globe, capability: 'scrape.crawl' },
   { v: 'rag', label: 'RAG', icon: Database, capability: 'rag.ingest' },
+  { v: 'uncensored', label: 'Uncensored', icon: Zap, capability: 'text.chat', uncensored: true },
 ]
 
 // ─── Context-Aware Chip Configs ────────────────────────────────
@@ -74,6 +75,11 @@ const MODE_CHIPS = {
     { key: 'chunking', label: 'Chunking', options: ['Auto', 'Precise', 'Broad', 'Custom'] },
     { key: 'topK', label: 'Top-K', options: ['3', '5', '10', '20'] },
   ],
+  uncensored: [
+    { key: 'model', label: 'Model', options: ['Venice.ai Uncensored', 'Mage Text', 'DeepInfra Uncensored'] },
+    { key: 'safety', label: 'Safety', options: ['Off', 'Minimal', 'Standard'] },
+    { key: 'fallback', label: 'Fallback', options: ['Strict (Fail)', 'Secondary Uncensored'] },
+  ],
 }
 
 // ─── Chip Popover Component ────────────────────────────────────
@@ -102,6 +108,7 @@ function Chip({ label, value, options, onChange }) {
 // ─── Preview Canvas ────────────────────────────────────────────
 function PreviewCanvas({ mode, generating, generatedAssets }) {
   const busy = generating[mode]
+  const isUncensored = mode === 'uncensored'
   const assets = generatedAssets.filter((a) => {
     if (mode === 'image') return a.type === 'image'
     if (mode === 'video' || mode === 'longvideo' || mode === 'avatar') return a.type === 'video'
@@ -112,7 +119,7 @@ function PreviewCanvas({ mode, generating, generatedAssets }) {
 
   if (busy) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
+      <div className={`flex flex-col items-center justify-center h-full ${isUncensored ? 'border-2 border-red-500/30 rounded-xl' : ''}`}>
         <div className="relative">
           <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center">
             <Loader2 className="h-8 w-8 text-cyan-400 animate-spin" />
@@ -230,6 +237,7 @@ export default function Studio() {
   // Get chips for current mode
   const chips = MODE_CHIPS[mode] || []
   const currentMode = MODES.find((m) => m.v === mode)
+  const isUncensored = currentMode?.uncensored === true
 
   // Generate handler
   const handleGenerate = async () => {
@@ -265,6 +273,9 @@ export default function Studio() {
           </div>
         </div>
         <div className="flex-1" />
+        {isUncensored && (
+          <Badge variant="outline" className="border-red-500/30 text-red-400 text-[10px] mr-2">UNCENSORED MODE ACTIVE</Badge>
+        )}
         <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">All Systems Operational</Badge>
       </header>
 
