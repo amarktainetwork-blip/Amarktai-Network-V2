@@ -160,15 +160,10 @@ describe('Prompt 2 dashboard frontend contracts', () => {
   it('Studio uses grouped capability selector instead of icon rail', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
 
-    // Must have a CapabilitySelector component
     expect(studioText).toContain('CapabilitySelector')
-    // Must have grouped capabilities
     expect(studioText).toContain('CAPABILITY_GROUPS')
-    // Must have a Director block
     expect(studioText).toContain('DirectorBlock')
-    // Must have an Options block with tabs
     expect(studioText).toContain('OptionsBlock')
-    // Must not hard-code provider to mode in user-facing UI
     expect(studioText).not.toContain("provider: 'groq'")
     expect(studioText).not.toContain("provider: 'together'")
     expect(studioText).not.toContain("provider: 'genx'")
@@ -178,37 +173,132 @@ describe('Prompt 2 dashboard frontend contracts', () => {
   it('Studio has two-block layout (Director + Options)', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
 
-    // Must have grid layout for two blocks
     expect(studioText).toContain('lg:grid-cols-')
-    // Must have Director block
     expect(studioText).toContain('DirectorBlock')
-    // Must have Options block
     expect(studioText).toContain('OptionsBlock')
-    // Backend details must be in collapsed accordion
     expect(studioText).toContain('Accordion')
     expect(studioText).toContain('Backend contract')
     expect(studioText).toContain('Provider routing')
     expect(studioText).toContain('Artifact & proof status')
   })
 
-  it('music schema includes required Prompt 2 genres', () => {
-    const genreOptions = CAPABILITY_SCHEMAS.music.genre.options
+  it('every final Studio selector label appears in page', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+    const labels = [
+      'Chat', 'Reasoning', 'Code', 'Research',
+      'Image generation', 'Image editing',
+      'Short video', 'Long-form video', 'Image-to-video', 'Video edit / remix',
+      'Music / Song', 'Voice / TTS', 'Speech-to-text',
+      'Avatar generation', 'Talking avatar', 'Lip-sync avatar',
+      'Website scrape / BrandPack', 'Campaign content', 'Social / reel pack',
+      'RAG ingest', 'RAG search',
+      'App request', 'Agent task', 'Workflow automation',
+      'DeepInfra gated text',
+    ]
+    for (const label of labels) {
+      expect(studioText, `Missing selector label: ${label}`).toContain(label)
+    }
+  })
 
+  it('every schema key required by the selector exists', () => {
+    // These keys must exist directly in CAPABILITY_SCHEMAS
+    const directSchemaKeys = [
+      'chat', 'reasoning', 'code', 'research',
+      'image', 'video', 'longvideo',
+      'image_to_video', 'video_edit',
+      'music', 'voice',
+      'avatar',
+      'scrape', 'campaign', 'social_reel',
+      'rag', 'rag_search',
+      'app_request', 'agent_task', 'workflow',
+      'uncensored',
+    ]
+    for (const key of directSchemaKeys) {
+      expect(CAPABILITY_SCHEMAS[key], `Schema missing for ${key}`).toBeDefined()
+    }
+    // These modes share schemas via SCHEMA_MAP - verify the target schema exists
+    const sharedSchemaTargets = {
+      image_edit: 'image',
+      voice_stt: 'voice',
+      talking_avatar: 'avatar',
+      lip_sync: 'avatar',
+    }
+    for (const [mode, targetSchema] of Object.entries(sharedSchemaTargets)) {
+      expect(CAPABILITY_SCHEMAS[targetSchema], `Shared schema target ${targetSchema} missing for ${mode}`).toBeDefined()
+    }
+  })
+
+  it('music schema includes required genres and controls', () => {
+    const genreOptions = CAPABILITY_SCHEMAS.music.genre.options
     for (const genre of REQUIRED_MUSIC_GENRES) {
       expect(genreOptions).toContain(genre)
     }
+    expect(CAPABILITY_SCHEMAS.music.describe_song).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.lyrics).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.instrumental_only).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.genre).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.vocal_style).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.instrumentation).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.tempo_bpm).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.target_duration).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.reference_track).toBeDefined()
+  })
+
+  it('long-form video schema includes required controls', () => {
+    const lv = CAPABILITY_SCHEMAS.longvideo
+    expect(lv.source).toBeDefined()
+    expect(lv.script_input).toBeDefined()
+    expect(lv.target_duration).toBeDefined()
+    expect(lv.scene_count).toBeDefined()
+    expect(lv.scene_cards).toBeDefined()
+    expect(lv.subtitles).toBeDefined()
+    expect(lv.cutdown_pack).toBeDefined()
+    expect(lv.export_format).toBeDefined()
+  })
+
+  it('image-to-video schema includes required controls', () => {
+    const i2v = CAPABILITY_SCHEMAS.image_to_video
+    expect(i2v.source_image).toBeDefined()
+    expect(i2v.first_frame).toBeDefined()
+    expect(i2v.motion_strength).toBeDefined()
+    expect(i2v.camera_movement).toBeDefined()
+    expect(i2v.duration).toBeDefined()
+    expect(i2v.prompt).toBeDefined()
+  })
+
+  it('campaign schema includes required controls', () => {
+    const camp = CAPABILITY_SCHEMAS.campaign
+    expect(camp.brand_product).toBeDefined()
+    expect(camp.target_audience).toBeDefined()
+    expect(camp.platforms).toBeDefined()
+    expect(camp.campaign_objective).toBeDefined()
+    expect(camp.offer_cta).toBeDefined()
+    expect(camp.variants).toBeDefined()
+  })
+
+  it('agent_task schema includes required controls', () => {
+    const agent = CAPABILITY_SCHEMAS.agent_task
+    expect(agent.task_directive).toBeDefined()
+    expect(agent.allowed_tools).toBeDefined()
+    expect(agent.memory_access).toBeDefined()
+    expect(agent.brand_access).toBeDefined()
+    expect(agent.app_scope).toBeDefined()
+    expect(agent.approval_required).toBeDefined()
+  })
+
+  it('workflow schema includes required controls', () => {
+    const wf = CAPABILITY_SCHEMAS.workflow
+    expect(wf.trigger_type).toBeDefined()
+    expect(wf.steps).toBeDefined()
+    expect(wf.approval_gates).toBeDefined()
+    expect(wf.schedule).toBeDefined()
+    expect(wf.success_criteria).toBeDefined()
+    expect(wf.rollback_notes).toBeDefined()
   })
 
   it('voice schema includes South African accent', () => {
     const accentOptions = CAPABILITY_SCHEMAS.voice.accent.options
     expect(accentOptions).toContain('South African')
-  })
-
-  it('every Studio mode has a matching capability schema', () => {
-    const modes = ['chat', 'image', 'video', 'longvideo', 'music', 'voice', 'avatar', 'scrape', 'rag', 'code', 'uncensored']
-    for (const mode of modes) {
-      expect(CAPABILITY_SCHEMAS[mode], `Schema missing for ${mode}`).toBeDefined()
-    }
   })
 
   it('uncensored Studio mode is DeepInfra-only and gated backend pending', () => {
@@ -226,6 +316,17 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     expect(rendererText).toContain('BACKEND_PENDING_GROUPS')
     expect(rendererText).toContain('Backend Pending')
     expect(rendererText).toContain('Advanced & Backend Details')
+  })
+
+  it('capability map has frontend-planned entries for new modes', () => {
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.image_to_video']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.edit']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['campaign.generate']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['social.reel_pack']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['app.request']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['agent.task']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['workflow.automation']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['research']).toMatchObject({ missing: true })
   })
 
   it('active UI code does not use old proof-risk wording', () => {

@@ -23,7 +23,8 @@ const CAPABILITY_GROUPS = [
     label: 'Chat & Reasoning',
     items: [
       { v: 'chat', label: 'Chat', icon: MessageSquare },
-      { v: 'code', label: 'Code / Reasoning', icon: Code2 },
+      { v: 'reasoning', label: 'Reasoning', icon: Code2 },
+      { v: 'code', label: 'Code', icon: Code2 },
       { v: 'research', label: 'Research', icon: Globe },
     ],
   },
@@ -31,7 +32,7 @@ const CAPABILITY_GROUPS = [
     label: 'Image',
     items: [
       { v: 'image', label: 'Image generation', icon: ImageIcon },
-      { v: 'image-edit', label: 'Image editing', icon: ImageIcon },
+      { v: 'image_edit', label: 'Image editing', icon: ImageIcon },
     ],
   },
   {
@@ -39,7 +40,8 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'video', label: 'Short video', icon: Video },
       { v: 'longvideo', label: 'Long-form video', icon: Film },
-      { v: 'video-edit', label: 'Video edit / remix', icon: Video },
+      { v: 'image_to_video', label: 'Image-to-video', icon: Film },
+      { v: 'video_edit', label: 'Video edit / remix', icon: Video },
     ],
   },
   {
@@ -47,15 +49,15 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'music', label: 'Music / Song', icon: Music },
       { v: 'voice', label: 'Voice / TTS', icon: Mic },
-      { v: 'voice-stt', label: 'Speech-to-text', icon: Mic },
+      { v: 'voice_stt', label: 'Speech-to-text', icon: Mic },
     ],
   },
   {
     label: 'Avatar',
     items: [
       { v: 'avatar', label: 'Avatar generation', icon: User },
-      { v: 'talking-avatar', label: 'Talking avatar', icon: User },
-      { v: 'lip-sync', label: 'Lip-sync avatar', icon: User },
+      { v: 'talking_avatar', label: 'Talking avatar', icon: User },
+      { v: 'lip_sync', label: 'Lip-sync avatar', icon: User },
     ],
   },
   {
@@ -63,21 +65,21 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'scrape', label: 'Website scrape / BrandPack', icon: Globe },
       { v: 'campaign', label: 'Campaign content', icon: Layers },
-      { v: 'social-reel', label: 'Social / reel pack', icon: Film },
+      { v: 'social_reel', label: 'Social / reel pack', icon: Film },
     ],
   },
   {
     label: 'Knowledge',
     items: [
       { v: 'rag', label: 'RAG ingest', icon: Database },
-      { v: 'rag-search', label: 'RAG search', icon: Database },
+      { v: 'rag_search', label: 'RAG search', icon: Database },
     ],
   },
   {
     label: 'Apps & Agents',
     items: [
-      { v: 'app-request', label: 'App request', icon: Zap },
-      { v: 'agent-task', label: 'Agent task', icon: Layers },
+      { v: 'app_request', label: 'App request', icon: Zap },
+      { v: 'agent_task', label: 'Agent task', icon: Layers },
       { v: 'workflow', label: 'Workflow automation', icon: Wrench },
     ],
   },
@@ -145,47 +147,38 @@ function CapabilitySelector({ value, onChange }) {
 
 // ─── Mode metadata ──────────────────────────────────────────────
 // Maps UI mode keys to backend capabilities and labels.
-// Modes that share a schema reuse the same capability key.
 const MODE_META = {
   chat: { capability: 'text.chat', label: 'Chat' },
-  code: { capability: 'text.code', label: 'Code / Reasoning' },
-  research: { capability: 'text.chat', label: 'Research' },
+  reasoning: { capability: 'text.reasoning', label: 'Reasoning' },
+  code: { capability: 'text.code', label: 'Code' },
+  research: { capability: 'research', label: 'Research' },
   image: { capability: 'image.generate', label: 'Image generation' },
-  'image-edit': { capability: 'image.edit', label: 'Image editing' },
+  image_edit: { capability: 'image.edit', label: 'Image editing' },
   video: { capability: 'video.generate', label: 'Short video' },
   longvideo: { capability: 'video.longform', label: 'Long-form video' },
-  'video-edit': { capability: 'video.generate', label: 'Video edit / remix' },
+  image_to_video: { capability: 'video.image_to_video', label: 'Image-to-video' },
+  video_edit: { capability: 'video.edit', label: 'Video edit / remix' },
   music: { capability: 'music.generate', label: 'Music / Song' },
   voice: { capability: 'voice.tts', label: 'Voice / TTS' },
-  'voice-stt': { capability: 'voice.stt', label: 'Speech-to-text' },
+  voice_stt: { capability: 'voice.stt', label: 'Speech-to-text' },
   avatar: { capability: 'avatar.generate', label: 'Avatar generation' },
-  'talking-avatar': { capability: 'avatar.generate', label: 'Talking avatar' },
-  'lip-sync': { capability: 'avatar.generate', label: 'Lip-sync avatar' },
+  talking_avatar: { capability: 'avatar.generate', label: 'Talking avatar' },
+  lip_sync: { capability: 'avatar.generate', label: 'Lip-sync avatar' },
   scrape: { capability: 'scrape.crawl', label: 'Website scrape' },
-  campaign: { capability: 'image.generate', label: 'Campaign content' },
-  'social-reel': { capability: 'video.generate', label: 'Social / reel pack' },
+  campaign: { capability: 'campaign.generate', label: 'Campaign content' },
+  social_reel: { capability: 'social.reel_pack', label: 'Social / reel pack' },
   rag: { capability: 'rag.ingest', label: 'RAG ingest' },
-  'rag-search': { capability: 'rag.query', label: 'RAG search' },
-  'app-request': { capability: 'text.chat', label: 'App request' },
-  'agent-task': { capability: 'text.chat', label: 'Agent task' },
-  workflow: { capability: 'text.chat', label: 'Workflow automation' },
+  rag_search: { capability: 'rag.query', label: 'RAG search' },
+  app_request: { capability: 'app.request', label: 'App request' },
+  agent_task: { capability: 'agent.task', label: 'Agent task' },
+  workflow: { capability: 'workflow.automation', label: 'Workflow automation' },
   uncensored: { capability: 'uncensored.text', label: 'DeepInfra gated', gated: true },
 }
 
 // Modes that share a schema should use the schema of the primary mode
 const SCHEMA_MAP = {
-  'image-edit': 'image',
-  'video-edit': 'video',
-  'voice-stt': 'voice',
-  'talking-avatar': 'avatar',
-  'lip-sync': 'avatar',
-  campaign: 'image',
-  'social-reel': 'video',
-  'rag-search': 'rag',
-  research: 'chat',
-  'app-request': 'chat',
-  'agent-task': 'chat',
-  workflow: 'chat',
+  talking_avatar: 'avatar',
+  lip_sync: 'avatar',
 }
 
 // ─── Director Block ─────────────────────────────────────────────
