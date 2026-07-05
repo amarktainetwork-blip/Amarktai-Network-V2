@@ -37,7 +37,7 @@ export default function ProvidersPage() {
     toast.success('Models synced', { description: 'All provider model catalogs updated.' })
   }
 
-  if (loading) return <PageTransition className="space-y-8"><PageHeader title="Providers & Models" subtitle="AI provider configuration and model catalog." /><div className="grid gap-4 sm:grid-cols-2">{[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}</div></PageTransition>
+  if (loading) return <PageTransition className="space-y-8"><PageHeader title="Providers & Models" subtitle="AI provider configuration and model catalog." /><div className="grid gap-4 sm:grid-cols-2">{[1, 2, 3, 4, 5].map((i) => <SkeletonCard key={i} />)}</div></PageTransition>
 
   return (
     <PageTransition className="space-y-8">

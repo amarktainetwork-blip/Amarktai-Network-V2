@@ -7,7 +7,8 @@ import path from 'path'
 import { CAPABILITIES, PROVIDERS, READINESS } from '@/lib/appdata'
 
 // ---------------------------------------------------------------------------
-// Infrastructure: Mongo connection (stands in for packages/db Prisma client)
+// Simulation-only Mongo connection. Production dashboard calls should target
+// the Fastify API under /api/v1/*, not this demo route.
 // ---------------------------------------------------------------------------
 const MONGO_URL = process.env.MONGO_URL
 const DB_NAME = process.env.DB_NAME || 'amarktai'
@@ -40,7 +41,7 @@ async function logEvent(db, level, message, meta = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Artifact fabrication (fake asset generation on local disk = apps/worker)
+// Simulation artifact fabrication (fake asset generation on local disk).
 // ---------------------------------------------------------------------------
 const TYPE_CFG = {
   'text.chat': { ext: 'md', mime: 'text/markdown', kind: 'markdown' },
@@ -93,13 +94,13 @@ function svgArt(title, subtitle) {
   <circle cx="220" cy="440" r="180" fill="url(#g)" opacity="0.14"/>
   <text x="64" y="300" font-family="Inter, sans-serif" font-size="52" font-weight="800" fill="url(#g)">${title}</text>
   <text x="64" y="350" font-family="Inter, sans-serif" font-size="24" fill="#8b93a7">${subtitle}</text>
-  <text x="64" y="520" font-family="monospace" font-size="16" fill="#4b5162">AmarktAI Network \u2014 mock artifact</text>
+  <text x="64" y="520" font-family="monospace" font-size="16" fill="#4b5162">AmarktAI Network - simulation artifact</text>
 </svg>`
 }
 
 function markdownDoc(type, payload) {
   const p = JSON.stringify(payload || {}, null, 2)
-  return `# AmarktAI Mock Artifact\n\n**Capability:** \`${type}\`  \n**Generated:** ${new Date().toISOString()}  \n**Mode:** Mock (no premium endpoints invoked)\n\n---\n\n## Summary\n\nThis is a fabricated result produced by the local simulation worker. It demonstrates the\nend-to-end orchestration pipeline: enqueue \u2192 process \u2192 persist artifact \u2192 surface in dashboard.\n\n## Request payload\n\n\`\`\`json\n${p}\n\`\`\`\n\n## Notes\n\n- Deterministic mock output for pipeline verification.\n- Replace mock provider with a live credential to produce real assets.\n`
+  return `# AmarktAI Simulation Artifact\n\n**Capability:** \`${type}\`  \n**Generated:** ${new Date().toISOString()}  \n**Mode:** Simulation (no provider endpoints invoked)\n\n---\n\n## Summary\n\nThis is a fabricated result produced by the local simulation worker. It demonstrates the\ndashboard orchestration contract without provider proof.\n\n## Request payload\n\n\`\`\`json\n${p}\n\`\`\`\n\n## Notes\n\n- Deterministic simulation output for dashboard contract checks.\n- Production execution must go through the Fastify /api/v1/* backend.\n`
 }
 
 async function fabricateArtifact(db, job) {
@@ -125,7 +126,7 @@ async function fabricateArtifact(db, job) {
     mime: cfg.mime,
     filename,
     internalPath: diskPath,
-    retrievalPath: `/api/artifacts/${id}/download`,
+    retrievalPath: `/api/simulation/artifacts/${id}/download`,
     sizeBytes: content.length,
     createdAt: new Date().toISOString(),
   }
@@ -139,7 +140,7 @@ async function fabricateArtifact(db, job) {
 async function runMockWorker(jobId) {
   const stages = [
     { delay: 500, status: 'running', progress: 18, msg: 'Worker picked up task' },
-    { delay: 1400, status: 'running', progress: 52, msg: 'Provider (mock) streaming response' },
+    { delay: 1400, status: 'running', progress: 52, msg: 'Simulation provider streaming response' },
     { delay: 1300, status: 'running', progress: 84, msg: 'Post-processing & encoding asset' },
   ]
   try {
@@ -192,7 +193,7 @@ export async function GET(request, { params }) {
     const route = p.join('/')
 
     if (p.length === 0 || route === 'health') {
-      return json({ status: 'ok', service: 'amarktai-network-v2', mode: 'mock', ts: new Date().toISOString() })
+      return json({ status: 'ok', service: 'amarktai-network-v2', mode: 'simulation', productionApi: '/api/v1/*', ts: new Date().toISOString() })
     }
 
     if (route === 'capabilities') return json({ capabilities: CAPABILITIES })
@@ -322,7 +323,7 @@ export async function POST(request, { params }) {
         ok: true,
         received: body,
         routed_to: (body?.type || 'text.chat'),
-        provider: 'mock',
+        provider: 'simulation',
         latency_ms: 40 + Math.floor(Math.random() * 120),
         trace_id: uuidv4(),
         would_enqueue_job: true,

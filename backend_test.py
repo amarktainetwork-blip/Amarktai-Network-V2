@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AmarktAI Network v2 Backend API Test Suite
-Tests all endpoints with focus on the critical end-to-end mock pipeline
+Tests the explicit simulation endpoints. Production API tests should target /api/v1/*.
 """
 
 import requests
@@ -10,7 +10,7 @@ import json
 import sys
 
 # Base URL from environment
-BASE_URL = "https://amarktai-ai-platform.preview.emergentagent.com/api"
+BASE_URL = "https://amarktai-ai-platform.preview.emergentagent.com/api/simulation"
 
 def log_test(name, passed, details=""):
     """Log test result"""
@@ -28,7 +28,7 @@ def test_health():
         passed = (
             resp.status_code == 200 and
             data.get("status") == "ok" and
-            data.get("mode") == "mock"
+            data.get("mode") == "simulation"
         )
         return log_test("GET /api/health", passed, f"Status: {resp.status_code}, Mode: {data.get('mode')}")
     except Exception as e:
@@ -40,10 +40,10 @@ def test_capabilities():
         resp = requests.get(f"{BASE_URL}/capabilities", timeout=10)
         data = resp.json()
         caps = data.get("capabilities", [])
-        passed = resp.status_code == 200 and len(caps) == 12
-        return log_test("GET /api/capabilities", passed, f"Status: {resp.status_code}, Count: {len(caps)}/12")
+        passed = resp.status_code == 200 and len(caps) == 19
+        return log_test("GET /api/simulation/capabilities", passed, f"Status: {resp.status_code}, Count: {len(caps)}/19")
     except Exception as e:
-        return log_test("GET /api/capabilities", False, str(e))
+        return log_test("GET /api/simulation/capabilities", False, str(e))
 
 def test_providers():
     """Test GET /api/providers"""
@@ -54,12 +54,13 @@ def test_providers():
         mimo = next((p for p in providers if p.get("id") == "mimo"), None)
         passed = (
             resp.status_code == 200 and
-            len(providers) == 4 and
-            mimo and mimo.get("tier") == "experimental"
+            len(providers) == 5 and
+            mimo and mimo.get("tier") == "core" and
+            any(p.get("id") == "deepinfra" for p in providers)
         )
-        return log_test("GET /api/providers", passed, f"Status: {resp.status_code}, Count: {len(providers)}/4, MiMo tier: {mimo.get('tier') if mimo else 'not found'}")
+        return log_test("GET /api/simulation/providers", passed, f"Status: {resp.status_code}, Count: {len(providers)}/5, MiMo tier: {mimo.get('tier') if mimo else 'not found'}")
     except Exception as e:
-        return log_test("GET /api/providers", False, str(e))
+        return log_test("GET /api/simulation/providers", False, str(e))
 
 def test_stats():
     """Test GET /api/stats"""

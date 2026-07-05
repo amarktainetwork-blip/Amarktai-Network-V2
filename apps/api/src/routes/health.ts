@@ -5,11 +5,11 @@
  * Qdrant is optional (used for RAG) — reported as degraded, not blocking.
  */
 
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
 
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/health', async (_request, reply) => {
+  const healthHandler = async (_request: FastifyRequest, reply: FastifyReply) => {
     const checks: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {}
     let criticalHealthy = true
 
@@ -66,5 +66,8 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
       timestamp: new Date().toISOString(),
       checks,
     })
-  })
+  }
+
+  app.get('/health', healthHandler)
+  app.get('/api/v1/health', healthHandler)
 }

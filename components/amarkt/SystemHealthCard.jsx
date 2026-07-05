@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Database, Wifi, Server, HardDrive, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react'
 
 const SERVICES = [
-  { id: 'mariadb', label: 'MariaDB', icon: Database, endpoint: '/api/health' },
-  { id: 'redis', label: 'Redis', icon: Wifi, endpoint: '/api/health' },
-  { id: 'qdrant', label: 'Qdrant', icon: Server, endpoint: '/api/health' },
-  { id: 'minio', label: 'MinIO', icon: HardDrive, endpoint: '/api/health' },
+  { id: 'mariadb', label: 'MariaDB', icon: Database, endpoint: '/api/v1/health' },
+  { id: 'redis', label: 'Redis', icon: Wifi, endpoint: '/api/v1/health' },
+  { id: 'qdrant', label: 'Qdrant', icon: Server, endpoint: '/api/v1/health' },
+  { id: 'minio', label: 'MinIO', icon: HardDrive, endpoint: '/api/v1/health' },
 ]
 
 export default function SystemHealthCard() {

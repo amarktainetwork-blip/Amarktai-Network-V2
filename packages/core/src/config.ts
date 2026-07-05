@@ -69,10 +69,23 @@ export function getGenxBaseUrl(): string {
   return process.env.GENX_BASE_URL ?? 'https://query.genx.sh'
 }
 
+export function getMimoApiKey(): string {
+  const key = process.env.MIMO_API_KEY
+  if (!key) throw new Error('MIMO_API_KEY environment variable is required')
+  return key
+}
+
+export function getDeepinfraApiKey(): string {
+  const key = process.env.DEEPINFRA_API_KEY
+  if (!key) throw new Error('DEEPINFRA_API_KEY environment variable is required')
+  return key
+}
+
 // ── Provider Defaults ─────────────────────────────────────────────────────────
 
 export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const TOGETHER_BASE_URL = 'https://api.together.xyz/v1'
+export const DEEPINFRA_BASE_URL = 'https://api.deepinfra.com/v1'
 
 export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 export const GROQ_STT_MODEL = 'whisper-large-v3'

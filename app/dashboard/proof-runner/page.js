@@ -13,7 +13,7 @@ export default function ProofRunnerPage() {
   const [artifacts, setArtifacts] = useState(null)
 
   useEffect(() => {
-    fetch('/api/artifacts').then((r) => r.json()).then((d) => setArtifacts(d?.artifacts || [])).catch(() => setArtifacts([]))
+    fetch('/api/simulation/artifacts').then((r) => r.json()).then((d) => setArtifacts(d?.artifacts || [])).catch(() => setArtifacts([]))
   }, [])
 
   return (

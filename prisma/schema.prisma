@@ -1318,7 +1318,7 @@ model CapabilityRegistry {
 /// Each row represents a provider's ability to fulfill a specific capability.
 model ProviderCapabilityMap {
   id              String   @id @default(cuid())
-  /// Provider key (e.g. 'genx', 'huggingface', 'groq')
+  /// Provider key (e.g. 'genx', 'groq', 'deepinfra')
   providerKey     String   @map("provider_key")
   /// Capability key reference
   capabilityKey   String   @map("capability_key")
@@ -1420,7 +1420,7 @@ model AvatarLibrary {
   name         String
   /// Visual style (e.g. 'realistic', 'cartoon', 'anime', '3d')
   style        String   @default("realistic")
-  /// Provider that generates this avatar (e.g. 'genx', 'huggingface')
+  /// Provider that generates this avatar (e.g. 'genx')
   provider     String   @default("genx")
   /// URL to thumbnail image
   thumbnailUrl String   @default("") @map("thumbnail_url")
@@ -1446,7 +1446,7 @@ model VoiceLibrary {
   voiceId     String   @unique @map("voice_id")
   /// Human-readable name
   name        String
-  /// Provider that hosts this voice (e.g. 'genx', 'elevenlabs', 'deepgram')
+  /// Provider that hosts this voice (e.g. 'genx', 'groq', 'deepinfra')
   provider    String   @default("genx")
   /// Model used for this voice
   model       String   @default("")

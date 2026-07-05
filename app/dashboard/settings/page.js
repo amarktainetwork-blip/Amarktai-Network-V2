@@ -44,11 +44,16 @@ export default function SettingsPage() {
     cors_origins: '*', worker_concurrency: 5,
     minio_endpoint: '', minio_access_key: '', minio_secret_key: '',
     webhook_url: '', webhook_secret: '',
-    piper_tts: true, fluidsynth: true, ffmpeg: true, sharp: true,
+    piper_tts: true, redis: true, qdrant: true, playwright_crawler: true, minio_storage: true, smtp: true, bullmq: true, ffmpeg: true, sharp: true,
   })
   const set = (k, v) => setS((p) => ({ ...p, [k]: v }))
   const save = async () => {
-    try { await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: s }) }); toast.success('Settings saved') } catch { toast.error('Save failed') }
+    try {
+      window.localStorage.setItem('amarktai.dashboard.settings', JSON.stringify(s))
+      toast.success('Settings saved locally', { description: 'Production persistence should use a Fastify /api/v1/* settings route.' })
+    } catch {
+      toast.error('Save failed')
+    }
   }
 
   const providerKeys = [
@@ -56,7 +61,7 @@ export default function SettingsPage() {
     { key: 'together_key', label: 'Together AI Key', placeholder: 'tg_…', status: 'ready', providerName: 'Together AI' },
     { key: 'groq_key', label: 'Groq API Key', placeholder: 'gsk_…', status: 'ready', providerName: 'Groq' },
     { key: 'deepinfra_key', label: 'DeepInfra API Key', placeholder: 'di_…', status: 'ready', providerName: 'DeepInfra' },
-    { key: 'mimo_key', label: 'MiMo API Key', placeholder: 'mimo_…', status: 'experimental', providerName: 'MiMo' },
+    { key: 'mimo_key', label: 'MiMo API Key', placeholder: 'mimo_…', status: 'ready', providerName: 'MiMo' },
   ]
 
   return (
@@ -79,7 +84,7 @@ export default function SettingsPage() {
                   <TestConnectionButton providerName={pk.providerName} hasKey={s[pk.key]?.length > 0} />
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px]">
-                  {pk.status === 'ready' ? <span className="flex items-center gap-1 text-emerald-400/70"><CheckCircle2 className="h-3 w-3" /> Connected</span> : <span className="flex items-center gap-1 text-amber-400/70"><AlertTriangle className="h-3 w-3" /> Experimental</span>}
+              {pk.status === 'ready' ? <span className="flex items-center gap-1 text-emerald-400/70"><CheckCircle2 className="h-3 w-3" /> Final provider</span> : <span className="flex items-center gap-1 text-amber-400/70"><AlertTriangle className="h-3 w-3" /> Needs review</span>}
                 </div>
               </div>
             ))}
@@ -110,10 +115,15 @@ export default function SettingsPage() {
           <h3 className="mb-4 flex items-center gap-2 font-semibold"><Terminal className="h-4 w-4 text-emerald-300" /> Open-Source Tools</h3>
           <div className="space-y-3">
             {[
-              { key: 'piper_tts', label: 'Piper TTS', desc: 'Local text-to-speech engine' },
-              { key: 'fluidsynth', label: 'FluidSynth', desc: 'MIDI synthesizer' },
               { key: 'ffmpeg', label: 'FFmpeg', desc: 'Media processing toolkit' },
               { key: 'sharp', label: 'Sharp', desc: 'Image processing library' },
+              { key: 'piper_tts', label: 'Piper', desc: 'Local text-to-speech engine' },
+              { key: 'redis', label: 'Redis', desc: 'Queue and cache service' },
+              { key: 'qdrant', label: 'Qdrant', desc: 'Vector search service' },
+              { key: 'playwright_crawler', label: 'Playwright/local crawler', desc: 'Local browser crawler' },
+              { key: 'minio_storage', label: 'MinIO/local storage', desc: 'Object and local artifact storage' },
+              { key: 'smtp', label: 'SMTP', desc: 'Email delivery service' },
+              { key: 'bullmq', label: 'BullMQ', desc: 'Job queue orchestration' },
             ].map((tool) => (
               <div key={tool.key} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
                 <div><span className="text-sm">{tool.label}</span><p className="text-[10px] text-muted-foreground">{tool.desc}</p></div>

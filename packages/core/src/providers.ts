@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 // ── Provider Keys ─────────────────────────────────────────────────────────────
 
-export const PROVIDER_KEYS = ['genx', 'together', 'groq', 'mimo'] as const
+export const PROVIDER_KEYS = ['genx', 'groq', 'together', 'mimo', 'deepinfra'] as const
 
 export type ProviderKey = (typeof PROVIDER_KEYS)[number]
 

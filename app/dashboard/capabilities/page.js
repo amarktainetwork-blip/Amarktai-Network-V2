@@ -10,20 +10,20 @@ import { Boxes, CheckCircle2, AlertTriangle, XCircle, Zap, ArrowRight, Key, Serv
 import Link from 'next/link'
 
 const CAPABILITY_MAP = [
-  { id: 'text.chat', label: 'Chat / Text', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
-  { id: 'text.reasoning', label: 'Reasoning', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
-  { id: 'text.code', label: 'Code Generation', category: 'Language', provider: 'Groq', inputs: 'Prompt', outputs: 'Code', requiresKey: 'GROQ_API_KEY' },
-  { id: 'image.generate', label: 'Image Generation', category: 'Vision', provider: 'Together AI', inputs: 'Prompt, Reference', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'image.edit', label: 'Image Edit', category: 'Vision', provider: 'Together AI', inputs: 'Image, Prompt', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'video.generate', label: 'Video Generation', category: 'Motion', provider: 'GenX', inputs: 'Prompt, First Frame', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'video.longform', label: 'Long-form Video', category: 'Motion', provider: 'GenX', inputs: 'Script, Scenes', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'music.generate', label: 'Music / Song', category: 'Audio', provider: 'GenX', inputs: 'Prompt, Lyrics', outputs: 'Audio', requiresKey: 'GENX_API_KEY' },
-  { id: 'voice.tts', label: 'Text-to-Speech', category: 'Audio', provider: 'Groq', inputs: 'Text, Voice', outputs: 'Audio', requiresKey: 'GROQ_API_KEY' },
-  { id: 'voice.stt', label: 'Speech-to-Text', category: 'Audio', provider: 'Groq', inputs: 'Audio', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
-  { id: 'avatar.generate', label: 'Avatar', category: 'Vision', provider: 'GenX', inputs: 'Face Image, Audio', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'brand.scrape', label: 'Brand Scrape', category: 'Intelligence', provider: 'Internal', inputs: 'URL', outputs: 'Brand Pack', requiresKey: null },
-  { id: 'rag.ingest', label: 'RAG Ingest', category: 'Knowledge', provider: 'Together AI', inputs: 'Documents', outputs: 'Vector Store', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'rag.search', label: 'RAG Search', category: 'Knowledge', provider: 'Together AI', inputs: 'Query', outputs: 'Cited Results', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'text.chat', label: 'Chat / Text', category: 'Language', provider: 'Groq', providerId: 'groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
+  { id: 'text.reasoning', label: 'Reasoning', category: 'Language', provider: 'MiMo', providerId: 'mimo', inputs: 'Prompt', outputs: 'Text', requiresKey: 'MIMO_API_KEY' },
+  { id: 'text.code', label: 'Code Generation', category: 'Language', provider: 'MiMo', providerId: 'mimo', inputs: 'Prompt', outputs: 'Code', requiresKey: 'MIMO_API_KEY' },
+  { id: 'image.generate', label: 'Image Generation', category: 'Vision', provider: 'Together AI', providerId: 'together', inputs: 'Prompt, Reference', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'image.edit', label: 'Image Edit', category: 'Vision', provider: 'Together AI', providerId: 'together', inputs: 'Image, Prompt', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'video.generate', label: 'Video Generation', category: 'Motion', provider: 'GenX', providerId: 'genx', inputs: 'Prompt, First Frame', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'video.longform', label: 'Long-form Video', category: 'Motion', provider: 'GenX', providerId: 'genx', inputs: 'Script, Scenes', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'music.generate', label: 'Music / Song', category: 'Audio', provider: 'GenX', providerId: 'genx', inputs: 'Prompt, Lyrics', outputs: 'Audio', requiresKey: 'GENX_API_KEY' },
+  { id: 'voice.tts', label: 'Text-to-Speech', category: 'Audio', provider: 'Groq', providerId: 'groq', inputs: 'Text, Voice', outputs: 'Audio', requiresKey: 'GROQ_API_KEY' },
+  { id: 'voice.stt', label: 'Speech-to-Text', category: 'Audio', provider: 'Groq', providerId: 'groq', inputs: 'Audio', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
+  { id: 'avatar.generate', label: 'Avatar', category: 'Vision', provider: 'GenX', providerId: 'genx', inputs: 'Face Image, Audio', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
+  { id: 'brand.scrape', label: 'Brand Scrape', category: 'Intelligence', provider: 'Local Tools', providerId: 'local_tools', inputs: 'URL', outputs: 'Brand Pack', requiresKey: null },
+  { id: 'rag.ingest', label: 'RAG Ingest', category: 'Knowledge', provider: 'Together AI', providerId: 'together', inputs: 'Documents', outputs: 'Vector Store', requiresKey: 'TOGETHER_API_KEY' },
+  { id: 'rag.search', label: 'RAG Search', category: 'Knowledge', provider: 'DeepInfra', providerId: 'deepinfra', inputs: 'Query', outputs: 'Cited Results', requiresKey: 'DEEPINFRA_API_KEY' },
 ]
 
 export default function CapabilitiesPage() {
@@ -34,7 +34,8 @@ export default function CapabilitiesPage() {
   useEffect(() => { fetchProviders().then(() => setLoading(false)) }, [])
 
   const getStatus = (cap) => {
-    const provider = providers.find((p) => p.id === cap.provider.toLowerCase().replace(' ', ''))
+    if (cap.providerId === 'local_tools') return { status: 'active', label: 'Tool', color: 'border-cyan-500/30 text-cyan-400' }
+    const provider = providers.find((p) => p.id === cap.providerId)
     if (!provider) return { status: 'blocked', label: 'No Provider', color: 'border-rose-500/30 text-rose-400' }
     if (provider.status === 'active') return { status: 'active', label: 'Active', color: 'border-emerald-500/30 text-emerald-400' }
     if (provider.status === 'experimental') return { status: 'experimental', label: 'Experimental', color: 'border-amber-500/30 text-amber-400' }
@@ -42,8 +43,9 @@ export default function CapabilitiesPage() {
   }
 
   const getBlocker = (cap) => {
-    const provider = providers.find((p) => p.id === cap.provider.toLowerCase().replace(' ', ''))
-    if (!provider && cap.provider !== 'Internal') return { blocked: true, reason: `Missing provider: ${cap.provider}`, icon: Server }
+    if (cap.providerId === 'local_tools') return { blocked: false, reason: null, icon: null }
+    const provider = providers.find((p) => p.id === cap.providerId)
+    if (!provider) return { blocked: true, reason: `Missing provider: ${cap.provider}`, icon: Server }
     if (cap.requiresKey && provider && provider.status !== 'active') return { blocked: true, reason: `Missing API key: ${cap.requiresKey}`, icon: Key }
     return { blocked: false, reason: null, icon: null }
   }

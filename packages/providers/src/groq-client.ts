@@ -1,7 +1,7 @@
 /**
  * Groq REST client — live integration for text.chat, voice.stt, voice.tts.
  *
- * Uses the official Groq OpenAI-compatible REST API.
+ * Uses the official Groq chat and audio REST API.
  * All API key resolution goes through @amarktai/core config (single source of truth).
  */
 

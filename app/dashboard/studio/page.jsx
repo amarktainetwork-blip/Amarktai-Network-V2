@@ -76,9 +76,9 @@ const MODE_CHIPS = {
     { key: 'topK', label: 'Top-K', options: ['3', '5', '10', '20'] },
   ],
   uncensored: [
-    { key: 'model', label: 'Model', options: ['Venice.ai Uncensored', 'Mage Text', 'DeepInfra Uncensored'] },
+    { key: 'model', label: 'Model', options: ['DeepInfra Text', 'MiMo Reasoning', 'Groq Text'] },
     { key: 'safety', label: 'Safety', options: ['Off', 'Minimal', 'Standard'] },
-    { key: 'fallback', label: 'Fallback', options: ['Strict (Fail)', 'Secondary Uncensored'] },
+    { key: 'fallback', label: 'Fallback', options: ['Strict (Fail)', 'Final provider fallback'] },
   ],
 }
 
