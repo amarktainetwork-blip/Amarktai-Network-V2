@@ -84,7 +84,7 @@ export default function SettingsPage() {
                   <TestConnectionButton providerName={pk.providerName} hasKey={s[pk.key]?.length > 0} />
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px]">
-              {pk.status === 'ready' ? <span className="flex items-center gap-1 text-emerald-400/70"><CheckCircle2 className="h-3 w-3" /> Final provider</span> : <span className="flex items-center gap-1 text-amber-400/70"><AlertTriangle className="h-3 w-3" /> Needs review</span>}
+              {pk.status === 'ready' ? <span className="flex items-center gap-1 text-cyan-400/70"><CheckCircle2 className="h-3 w-3" /> Contract ready, backend pending</span> : <span className="flex items-center gap-1 text-amber-400/70"><AlertTriangle className="h-3 w-3" /> Needs review</span>}
                 </div>
               </div>
             ))}

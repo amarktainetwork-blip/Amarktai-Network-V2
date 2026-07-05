@@ -27,7 +27,7 @@ const MODES = [
   { v: 'avatar', label: 'Avatar', icon: User, capability: 'avatar.generate' },
   { v: 'scrape', label: 'Scrape', icon: Globe, capability: 'scrape.crawl' },
   { v: 'rag', label: 'RAG', icon: Database, capability: 'rag.ingest' },
-  { v: 'uncensored', label: 'Uncensored', icon: Zap, capability: 'text.chat', uncensored: true },
+  { v: 'uncensored', label: 'Gated', icon: Zap, capability: 'uncensored.text', uncensored: true, disabled: true },
 ]
 
 // ─── Context-Aware Chip Configs ────────────────────────────────
@@ -76,9 +76,9 @@ const MODE_CHIPS = {
     { key: 'topK', label: 'Top-K', options: ['3', '5', '10', '20'] },
   ],
   uncensored: [
-    { key: 'model', label: 'Model', options: ['DeepInfra Text', 'MiMo Reasoning', 'Groq Text'] },
-    { key: 'safety', label: 'Safety', options: ['Off', 'Minimal', 'Standard'] },
-    { key: 'fallback', label: 'Fallback', options: ['Strict (Fail)', 'Final provider fallback'] },
+    { key: 'provider', label: 'Provider', options: ['DeepInfra gated lane'] },
+    { key: 'status', label: 'Status', options: ['Backend gating pending'] },
+    { key: 'fallback', label: 'Fallback', options: ['Disabled until configured'] },
   ],
 }
 
@@ -224,7 +224,7 @@ function DirectorInline() {
 
 // ─── MAIN STUDIO PAGE ──────────────────────────────────────────
 export default function Studio() {
-  const { generating, generatedAssets, simulateGeneration } = useStudioStore()
+  const { generating, generatedAssets } = useStudioStore()
 
   // Mode and chip state
   const [mode, setMode] = useState('chat')
@@ -254,9 +254,10 @@ export default function Studio() {
       setShowChat(true)
       return
     }
-    // Generate mode
-    const asset = await simulateGeneration(currentMode.capability, { title: `${currentMode.label} output` })
-    toast.success('Generation complete', { description: `${currentMode.label} · ${asset.name}` })
+    if (mode !== 'chat') {
+      toast.info('Backend integration pending', { description: `${currentMode.label} execution is disabled until the real /api/v1 backend is wired.` })
+      return
+    }
   }
 
   return (
@@ -274,9 +275,9 @@ export default function Studio() {
         </div>
         <div className="flex-1" />
         {isUncensored && (
-          <Badge variant="outline" className="border-red-500/30 text-red-400 text-[10px] mr-2">UNCENSORED MODE ACTIVE</Badge>
+          <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px] mr-2">GATED LANE PENDING</Badge>
         )}
-        <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 text-[10px]">All Systems Operational</Badge>
+        <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">Backend Pending</Badge>
       </header>
 
       {/* ─── Preview Canvas (flex-1) ─────────────────────────────── */}
@@ -350,10 +351,11 @@ export default function Studio() {
             />
           </div>
           <Button onClick={handleGenerate}
-            disabled={generating[mode]}
+            disabled={mode !== 'chat' || generating[mode]}
+            title={mode !== 'chat' ? 'Backend integration pending' : undefined}
             className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90 h-11 px-6 rounded-xl text-sm font-semibold transition-all">
             {generating[mode] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {generating[mode] ? 'Generating…' : mode === 'chat' ? 'Send' : 'Generate'}
+            {generating[mode] ? 'Pending...' : mode === 'chat' ? 'Send' : 'Backend Pending'}
           </Button>
         </div>
       </div>

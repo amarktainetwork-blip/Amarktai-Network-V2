@@ -11,7 +11,6 @@ import {
   CheckCircle2, Activity, Layers, Boxes, AlertTriangle, Server, Database, Wifi,
   Cpu, Zap, Clock, ArrowRight, RefreshCw, Loader2
 } from 'lucide-react'
-import { toast } from 'sonner'
 import Link from 'next/link'
 
 function Ticker({ value }) {
@@ -60,9 +59,8 @@ export default function CommandCenterPage() {
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing} className="border-white/10 text-xs">
             {refreshing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />} Refresh
           </Button>
-          <Button variant="outline" size="sm" className="border-amber-500/30 text-amber-300 text-xs"
-            onClick={() => toast.warning('Provider degraded', { description: 'Groq latency > 2s · fallback to Together AI' })}>
-            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Simulate Alert
+          <Button variant="outline" size="sm" disabled className="border-amber-500/30 text-amber-300 text-xs opacity-70">
+            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Backend Pending
           </Button>
         </div>
       </PageHeader>
@@ -77,11 +75,11 @@ export default function CommandCenterPage() {
                   <Cpu className="h-4 w-4 text-cyan-300" />
                   <span className="font-semibold text-sm">{p.name}</span>
                 </div>
-                <div className={`h-2.5 w-2.5 rounded-full ${p.status === 'active' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : p.status === 'experimental' ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]' : 'bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]'}`} />
+                <div className={`h-2.5 w-2.5 rounded-full ${p.status === 'configured' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : p.status === 'gated_backend_pending' ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]' : 'bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.35)]'}`} />
               </div>
               <div className="text-xs text-muted-foreground mb-2">{p.capabilities.length} capabilities · {p.modelCount} models</div>
-              <Badge variant="outline" className={`text-[10px] ${p.status === 'active' ? 'border-emerald-500/30 text-emerald-400' : p.status === 'experimental' ? 'border-amber-500/30 text-amber-400' : 'border-rose-500/30 text-rose-400'}`}>
-                {p.status === 'active' ? 'Active' : p.status === 'experimental' ? 'Experimental' : 'Needs Config'}
+              <Badge variant="outline" className={`text-[10px] ${p.status === 'configured' ? 'border-emerald-500/30 text-emerald-400' : p.status === 'gated_backend_pending' ? 'border-amber-500/30 text-amber-400' : 'border-cyan-500/30 text-cyan-400'}`}>
+                {p.status === 'configured' ? 'Configured' : p.status === 'gated_backend_pending' ? 'Gated Pending' : 'Backend Pending'}
               </Badge>
             </Card>
           </div>

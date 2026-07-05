@@ -37,16 +37,16 @@ export default function CapabilitiesPage() {
     if (cap.providerId === 'local_tools') return { status: 'active', label: 'Tool', color: 'border-cyan-500/30 text-cyan-400' }
     const provider = providers.find((p) => p.id === cap.providerId)
     if (!provider) return { status: 'blocked', label: 'No Provider', color: 'border-rose-500/30 text-rose-400' }
-    if (provider.status === 'active') return { status: 'active', label: 'Active', color: 'border-emerald-500/30 text-emerald-400' }
-    if (provider.status === 'experimental') return { status: 'experimental', label: 'Experimental', color: 'border-amber-500/30 text-amber-400' }
-    return { status: 'needs-config', label: 'Needs Config', color: 'border-amber-500/30 text-amber-400' }
+    if (provider.status === 'configured') return { status: 'configured', label: 'Configured', color: 'border-emerald-500/30 text-emerald-400' }
+    if (provider.status === 'gated_backend_pending') return { status: 'gated_backend_pending', label: 'Gated Pending', color: 'border-amber-500/30 text-amber-400' }
+    return { status: 'backend_pending', label: 'Backend Pending', color: 'border-cyan-500/30 text-cyan-400' }
   }
 
   const getBlocker = (cap) => {
     if (cap.providerId === 'local_tools') return { blocked: false, reason: null, icon: null }
     const provider = providers.find((p) => p.id === cap.providerId)
     if (!provider) return { blocked: true, reason: `Missing provider: ${cap.provider}`, icon: Server }
-    if (cap.requiresKey && provider && provider.status !== 'active') return { blocked: true, reason: `Missing API key: ${cap.requiresKey}`, icon: Key }
+    if (cap.requiresKey && provider && provider.status !== 'configured') return { blocked: true, reason: `Backend/key pending: ${cap.requiresKey}`, icon: Key }
     return { blocked: false, reason: null, icon: null }
   }
 

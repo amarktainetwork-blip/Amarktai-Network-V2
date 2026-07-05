@@ -1,35 +1,35 @@
 # Cleanup Findings
 
-## Safe To Delete Now
+## Deleted From Production Source
 
-- `workspace/artifacts/*` are generated simulation artifacts committed to the repo. They should not be part of production source of truth.
-- `test_result.md` records old mock-route validation and should not be used as current deployment evidence.
-- `AUDIT_REPORT.md` is historical audit context only. It still describes the old `/api/*` catch-all path and four-provider state.
+- Deleted `app/api/simulation/[[...path]]/route.js`.
+- Deleted the Mongo-backed dashboard data utility `lib/dataAccess.js`.
+- Deleted `backend_test.py`, which targeted simulation endpoints.
+- Deleted historical reports that claimed Mongo/mock behavior was production truth: `AUDIT_REPORT.md` and `test_result.md`.
+- Deleted committed generated outputs under `workspace/artifacts/*`.
+- Removed `mongodb` from active dependencies.
+- Removed `mongodb` from Next server external packages.
 
-## Keep For Dashboard Simulation
+## Kept As Real Contracts
 
-- `app/api/simulation/[[...path]]/route.js` keeps the old Mongo-backed fake job/artifact flow behind an explicit simulation route.
-- `lib/mockSchemas.js` still drives the Studio form renderer for dashboard-only contract coverage.
-- `backend_test.py` now targets `/api/simulation/*` and should be treated as a simulation smoke test, not production proof.
-- `components/amarkt/SystemHealthCard.jsx` still uses local demo state for display while pointing its contract endpoint metadata at `/api/v1/health`.
+- `lib/dashboard-contract.js` defines the final provider, dashboard, capability, settings, job, artifact, agent, app, and tool contracts.
+- `lib/capability-map.js` maps dashboard capability keys to backend canonical capability keys and marks missing/planned backend support explicitly.
+- `packages/core/src/providers.ts` locks provider IDs to `genx`, `groq`, `together`, `mimo`, and `deepinfra`.
+- `.env.example` keeps keys for the final five provider contracts only.
 
-## Keep For Backend Integration
+## Remaining Backend-Pending Dashboard Areas
 
-- `apps/api/src/routes/*` are the Fastify backend route modules and should become the production dashboard integration target.
-- `packages/core/src/capabilities.ts` remains the backend canonical capability source.
-- `packages/core/src/providers.ts` now defines the final provider IDs: `genx`, `groq`, `together`, `mimo`, `deepinfra`.
-- `packages/providers/src/*` contains live client/adaptor support that should be wired through the worker, not through the Next dashboard.
-- `prisma/schema.prisma` remains the database schema and was only comment-aligned for provider examples.
+- Studio execution is disabled for non-chat generation until a real `/api/v1` execution route exists.
+- Provider connection tests are disabled until real provider health/test endpoints exist.
+- Provider model sync shows contract rows only until backend model catalog discovery exists.
+- Proof Runner shows an empty backend-pending state until real job/artifact endpoints are wired.
+- Settings save remains local-only until a real Fastify settings endpoint exists.
+- System Health displays backend-pending status until it is wired to live `/api/v1/health` checks.
+- App Gateway workspace creation remains client-side contract state until backend app/agent provisioning exists.
 
-## Must Not Deploy As Production
+## Must Not Deploy As Production Proof
 
-- `app/api/simulation/[[...path]]/route.js` fabricates SVG, WAV, and Markdown artifacts and must not be treated as real provider proof.
-- `workspace/artifacts/*` are generated outputs and must not be used as production artifacts.
-- Dashboard-local settings persistence in `app/dashboard/settings/page.js` is a frontend placeholder until a real Fastify `/api/v1/*` settings route exists.
-- Historical claims in `AUDIT_REPORT.md` and `test_result.md` predate this cleanup and must not be used to claim the backend is live.
-
-## Notes
-
-- The ambiguous root catch-all route `app/api/[[...path]]/route.js` was removed from active production routing.
-- Demo-only API behavior now lives under `/api/simulation/*`.
-- Production dashboard integration should target Fastify `/api/v1/*` routes.
+- No dashboard page should claim a provider is live without backend proof.
+- DeepInfra is included as a final provider, but only as the gated/uncensored lane and fallback model infrastructure where explicitly allowed.
+- MiMo is included as a final provider for coding/reasoning contracts.
+- Open-source tools remain separate from AI providers: FFmpeg, Sharp, Piper, Redis, Qdrant, BullMQ, Playwright/local crawler, MinIO/local storage, SMTP.
