@@ -13,14 +13,14 @@ const VALUES = [
   { icon: Target, title: 'Mission-Driven', desc: 'Every product team deserves enterprise-grade AI infrastructure without rebuilding it from scratch.' },
   { icon: Shield, title: 'Security First', desc: 'Tenant isolation, encrypted keys, scoped API tokens, and per-app budget controls — built in, not bolted on.' },
   { icon: Lightbulb, title: 'Provider Agnostic', desc: 'Route capabilities across multiple providers without touching client code. Swap engines freely.' },
-  { icon: Rocket, title: 'Ship Faster', desc: 'Connected apps stay lightweight clients. The Network handles orchestration, queuing, storage, and delivery.' },
+  { icon: Rocket, title: 'Integrate Faster', desc: 'Connected apps stay lightweight while the Network defines capability contracts, queues, storage, and delivery workflows.' },
 ]
 
 const STATS = [
   { value: '16+', label: 'AI Capabilities' },
   { value: '55+', label: 'Domain Models' },
-  { value: '99.9%', label: 'Uptime Target' },
-  { value: '<200ms', label: 'Avg Latency' },
+  { value: '5', label: 'Final Providers' },
+  { value: 'API', label: 'Contract Runtime' },
 ]
 
 export default function AboutPage() {
@@ -63,7 +63,7 @@ export default function AboutPage() {
               We exist to eliminate the redundant AI infrastructure that every product team rebuilds. Routing, fallback chains, budget enforcement, artifact storage, provider abstraction, safety guardrails — these are platform problems, not product problems.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-              AmarktAI Network centralizes these capabilities into a single, secure, multi-tenant engine. Connected apps send a capability request with a scoped API key. The Network handles provider selection, execution, storage, and delivery — returning clean artifacts through secure paths.
+              AmarktAI Network centralizes these capabilities into a single, secure, multi-tenant runtime contract. Connected apps send capability requests with scoped credentials; backend routes then handle provider selection, execution, storage, and delivery once wired.
             </p>
           </Reveal>
         </div>
@@ -119,7 +119,7 @@ export default function AboutPage() {
             {[
               { icon: Layers, title: 'Capability Contracts', desc: 'Typed schemas define every input and output. Connected apps request capabilities — never models or providers.' },
               { icon: Workflow, title: 'Intelligent Routing', desc: 'The engine selects the optimal provider based on capability, cost, latency, and availability. Fallback chains are automatic.' },
-              { icon: Database, title: 'Artifact Lineage', desc: 'Every generated asset is persisted, versioned, and retrievable. Full trace from request to delivered artifact.' },
+              { icon: Database, title: 'Artifact Lineage', desc: 'Artifact contracts describe storage, versioning, retrieval, and proof from request to delivered result once backend integration is complete.' },
             ].map((item) => (
               <StaggerItem key={item.title}>
                 <div className="h-full rounded-xl border border-white/[0.07] bg-white/[0.02] p-6">

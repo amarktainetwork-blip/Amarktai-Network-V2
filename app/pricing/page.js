@@ -88,7 +88,7 @@ export default function PricingPage() {
             Scale your AI. <span className="text-gradient">Pay for what you use.</span>
           </h1>
           <p className="animate-fade-up mt-6 max-w-2xl text-lg text-muted-foreground" style={{ animationDelay: '0.18s' }}>
-            Choose a plan that matches your product footprint. Every tier includes hosting, maintenance, and free tokens to get started. Top up when you need more.
+            Choose a plan that matches your product footprint. Backend execution, usage metering, and billing controls require live integration before production rollout.
           </p>
         </div>
       </section>
@@ -196,7 +196,7 @@ export default function PricingPage() {
               <div className="pointer-events-none absolute inset-0 aurora opacity-70" />
               <div className="relative">
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ready to get started?</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Choose a plan, connect your app, and start shipping AI features today.</p>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Choose a plan and prepare your app contracts before backend execution is enabled.</p>
                 <Link href="/contact">
                   <Button size="lg" className="mt-8 h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-8 text-black glow-cyan">
                     Contact Sales <ArrowRight className="ml-2 h-4 w-4" />

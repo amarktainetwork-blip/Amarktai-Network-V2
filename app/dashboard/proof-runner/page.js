@@ -13,7 +13,7 @@ export default function ProofRunnerPage() {
       <EmptyState
         icon={Boxes}
         title="Backend Integration Pending"
-        description="Simulation artifacts were removed. This page should connect to real /api/v1 job and artifact endpoints before showing proof."
+        description="This page should connect to real /api/v1 job and artifact endpoints before showing proof."
         action={
           <Link href="/dashboard/studio">
             <Button variant="outline" disabled className="border-white/10">
