@@ -152,30 +152,43 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     expect(layoutText).toContain('overflow-hidden')
   })
 
-  it('Studio has responsive internal panel tabs for overflow-safe layout', () => {
-    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-
-    // Must have segmented tab buttons for mobile/tablet
-    expect(studioText).toContain('controlTab')
-    expect(studioText).toContain('setControlTab')
-    // Must have tab labels for Command, Controls, Inspector
-    expect(studioText).toContain("'command'")
-    expect(studioText).toContain("'controls'")
-    expect(studioText).toContain("'inspector'")
-    // Tabs must be hidden on xl+ where all panels show side-by-side
-    expect(studioText).toContain('xl:hidden')
-    // Panels must be conditionally hidden/shown based on active tab
-    expect(studioText).toContain('hidden xl:flex')
-    expect(studioText).toContain('hidden xl:block')
-    // Control area must use min(dvh) not fixed px to avoid clipping
-    expect(studioText).toContain("min(360px, 40dvh)")
+  it('dashboard index redirects to Studio', () => {
+    const pageIndex = fs.readFileSync(path.join(ROOT, 'app/dashboard/page.js'), 'utf8')
+    expect(pageIndex).toContain("redirect('/dashboard/studio')")
   })
 
-  it('Studio includes the backend-pending preview message', () => {
+  it('Studio uses grouped capability selector instead of icon rail', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
 
-    expect(studioText).toContain('Backend integration pending.')
-    expect(studioText).toContain('Real previews appear after /api/v1 jobs and artifacts are wired.')
+    // Must have a CapabilitySelector component
+    expect(studioText).toContain('CapabilitySelector')
+    // Must have grouped capabilities
+    expect(studioText).toContain('CAPABILITY_GROUPS')
+    // Must have a Director block
+    expect(studioText).toContain('DirectorBlock')
+    // Must have an Options block with tabs
+    expect(studioText).toContain('OptionsBlock')
+    // Must not hard-code provider to mode in user-facing UI
+    expect(studioText).not.toContain("provider: 'groq'")
+    expect(studioText).not.toContain("provider: 'together'")
+    expect(studioText).not.toContain("provider: 'genx'")
+    expect(studioText).not.toContain("provider: 'mimo'")
+  })
+
+  it('Studio has two-block layout (Director + Options)', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+
+    // Must have grid layout for two blocks
+    expect(studioText).toContain('lg:grid-cols-')
+    // Must have Director block
+    expect(studioText).toContain('DirectorBlock')
+    // Must have Options block
+    expect(studioText).toContain('OptionsBlock')
+    // Backend details must be in collapsed accordion
+    expect(studioText).toContain('Accordion')
+    expect(studioText).toContain('Backend contract')
+    expect(studioText).toContain('Provider routing')
+    expect(studioText).toContain('Artifact & proof status')
   })
 
   it('music schema includes required Prompt 2 genres', () => {
@@ -192,7 +205,6 @@ describe('Prompt 2 dashboard frontend contracts', () => {
   })
 
   it('every Studio mode has a matching capability schema', () => {
-    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
     const modes = ['chat', 'image', 'video', 'longvideo', 'music', 'voice', 'avatar', 'scrape', 'rag', 'code', 'uncensored']
     for (const mode of modes) {
       expect(CAPABILITY_SCHEMAS[mode], `Schema missing for ${mode}`).toBeDefined()
@@ -205,10 +217,15 @@ describe('Prompt 2 dashboard frontend contracts', () => {
 
     expect(uncensored.provider.options).toEqual(['DeepInfra gated lane'])
     expect(uncensored.backend_gating.options).toEqual(['gated_backend_pending'])
-    expect(studioText).toContain("provider: 'deepinfra'")
+    expect(studioText).toContain('DeepInfra gated')
     expect(studioText).toContain('gated: true')
-    expect(studioText).not.toContain("provider: 'groq', gated: true")
-    expect(studioText).not.toContain("provider: 'mimo', gated: true")
+  })
+
+  it('DynamicFormRenderer hides Backend Pending groups by default', () => {
+    const rendererText = fs.readFileSync(path.join(ROOT, 'components/amarkt/DynamicFormRenderer.jsx'), 'utf8')
+    expect(rendererText).toContain('BACKEND_PENDING_GROUPS')
+    expect(rendererText).toContain('Backend Pending')
+    expect(rendererText).toContain('Advanced & Backend Details')
   })
 
   it('active UI code does not use old proof-risk wording', () => {

@@ -163,17 +163,14 @@ function groupFields(entries) {
   return groups
 }
 
+const BACKEND_PENDING_GROUPS = ['Backend Pending', 'Provider', 'Gate']
+
 // ─── Card wrapper for a group ──────────────────────────────────
-function GroupCard({ title, children, mode }) {
+function GroupCard({ title, children }) {
   return (
-    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
-        {mode === 'pro' && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20">Pro</span>
-        )}
-      </div>
-      <div className="space-y-4">
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 space-y-3">
+      <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{title}</h4>
+      <div className="space-y-3">
         {children}
       </div>
     </div>
@@ -189,64 +186,37 @@ export default function DynamicFormRenderer({ schema, values, onChange, mode = '
     return values[def.visibleWhen.field] === def.visibleWhen.value
   }
 
-  const mainEntries = Object.entries(schema).filter(([, def]) => !def.advanced && isVisible(def))
-  const advancedEntries = Object.entries(schema).filter(([, def]) => def.advanced && isVisible(def))
+  const allEntries = Object.entries(schema).filter(([, def]) => isVisible(def))
+  const mainEntries = allEntries.filter(([, def]) => !def.advanced && !BACKEND_PENDING_GROUPS.includes(def.group))
+  const advancedEntries = allEntries.filter(([, def]) => def.advanced || BACKEND_PENDING_GROUPS.includes(def.group))
 
   const mainGroups = groupFields(mainEntries)
   const advancedGroups = groupFields(advancedEntries)
 
-  // Creator mode: advanced in accordion
-  if (mode === 'creator') {
-    return (
-      <div className="space-y-5">
-        {Object.entries(mainGroups).map(([group, fields]) => (
-          <GroupCard key={group} title={group} mode={mode}>
-            {fields.map(([key, def]) => renderField(key, def, values, set, mode, capability))}
-          </GroupCard>
-        ))}
-        {advancedEntries.length > 0 && (
-          <Accordion type="single" collapsible>
-            <AccordionItem value="advanced" className="border-white/[0.06]">
-              <AccordionTrigger className="text-xs text-muted-foreground py-2">
-                <span className="flex items-center gap-1.5"><Settings className="h-3 w-3" /> Advanced Settings</span>
-              </AccordionTrigger>
-              <AccordionContent className="pt-2">
-                <div className="space-y-5">
-                  {Object.entries(advancedGroups).map(([group, fields]) => (
-                    <GroupCard key={group} title={group} mode={mode}>
-                      {fields.map(([key, def]) => renderField(key, def, values, set, mode, capability))}
-                    </GroupCard>
-                  ))}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        )}
-      </div>
-    )
-  }
-
-  // Pro mode: everything inline with cards
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {Object.entries(mainGroups).map(([group, fields]) => (
         <GroupCard key={group} title={group} mode={mode}>
           {fields.map(([key, def]) => renderField(key, def, values, set, mode, capability))}
         </GroupCard>
       ))}
       {advancedEntries.length > 0 && (
-        <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.02] p-5 space-y-4">
-          <div className="flex items-center gap-1.5 text-[10px] text-violet-300 uppercase tracking-wider">
-            <Settings className="h-3 w-3" /> Advanced Parameters
-          </div>
-          <div className="space-y-5">
-            {Object.entries(advancedGroups).map(([group, fields]) => (
-              <GroupCard key={group} title={group} mode={mode}>
-                {fields.map(([key, def]) => renderField(key, def, values, set, mode, capability))}
-              </GroupCard>
-            ))}
-          </div>
-        </div>
+        <Accordion type="single" collapsible>
+          <AccordionItem value="advanced" className="rounded-xl border border-white/[0.06] px-4">
+            <AccordionTrigger className="text-xs py-3">
+              <span className="flex items-center gap-1.5 text-muted-foreground"><Settings className="h-3 w-3" /> Advanced & Backend Details</span>
+            </AccordionTrigger>
+            <AccordionContent className="pt-2">
+              <div className="space-y-4">
+                {Object.entries(advancedGroups).map(([group, fields]) => (
+                  <GroupCard key={group} title={group} mode={mode}>
+                    {fields.map(([key, def]) => renderField(key, def, values, set, mode, capability))}
+                  </GroupCard>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       )}
     </div>
   )
