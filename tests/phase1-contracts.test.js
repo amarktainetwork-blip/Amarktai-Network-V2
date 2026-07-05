@@ -186,6 +186,19 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     }
   })
 
+  it('voice schema includes South African accent', () => {
+    const accentOptions = CAPABILITY_SCHEMAS.voice.accent.options
+    expect(accentOptions).toContain('South African')
+  })
+
+  it('every Studio mode has a matching capability schema', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+    const modes = ['chat', 'image', 'video', 'longvideo', 'music', 'voice', 'avatar', 'scrape', 'rag', 'code', 'uncensored']
+    for (const mode of modes) {
+      expect(CAPABILITY_SCHEMAS[mode], `Schema missing for ${mode}`).toBeDefined()
+    }
+  })
+
   it('uncensored Studio mode is DeepInfra-only and gated backend pending', () => {
     const uncensored = CAPABILITY_SCHEMAS.uncensored
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
