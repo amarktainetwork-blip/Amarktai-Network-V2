@@ -212,27 +212,29 @@ export default function Studio() {
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,1fr)_minmax(380px,1.2fr)_minmax(320px,0.9fr)] max-xl:grid-cols-1">
           {/* Command panel */}
           <div className={`flex min-h-0 flex-col border-r border-white/[0.06] p-3 max-xl:border-r-0 ${controlTab !== 'command' ? 'hidden xl:flex' : 'flex'}`}>
-            <div className="mb-2 grid grid-cols-5 gap-1.5">
-              {MODES.map((item) => (
-                <button
-                  key={item.v}
-                  onClick={() => setMode(item.v)}
-                  className={`flex min-h-10 items-center justify-center rounded-md border text-[10px] transition ${mode === item.v ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-white/[0.06] bg-black/20 text-muted-foreground hover:text-foreground'}`}
-                  title={item.label}
-                >
-                  <item.icon className="h-3.5 w-3.5" />
-                </button>
-              ))}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mb-2 grid grid-cols-5 gap-1.5">
+                {MODES.map((item) => (
+                  <button
+                    key={item.v}
+                    onClick={() => setMode(item.v)}
+                    className={`flex min-h-10 items-center justify-center rounded-md border text-[10px] transition ${mode === item.v ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-white/[0.06] bg-black/20 text-muted-foreground hover:text-foreground'}`}
+                    title={item.label}
+                  >
+                    <item.icon className="h-3.5 w-3.5" />
+                  </button>
+                ))}
+              </div>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {quickChips.map((key) => {
+                  const def = schema[key]
+                  if (!def) return null
+                  const value = values[key] ?? firstOption(def)
+                  return <Badge key={key} variant="outline" className="border-white/10 text-[10px]">{def.label}: {String(Array.isArray(value) ? value[0] || 'draft' : value)}</Badge>
+                })}
+              </div>
             </div>
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {quickChips.map((key) => {
-                const def = schema[key]
-                if (!def) return null
-                const value = values[key] ?? firstOption(def)
-                return <Badge key={key} variant="outline" className="border-white/10 text-[10px]">{def.label}: {String(Array.isArray(value) ? value[0] || 'draft' : value)}</Badge>
-              })}
-            </div>
-            <div className="mt-auto space-y-2">
+            <div className="shrink-0 space-y-2 border-t border-white/[0.04] pt-2">
               <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && run()} placeholder={mode === 'chat' ? 'Ask the Director draft panel...' : `Describe ${currentMode.label.toLowerCase()} request...`} className="h-10 rounded-xl bg-black/20 text-sm" />
               <div className="flex gap-2">
                 <Button onClick={run} className="h-10 flex-1 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
