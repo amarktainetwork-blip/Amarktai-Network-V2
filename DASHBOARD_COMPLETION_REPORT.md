@@ -96,9 +96,52 @@ DeepInfra remains visible as the gated/uncensored lane, with backend gating pend
 
 ## Verification Output
 
-- `npm install`: passed. Prisma Client generated. npm reported one high severity audit warning and a Windows cleanup warning for a nested optional package directory.
-- `npm run build`: passed. Next.js compiled successfully and generated 21 static pages. Route output did not include `/api/simulation`.
-- `npm test`: passed. 1 test file, 31 tests.
+- `npm install`: passed. Prisma Client generated.
+- `npm run build`: passed. Next.js compiled successfully (13.2s) and generated 21 static pages.
+- `npm test`: passed. 1 test file, 34 tests (57ms).
+
+## Mimo Handoff (Phase 2 Polish)
+
+**Branch used:** `feat/dashboard-final-control-room`
+**PR:** #18 (updated)
+**Dashboard-only scope:** Confirmed. Only `app/dashboard/` and `tests/` files modified.
+
+### Changes Made
+
+1. **Studio responsive control fix:** Added internal segmented tabs (Command / Controls / Inspector) for mobile/tablet. Tabs visible below `xl` breakpoint, hidden on desktop where all 3 panels show side-by-side. Control area uses `min(360px, 40dvh)` instead of fixed `h-[360px]` to prevent clipping on short viewports.
+
+2. **Studio command tab scroll safety:** Mode selector and quick chips wrapped in `overflow-y-auto` container. Input bar pinned at bottom with `shrink-0` and visual separator. Command input always reachable regardless of viewport height.
+
+3. **Test coverage added:**
+   - Responsive internal panel tabs verification
+   - Voice schema includes South African accent
+   - Every Studio mode has a matching capability schema
+
+### Provider List Confirmation
+
+Exactly 5 final providers: GenX, Groq, Together, MiMo, DeepInfra.
+
+### DeepInfra Gated Lane Confirmation
+
+- DeepInfra exists as `gated_uncensored_lane` with `gated: true`
+- Status: `gated_backend_pending`
+- Provider options in uncensored schema: `['DeepInfra gated lane']`
+- Safe flow exposure: `disabled`
+- No Groq or Mimo options in gated mode
+
+### Backend-Pending Areas
+
+- Jobs, artifacts, provider health, model catalog
+- Studio execution disabled with clear toast
+- Chat appends backend-pending notice
+- All disabled buttons show `backend_pending` rationale
+
+### No Fake Proof Confirmation
+
+- No `mock`, `simulate`, `fake`, `fabricated` in active dashboard code
+- No MongoDB, no `/api/simulation`
+- `Math.random` only in particle visual effects (harmless UI)
+- All non-backend-wired features labeled `backend_pending` or `route_pending`
 
 ## Keyword Search
 
