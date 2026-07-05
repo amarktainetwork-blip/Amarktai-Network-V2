@@ -152,6 +152,25 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     expect(layoutText).toContain('overflow-hidden')
   })
 
+  it('Studio has responsive internal panel tabs for overflow-safe layout', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+
+    // Must have segmented tab buttons for mobile/tablet
+    expect(studioText).toContain('controlTab')
+    expect(studioText).toContain('setControlTab')
+    // Must have tab labels for Command, Controls, Inspector
+    expect(studioText).toContain("'command'")
+    expect(studioText).toContain("'controls'")
+    expect(studioText).toContain("'inspector'")
+    // Tabs must be hidden on xl+ where all panels show side-by-side
+    expect(studioText).toContain('xl:hidden')
+    // Panels must be conditionally hidden/shown based on active tab
+    expect(studioText).toContain('hidden xl:flex')
+    expect(studioText).toContain('hidden xl:block')
+    // Control area must use min(dvh) not fixed px to avoid clipping
+    expect(studioText).toContain("min(360px, 40dvh)")
+  })
+
   it('Studio includes the backend-pending preview message', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
 

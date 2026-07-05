@@ -137,6 +137,7 @@ export default function Studio() {
   const [valuesByMode, setValuesByMode] = useState({})
   const [prompt, setPrompt] = useState('')
   const [showChat, setShowChat] = useState(false)
+  const [controlTab, setControlTab] = useState('command')
   const currentMode = MODES.find((item) => item.v === mode) || MODES[0]
   const schema = CAPABILITY_SCHEMAS[mode] || {}
   const values = valuesByMode[mode] || {}
@@ -194,75 +195,93 @@ export default function Studio() {
         {showChat && <DirectorPanel onClose={() => setShowChat(false)} />}
       </section>
 
-      <section className="grid h-[360px] shrink-0 grid-cols-[minmax(320px,1fr)_minmax(380px,1.2fr)_minmax(320px,0.9fr)] border-t border-white/[0.06] bg-[hsl(240_14%_3.5%)] max-xl:grid-cols-[minmax(300px,1fr)_minmax(360px,1fr)] max-lg:h-[420px] max-lg:grid-cols-1">
-        <div className="flex min-h-0 flex-col border-r border-white/[0.06] p-3 max-lg:border-r-0 max-lg:border-b">
-          <div className="mb-2 grid grid-cols-5 gap-1.5">
-            {MODES.map((item) => (
-              <button
-                key={item.v}
-                onClick={() => setMode(item.v)}
-                className={`flex min-h-10 items-center justify-center rounded-md border text-[10px] transition ${mode === item.v ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-white/[0.06] bg-black/20 text-muted-foreground hover:text-foreground'}`}
-                title={item.label}
-              >
-                <item.icon className="h-3.5 w-3.5" />
-              </button>
-            ))}
-          </div>
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {quickChips.map((key) => {
-              const def = schema[key]
-              if (!def) return null
-              const value = values[key] ?? firstOption(def)
-              return <Badge key={key} variant="outline" className="border-white/10 text-[10px]">{def.label}: {String(Array.isArray(value) ? value[0] || 'draft' : value)}</Badge>
-            })}
-          </div>
-          <div className="mt-auto space-y-2">
-            <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && run()} placeholder={mode === 'chat' ? 'Ask the Director draft panel...' : `Describe ${currentMode.label.toLowerCase()} request...`} className="h-10 rounded-xl bg-black/20 text-sm" />
-            <div className="flex gap-2">
-              <Button onClick={run} className="h-10 flex-1 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
-                {mode === 'chat' ? <Send className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
-                {mode === 'chat' ? 'Draft notice' : 'Backend Pending'}
-              </Button>
-              <Button variant="outline" onClick={() => setShowChat(true)} className="h-10 rounded-xl border-white/10"><MessageSquare className="h-4 w-4" /></Button>
-            </div>
-          </div>
+      <section className="flex shrink-0 flex-col border-t border-white/[0.06] bg-[hsl(240_14%_3.5%)]" style={{ height: 'min(360px, 40dvh)' }}>
+        {/* Segmented tabs for mobile/tablet - hidden on xl+ */}
+        <div className="flex items-center gap-1 border-b border-white/[0.06] px-3 py-1.5 xl:hidden">
+          {[['command', 'Command'], ['controls', 'Controls'], ['inspector', 'Inspector']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setControlTab(key)}
+              className={`rounded-md px-3 py-1.5 text-[10px] font-medium transition ${controlTab === key ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' : 'text-muted-foreground hover:text-foreground border border-transparent'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className="min-h-0 overflow-y-auto p-3">
-          <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={mode} />
-        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,1fr)_minmax(380px,1.2fr)_minmax(320px,0.9fr)] max-xl:grid-cols-1">
+          {/* Command panel */}
+          <div className={`flex min-h-0 flex-col border-r border-white/[0.06] p-3 max-xl:border-r-0 ${controlTab !== 'command' ? 'hidden xl:flex' : 'flex'}`}>
+            <div className="mb-2 grid grid-cols-5 gap-1.5">
+              {MODES.map((item) => (
+                <button
+                  key={item.v}
+                  onClick={() => setMode(item.v)}
+                  className={`flex min-h-10 items-center justify-center rounded-md border text-[10px] transition ${mode === item.v ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-white/[0.06] bg-black/20 text-muted-foreground hover:text-foreground'}`}
+                  title={item.label}
+                >
+                  <item.icon className="h-3.5 w-3.5" />
+                </button>
+              ))}
+            </div>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {quickChips.map((key) => {
+                const def = schema[key]
+                if (!def) return null
+                const value = values[key] ?? firstOption(def)
+                return <Badge key={key} variant="outline" className="border-white/10 text-[10px]">{def.label}: {String(Array.isArray(value) ? value[0] || 'draft' : value)}</Badge>
+              })}
+            </div>
+            <div className="mt-auto space-y-2">
+              <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && run()} placeholder={mode === 'chat' ? 'Ask the Director draft panel...' : `Describe ${currentMode.label.toLowerCase()} request...`} className="h-10 rounded-xl bg-black/20 text-sm" />
+              <div className="flex gap-2">
+                <Button onClick={run} className="h-10 flex-1 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
+                  {mode === 'chat' ? <Send className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                  {mode === 'chat' ? 'Draft notice' : 'Backend Pending'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowChat(true)} className="h-10 rounded-xl border-white/10"><MessageSquare className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          </div>
 
-        <aside className="min-h-0 space-y-3 overflow-y-auto border-l border-white/[0.06] p-3 max-xl:col-span-2 max-xl:border-l-0 max-xl:border-t max-lg:col-span-1">
-          <StatusCard icon={ClipboardList} title="Request inspector" rows={[
-            ['payload', 'draft only'],
-            ['backend key', backend.backendCapability || backend.expectedBackendKey || backend.plannedBackendKey || 'planned'],
-            ['route', backend.missing ? 'capability_missing' : 'route_pending'],
-          ]} />
-          <StatusCard icon={Layers} title="Provider candidates" rows={[
-            ['primary', provider?.name || 'Local tool'],
-            ['status', provider?.status || 'backend_pending'],
-            ['proof', provider?.proofStatus || 'live_proof_required'],
-          ]} />
-          <StatusCard icon={Package} title="Artifact / proof" rows={[
-            ['preview', 'backend_pending'],
-            ['artifact', 'backend_pending'],
-            ['signed URL', 'backend_pending'],
-          ]} />
-          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
-            <div className="mb-2 text-xs font-semibold">Payload preview</div>
-            <pre className="max-h-40 overflow-auto rounded-md bg-black/30 p-2 text-[10px] text-muted-foreground">{JSON.stringify(payload, null, 2)}</pre>
+          {/* Controls panel */}
+          <div className={`min-h-0 overflow-y-auto p-3 ${controlTab !== 'controls' ? 'hidden xl:block' : 'block'}`}>
+            <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={mode} />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
-              <div className="font-semibold">Asset bin</div>
-              <p className="mt-1 text-[10px] text-muted-foreground">Draft uploads only. Real artifacts pending backend.</p>
+
+          {/* Inspector panel */}
+          <aside className={`min-h-0 space-y-3 overflow-y-auto border-l border-white/[0.06] p-3 max-xl:border-l-0 ${controlTab !== 'inspector' ? 'hidden xl:block' : 'block'}`}>
+            <StatusCard icon={ClipboardList} title="Request inspector" rows={[
+              ['payload', 'draft only'],
+              ['backend key', backend.backendCapability || backend.expectedBackendKey || backend.plannedBackendKey || 'planned'],
+              ['route', backend.missing ? 'capability_missing' : 'route_pending'],
+            ]} />
+            <StatusCard icon={Layers} title="Provider candidates" rows={[
+              ['primary', provider?.name || 'Local tool'],
+              ['status', provider?.status || 'backend_pending'],
+              ['proof', provider?.proofStatus || 'live_proof_required'],
+            ]} />
+            <StatusCard icon={Package} title="Artifact / proof" rows={[
+              ['preview', 'backend_pending'],
+              ['artifact', 'backend_pending'],
+              ['signed URL', 'backend_pending'],
+            ]} />
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+              <div className="mb-2 text-xs font-semibold">Payload preview</div>
+              <pre className="max-h-40 overflow-auto rounded-md bg-black/30 p-2 text-[10px] text-muted-foreground">{JSON.stringify(payload, null, 2)}</pre>
             </div>
-            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
-              <div className="font-semibold">Timeline</div>
-              <p className="mt-1 text-[10px] text-muted-foreground">Assembly shell ready. Jobs route pending.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
+                <div className="font-semibold">Asset bin</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Draft uploads only. Real artifacts pending backend.</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
+                <div className="font-semibold">Timeline</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Assembly shell ready. Jobs route pending.</p>
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        </div>
       </section>
     </div>
   )
