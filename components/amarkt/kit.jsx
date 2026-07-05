@@ -18,7 +18,7 @@ export function PageTransition({ children, className }) {
 }
 
 const STATUS_MAP = {
-  mock: { label: 'Mock Active', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' },
+  contract_ready: { label: 'Contract Ready', cls: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' },
   not_configured: { label: 'Not Configured', cls: 'bg-white/5 text-muted-foreground border-white/10' },
   experimental: { label: 'Experimental', cls: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
   queued: { label: 'Queued', cls: 'bg-slate-500/10 text-slate-300 border-slate-500/30' },
@@ -79,7 +79,7 @@ export function DropZone({ label = 'Drop files or click to browse', kind = 'asse
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       </div>
       <p className="text-sm text-foreground/80">{label}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{kind} · simulated upload</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{kind} · backend upload pending</p>
     </div>
   )
 }

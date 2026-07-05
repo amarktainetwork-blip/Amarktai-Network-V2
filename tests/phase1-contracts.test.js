@@ -103,8 +103,39 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
     expect(fs.existsSync(path.join(ROOT, 'app/api/simulation/[[...path]]/route.js'))).toBe(false)
   })
 
+  it('does not keep the old mock schema contract filename', () => {
+    expect(fs.existsSync(path.join(ROOT, 'lib/mockSchemas.js'))).toBe(false)
+    expect(fs.existsSync(path.join(ROOT, 'lib/studio-capability-schemas.js'))).toBe(true)
+  })
+
   it('does not keep a MongoDB production API route or data access utility', () => {
     expect(fs.existsSync(path.join(ROOT, 'app/api/[[...path]]/route.js'))).toBe(false)
     expect(fs.existsSync(path.join(ROOT, 'lib/dataAccess.js'))).toBe(false)
+  })
+
+  it('does not declare an active mongodb dependency', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
+    const activeDependencies = {
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+      ...pkg.optionalDependencies,
+      ...pkg.peerDependencies,
+    }
+
+    expect(activeDependencies.mongodb).toBeUndefined()
+  })
+
+  it('does not keep the old Studio chat response function name', () => {
+    const storeText = fs.readFileSync(path.join(ROOT, 'lib/useStudioStore.js'), 'utf8')
+
+    expect(storeText).toContain('appendBackendPendingChatNotice')
+    expect(storeText).not.toContain('simulateChatResponse')
+    expect(storeText).not.toContain('Math.random')
+  })
+
+  it('does not keep local worker simulation adapter files', () => {
+    for (const adapter of ['image', 'text', 'video', 'voice']) {
+      expect(fs.existsSync(path.join(ROOT, `apps/worker/src/adapters/${adapter}-simulation.ts`))).toBe(false)
+    }
   })
 })

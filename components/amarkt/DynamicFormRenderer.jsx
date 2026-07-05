@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Field, DropZone } from '@/components/amarkt/kit'
 import { Settings } from 'lucide-react'
-import { CREATOR_PRESETS } from '@/lib/mockSchemas'
+import { CREATOR_PRESETS } from '@/lib/studio-capability-schemas'
 
 // ─── Creator Mode Visual Presets ───────────────────────────────
 function PresetChips({ presets, value, onChange, multiple = false }) {
