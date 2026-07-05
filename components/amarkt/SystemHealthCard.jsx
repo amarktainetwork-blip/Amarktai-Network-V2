@@ -1,36 +1,21 @@
 'use client'
-import { useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Database, Wifi, Server, HardDrive, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react'
+import { Database, Wifi, Server, HardDrive, Clock, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 
 const SERVICES = [
   { id: 'mariadb', label: 'MariaDB', icon: Database, endpoint: '/api/v1/health' },
   { id: 'redis', label: 'Redis', icon: Wifi, endpoint: '/api/v1/health' },
   { id: 'qdrant', label: 'Qdrant', icon: Server, endpoint: '/api/v1/health' },
-  { id: 'minio', label: 'MinIO', icon: HardDrive, endpoint: '/api/v1/health' },
+  { id: 'minio', label: 'MinIO/local storage', icon: HardDrive, endpoint: '/api/v1/health' },
 ]
 
 export default function SystemHealthCard() {
-  const [statuses, setStatuses] = useState({
-    mariadb: { online: true, latency: 2 },
-    redis: { online: true, latency: 1 },
-    qdrant: { online: true, latency: 5 },
-    minio: { online: true, latency: 3 },
-  })
-  const [checking, setChecking] = useState(false)
-
   const refresh = () => {
-    setChecking(true)
-    setTimeout(() => {
-      setStatuses({
-        mariadb: { online: Math.random() > 0.05, latency: Math.floor(Math.random() * 10) + 1 },
-        redis: { online: Math.random() > 0.05, latency: Math.floor(Math.random() * 5) + 1 },
-        qdrant: { online: Math.random() > 0.1, latency: Math.floor(Math.random() * 20) + 1 },
-        minio: { online: Math.random() > 0.08, latency: Math.floor(Math.random() * 15) + 1 },
-      })
-      setChecking(false)
-    }, 1200)
+    toast.info('Backend integration pending', {
+      description: 'Wire this card to /api/v1/health before displaying live readiness.',
+    })
   }
 
   return (
@@ -39,22 +24,22 @@ export default function SystemHealthCard() {
         <h3 className="flex items-center gap-2 font-semibold">
           <Server className="h-4 w-4 text-cyan-300" /> System Health
         </h3>
-        <Button variant="ghost" size="sm" onClick={refresh} disabled={checking} className="h-7 px-2 text-xs">
-          <RefreshCw className={`h-3 w-3 ${checking ? 'animate-spin' : ''}`} />
+        <Button variant="ghost" size="sm" onClick={refresh} className="h-7 px-2 text-xs" title="Backend integration pending">
+          <RefreshCw className="h-3 w-3" />
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {SERVICES.map((svc) => {
-          const status = statuses[svc.id]
           const Icon = svc.icon
           return (
             <div key={svc.id} className="flex items-center gap-3 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2.5">
-              <div className={`h-2.5 w-2.5 rounded-full ${status.online ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]' : 'bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]'}`} />
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.35)]" />
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium">{svc.label}</div>
-                <div className="text-[10px] text-muted-foreground">{status.online ? `${status.latency}ms` : 'Offline'}</div>
+                <div className="text-[10px] text-muted-foreground">Backend pending</div>
               </div>
-              {status.online ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> : <XCircle className="h-3.5 w-3.5 text-rose-400" />}
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+              <Clock className="h-3.5 w-3.5 text-amber-400" />
             </div>
           )
         })}

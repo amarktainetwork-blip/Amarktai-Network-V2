@@ -1,16 +1,14 @@
 # Source Of Truth Report
 
-## Branch And Commit
+## Phase 1 Hard Cleanup
 
-- Branch: `main`
-- Starting commit: `a461e94`
-- Latest starting commit title: `Merge pull request #16 from amarktainetwork-blip/feat/frontend-ui-perfection`
-- Working tree at audit start: clean clone of `origin/main`
-- Source of truth: GitHub `main` for `https://github.com/amarktainetwork-blip/Amarktai-Network-V2.git`
+Phase 1 hard cleanup completed on branch `fix/phase-1-hard-cleanup-no-simulation`.
+
+The repository no longer keeps a hidden fake backend, simulation route, Mongo mock API, fake artifact generator, fake provider tests, or committed generated proof artifacts.
 
 ## Provider List
 
-Final provider IDs:
+Final provider IDs are locked to:
 
 - `genx`
 - `groq`
@@ -18,63 +16,49 @@ Final provider IDs:
 - `mimo`
 - `deepinfra`
 
-DeepInfra is present in dashboard/static provider data, settings, mock provider displays, model catalog mocks, env example, and core provider keys. MiMo is active as the final coding/reasoning provider, not an experimental provider.
+No active provider contract includes HeyGen, Hugging Face, Qwen, MiniMax, Gemini, OpenAI, Anthropic, Replicate, Lyria, or old provider lists.
+
+## DeepInfra Role
+
+DeepInfra remains included as a final provider.
+
+DeepInfra is modelled as the gated/uncensored provider lane and fallback model infrastructure where explicitly allowed. It is not silently mixed into normal safe flows. The dashboard capability `uncensored.text` is mapped as missing/planned backend key `uncensored_text` until backend gating exists.
+
+## MiMo Role
+
+MiMo remains included as a final provider.
+
+MiMo is modelled as the final coding/reasoning provider contract and remains backend-pending until real provider proof exists.
+
+## Simulation And Mongo Cleanup
+
+- `/api/simulation` is gone.
+- `app/api/simulation/[[...path]]/route.js` was deleted.
+- The old root catch-all production-looking backend remains absent.
+- `lib/dataAccess.js` was deleted.
+- `mongodb` was removed from active dependencies.
+- `next.config.js` no longer declares MongoDB as a server external package.
+- Historical Mongo/mock proof reports were removed.
+
+## Generated Artifacts
+
+Generated fake SVG, WAV, and Markdown artifacts under `workspace/artifacts/*` were removed.
+
+`.gitignore` now ignores generated workspace artifacts and uploads so they are not committed again.
 
 ## Dashboard Contract
 
-- Created `lib/dashboard-contract.js`.
-- Contract exports provider contracts, dashboard pages, capabilities, studio modes, app connection fields, agent fields, artifact display fields, job display fields, settings sections, and open-source tool entries.
+- `lib/dashboard-contract.js` remains the dashboard contract source for providers, pages, capabilities, studio modes, app fields, agent fields, jobs, artifacts, settings sections, and open-source tools.
+- `lib/capability-map.js` remains the dashboard-to-backend capability map.
+- `video.longform` remains missing/planned until backend canonical `long_form_video` support exists.
+- `uncensored.text` remains missing/planned until backend canonical `uncensored_text` support and gating exist.
 
-## Capability Map
+## Verification
 
-- Created `lib/capability-map.js`.
-- Dashboard capability keys now map to backend canonical keys.
-- `video.longform` is explicitly marked missing because backend canonical capabilities do not currently include `long_form_video`.
+- `npm install`: passed. Prisma Client generated. NPM still reports one high-severity audit item.
+- `npm run build`: passed. Next route output no longer includes `/api/simulation`.
+- `npm test`: passed. Vitest reports 1 test file and 22 tests passing.
 
-## Mock And Catch-All Status
-
-- Removed active root catch-all `app/api/[[...path]]/route.js`.
-- Moved the old Mongo-backed fake artifact/job route to `app/api/simulation/[[...path]]/route.js`.
-- Simulation artifact retrieval paths now point to `/api/simulation/artifacts/:id/download`.
-- Production dashboard API alignment target is Fastify `/api/v1/*`.
-- Added `/api/v1/health` alias to the Fastify health route while preserving `/health`.
-
-## Files Changed
-
-- `.env.example`
-- `app/api/[[...path]]/route.js`
-- `app/api/simulation/[[...path]]/route.js`
-- `app/dashboard/capabilities/page.js`
-- `app/dashboard/proof-runner/page.js`
-- `app/dashboard/providers/page.js`
-- `app/dashboard/settings/page.js`
-- `app/dashboard/studio/page.jsx`
-- `apps/api/src/routes/health.ts`
-- `backend_test.py`
-- `components/amarkt/SystemHealthCard.jsx`
-- `lib/appdata.js`
-- `lib/capability-map.js`
-- `lib/dashboard-contract.js`
-- `lib/useStudioStore.js`
-- `packages/core/src/config.ts`
-- `packages/core/src/index.ts`
-- `packages/core/src/providers.ts`
-- `packages/providers/src/groq-client.ts`
-- `prisma/schema.prisma`
-- `tsconfig.json`
-- `CLEANUP_FINDINGS.md`
-- `SOURCE_OF_TRUTH_REPORT.md`
-
-## Build Result
-
-- `npm.cmd install`: passed. Prisma Client generated. NPM reported one high-severity audit item.
-- `npm.cmd run build`: passed after narrowing the root Next TypeScript scope so the dashboard build does not type-check unbuilt workspace packages.
-
-## Tests Result
-
-- `npm.cmd test -- --runInBand`: not supported by Vitest; failed with unknown option `--runInBand`.
-- `npm.cmd test`: failed because no Vitest test files exist in the repo.
-
-## Next Prompt Recommendation
+## Next Step
 
 Prompt 2 should finish the dashboard only.

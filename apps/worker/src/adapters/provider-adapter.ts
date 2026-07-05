@@ -2,8 +2,8 @@
  * ProviderAdapter interface — uniform contract for all provider execution.
  *
  * Each capability category (text, image, voice, video) has its own adapter
- * implementation. For Phase 2, all adapters are local simulation drivers
- * that behave identically to real engines without hitting paid APIs.
+ * implementation. Adapters either execute real backend provider calls or
+ * throw explicit backend-pending errors.
  */
 
 import type { CapabilityKey } from '@amarktai/core'
