@@ -12,9 +12,9 @@ import {
 
 const CAPABILITIES = [
   { icon: Type, title: 'Text & Language', category: 'Natural Language', desc: 'Chat completions, reasoning chains, code generation, structured output, embeddings, and reranking — all routed through a unified text engine with automatic provider selection.' },
-  { icon: Image, title: 'Image Generation', category: 'Visual Creation', desc: 'High-fidelity image generation and editing via FLUX and diffusion models. Prompt in, artifact out — with full lineage tracking and secure asset delivery.' },
-  { icon: Film, title: 'Video Generation', category: 'Motion & Film', desc: 'Long-form and short-form video synthesis with async job processing. Submit prompts, track progress in real time, and retrieve finished MP4 assets from storage.' },
-  { icon: Music, title: 'Music & Audio', category: 'Audio Engine', desc: 'Full music generation with genre, mood, and vocal style controls. Cover art auto-generation. Multi-format output with duration and BPM targeting.' },
+  { icon: Image, title: 'Image Generation', category: 'Visual Creation', desc: 'Image generation and editing controls with provider/runtime routing contracts, artifact storage plans, and proof requirements.' },
+  { icon: Film, title: 'Video Generation', category: 'Motion & Film', desc: 'Short-form and planned long-form video workflows with async job contracts, provider attempts, and artifact retrieval states.' },
+  { icon: Music, title: 'Music & Audio', category: 'Audio Engine', desc: 'Music drafting controls for genre, mood, vocal style, instrumentation, duration, and backend-pending stem export.' },
   { icon: Mic, title: 'Voice — TTS & STT', category: 'Speech Pipeline', desc: 'Text-to-speech with voice persona customization and speech-to-text transcription. Supports multiple languages, accents, and real-time streaming.' },
   { icon: User, title: 'Avatar Generation', category: 'Digital Presence', desc: 'AI-powered avatar creation with style, framing, and gesture controls. Paired with voice personas for complete digital presenter pipelines.' },
   { icon: Globe, title: 'Brand Scraping', category: 'Intelligence Gathering', desc: 'Automated corporate website extraction: typography matrices, color palettes, taglines, and content walls. Structured JSON output for brand intelligence profiles.' },
@@ -24,8 +24,8 @@ const CAPABILITIES = [
 const ENGINE_FEATURES = [
   { icon: Workflow, title: 'Intelligent Routing', desc: 'The engine selects optimal providers based on capability, cost, latency, and availability. Fallback chains activate automatically.' },
   { icon: Shield, title: 'Tenant Isolation', desc: 'Absolute data isolation between connected apps. Per-connection API keys, capability scopes, and daily budget enforcement.' },
-  { icon: Database, title: 'Artifact Lineage', desc: 'Every generated asset is persisted, versioned, and retrievable. Full trace from request to delivered artifact with cost tracking.' },
-  { icon: Cpu, title: 'Provider Abstraction', desc: 'Swap underlying AI providers without touching client code. The Network handles format translation, retry logic, and quality validation.' },
+  { icon: Database, title: 'Artifact Lineage', desc: 'Artifact contracts describe persistence, retrieval, trace, cost, and proof fields before backend integration begins.' },
+  { icon: Cpu, title: 'Provider Abstraction', desc: 'Swap final provider lanes without touching client code once backend routing and proof are wired.' },
   { icon: Layers, title: 'Capability Contracts', desc: 'Strict typed input/output schemas per capability. Connected apps request capabilities — never models or providers.' },
   { icon: Server, title: 'Background Processing', desc: 'Durable BullMQ job queue with worker pipelines, progress tracking, automatic retries, and full artifact lineage.' },
 ]
@@ -87,7 +87,7 @@ export default function FeaturesPage() {
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">The Engine Behind It</h2>
-            <p className="mt-3 text-muted-foreground">Enterprise-grade infrastructure that handles the complexity so your apps stay lightweight.</p>
+            <p className="mt-3 text-muted-foreground">Enterprise-grade contract infrastructure that keeps app integrations lightweight.</p>
           </Reveal>
           <Stagger className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {ENGINE_FEATURES.map((f) => (
@@ -113,7 +113,7 @@ export default function FeaturesPage() {
               <div className="pointer-events-none absolute inset-0 aurora opacity-70" />
               <div className="relative">
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ready to integrate?</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Connect your app with a single API key. The Network handles the rest.</p>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Connect your app to one capability contract layer, then wire backend routes for execution, artifacts, and proof.</p>
                 <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                   <Link href="/pricing">
                     <Button size="lg" className="h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-7 text-black">View Pricing <ArrowRight className="ml-2 h-4 w-4" /></Button>

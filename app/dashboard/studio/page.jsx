@@ -1,285 +1,290 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStudioStore } from '@/lib/useStudioStore'
+import { CAPABILITY_SCHEMAS } from '@/lib/studio-capability-schemas'
+import { PROVIDER_CONTRACTS } from '@/lib/dashboard-contract'
+import { getBackendCapability } from '@/lib/capability-map'
+import DynamicFormRenderer from '@/components/amarkt/DynamicFormRenderer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import {
   MessageSquare, Image as ImageIcon, Video, Film, Music, Mic, User, Globe, Database,
-  Sparkles, Loader2, Send, ChevronDown, Settings, X, Zap,
+  Sparkles, Send, X, Zap, Code2, ShieldAlert, ClipboardList, Package, Layers, Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-// ─── Capability Modes ──────────────────────────────────────────
 const MODES = [
-  { v: 'chat', label: 'Chat', icon: MessageSquare, capability: 'text.chat' },
-  { v: 'image', label: 'Image', icon: ImageIcon, capability: 'image.generate' },
-  { v: 'video', label: 'Video', icon: Video, capability: 'video.generate' },
-  { v: 'longvideo', label: 'Long-form', icon: Film, capability: 'video.longform' },
-  { v: 'music', label: 'Music', icon: Music, capability: 'music.generate' },
-  { v: 'voice', label: 'Voice', icon: Mic, capability: 'voice.tts' },
-  { v: 'avatar', label: 'Avatar', icon: User, capability: 'avatar.generate' },
-  { v: 'scrape', label: 'Scrape', icon: Globe, capability: 'scrape.crawl' },
-  { v: 'rag', label: 'RAG', icon: Database, capability: 'rag.ingest' },
-  { v: 'uncensored', label: 'Gated', icon: Zap, capability: 'uncensored.text', uncensored: true, disabled: true },
+  { v: 'chat', label: 'Chat', icon: MessageSquare, capability: 'text.chat', provider: 'groq' },
+  { v: 'image', label: 'Image', icon: ImageIcon, capability: 'image.generate', provider: 'together' },
+  { v: 'video', label: 'Video', icon: Video, capability: 'video.generate', provider: 'genx' },
+  { v: 'longvideo', label: 'Long-form', icon: Film, capability: 'video.longform', provider: 'genx' },
+  { v: 'music', label: 'Music', icon: Music, capability: 'music.generate', provider: 'genx' },
+  { v: 'voice', label: 'Voice', icon: Mic, capability: 'voice.tts', provider: 'groq' },
+  { v: 'avatar', label: 'Avatar', icon: User, capability: 'avatar.generate', provider: 'genx' },
+  { v: 'scrape', label: 'Scrape', icon: Globe, capability: 'scrape.crawl', provider: 'local_tool' },
+  { v: 'rag', label: 'RAG', icon: Database, capability: 'rag.ingest', provider: 'together' },
+  { v: 'code', label: 'Code', icon: Code2, capability: 'text.code', provider: 'mimo' },
+  { v: 'uncensored', label: 'Gated', icon: ShieldAlert, capability: 'uncensored.text', provider: 'deepinfra', gated: true },
 ]
 
-// ─── Context-Aware Chip Configs ────────────────────────────────
-const MODE_CHIPS = {
-  chat: [
-    { key: 'purpose', label: 'Purpose', options: ['General', 'Creative', 'Analysis', 'Code', 'Summarize'] },
-    { key: 'tone', label: 'Tone', options: ['Professional', 'Casual', 'Friendly', 'Authoritative', 'Creative'] },
-    { key: 'language', label: 'Language', options: ['English', 'Spanish', 'French', 'German', 'Chinese'] },
-  ],
-  image: [
-    { key: 'style', label: 'Style', options: ['Photorealistic', 'Anime', '3D Render', 'Oil Painting', 'Illustration'] },
-    { key: 'aspect', label: 'Aspect', options: ['1:1', '16:9', '9:16', '4:3'] },
-    { key: 'quality', label: 'Quality', options: ['Draft', 'Standard', 'HD'] },
-  ],
-  video: [
-    { key: 'mode', label: 'Mode', options: ['Text to Video', 'Image to Video', 'Reel', 'Ad'] },
-    { key: 'style', label: 'Style', options: ['Cinematic', 'Realistic', 'Anime', '3D'] },
-    { key: 'duration', label: 'Duration', options: ['4s', '8s', '16s', '30s'] },
-    { key: 'camera', label: 'Camera', options: ['Static', 'Pan Left', 'Pan Right', 'Zoom In', 'Drone', 'Orbit'] },
-  ],
-  longvideo: [
-    { key: 'source', label: 'Source', options: ['Prompt', 'Script', 'Website', 'Brand Pack'] },
-    { key: 'duration', label: 'Duration', options: ['30s', '1 min', '2 min', '5 min'] },
-    { key: 'scenes', label: 'Scenes', options: ['2', '4', '6', '8'] },
-  ],
-  music: [
-    { key: 'genre', label: 'Genre', options: ['Pop', 'Rock', 'Hip-Hop', 'Amapiano', 'Afrobeat', 'Jazz', 'Lo-Fi', 'Techno', 'Cinematic', 'R&B', 'Reggae', 'Acoustic'] },
-    { key: 'mood', label: 'Mood', options: ['Happy', 'Sad', 'Epic', 'Chill', 'Dark'] },
-    { key: 'vocals', label: 'Vocals', options: ['Male', 'Female', 'Group', 'Rap', 'Choir', 'Instrumental'] },
-    { key: 'tempo', label: 'Tempo', options: ['Slow', 'Medium', 'Fast'] },
-  ],
-  voice: [
-    { key: 'voiceType', label: 'Voice', options: ['Male', 'Female', 'Child', 'Elderly'] },
-    { key: 'emotion', label: 'Emotion', options: ['Neutral', 'Happy', 'Angry', 'Whisper', 'Authoritative'] },
-  ],
-  avatar: [
-    { key: 'background', label: 'Background', options: ['Office', 'Studio', 'Green Screen', 'Custom'] },
-    { key: 'gesture', label: 'Gesture', options: ['None', 'Subtle', 'Expressive'] },
-  ],
-  scrape: [
-    { key: 'depth', label: 'Depth', options: ['1', '2', '3', '4', '5'] },
-    { key: 'extract', label: 'Extract', options: ['Logo', 'Colors', 'Fonts', 'Pricing', 'Products', 'Team'] },
-  ],
-  rag: [
-    { key: 'chunking', label: 'Chunking', options: ['Auto', 'Precise', 'Broad', 'Custom'] },
-    { key: 'topK', label: 'Top-K', options: ['3', '5', '10', '20'] },
-  ],
-  uncensored: [
-    { key: 'provider', label: 'Provider', options: ['DeepInfra gated lane'] },
-    { key: 'status', label: 'Status', options: ['Backend gating pending'] },
-    { key: 'fallback', label: 'Fallback', options: ['Disabled until configured'] },
-  ],
+const CHIP_KEYS = {
+  chat: ['purpose', 'tone', 'language'],
+  image: ['style', 'aspect_ratio', 'quality'],
+  video: ['mode', 'duration', 'camera_movement'],
+  longvideo: ['source', 'target_duration', 'scene_count'],
+  music: ['genre', 'vocal_style', 'target_duration'],
+  voice: ['mode', 'gender', 'accent'],
+  avatar: ['avatar_library', 'voice_source', 'background'],
+  scrape: ['crawl_depth', 'extract_logo', 'extract_colors'],
+  rag: ['top_k', 'embedding_provider', 'citations_required'],
+  code: ['language_framework', 'reasoning_depth', 'output_format'],
+  uncensored: ['provider', 'backend_gating', 'safe_flow_exposure'],
 }
 
-// ─── Chip Popover Component ────────────────────────────────────
-function Chip({ label, value, options, onChange }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button className="flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:border-white/20 transition whitespace-nowrap">
-          <span className="text-foreground/50">{label}:</span>
-          <span className="text-cyan-300">{value}</span>
-          <ChevronDown className="h-2.5 w-2.5 opacity-50" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-40 p-1.5" align="start">
-        {options.map((opt) => (
-          <button key={opt} onClick={() => onChange(opt)}
-            className={`w-full text-left rounded px-2.5 py-1.5 text-xs transition ${value === opt ? 'bg-cyan-500/15 text-cyan-300' : 'text-foreground/80 hover:bg-white/[0.06]'}`}>
-            {opt}
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
-  )
+function firstOption(def) {
+  if (!def) return ''
+  if (def.type === 'boolean') return false
+  if (def.type === 'number') return def.min ?? 0
+  if (Array.isArray(def.options)) {
+    const option = def.options[0]
+    return typeof option === 'string' ? option : option?.value
+  }
+  return ''
 }
 
-// ─── Preview Canvas ────────────────────────────────────────────
-function PreviewCanvas() {
+function PreviewCanvas({ mode }) {
+  const current = MODES.find((item) => item.v === mode)
+  const Icon = current?.icon || Zap
+
   return (
-    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-      <div className="h-16 w-16 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-4">
-        <Zap className="h-7 w-7 opacity-20" />
+    <div className="flex h-full min-h-0 items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent)]">
+      <div className="flex max-w-lg flex-col items-center px-6 text-center text-muted-foreground">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+          <Icon className="h-7 w-7 opacity-30" />
+        </div>
+        <p className="text-sm font-medium text-foreground">Backend integration pending.</p>
+        <p className="mt-1 text-xs text-muted-foreground/70">
+          Real previews appear after /api/v1 jobs and artifacts are wired.
+        </p>
+        <div className="mt-5 grid w-full grid-cols-3 gap-2 text-left text-[10px]">
+          {['jobs pending backend', 'artifacts pending backend', 'live proof required'].map((label) => (
+            <div key={label} className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-muted-foreground">{label}</div>
+          ))}
+        </div>
       </div>
-      <p className="text-sm font-medium">Backend integration pending.</p>
-      <p className="mt-1 max-w-md text-center text-xs text-muted-foreground/60">
-        Real previews will appear here after /api/v1 jobs and artifacts are wired.
-      </p>
     </div>
   )
 }
-// Director Chat (inline, no separate panel) ─────────────────
-function DirectorInline() {
+
+function DirectorPanel({ onClose }) {
   const { chatHistory, appendBackendPendingChatNotice, generating } = useStudioStore()
   const [input, setInput] = useState('')
   const scrollRef = useRef(null)
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight }, [chatHistory])
-  const send = () => { if (!input.trim()) return; appendBackendPendingChatNotice(input); setInput('') }
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [chatHistory])
+
+  const send = () => {
+    if (!input.trim()) return
+    appendBackendPendingChatNotice(input)
+    setInput('')
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {chatHistory.map((m, i) => (
-          <div key={i} className={`rounded-lg px-3 py-2 text-xs ${m.role === 'user' ? 'ml-12 bg-cyan-500/10 text-cyan-100' : 'mr-12 bg-white/[0.04] text-foreground/80'}`}>
-            <div className="whitespace-pre-wrap">{m.content}</div>
+    <div className="absolute inset-y-0 right-0 z-10 flex w-full max-w-md flex-col border-l border-white/[0.06] bg-[hsl(240_14%_3.5%)] shadow-2xl">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+        <div className="flex items-center gap-2 text-xs font-semibold"><MessageSquare className="h-3.5 w-3.5 text-cyan-300" /> Director draft panel</div>
+        <button onClick={onClose} className="text-muted-foreground transition hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+      </div>
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
+        {chatHistory.map((message, index) => (
+          <div key={`${message.timestamp}-${index}`} className={`rounded-lg px-3 py-2 text-xs ${message.role === 'user' ? 'ml-12 bg-cyan-500/10 text-cyan-100' : 'mr-12 bg-white/[0.04] text-foreground/80'}`}>
+            {message.content}
           </div>
         ))}
-        {generating.chat && <div className="mr-12 rounded-lg bg-white/[0.04] px-3 py-2 text-xs text-foreground/80">Thinking<span className="inline-block h-3 w-px animate-pulse bg-cyan-400 ml-0.5" /></div>}
+        {generating.chat && <div className="mr-12 rounded-lg bg-white/[0.04] px-3 py-2 text-xs text-foreground/80">Appending backend-pending notice</div>}
       </div>
-      <div className="border-t border-white/[0.06] px-4 py-2 flex gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Ask the Director AI…" className="bg-black/20 flex-1 h-8 text-xs rounded-lg" />
-        <Button onClick={send} size="sm" className="h-8 w-8 p-0 bg-gradient-to-r from-cyan-400 to-violet-500 text-black rounded-lg"><Send className="h-3 w-3" /></Button>
+      <div className="flex gap-2 border-t border-white/[0.06] px-4 py-2">
+        <Input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && send()} placeholder="Draft a request note..." className="h-8 flex-1 rounded-lg bg-black/20 text-xs" />
+        <Button onClick={send} size="sm" className="h-8 w-8 rounded-lg bg-gradient-to-r from-cyan-400 to-violet-500 p-0 text-black"><Send className="h-3 w-3" /></Button>
       </div>
     </div>
   )
 }
 
-// ─── MAIN STUDIO PAGE ──────────────────────────────────────────
-export default function Studio() {
-  const { generating } = useStudioStore()
+function StatusCard({ title, icon: Icon, rows }) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><Icon className="h-3.5 w-3.5 text-cyan-300" /> {title}</div>
+      <div className="space-y-1.5">
+        {rows.map((row) => (
+          <div key={row[0]} className="flex items-center justify-between gap-3 text-[10px]">
+            <span className="text-muted-foreground">{row[0]}</span>
+            <span className="text-right font-mono text-foreground/80">{row[1]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-  // Mode and chip state
+export default function Studio() {
   const [mode, setMode] = useState('chat')
-  const [chipValues, setChipValues] = useState({})
+  const [uxMode, setUxMode] = useState('creator')
+  const [valuesByMode, setValuesByMode] = useState({})
   const [prompt, setPrompt] = useState('')
   const [showChat, setShowChat] = useState(false)
+  const [controlTab, setControlTab] = useState('command')
+  const currentMode = MODES.find((item) => item.v === mode) || MODES[0]
+  const schema = CAPABILITY_SCHEMAS[mode] || {}
+  const values = valuesByMode[mode] || {}
+  const backend = getBackendCapability(currentMode.capability)
+  const provider = PROVIDER_CONTRACTS.find((item) => item.id === currentMode.provider)
 
-  const setChip = (key, val) => setChipValues((p) => ({ ...p, [key]: val }))
+  const payload = useMemo(() => ({
+    dashboardCapability: currentMode.capability,
+    backendCapability: backend.backendCapability,
+    routeStatus: backend.missing ? 'capability_missing' : 'route_pending',
+    providerId: currentMode.provider,
+    status: currentMode.gated ? 'gated_backend_pending' : 'backend_pending',
+    controls: values,
+    prompt,
+  }), [backend.backendCapability, backend.missing, currentMode, prompt, values])
 
-  // Get chips for current mode
-  const chips = MODE_CHIPS[mode] || []
-  const currentMode = MODES.find((m) => m.v === mode)
-  const isUncensored = currentMode?.uncensored === true
+  const setValues = (nextValues) => setValuesByMode((previous) => ({ ...previous, [mode]: nextValues }))
 
-  // Generate handler
-  const handleGenerate = async () => {
-    if (!prompt.trim() && mode !== 'chat') {
-      toast.warning('Enter a prompt first')
-      return
-    }
-    if (mode === 'chat') {
-      // Chat mode: send to Director
-      if (!prompt.trim()) return
+  const quickChips = CHIP_KEYS[mode] || []
+
+  const run = () => {
+    if (mode === 'chat' && prompt.trim()) {
       const { appendBackendPendingChatNotice } = useStudioStore.getState()
       appendBackendPendingChatNotice(prompt)
       setPrompt('')
       setShowChat(true)
       return
     }
-    if (mode !== 'chat') {
-      toast.info('Backend integration pending', { description: `${currentMode.label} execution is disabled until the real /api/v1 backend is wired.` })
-      return
-    }
+    toast.info('Backend integration pending', {
+      description: 'Execution is disabled until /api/v1 jobs, artifacts, and provider routes are wired.',
+    })
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
-      {/* ─── Top Bar (56px) ─────────────────────────────────────── */}
-      <header className="h-14 shrink-0 flex items-center gap-4 border-b border-white/[0.06] bg-[hsl(240_14%_4%)] px-5">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-white/[0.06] bg-[hsl(240_14%_4%)] px-5">
         <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 flex items-center justify-center">
-            <Zap className="h-4 w-4 text-black" />
-          </div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-violet-500 text-black"><Zap className="h-4 w-4" /></div>
           <div>
             <div className="text-sm font-bold tracking-tight">AmarktAI Studio</div>
-            <div className="text-[9px] text-muted-foreground -mt-0.5">Enterprise AI Workspace</div>
+            <div className="text-[9px] text-muted-foreground">Frontend contract control room</div>
           </div>
         </div>
-        <div className="flex-1" />
-        {isUncensored && (
-          <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px] mr-2">GATED LANE PENDING</Badge>
-        )}
-        <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">Backend Pending</Badge>
+        <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">{currentMode.capability}</Badge>
+        {currentMode.gated && <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">DeepInfra gated lane</Badge>}
+        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Creator</span>
+          <Switch checked={uxMode === 'pro'} onCheckedChange={(checked) => setUxMode(checked ? 'pro' : 'creator')} />
+          <span>Pro</span>
+        </div>
       </header>
 
-      {/* ─── Preview Canvas (flex-1) ─────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-hidden relative">
-        <PreviewCanvas />
+      <section className="relative min-h-0 flex-1 overflow-hidden">
+        <PreviewCanvas mode={mode} />
+        {showChat && <DirectorPanel onClose={() => setShowChat(false)} />}
+      </section>
 
-        {/* Director Chat overlay (toggled) */}
-        {showChat && (
-          <div className="absolute inset-y-0 right-0 w-96 border-l border-white/[0.06] bg-[hsl(240_14%_3.5%)] shadow-2xl z-10 flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-md bg-gradient-to-br from-cyan-400 to-violet-500 flex items-center justify-center">
-                  <MessageSquare className="h-3 w-3 text-black" />
-                </div>
-                <span className="text-xs font-semibold">Director AI</span>
+      <section className="flex shrink-0 flex-col border-t border-white/[0.06] bg-[hsl(240_14%_3.5%)]" style={{ height: 'min(360px, 40dvh)' }}>
+        {/* Segmented tabs for mobile/tablet - hidden on xl+ */}
+        <div className="flex items-center gap-1 border-b border-white/[0.06] px-3 py-1.5 xl:hidden">
+          {[['command', 'Command'], ['controls', 'Controls'], ['inspector', 'Inspector']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setControlTab(key)}
+              className={`rounded-md px-3 py-1.5 text-[10px] font-medium transition ${controlTab === key ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30' : 'text-muted-foreground hover:text-foreground border border-transparent'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,1fr)_minmax(380px,1.2fr)_minmax(320px,0.9fr)] max-xl:grid-cols-1">
+          {/* Command panel */}
+          <div className={`flex min-h-0 flex-col border-r border-white/[0.06] p-3 max-xl:border-r-0 ${controlTab !== 'command' ? 'hidden xl:flex' : 'flex'}`}>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mb-2 grid grid-cols-5 gap-1.5">
+                {MODES.map((item) => (
+                  <button
+                    key={item.v}
+                    onClick={() => setMode(item.v)}
+                    className={`flex min-h-10 items-center justify-center rounded-md border text-[10px] transition ${mode === item.v ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200' : 'border-white/[0.06] bg-black/20 text-muted-foreground hover:text-foreground'}`}
+                    title={item.label}
+                  >
+                    <item.icon className="h-3.5 w-3.5" />
+                  </button>
+                ))}
               </div>
-              <button onClick={() => setShowChat(false)} className="text-muted-foreground hover:text-foreground transition"><X className="h-3.5 w-3.5" /></button>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {quickChips.map((key) => {
+                  const def = schema[key]
+                  if (!def) return null
+                  const value = values[key] ?? firstOption(def)
+                  return <Badge key={key} variant="outline" className="border-white/10 text-[10px]">{def.label}: {String(Array.isArray(value) ? value[0] || 'draft' : value)}</Badge>
+                })}
+              </div>
             </div>
-            <DirectorInline />
+            <div className="shrink-0 space-y-2 border-t border-white/[0.04] pt-2">
+              <Input value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && run()} placeholder={mode === 'chat' ? 'Ask the Director draft panel...' : `Describe ${currentMode.label.toLowerCase()} request...`} className="h-10 rounded-xl bg-black/20 text-sm" />
+              <div className="flex gap-2">
+                <Button onClick={run} className="h-10 flex-1 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
+                  {mode === 'chat' ? <Send className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                  {mode === 'chat' ? 'Draft notice' : 'Backend Pending'}
+                </Button>
+                <Button variant="outline" onClick={() => setShowChat(true)} className="h-10 rounded-xl border-white/10"><MessageSquare className="h-4 w-4" /></Button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* ─── Command Bar (fixed bottom, flex-shrink-0) ──────────── */}
-      <div className="flex-shrink-0 border-t border-white/[0.06] bg-[hsl(240_14%_3.5%)]">
-        {/* Chips row */}
-        <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto hide-scrollbar border-b border-white/[0.04]">
-          {/* Mode Selector */}
-          <Select value={mode} onValueChange={(v) => { setMode(v); setChipValues({}) }}>
-            <SelectTrigger className="w-32 bg-black/20 h-8 text-xs rounded-lg shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MODES.map((m) => (
-                <SelectItem key={m.v} value={m.v}>
-                  <div className="flex items-center gap-2"><m.icon className="h-3 w-3" /> {m.label}</div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="h-5 w-px bg-white/10 shrink-0" />
-
-          {/* Context-Aware Chips */}
-          {chips.map((chip) => {
-            const currentVal = chipValues[chip.key] || chip.options[0]
-            return (
-              <Chip key={chip.key} label={chip.label} value={currentVal} options={chip.options} onChange={(v) => setChip(chip.key, v)} />
-            )
-          })}
-
-          <div className="flex-1" />
-
-          {/* Director toggle */}
-          <button onClick={() => setShowChat(!showChat)}
-            className={`p-2 rounded-lg transition ${showChat ? 'text-cyan-300 bg-cyan-500/10' : 'text-muted-foreground hover:text-foreground hover:bg-white/[0.04]'}`}
-            title="Director AI">
-            <MessageSquare className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Input row */}
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="flex-1 relative">
-            <Input
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-              placeholder={mode === 'chat' ? 'Ask the Director AI…' : `Describe your ${currentMode?.label?.toLowerCase()}…`}
-              className="bg-black/20 h-11 text-sm rounded-xl pr-4"
-            />
+          {/* Controls panel */}
+          <div className={`min-h-0 overflow-y-auto p-3 ${controlTab !== 'controls' ? 'hidden xl:block' : 'block'}`}>
+            <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={mode} />
           </div>
-          <Button onClick={handleGenerate}
-            disabled={mode !== 'chat' || generating[mode]}
-            title={mode !== 'chat' ? 'Backend integration pending' : undefined}
-            className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black hover:opacity-90 h-11 px-6 rounded-xl text-sm font-semibold transition-all">
-            {generating[mode] ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {generating[mode] ? 'Pending...' : mode === 'chat' ? 'Send' : 'Backend Pending'}
-          </Button>
+
+          {/* Inspector panel */}
+          <aside className={`min-h-0 space-y-3 overflow-y-auto border-l border-white/[0.06] p-3 max-xl:border-l-0 ${controlTab !== 'inspector' ? 'hidden xl:block' : 'block'}`}>
+            <StatusCard icon={ClipboardList} title="Request inspector" rows={[
+              ['payload', 'draft only'],
+              ['backend key', backend.backendCapability || backend.expectedBackendKey || backend.plannedBackendKey || 'planned'],
+              ['route', backend.missing ? 'capability_missing' : 'route_pending'],
+            ]} />
+            <StatusCard icon={Layers} title="Provider candidates" rows={[
+              ['primary', provider?.name || 'Local tool'],
+              ['status', provider?.status || 'backend_pending'],
+              ['proof', provider?.proofStatus || 'live_proof_required'],
+            ]} />
+            <StatusCard icon={Package} title="Artifact / proof" rows={[
+              ['preview', 'backend_pending'],
+              ['artifact', 'backend_pending'],
+              ['signed URL', 'backend_pending'],
+            ]} />
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+              <div className="mb-2 text-xs font-semibold">Payload preview</div>
+              <pre className="max-h-40 overflow-auto rounded-md bg-black/30 p-2 text-[10px] text-muted-foreground">{JSON.stringify(payload, null, 2)}</pre>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
+                <div className="font-semibold">Asset bin</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Draft uploads only. Real artifacts pending backend.</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 text-xs">
+                <div className="font-semibold">Timeline</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Assembly shell ready. Jobs route pending.</p>
+              </div>
+            </div>
+          </aside>
         </div>
-      </div>
+      </section>
     </div>
   )
 }

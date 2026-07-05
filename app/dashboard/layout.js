@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [user, setUser] = useState(null)
+  const studioRoute = pathname === '/dashboard/studio'
 
   useEffect(() => {
     try {
@@ -111,7 +112,7 @@ export default function DashboardLayout({ children }) {
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-background/70 px-5 py-3 backdrop-blur-xl md:px-8">
+        {!studioRoute && <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-background/70 px-5 py-3 backdrop-blur-xl md:px-8">
           <button className="md:hidden" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </button>
@@ -126,8 +127,8 @@ export default function DashboardLayout({ children }) {
               {user?.email?.[0]?.toUpperCase() || 'A'}
             </div>
           </div>
-        </header>
-        <main className="flex-1 px-5 py-6 md:px-8 md:py-8">{children}</main>
+        </header>}
+        <main className={studioRoute ? 'min-h-0 flex-1 overflow-hidden' : 'flex-1 px-5 py-6 md:px-8 md:py-8'}>{children}</main>
       </div>
     </div>
   )

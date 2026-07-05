@@ -1,46 +1,57 @@
 'use client'
+import Link from 'next/link'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
+import { DropZone } from '@/components/amarkt/StudioComponents'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Palette, Globe, Type, Image, Plus } from 'lucide-react'
-import Link from 'next/link'
+import { Badge } from '@/components/ui/badge'
+import { FileText, Globe, Image, Lock, Palette, Plus, Type } from 'lucide-react'
+
+const SECTIONS = [
+  ['Logo section', Image],
+  ['Color palette section', Palette],
+  ['Fonts section', Type],
+  ['Website snapshot section', Globe],
+  ['Extracted copy/tone section', FileText],
+  ['Products/pricing/testimonials section', FileText],
+]
 
 export default function BrandLibraryPage() {
   return (
-    <PageTransition className="space-y-8">
-      <PageHeader title="Brand Library" subtitle="Central repository for scraped BrandPacks — logos, colors, typography, and company intelligence.">
-        <Link href="/dashboard/studio">
-          <Button variant="outline" className="border-white/15 bg-white/[0.02]">
-            <Plus className="mr-1.5 h-4 w-4" /> New Scrape
-          </Button>
-        </Link>
+    <PageTransition className="space-y-6">
+      <PageHeader title="Brand Library" subtitle="BrandPack frontend structure. Scraping, rescraping, and assignment persistence remain backend pending.">
+        <Link href="/dashboard/studio"><Button variant="outline" className="border-white/10 text-xs"><Plus className="mr-1.5 h-3.5 w-3.5" /> Open Studio</Button></Link>
       </PageHeader>
 
-      <Card className="border-white/[0.07] bg-white/[0.02] p-12 text-center">
-        <Palette className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
-        <h3 className="text-lg font-semibold">No BrandPacks Yet</h3>
-        <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-          Use the Scrape/Brand capability in the Studio to extract brand intelligence from corporate websites. BrandPacks will appear here automatically.
-        </p>
-        <div className="mt-8 grid max-w-lg mx-auto gap-4 sm:grid-cols-3">
-          {[
-            { icon: Image, label: 'Logo & Visual', desc: 'Colors, imagery, visual identity' },
-            { icon: Type, label: 'Typography', desc: 'Font families, sizes, weights' },
-            { icon: Globe, label: 'Content', desc: 'Taglines, copy, messaging' },
-          ].map((item) => (
-            <div key={item.label} className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 text-center">
-              <item.icon className="mx-auto mb-2 h-5 w-5 text-cyan-300" />
-              <div className="text-sm font-medium">{item.label}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{item.desc}</div>
-            </div>
-          ))}
-        </div>
-        <Link href="/dashboard/studio">
-          <Button className="mt-8 bg-gradient-to-r from-cyan-400 to-violet-500 text-black">
-            <Plus className="mr-1.5 h-4 w-4" /> Start Scraping
-          </Button>
-        </Link>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+        <Card className="border-white/[0.07] bg-white/[0.02] p-6 text-center">
+          <Palette className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
+          <h3 className="text-lg font-semibold">No BrandPacks loaded</h3>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Real scraped brand data will appear after the scrape route, artifact storage, and BrandPack persistence are wired.</p>
+          <div className="mt-5"><DropZone label="Import/upload brand assets UI" kind="brand assets" compact /></div>
+          <Button disabled variant="outline" className="mt-5 border-white/10 text-xs"><Lock className="mr-1.5 h-3.5 w-3.5" /> Rescrape backend pending</Button>
+        </Card>
+
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Brand Details Panel</h3>
+            <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">ui_ready</Badge>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {SECTIONS.map(([label, Icon]) => (
+              <div key={label} className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
+                <Icon className="mb-2 h-4 w-4 text-cyan-300" />
+                <div className="text-xs font-semibold">{label}</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">Awaiting real BrandPack artifact data.</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <Button disabled variant="outline" className="border-white/10 text-xs">Assign to app/agent</Button>
+            <Button disabled variant="outline" className="border-white/10 text-xs">Use in Studio</Button>
+          </div>
+        </Card>
+      </div>
     </PageTransition>
   )
 }

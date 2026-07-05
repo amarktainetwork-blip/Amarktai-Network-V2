@@ -12,12 +12,15 @@ import {
 
 const FEATURES = [
   { icon: Workflow, title: 'AI Orchestration', desc: 'Route any capability — text, image, video, audio — through a single control plane with intelligent provider selection.' },
-  { icon: Server, title: 'Background Jobs', desc: 'Durable task queue with worker pipelines, progress tracking, retries and full artifact lineage.' },
-  { icon: Database, title: 'Asset Storage', desc: 'Every generated asset persisted, versioned and retrievable through secure signed paths.' },
+  { icon: Server, title: 'Background Jobs', desc: 'Contract-ready job queues for worker pipelines, progress tracking, retries and artifact lineage once backend routes are wired.' },
+  { icon: Database, title: 'Asset Storage', desc: 'Artifact contracts for secure storage, signed paths and retrieval once backend storage is connected.' },
   { icon: Layers, title: 'Capability Contracts', desc: 'Strict typed input/output schemas per capability. Connected apps stay lightweight clients.' },
   { icon: ShieldCheck, title: 'Tenant Isolation', desc: 'Absolute data isolation between apps with per-connection keys, scopes and daily budgets.' },
   { icon: Cpu, title: 'Multi-Provider', desc: 'Swap underlying providers without touching client code. Fallback chains are automatic.' },
 ]
+
+const FINAL_PROVIDERS = ['GenX', 'Groq', 'Together', 'Mimo', 'DeepInfra gated lane']
+const WORKFLOW = ['App request', 'Capability contract', 'Provider/runtime route', 'Artifact/proof after backend wiring']
 
 export default function Landing() {
   const [isAuthed, setIsAuthed] = useState(false)
@@ -70,8 +73,7 @@ export default function Landing() {
           </h1>
 
           <p className="animate-fade-up mt-6 max-w-2xl text-lg text-muted-foreground" style={{ animationDelay: '0.18s' }}>
-            AmarktAI Network handles the complete AI orchestration, background jobs, and asset storage pipelines —
-            so every connected app stays a lightweight client.
+            AmarktAI Network defines the central AI capability runtime: connected apps request capabilities through one controlled contract layer while backend execution is wired behind it.
           </p>
 
           <div className="animate-fade-up mt-9 flex flex-col items-center gap-3 sm:flex-row" style={{ animationDelay: '0.28s' }}>
@@ -115,6 +117,32 @@ export default function Landing() {
                 View All Capabilities <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
             </Link>
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="relative z-10 border-t border-white/[0.06] py-20">
+        <div className="container grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <Reveal>
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Final provider lanes</h2>
+            <p className="mt-3 text-muted-foreground">
+              The frontend is locked to five provider contracts: GenX, Groq, Together, Mimo, and the gated DeepInfra lane.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {FINAL_PROVIDERS.map((provider) => (
+                <span key={provider} className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-foreground/80">{provider}</span>
+              ))}
+            </div>
+          </Reveal>
+          <Reveal>
+            <div className="grid gap-3 sm:grid-cols-4">
+              {WORKFLOW.map((step, index) => (
+                <div key={step} className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-4">
+                  <div className="mb-2 text-[10px] text-cyan-300">0{index + 1}</div>
+                  <div className="text-sm font-semibold">{step}</div>
+                </div>
+              ))}
+            </div>
           </Reveal>
         </div>
       </section>

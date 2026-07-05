@@ -1,106 +1,66 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useStudioStore } from '@/lib/useStudioStore'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
-import { EmptyState, SkeletonList } from '@/components/amarkt/EmptyState'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Boxes, CheckCircle2, AlertTriangle, XCircle, Zap, ArrowRight, Key, Server } from 'lucide-react'
-import Link from 'next/link'
+import { CAPABILITY_CONTRACTS, PROVIDER_CONTRACTS } from '@/lib/dashboard-contract'
+import { DASHBOARD_TO_BACKEND_CAPABILITY_MAP } from '@/lib/capability-map'
+import { Boxes, Route } from 'lucide-react'
 
-const CAPABILITY_MAP = [
-  { id: 'text.chat', label: 'Chat / Text', category: 'Language', provider: 'Groq', providerId: 'groq', inputs: 'Prompt', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
-  { id: 'text.reasoning', label: 'Reasoning', category: 'Language', provider: 'MiMo', providerId: 'mimo', inputs: 'Prompt', outputs: 'Text', requiresKey: 'MIMO_API_KEY' },
-  { id: 'text.code', label: 'Code Generation', category: 'Language', provider: 'MiMo', providerId: 'mimo', inputs: 'Prompt', outputs: 'Code', requiresKey: 'MIMO_API_KEY' },
-  { id: 'image.generate', label: 'Image Generation', category: 'Vision', provider: 'Together AI', providerId: 'together', inputs: 'Prompt, Reference', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'image.edit', label: 'Image Edit', category: 'Vision', provider: 'Together AI', providerId: 'together', inputs: 'Image, Prompt', outputs: 'Image', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'video.generate', label: 'Video Generation', category: 'Motion', provider: 'GenX', providerId: 'genx', inputs: 'Prompt, First Frame', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'video.longform', label: 'Long-form Video', category: 'Motion', provider: 'GenX', providerId: 'genx', inputs: 'Script, Scenes', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'music.generate', label: 'Music / Song', category: 'Audio', provider: 'GenX', providerId: 'genx', inputs: 'Prompt, Lyrics', outputs: 'Audio', requiresKey: 'GENX_API_KEY' },
-  { id: 'voice.tts', label: 'Text-to-Speech', category: 'Audio', provider: 'Groq', providerId: 'groq', inputs: 'Text, Voice', outputs: 'Audio', requiresKey: 'GROQ_API_KEY' },
-  { id: 'voice.stt', label: 'Speech-to-Text', category: 'Audio', provider: 'Groq', providerId: 'groq', inputs: 'Audio', outputs: 'Text', requiresKey: 'GROQ_API_KEY' },
-  { id: 'avatar.generate', label: 'Avatar', category: 'Vision', provider: 'GenX', providerId: 'genx', inputs: 'Face Image, Audio', outputs: 'Video', requiresKey: 'GENX_API_KEY' },
-  { id: 'brand.scrape', label: 'Brand Scrape', category: 'Intelligence', provider: 'Local Tools', providerId: 'local_tools', inputs: 'URL', outputs: 'Brand Pack', requiresKey: null },
-  { id: 'rag.ingest', label: 'RAG Ingest', category: 'Knowledge', provider: 'Together AI', providerId: 'together', inputs: 'Documents', outputs: 'Vector Store', requiresKey: 'TOGETHER_API_KEY' },
-  { id: 'rag.search', label: 'RAG Search', category: 'Knowledge', provider: 'DeepInfra', providerId: 'deepinfra', inputs: 'Query', outputs: 'Cited Results', requiresKey: 'DEEPINFRA_API_KEY' },
+const CATALOG = [
+  ['Language', 'text.chat', 'chat', ['groq']],
+  ['Language', 'text.reasoning', 'reasoning', ['mimo']],
+  ['Language', 'text.code', 'code', ['mimo']],
+  ['Image', 'image.generate', 'image_generation', ['together']],
+  ['Image', 'image.edit', 'image_edit', ['together']],
+  ['Video', 'video.generate', 'video_generation', ['genx']],
+  ['Video', 'video.longform', null, ['genx']],
+  ['Audio/Music', 'music.generate', 'music_generation', ['genx']],
+  ['Voice', 'voice.tts', 'tts', ['groq']],
+  ['Voice', 'voice.stt', 'stt', ['groq']],
+  ['Avatar', 'avatar.generate', 'avatar_generation', ['genx']],
+  ['Scrape/Brand', 'scrape.crawl', 'brand_scrape', ['local tools']],
+  ['RAG/Knowledge', 'rag.ingest', 'rag_ingest', ['together']],
+  ['RAG/Knowledge', 'rag.query', 'rag_search', ['together']],
+  ['App/System', 'structured_output', 'structured_output', ['groq', 'mimo']],
+  ['Gated/Uncensored', 'uncensored.text', null, ['deepinfra']],
 ]
 
+const providersById = Object.fromEntries(PROVIDER_CONTRACTS.map((provider) => [provider.id, provider]))
+
 export default function CapabilitiesPage() {
-  const providers = useStudioStore((s) => s.providers) || []
-  const fetchProviders = useStudioStore((s) => s.fetchProviders)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => { fetchProviders().then(() => setLoading(false)) }, [])
-
-  const getStatus = (cap) => {
-    if (cap.providerId === 'local_tools') return { status: 'active', label: 'Tool', color: 'border-cyan-500/30 text-cyan-400' }
-    const provider = providers.find((p) => p.id === cap.providerId)
-    if (!provider) return { status: 'blocked', label: 'No Provider', color: 'border-rose-500/30 text-rose-400' }
-    if (provider.status === 'configured') return { status: 'configured', label: 'Configured', color: 'border-emerald-500/30 text-emerald-400' }
-    if (provider.status === 'gated_backend_pending') return { status: 'gated_backend_pending', label: 'Gated Pending', color: 'border-amber-500/30 text-amber-400' }
-    return { status: 'backend_pending', label: 'Backend Pending', color: 'border-cyan-500/30 text-cyan-400' }
-  }
-
-  const getBlocker = (cap) => {
-    if (cap.providerId === 'local_tools') return { blocked: false, reason: null, icon: null }
-    const provider = providers.find((p) => p.id === cap.providerId)
-    if (!provider) return { blocked: true, reason: `Missing provider: ${cap.provider}`, icon: Server }
-    if (cap.requiresKey && provider && provider.status !== 'configured') return { blocked: true, reason: `Backend/key pending: ${cap.requiresKey}`, icon: Key }
-    return { blocked: false, reason: null, icon: null }
-  }
-
-  if (loading) return <PageTransition className="space-y-8"><PageHeader title="Capabilities" subtitle="Complete catalogue of all AI capabilities." /><SkeletonList count={6} /></PageTransition>
-
   return (
-    <PageTransition className="space-y-8">
-      <PageHeader title="Capabilities" subtitle="Complete catalogue of all AI capabilities with status and blockers." />
+    <PageTransition className="space-y-6">
+      <PageHeader title="Capability Catalogue" subtitle="Dashboard modes, backend canonical keys, blockers, and next actions for frontend contract workflows." />
 
-      <div className="rounded-lg border border-white/[0.06] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Capability</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Category</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Provider</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Inputs</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Outputs</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">Blocker</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CAPABILITY_MAP.map((cap) => {
-                const s = getStatus(cap)
-                const b = getBlocker(cap)
-                return (
-                  <tr key={cap.id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{cap.label}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono">{cap.id}</div>
-                    </td>
-                    <td className="px-4 py-3"><Badge variant="outline" className="border-white/10 text-[10px]">{cap.category}</Badge></td>
-                    <td className="px-4 py-3"><Badge variant="outline" className={`text-[10px] ${s.color}`}>{s.label}</Badge></td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{cap.provider}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{cap.inputs}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{cap.outputs}</td>
-                    <td className="px-4 py-3">
-                      {b.blocked ? (
-                        <div className="flex items-center gap-1.5 text-[10px] text-rose-400">
-                          <b.icon className="h-3 w-3 shrink-0" />
-                          <span>{b.reason}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-emerald-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Ready</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {CATALOG.map(([category, dashboardMode, backendKey, providerIds]) => {
+          const map = DASHBOARD_TO_BACKEND_CAPABILITY_MAP[dashboardMode]
+          const missing = map?.missing || backendKey === null
+          const providers = providerIds.map((id) => providersById[id]?.name || id).join(', ')
+          return (
+            <Card key={`${category}-${dashboardMode}`} className="border-white/[0.07] bg-white/[0.02] p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <Badge variant="outline" className="mb-2 border-white/10 text-[10px]">{category}</Badge>
+                  <h3 className="text-sm font-semibold">{dashboardMode}</h3>
+                </div>
+                <Boxes className="h-4 w-4 text-cyan-300" />
+              </div>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Backend key</span><span className="font-mono">{backendKey || map?.expectedBackendKey || map?.plannedBackendKey || 'planned'}</span></div>
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Providers</span><span className="text-right">{providers}</span></div>
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Required env</span><span className="text-right">{providerIds.map((id) => providersById[id]?.envKey).filter(Boolean).join(', ') || 'local tool'}</span></div>
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Frontend controls</span><span>ui_ready</span></div>
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Backend route</span><span>{missing ? 'capability_missing' : 'route_pending'}</span></div>
+                <div className="flex justify-between gap-2"><span className="text-muted-foreground">Live proof</span><span>live_proof_required</span></div>
+              </div>
+              <div className="mt-3 rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-[10px] text-muted-foreground">
+                <Route className="mr-1 inline h-3 w-3" /> Next action: wire /api/v1 route, provider keys, attempts, artifacts, and proof capture.
+              </div>
+              {missing && <Badge variant="outline" className="mt-3 border-amber-500/30 text-amber-400 text-[10px]">missing/planned backend key</Badge>}
+            </Card>
+          )
+        })}
       </div>
     </PageTransition>
   )
