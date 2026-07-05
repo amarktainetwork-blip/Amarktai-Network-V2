@@ -3,7 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
 import { DASHBOARD_TO_BACKEND_CAPABILITY_MAP } from '../lib/capability-map.js'
-import { PROVIDER_CONTRACTS } from '../lib/dashboard-contract.js'
+import { PROVIDER_CONTRACTS, STUDIO_MODES } from '../lib/dashboard-contract.js'
 import { CAPABILITY_SCHEMAS, REQUIRED_MUSIC_GENRES } from '../lib/studio-capability-schemas.js'
 
 const ROOT = process.cwd()
@@ -177,8 +177,8 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     expect(studioText).toContain('DirectorBlock')
     expect(studioText).toContain('OptionsBlock')
     expect(studioText).toContain('Accordion')
-    expect(studioText).toContain('Backend contract')
-    expect(studioText).toContain('Provider routing')
+    expect(studioText).toContain('Developer contract')
+    expect(studioText).toContain('Runtime routing')
     expect(studioText).toContain('Artifact & proof status')
   })
 
@@ -343,6 +343,69 @@ describe('Prompt 2 dashboard frontend contracts', () => {
         expect(normalized, file).not.toContain(term.toLowerCase())
       }
     }
+  })
+
+  it('STUDIO_MODES does not contain defaultProvider', () => {
+    for (const mode of STUDIO_MODES) {
+      expect(mode.defaultProvider, `defaultProvider found in mode ${mode.id}`).toBeUndefined()
+    }
+  })
+
+  it('Studio uses Developer/Admin labels instead of Backend', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+    expect(studioText).toContain('Developer')
+    expect(studioText).toContain('Runtime routing')
+    expect(studioText).toContain('Developer contract')
+    expect(studioText).not.toContain("'Backend contract'")
+    expect(studioText).not.toContain("'Provider routing'")
+  })
+
+  it('App page does not show raw contract JSON by default', () => {
+    const appText = fs.readFileSync(path.join(ROOT, 'app/dashboard/app-gateway/page.js'), 'utf8')
+    expect(appText).not.toContain('App Contract Drawer')
+    expect(appText).not.toContain('apiKeyStatus')
+    expect(appText).not.toContain('webhookSecretStatus')
+    expect(appText).not.toContain('Workspace State')
+    expect(appText).not.toContain('Request runner')
+    expect(appText).toContain('Developer details')
+    expect(appText).toContain('App Templates')
+  })
+
+  it('Jobs/Work Library page does not show backend debug panels', () => {
+    const jobsText = fs.readFileSync(path.join(ROOT, 'app/dashboard/jobs/page.js'), 'utf8')
+    expect(jobsText).not.toContain('Provider attempts panel')
+    expect(jobsText).not.toContain('Signed URL status')
+    expect(jobsText).not.toContain('Webhook delivery status')
+    expect(jobsText).not.toContain('Proof status')
+    expect(jobsText).not.toContain('Job timeline panel')
+    expect(jobsText).toContain('Work Library')
+    expect(jobsText).toContain('Admin diagnostics')
+  })
+
+  it('Capabilities page does not hard-code providers', () => {
+    const capText = fs.readFileSync(path.join(ROOT, 'app/dashboard/capabilities/page.js'), 'utf8')
+    expect(capText).not.toContain('Required env')
+    expect(capText).not.toContain('Backend key')
+    expect(capText).not.toContain('Backend route')
+    expect(capText).not.toContain('Live proof')
+    expect(capText).not.toContain('route_pending')
+    expect(capText).not.toContain('capability_missing')
+    expect(capText).not.toContain('live_proof_required')
+    expect(capText).not.toContain('Next action: wire')
+    expect(capText).toContain('Runtime selected')
+    expect(capText).toContain('Capability Library')
+    expect(capText).toContain('Developer matrix')
+  })
+
+  it('Settings page does not show hard-coded fallback order', () => {
+    const settingsText = fs.readFileSync(path.join(ROOT, 'app/dashboard/settings/page.js'), 'utf8')
+    expect(settingsText).not.toContain('Language: Groq')
+    expect(settingsText).not.toContain('Image: Together')
+    expect(settingsText).not.toContain('Video: GenX')
+    expect(settingsText).not.toContain('Voice: Groq')
+    expect(settingsText).not.toContain('Music: GenX')
+    expect(settingsText).toContain('Runtime selected')
+    expect(settingsText).toContain('Runtime Policy')
   })
 })
 
