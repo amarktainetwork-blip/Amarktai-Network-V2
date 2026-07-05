@@ -24,12 +24,14 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'chat', label: 'Chat', icon: MessageSquare },
       { v: 'code', label: 'Code / Reasoning', icon: Code2 },
+      { v: 'research', label: 'Research', icon: Globe },
     ],
   },
   {
     label: 'Image',
     items: [
       { v: 'image', label: 'Image generation', icon: ImageIcon },
+      { v: 'image-edit', label: 'Image editing', icon: ImageIcon },
     ],
   },
   {
@@ -37,6 +39,7 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'video', label: 'Short video', icon: Video },
       { v: 'longvideo', label: 'Long-form video', icon: Film },
+      { v: 'video-edit', label: 'Video edit / remix', icon: Video },
     ],
   },
   {
@@ -44,19 +47,38 @@ const CAPABILITY_GROUPS = [
     items: [
       { v: 'music', label: 'Music / Song', icon: Music },
       { v: 'voice', label: 'Voice / TTS', icon: Mic },
+      { v: 'voice-stt', label: 'Speech-to-text', icon: Mic },
     ],
   },
   {
     label: 'Avatar',
     items: [
       { v: 'avatar', label: 'Avatar generation', icon: User },
+      { v: 'talking-avatar', label: 'Talking avatar', icon: User },
+      { v: 'lip-sync', label: 'Lip-sync avatar', icon: User },
     ],
   },
   {
-    label: 'Brand & Knowledge',
+    label: 'Brand & Marketing',
     items: [
       { v: 'scrape', label: 'Website scrape / BrandPack', icon: Globe },
-      { v: 'rag', label: 'RAG / Knowledge', icon: Database },
+      { v: 'campaign', label: 'Campaign content', icon: Layers },
+      { v: 'social-reel', label: 'Social / reel pack', icon: Film },
+    ],
+  },
+  {
+    label: 'Knowledge',
+    items: [
+      { v: 'rag', label: 'RAG ingest', icon: Database },
+      { v: 'rag-search', label: 'RAG search', icon: Database },
+    ],
+  },
+  {
+    label: 'Apps & Agents',
+    items: [
+      { v: 'app-request', label: 'App request', icon: Zap },
+      { v: 'agent-task', label: 'Agent task', icon: Layers },
+      { v: 'workflow', label: 'Workflow automation', icon: Wrench },
     ],
   },
   {
@@ -71,45 +93,99 @@ function CapabilitySelector({ value, onChange }) {
   const allItems = CAPABILITY_GROUPS.flatMap((g) => g.items)
   const current = allItems.find((item) => item.v === value) || allItems[0]
   const Icon = current.icon
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const filteredGroups = CAPABILITY_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) =>
+      item.label.toLowerCase().includes(search.toLowerCase()) ||
+      group.label.toLowerCase().includes(search.toLowerCase())
+    ),
+  })).filter((group) => group.items.length > 0)
 
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-9 w-auto min-w-[180px] gap-2 border-white/[0.08] bg-white/[0.04] text-xs">
-        <Icon className="h-3.5 w-3.5 text-cyan-400" />
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {CAPABILITY_GROUPS.map((group) => (
-          <div key={group.label}>
-            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</div>
-            {group.items.map((item) => (
-              <SelectItem key={item.v} value={item.v}>
-                <div className="flex items-center gap-2">
-                  <item.icon className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>{item.label}</span>
-                </div>
-              </SelectItem>
-            ))}
+    <div className="relative">
+      <Select value={value} onOpenChange={setOpen} onValueChange={(v) => { onChange(v); setSearch('') }}>
+        <SelectTrigger className="h-9 w-auto min-w-[200px] gap-2 border-white/[0.08] bg-white/[0.04] text-xs">
+          <Icon className="h-3.5 w-3.5 text-cyan-400" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-[400px]">
+          <div className="sticky top-0 z-10 border-b border-white/[0.06] bg-[hsl(240_14%_4%)] px-2 py-1.5">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search capabilities..."
+              className="h-7 border-0 bg-white/[0.04] text-xs focus-visible:ring-0"
+              onKeyDown={(e) => e.stopPropagation()}
+            />
           </div>
-        ))}
-      </SelectContent>
-    </Select>
+          {filteredGroups.map((group) => (
+            <div key={group.label}>
+              <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</div>
+              {group.items.map((item) => (
+                <SelectItem key={item.v} value={item.v}>
+                  <div className="flex items-center gap-2">
+                    <item.icon className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>{item.label}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </div>
+          ))}
+          {filteredGroups.length === 0 && (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground">No capabilities found</div>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }
 
 // ─── Mode metadata ──────────────────────────────────────────────
+// Maps UI mode keys to backend capabilities and labels.
+// Modes that share a schema reuse the same capability key.
 const MODE_META = {
   chat: { capability: 'text.chat', label: 'Chat' },
+  code: { capability: 'text.code', label: 'Code / Reasoning' },
+  research: { capability: 'text.chat', label: 'Research' },
   image: { capability: 'image.generate', label: 'Image generation' },
+  'image-edit': { capability: 'image.edit', label: 'Image editing' },
   video: { capability: 'video.generate', label: 'Short video' },
   longvideo: { capability: 'video.longform', label: 'Long-form video' },
+  'video-edit': { capability: 'video.generate', label: 'Video edit / remix' },
   music: { capability: 'music.generate', label: 'Music / Song' },
   voice: { capability: 'voice.tts', label: 'Voice / TTS' },
+  'voice-stt': { capability: 'voice.stt', label: 'Speech-to-text' },
   avatar: { capability: 'avatar.generate', label: 'Avatar generation' },
+  'talking-avatar': { capability: 'avatar.generate', label: 'Talking avatar' },
+  'lip-sync': { capability: 'avatar.generate', label: 'Lip-sync avatar' },
   scrape: { capability: 'scrape.crawl', label: 'Website scrape' },
-  rag: { capability: 'rag.ingest', label: 'RAG / Knowledge' },
-  code: { capability: 'text.code', label: 'Code / Reasoning' },
+  campaign: { capability: 'image.generate', label: 'Campaign content' },
+  'social-reel': { capability: 'video.generate', label: 'Social / reel pack' },
+  rag: { capability: 'rag.ingest', label: 'RAG ingest' },
+  'rag-search': { capability: 'rag.query', label: 'RAG search' },
+  'app-request': { capability: 'text.chat', label: 'App request' },
+  'agent-task': { capability: 'text.chat', label: 'Agent task' },
+  workflow: { capability: 'text.chat', label: 'Workflow automation' },
   uncensored: { capability: 'uncensored.text', label: 'DeepInfra gated', gated: true },
+}
+
+// Modes that share a schema should use the schema of the primary mode
+const SCHEMA_MAP = {
+  'image-edit': 'image',
+  'video-edit': 'video',
+  'voice-stt': 'voice',
+  'talking-avatar': 'avatar',
+  'lip-sync': 'avatar',
+  campaign: 'image',
+  'social-reel': 'video',
+  'rag-search': 'rag',
+  research: 'chat',
+  'app-request': 'chat',
+  'agent-task': 'chat',
+  workflow: 'chat',
 }
 
 // ─── Director Block ─────────────────────────────────────────────
@@ -196,7 +272,8 @@ function DirectorBlock({ mode, onModeChange }) {
 function OptionsBlock({ mode, uxMode }) {
   const [activeTab, setActiveTab] = useState('options')
   const meta = MODE_META[mode]
-  const schema = CAPABILITY_SCHEMAS[mode] || {}
+  const schemaKey = SCHEMA_MAP[mode] || mode
+  const schema = CAPABILITY_SCHEMAS[schemaKey] || {}
   const backend = getBackendCapability(meta.capability)
   const [values, setValues] = useState({})
 
@@ -239,7 +316,7 @@ function OptionsBlock({ mode, uxMode }) {
         {/* Options tab */}
         {activeTab === 'options' && (
           <div className="p-4">
-            <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={mode} />
+            <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={schemaKey} />
           </div>
         )}
 
