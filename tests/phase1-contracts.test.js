@@ -152,51 +152,153 @@ describe('Prompt 2 dashboard frontend contracts', () => {
     expect(layoutText).toContain('overflow-hidden')
   })
 
-  it('Studio has responsive internal panel tabs for overflow-safe layout', () => {
-    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-
-    // Must have segmented tab buttons for mobile/tablet
-    expect(studioText).toContain('controlTab')
-    expect(studioText).toContain('setControlTab')
-    // Must have tab labels for Command, Controls, Inspector
-    expect(studioText).toContain("'command'")
-    expect(studioText).toContain("'controls'")
-    expect(studioText).toContain("'inspector'")
-    // Tabs must be hidden on xl+ where all panels show side-by-side
-    expect(studioText).toContain('xl:hidden')
-    // Panels must be conditionally hidden/shown based on active tab
-    expect(studioText).toContain('hidden xl:flex')
-    expect(studioText).toContain('hidden xl:block')
-    // Control area must use min(dvh) not fixed px to avoid clipping
-    expect(studioText).toContain("min(360px, 40dvh)")
+  it('dashboard index redirects to Studio', () => {
+    const pageIndex = fs.readFileSync(path.join(ROOT, 'app/dashboard/page.js'), 'utf8')
+    expect(pageIndex).toContain("redirect('/dashboard/studio')")
   })
 
-  it('Studio includes the backend-pending preview message', () => {
+  it('Studio uses grouped capability selector instead of icon rail', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
 
-    expect(studioText).toContain('Backend integration pending.')
-    expect(studioText).toContain('Real previews appear after /api/v1 jobs and artifacts are wired.')
+    expect(studioText).toContain('CapabilitySelector')
+    expect(studioText).toContain('CAPABILITY_GROUPS')
+    expect(studioText).toContain('DirectorBlock')
+    expect(studioText).toContain('OptionsBlock')
+    expect(studioText).not.toContain("provider: 'groq'")
+    expect(studioText).not.toContain("provider: 'together'")
+    expect(studioText).not.toContain("provider: 'genx'")
+    expect(studioText).not.toContain("provider: 'mimo'")
   })
 
-  it('music schema includes required Prompt 2 genres', () => {
+  it('Studio has two-block layout (Director + Options)', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+
+    expect(studioText).toContain('lg:grid-cols-')
+    expect(studioText).toContain('DirectorBlock')
+    expect(studioText).toContain('OptionsBlock')
+    expect(studioText).toContain('Accordion')
+    expect(studioText).toContain('Backend contract')
+    expect(studioText).toContain('Provider routing')
+    expect(studioText).toContain('Artifact & proof status')
+  })
+
+  it('every final Studio selector label appears in page', () => {
+    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
+    const labels = [
+      'Chat', 'Reasoning', 'Code', 'Research',
+      'Image generation', 'Image editing',
+      'Short video', 'Long-form video', 'Image-to-video', 'Video edit / remix',
+      'Music / Song', 'Voice / TTS', 'Speech-to-text',
+      'Avatar generation', 'Talking avatar', 'Lip-sync avatar',
+      'Website scrape / BrandPack', 'Campaign content', 'Social / reel pack',
+      'RAG ingest', 'RAG search',
+      'App request', 'Agent task', 'Workflow automation',
+      'DeepInfra gated text',
+    ]
+    for (const label of labels) {
+      expect(studioText, `Missing selector label: ${label}`).toContain(label)
+    }
+  })
+
+  it('every schema key required by the selector exists', () => {
+    // These keys must exist directly in CAPABILITY_SCHEMAS
+    const directSchemaKeys = [
+      'chat', 'reasoning', 'code', 'research',
+      'image', 'video', 'longvideo',
+      'image_to_video', 'video_edit',
+      'music', 'voice',
+      'avatar',
+      'scrape', 'campaign', 'social_reel',
+      'rag', 'rag_search',
+      'app_request', 'agent_task', 'workflow',
+      'uncensored',
+    ]
+    for (const key of directSchemaKeys) {
+      expect(CAPABILITY_SCHEMAS[key], `Schema missing for ${key}`).toBeDefined()
+    }
+    // These modes share schemas via SCHEMA_MAP - verify the target schema exists
+    const sharedSchemaTargets = {
+      image_edit: 'image',
+      voice_stt: 'voice',
+      talking_avatar: 'avatar',
+      lip_sync: 'avatar',
+    }
+    for (const [mode, targetSchema] of Object.entries(sharedSchemaTargets)) {
+      expect(CAPABILITY_SCHEMAS[targetSchema], `Shared schema target ${targetSchema} missing for ${mode}`).toBeDefined()
+    }
+  })
+
+  it('music schema includes required genres and controls', () => {
     const genreOptions = CAPABILITY_SCHEMAS.music.genre.options
-
     for (const genre of REQUIRED_MUSIC_GENRES) {
       expect(genreOptions).toContain(genre)
     }
+    expect(CAPABILITY_SCHEMAS.music.describe_song).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.lyrics).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.instrumental_only).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.genre).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.vocal_style).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.instrumentation).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.tempo_bpm).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.target_duration).toBeDefined()
+    expect(CAPABILITY_SCHEMAS.music.reference_track).toBeDefined()
+  })
+
+  it('long-form video schema includes required controls', () => {
+    const lv = CAPABILITY_SCHEMAS.longvideo
+    expect(lv.source).toBeDefined()
+    expect(lv.script_input).toBeDefined()
+    expect(lv.target_duration).toBeDefined()
+    expect(lv.scene_count).toBeDefined()
+    expect(lv.scene_cards).toBeDefined()
+    expect(lv.subtitles).toBeDefined()
+    expect(lv.cutdown_pack).toBeDefined()
+    expect(lv.export_format).toBeDefined()
+  })
+
+  it('image-to-video schema includes required controls', () => {
+    const i2v = CAPABILITY_SCHEMAS.image_to_video
+    expect(i2v.source_image).toBeDefined()
+    expect(i2v.first_frame).toBeDefined()
+    expect(i2v.motion_strength).toBeDefined()
+    expect(i2v.camera_movement).toBeDefined()
+    expect(i2v.duration).toBeDefined()
+    expect(i2v.prompt).toBeDefined()
+  })
+
+  it('campaign schema includes required controls', () => {
+    const camp = CAPABILITY_SCHEMAS.campaign
+    expect(camp.brand_product).toBeDefined()
+    expect(camp.target_audience).toBeDefined()
+    expect(camp.platforms).toBeDefined()
+    expect(camp.campaign_objective).toBeDefined()
+    expect(camp.offer_cta).toBeDefined()
+    expect(camp.variants).toBeDefined()
+  })
+
+  it('agent_task schema includes required controls', () => {
+    const agent = CAPABILITY_SCHEMAS.agent_task
+    expect(agent.task_directive).toBeDefined()
+    expect(agent.allowed_tools).toBeDefined()
+    expect(agent.memory_access).toBeDefined()
+    expect(agent.brand_access).toBeDefined()
+    expect(agent.app_scope).toBeDefined()
+    expect(agent.approval_required).toBeDefined()
+  })
+
+  it('workflow schema includes required controls', () => {
+    const wf = CAPABILITY_SCHEMAS.workflow
+    expect(wf.trigger_type).toBeDefined()
+    expect(wf.steps).toBeDefined()
+    expect(wf.approval_gates).toBeDefined()
+    expect(wf.schedule).toBeDefined()
+    expect(wf.success_criteria).toBeDefined()
+    expect(wf.rollback_notes).toBeDefined()
   })
 
   it('voice schema includes South African accent', () => {
     const accentOptions = CAPABILITY_SCHEMAS.voice.accent.options
     expect(accentOptions).toContain('South African')
-  })
-
-  it('every Studio mode has a matching capability schema', () => {
-    const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-    const modes = ['chat', 'image', 'video', 'longvideo', 'music', 'voice', 'avatar', 'scrape', 'rag', 'code', 'uncensored']
-    for (const mode of modes) {
-      expect(CAPABILITY_SCHEMAS[mode], `Schema missing for ${mode}`).toBeDefined()
-    }
   })
 
   it('uncensored Studio mode is DeepInfra-only and gated backend pending', () => {
@@ -205,10 +307,26 @@ describe('Prompt 2 dashboard frontend contracts', () => {
 
     expect(uncensored.provider.options).toEqual(['DeepInfra gated lane'])
     expect(uncensored.backend_gating.options).toEqual(['gated_backend_pending'])
-    expect(studioText).toContain("provider: 'deepinfra'")
+    expect(studioText).toContain('DeepInfra gated')
     expect(studioText).toContain('gated: true')
-    expect(studioText).not.toContain("provider: 'groq', gated: true")
-    expect(studioText).not.toContain("provider: 'mimo', gated: true")
+  })
+
+  it('DynamicFormRenderer hides Backend Pending groups by default', () => {
+    const rendererText = fs.readFileSync(path.join(ROOT, 'components/amarkt/DynamicFormRenderer.jsx'), 'utf8')
+    expect(rendererText).toContain('BACKEND_PENDING_GROUPS')
+    expect(rendererText).toContain('Backend Pending')
+    expect(rendererText).toContain('Advanced & Backend Details')
+  })
+
+  it('capability map has frontend-planned entries for new modes', () => {
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.image_to_video']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.edit']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['campaign.generate']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['social.reel_pack']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['app.request']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['agent.task']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['workflow.automation']).toMatchObject({ missing: true })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['research']).toMatchObject({ missing: true })
   })
 
   it('active UI code does not use old proof-risk wording', () => {
