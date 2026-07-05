@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import {
   MessageSquare, Image as ImageIcon, Video, Film, Music, Mic, User, Globe, Database,
-  Send, Zap, Code2, ShieldAlert, ChevronDown, Settings, Paperclip, Wrench, Eye, Package, Layers,
+  Send, Zap, Code2, ShieldAlert, ChevronDown, Settings, Paperclip, Wrench, Eye, Package, Layers, Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -282,8 +282,58 @@ function OptionsBlock({ mode, uxMode }) {
     { key: 'options', label: 'Options', icon: Settings },
     { key: 'preview', label: 'Preview', icon: Eye },
     { key: 'assets', label: 'Assets', icon: Package },
-    { key: 'advanced', label: 'Advanced', icon: Wrench },
+    { key: 'advanced', label: 'Developer', icon: Wrench },
   ]
+
+  // Capability-specific labels
+  const PREVIEW_LABELS = {
+    music: 'Song preview will appear here',
+    voice: 'Voice preview will appear here',
+    video: 'Video/storyboard preview will appear here',
+    longvideo: 'Storyboard preview will appear here',
+    image_to_video: 'Video preview will appear here',
+    video_edit: 'Edited video preview will appear here',
+    image: 'Image canvas will appear here',
+    image_edit: 'Edited image preview will appear here',
+    avatar: 'Avatar preview will appear here',
+    talking_avatar: 'Talking avatar preview will appear here',
+    lip_sync: 'Lip-sync preview will appear here',
+    app_request: 'App request preview will appear here',
+    agent_task: 'Agent task plan will appear here',
+    workflow: 'Workflow diagram will appear here',
+    scrape: 'BrandPack preview will appear here',
+    campaign: 'Campaign pack preview will appear here',
+    social_reel: 'Reel pack preview will appear here',
+    rag: 'Knowledge base preview will appear here',
+    rag_search: 'Search results will appear here',
+    research: 'Research report will appear here',
+    code: 'Code output will appear here',
+    reasoning: 'Reasoning output will appear here',
+  }
+  const previewLabel = PREVIEW_LABELS[mode] || 'Output preview will appear here'
+
+  const ASSETS_LABELS = {
+    music: 'Reference tracks / stems',
+    voice: 'Voice clones / source audio',
+    video: 'Source clips / frames',
+    longvideo: 'Scripts / scene assets',
+    image_to_video: 'Source images / reference frames',
+    video_edit: 'Source video / assets',
+    image: 'References / brand assets',
+    image_edit: 'Source images / masks',
+    avatar: 'Avatar images / voice sources',
+    talking_avatar: 'Avatar images / voice sources',
+    lip_sync: 'Avatar images / audio tracks',
+    scrape: 'Brand assets / URLs',
+    campaign: 'Brand assets / product images',
+    social_reel: 'Brand assets / music',
+    rag: 'Documents / URLs',
+    rag_search: 'Knowledge sets',
+    research: 'Source references',
+    code: 'Repository context',
+    reasoning: 'Reference documents',
+  }
+  const assetsLabel = ASSETS_LABELS[mode] || 'Asset library'
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-white/[0.07] bg-white/[0.02]">
@@ -320,8 +370,9 @@ function OptionsBlock({ mode, uxMode }) {
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
                 <Eye className="h-6 w-6 opacity-20" />
               </div>
-              <p className="text-sm font-medium text-foreground">Preview area</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Output will appear here after backend integration.</p>
+              <p className="text-sm font-medium text-foreground">{previewLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Connect Studio to backend to see real output here.</p>
+              <Button disabled variant="outline" size="sm" className="mt-4 border-white/10 text-xs"><Lock className="mr-1 h-3 w-3" /> Backend connection required</Button>
             </div>
           </div>
         )}
@@ -333,8 +384,8 @@ function OptionsBlock({ mode, uxMode }) {
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]">
                 <Package className="h-6 w-6 opacity-20" />
               </div>
-              <p className="text-sm font-medium text-foreground">Asset library</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Generated assets will appear here after backend integration.</p>
+              <p className="text-sm font-medium text-foreground">{assetsLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Upload and manage assets for your {meta.label.toLowerCase()} creations.</p>
             </div>
           </div>
         )}
@@ -344,13 +395,13 @@ function OptionsBlock({ mode, uxMode }) {
           <div className="p-4">
             <Accordion type="multiple" className="space-y-2">
               <AccordionItem value="contract" className="rounded-lg border border-white/[0.06] px-4">
-                <AccordionTrigger className="text-xs py-3">Backend contract</AccordionTrigger>
+                <AccordionTrigger className="text-xs py-3">Developer contract</AccordionTrigger>
                 <AccordionContent>
                   <pre className="overflow-auto rounded-md bg-black/30 p-3 text-[10px] text-muted-foreground">{JSON.stringify(payload, null, 2)}</pre>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="provider" className="rounded-lg border border-white/[0.06] px-4">
-                <AccordionTrigger className="text-xs py-3">Provider routing</AccordionTrigger>
+                <AccordionTrigger className="text-xs py-3">Runtime routing</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-2 text-xs text-muted-foreground">
                     <div className="flex justify-between"><span>Backend key</span><span className="font-mono">{payload.backendKey}</span></div>
