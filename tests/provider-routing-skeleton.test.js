@@ -118,14 +118,15 @@ describe('Capability routing', () => {
     expect(decision.capability).toBe('chat')
   })
 
-  it('unknown capability is rejected', () => {
-    // isValidCapability check happens before routeProvider is called
-    // but routeProvider itself accepts any CapabilityKey
-    // The test proves the routing works for all valid capabilities
+  it('all canonical capabilities produce valid routing decisions', () => {
+    // Router accepts validated CapabilityKey only.
+    // Unknown capabilities are rejected by API/worker validation before routing.
+    // This test proves routing works across all canonical capabilities.
     for (const cap of CAPABILITY_KEYS) {
       const decision = routeProvider(cap)
       expect(decision.capability).toBe(cap)
       expect(decision.executionAllowed).toBe(false)
+      expect(decision.candidates.length).toBe(5)
     }
   })
 

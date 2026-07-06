@@ -11,7 +11,7 @@ This PR creates the internal routing decision layer that chooses eligible provid
 ## What Was Proven
 
 1. **Provider identity:** Only final provider IDs (genx, groq, together, mimo, deepinfra) are valid
-2. **Capability routing:** Valid capabilities get candidate lists; unknown capabilities are rejected
+2. **Capability routing:** All canonical capabilities produce valid routing decisions; unknown capabilities are rejected by API/worker validation before routing
 3. **Chat/text routing:** Routes to eligible text providers (groq, together, mimo)
 4. **Code/reasoning routing:** Routes to eligible text/code providers
 5. **Image/video/music/avatar routing:** Routes only if canonical capability exists
