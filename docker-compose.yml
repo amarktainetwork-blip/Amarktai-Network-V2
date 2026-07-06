@@ -35,7 +35,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     ports:
@@ -49,6 +49,8 @@ services:
       - amarktai
 
   # ── Qdrant ──────────────────────────────────────────────────
+  # Healthcheck removed: Qdrant image has no curl/wget.
+  # Real Qdrant readiness is verified by the API /health endpoint.
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
@@ -57,12 +59,6 @@ services:
     ports:
       - "6333:6333"
       - "6334:6334"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/healthz || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
     networks:
       - amarktai
 
@@ -138,6 +134,12 @@ services:
       API_URL: http://api:3001
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       api:
         condition: service_healthy
