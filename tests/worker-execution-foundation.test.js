@@ -360,8 +360,9 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('GenX')
-    expect(failedUpdate[0].data.error).not.toContain('genx')
+    // Error mentions provider as routing candidate, not as adapter call
+    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call Groq adapter', async () => {
@@ -372,8 +373,8 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('Groq')
-    expect(failedUpdate[0].data.error).not.toContain('groq')
+    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call Together adapter', async () => {
@@ -384,8 +385,8 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('Together')
-    expect(failedUpdate[0].data.error).not.toContain('together')
+    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call Mimo adapter', async () => {
@@ -396,8 +397,8 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('Mimo')
-    expect(failedUpdate[0].data.error).not.toContain('mimo')
+    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call DeepInfra adapter', async () => {
@@ -408,7 +409,7 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('DeepInfra')
-    expect(failedUpdate[0].data.error).not.toContain('deepinfra')
+    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 })

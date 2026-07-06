@@ -14,7 +14,7 @@
  */
 
 import { prisma } from '@amarktai/db'
-import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
+import { QUEUE_NAMES, isValidCapability, routeProvider, type CapabilityKey } from '@amarktai/core'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -57,13 +57,25 @@ export function validatePayload(payload: WorkerJobData): string | null {
 
 // ── Default execution placeholder ──────────────────────────────────────────────
 // This is the ONLY place provider execution would happen.
-// Phase 4 intentionally does NOT implement it.
+// Phase 5: Consults routing skeleton but does NOT execute providers.
 
-function defaultExecuteCapability(_payload: WorkerJobData): Promise<ProcessorResult> {
+function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  // Ask the router for a routing decision (no network calls)
+  const decision = routeProvider(payload.capability as CapabilityKey)
+
+  // Build a descriptive error that includes routing info
+  const providerInfo = decision.selectedProvider
+    ? `Selected provider: ${decision.selectedProvider}`
+    : `No provider selected: ${decision.blockReason ?? 'unknown'}`
+  const candidates = decision.candidates
+    .filter((c) => c.supported)
+    .map((c) => `${c.provider}(${c.configured ? 'configured' : 'missing-config'})`)
+    .join(', ')
+
   return Promise.resolve({
     success: false,
     status: 'failed',
-    error: 'Provider execution not implemented in this phase. Backend Phase 4 proves worker foundation only.',
+    error: `Provider execution not implemented. ${providerInfo}. Candidates: ${candidates || 'none'}. executionAllowed: false`,
   })
 }
 
