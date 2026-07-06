@@ -6,9 +6,11 @@
  */
 
 import { prisma } from '@amarktai/db'
+import { randomUUID } from 'node:crypto'
 import { getArtifactStorage } from './storage.js'
 import {
   isValidMimeForType,
+  type ArtifactRecord,
   type ArtifactType,
   type CreateArtifactInput,
 } from '@amarktai/core'
@@ -27,6 +29,10 @@ export interface SavedArtifact {
   storageUrl: string
   mimeType: string
   fileSizeBytes: number
+}
+
+export function getArtifactPublicUrl(artifactId: string): string {
+  return `/api/v1/artifacts/${artifactId}/file`
 }
 
 // ── Save Artifact ─────────────────────────────────────────────────────────────
@@ -52,9 +58,13 @@ export async function saveArtifact(opts: SaveArtifactOptions): Promise<SavedArti
     )
   }
 
-  // Write to database
+  // Write to database. Pre-generating the ID keeps storageUrl aligned with the
+  // artifact-ID route without exposing the internal storage key.
+  const artifactId = randomUUID()
+  const storageUrl = getArtifactPublicUrl(artifactId)
   const artifact = await prisma.artifact.create({
     data: {
+      id: artifactId,
       appSlug: input.appSlug,
       type: input.type,
       subType: input.subType,
@@ -65,7 +75,7 @@ export async function saveArtifact(opts: SaveArtifactOptions): Promise<SavedArti
       traceId: input.traceId,
       storageDriver: 'local_vps',
       storagePath: result.storagePath,
-      storageUrl: result.storageUrl,
+      storageUrl,
       mimeType: finalMime,
       fileSizeBytes: result.fileSizeBytes,
       previewable: isPreviewable(finalMime),
@@ -85,6 +95,10 @@ export async function saveArtifact(opts: SaveArtifactOptions): Promise<SavedArti
 }
 
 // ── Get Artifact File ─────────────────────────────────────────────────────────
+
+export async function getArtifactRecord(artifactId: string): Promise<ArtifactRecord | null> {
+  return prisma.artifact.findUnique({ where: { id: artifactId } })
+}
 
 export async function getArtifactFile(artifactId: string): Promise<{
   buffer: Buffer

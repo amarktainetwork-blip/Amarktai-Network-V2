@@ -19,7 +19,6 @@ import {
 
 export interface StoragePutResult {
   storagePath: string
-  storageUrl: string
   mimeType: string
   fileSizeBytes: number
 }
@@ -39,10 +38,6 @@ function assertInsideBase(basePath: string, key: string): string {
     throw new Error('Path traversal detected')
   }
   return resolved
-}
-
-function encodeStorageKey(key: string): string {
-  return key.split('/').map(encodeURIComponent).join('/')
 }
 
 // ── Storage Driver ────────────────────────────────────────────────────────────
@@ -73,7 +68,6 @@ export class ArtifactStorageDriver {
 
     return {
       storagePath: key,
-      storageUrl: `/api/v1/artifacts/${encodeStorageKey(key)}/file`,
       mimeType: detectedMime,
       fileSizeBytes: stat.size,
     }
