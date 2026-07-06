@@ -1,16 +1,89 @@
 /**
- * Provider executor — routes execution to the correct provider client.
+ * Provider executor - routes execution to implemented provider clients.
  *
- * Phase 6A: Only Groq chat is implemented.
+ * Phase 6B: Groq chat and Together image_generation are implemented.
  * All other capabilities return "not implemented".
  *
- * This module is the ONLY place that calls provider APIs.
+ * This module is the only active worker path that calls provider APIs.
  */
 
-import { routeProvider, type CapabilityKey } from '@amarktai/core'
+import {
+  TOGETHER_DEFAULT_IMAGE_MODEL,
+  routeProvider,
+  type CapabilityKey,
+  type ProviderKey,
+} from '@amarktai/core'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
-// ── Groq chat execution ───────────────────────────────────────────────────────
+// Temporary proof gate for live-capable paths. This is not final Brain routing:
+// future selection must remain internal and dynamic across health, cost,
+// latency, quality, safety, budget, fallback, and subtask requirements.
+const EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {
+  chat: 'groq',
+  image_generation: 'together',
+}
+
+function getImplementedProvider(capability: CapabilityKey): ProviderKey | null {
+  return EXECUTION_SUPPORT[capability] ?? null
+}
+
+function canExecuteImplementedProvider(
+  capability: CapabilityKey,
+  provider: ProviderKey,
+): { allowed: boolean; reason: string | null } {
+  const decision = routeProvider(capability)
+  const candidate = decision.candidates.find((item) => item.provider === provider)
+
+  if (!candidate?.supported) {
+    return {
+      allowed: false,
+      reason: `${provider} does not support capability '${capability}'`,
+    }
+  }
+
+  if (candidate.gated) {
+    return {
+      allowed: false,
+      reason: `${provider} is gated for capability '${capability}'`,
+    }
+  }
+
+  if (!candidate.configured) {
+    return {
+      allowed: false,
+      reason: `${provider} config missing for capability '${capability}'`,
+    }
+  }
+
+  return { allowed: true, reason: null }
+}
+
+function formatSupportedCandidates(capability: CapabilityKey): string {
+  return routeProvider(capability).candidates
+    .filter((candidate) => candidate.supported)
+    .map((candidate) => `${candidate.provider}(${candidate.configured ? 'configured' : 'missing-config'})`)
+    .join(', ') || 'none'
+}
+
+function redactProviderSecrets(message: string): string {
+  let safe = message
+  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY]) {
+    if (key) {
+      safe = safe.split(key).join('[redacted]')
+    }
+  }
+  return safe
+}
+
+function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = input?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function readString(input: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = input?.[key]
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
 
 async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
   const { groqChat } = await import('@amarktai/providers')
@@ -40,33 +113,129 @@ async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult>
     return {
       success: false,
       status: 'failed',
-      error: `Groq execution failed: ${message}`,
+      error: `Groq execution failed: ${redactProviderSecrets(message)}`,
     }
   }
 }
 
-// ── Provider executor ─────────────────────────────────────────────────────────
+async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorResult> {
+  const { togetherGenerateImage } = await import('@amarktai/providers')
+  const { saveArtifact } = await import('@amarktai/artifacts')
+
+  try {
+    const result = await togetherGenerateImage({
+      prompt: payload.prompt,
+      model: TOGETHER_DEFAULT_IMAGE_MODEL,
+      width: readNumber(payload.input, 'width'),
+      height: readNumber(payload.input, 'height'),
+      steps: readNumber(payload.input, 'steps'),
+      seed: readNumber(payload.input, 'seed'),
+      negativePrompt: readString(payload.input, 'negativePrompt'),
+      n: 1,
+    })
+
+    const image = result.images[0]
+    if (!image?.buffer || image.buffer.length === 0) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'Together returned empty image data',
+      }
+    }
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug,
+        type: 'image',
+        subType: 'image_generation',
+        title: `image_generation output for ${payload.appSlug}`,
+        description: 'Together image_generation artifact',
+        provider: 'together',
+        model: result.model,
+        traceId: payload.traceId,
+        mimeType: image.mimeType,
+        metadata: {
+          capability: 'image_generation',
+          provider: 'together',
+          model: result.model,
+          width: image.width,
+          height: image.height,
+          usage: result.usage,
+        },
+      },
+      data: image.buffer,
+      explicitMimeType: image.mimeType,
+    })
+
+    const output = {
+      artifactId: artifact.id,
+      artifactUrl: artifact.storageUrl,
+      mimeType: artifact.mimeType,
+      fileSizeBytes: artifact.fileSizeBytes,
+      width: image.width,
+      height: image.height,
+    }
+
+    return {
+      success: true,
+      status: 'completed',
+      provider: 'together',
+      model: result.model,
+      artifactId: artifact.id,
+      output: JSON.stringify(output),
+      metadata: output,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown Together error'
+    return {
+      success: false,
+      status: 'failed',
+      error: `Together execution failed: ${redactProviderSecrets(message)}`,
+    }
+  }
+}
 
 export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
-  const decision = routeProvider(payload.capability as CapabilityKey)
+  const capability = payload.capability as CapabilityKey
+  const implementedProvider = getImplementedProvider(capability)
 
-  // Only groq + chat is implemented in Phase 6A
-  if (decision.selectedProvider === 'groq' && payload.capability === 'chat') {
+  if (!implementedProvider) {
+    const decision = routeProvider(capability)
+    const providerInfo = decision.selectedProvider
+      ? `Selected provider: ${decision.selectedProvider}`
+      : `No provider selected: ${decision.blockReason ?? 'unknown'}`
+    const candidates = decision.candidates
+      .filter((c) => c.supported)
+      .map((c) => `${c.provider}(${c.configured ? 'configured' : 'missing-config'})`)
+      .join(', ')
+
+    return {
+      success: false,
+      status: 'failed',
+      error: `Provider execution not implemented for '${payload.capability}'. ${providerInfo}. Candidates: ${candidates || 'none'}. executionAllowed: false`,
+    }
+  }
+
+  const gate = canExecuteImplementedProvider(capability, implementedProvider)
+  if (!gate.allowed) {
+    return {
+      success: false,
+      status: 'failed',
+      error: `Provider execution not implemented or blocked for '${payload.capability}'. ${gate.reason}. Candidates: ${formatSupportedCandidates(capability)}. executionAllowed: false`,
+    }
+  }
+
+  if (implementedProvider === 'groq' && capability === 'chat') {
     return executeGroqChat(payload)
   }
 
-  // All other provider/capability combinations are not implemented
-  const providerInfo = decision.selectedProvider
-    ? `Selected provider: ${decision.selectedProvider}`
-    : `No provider selected: ${decision.blockReason ?? 'unknown'}`
-  const candidates = decision.candidates
-    .filter((c) => c.supported)
-    .map((c) => `${c.provider}(${c.configured ? 'configured' : 'missing-config'})`)
-    .join(', ')
+  if (implementedProvider === 'together' && capability === 'image_generation') {
+    return executeTogetherImage(payload)
+  }
 
   return {
     success: false,
     status: 'failed',
-    error: `Provider execution not implemented for '${payload.capability}'. ${providerInfo}. Candidates: ${candidates || 'none'}. executionAllowed: false`,
+    error: `Provider execution not implemented for '${payload.capability}'. executionAllowed: false`,
   }
 }

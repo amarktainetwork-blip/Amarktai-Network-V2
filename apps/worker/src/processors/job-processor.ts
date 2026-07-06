@@ -36,6 +36,8 @@ export interface ProcessorResult {
   output?: string
   provider?: string
   model?: string
+  artifactId?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ProcessorDeps {
@@ -111,16 +113,32 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
+        const completedData: {
+          status: string
+          provider: string | null
+          model: string | null
+          output: string | null
+          progress: number
+          completedAt: Date
+          error: null
+          artifactId?: string
+        } = {
+          status: 'completed',
+          provider: result.provider ?? null,
+          model: result.model ?? null,
+          output: result.output ?? null,
+          progress: 100,
+          completedAt: new Date(),
+          error: null,
+        }
+
+        if (result.artifactId) {
+          completedData.artifactId = result.artifactId
+        }
+
         await prisma.job.update({
           where: { id: jobId },
-          data: {
-            status: 'completed',
-            provider: result.provider ?? null,
-            model: result.model ?? null,
-            output: result.output ?? null,
-            progress: 100,
-            completedAt: new Date(),
-          },
+          data: completedData,
         })
         return result
       }
