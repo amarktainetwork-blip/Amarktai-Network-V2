@@ -2,7 +2,7 @@
 
 Branch: `fix/secure-artifact-urls-ownership`
 PR URL: https://github.com/amarktainetwork-blip/Amarktai-Network-V2/pull/24
-Implementation commit opened as: `5c8432c0eeecab9b7552a85377a09ef9b6d13035`
+Implementation commit opened as: `c8729a3ccc32d138dd5f571fa5ff83e0f4f846c1`
 
 This PR secures and aligns artifact retrieval only. It does not add provider execution, Studio job submission, artifact generation behavior, or new capabilities.
 
