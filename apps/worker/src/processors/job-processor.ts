@@ -14,7 +14,7 @@
  */
 
 import { prisma } from '@amarktai/db'
-import { QUEUE_NAMES, isValidCapability, routeProvider, type CapabilityKey } from '@amarktai/core'
+import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,9 @@ export interface ProcessorResult {
   success: boolean
   status: 'completed' | 'failed'
   error?: string
+  output?: string
+  provider?: string
+  model?: string
 }
 
 export interface ProcessorDeps {
@@ -55,28 +58,12 @@ export function validatePayload(payload: WorkerJobData): string | null {
   return null
 }
 
-// ── Default execution placeholder ──────────────────────────────────────────────
-// This is the ONLY place provider execution would happen.
-// Phase 5: Consults routing skeleton but does NOT execute providers.
+// ── Default execution — delegates to provider executor ────────────────────────
+// Phase 6A: Only Groq chat executes. All other capabilities return not-implemented.
 
-function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
-  // Ask the router for a routing decision (no network calls)
-  const decision = routeProvider(payload.capability as CapabilityKey)
-
-  // Build a descriptive error that includes routing info
-  const providerInfo = decision.selectedProvider
-    ? `Selected provider: ${decision.selectedProvider}`
-    : `No provider selected: ${decision.blockReason ?? 'unknown'}`
-  const candidates = decision.candidates
-    .filter((c) => c.supported)
-    .map((c) => `${c.provider}(${c.configured ? 'configured' : 'missing-config'})`)
-    .join(', ')
-
-  return Promise.resolve({
-    success: false,
-    status: 'failed',
-    error: `Provider execution not implemented. ${providerInfo}. Candidates: ${candidates || 'none'}. executionAllowed: false`,
-  })
+async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  const { executeWithProvider } = await import('../providers/provider-executor.js')
+  return executeWithProvider(payload)
 }
 
 // ── Job processor factory ──────────────────────────────────────────────────────
@@ -124,12 +111,13 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
-        // This branch should NOT be reached in Phase 4
-        // because defaultExecuteCapability always returns success: false
         await prisma.job.update({
           where: { id: jobId },
           data: {
             status: 'completed',
+            provider: result.provider ?? null,
+            model: result.model ?? null,
+            output: result.output ?? null,
             progress: 100,
             completedAt: new Date(),
           },
