@@ -2,7 +2,7 @@
 
 Branch: `fix/backend-workspace-build-contracts`
 PR URL: https://github.com/amarktainetwork-blip/Amarktai-Network-V2/pull/23
-Implementation commit opened as: `ec2a625995a76d1327934220f01a7b2712a002fe`
+Implementation commit opened as: `4012e821724d3ca501620fc881485f12674dc4bb`
 
 This PR makes the existing backend compile and validate. It does not add provider execution, Studio job submission, artifact delivery changes, or new capability behavior.
 
