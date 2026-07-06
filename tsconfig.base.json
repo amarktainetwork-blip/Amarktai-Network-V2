@@ -3,6 +3,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@amarktai/core": ["packages/core/src/index.ts"],
+      "@amarktai/db": ["packages/db/src/index.ts"],
+      "@amarktai/providers": ["packages/providers/src/index.ts"],
+      "@amarktai/artifacts": ["packages/artifacts/src/index.ts"]
+    },
     "lib": ["ES2022"],
     "strict": true,
     "esModuleInterop": true,
@@ -10,6 +17,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

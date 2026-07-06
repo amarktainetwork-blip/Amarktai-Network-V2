@@ -12,9 +12,9 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "dev": "tsc --watch",
-    "lint": "tsc --noEmit"
+    "lint": "tsc -b --noEmit"
   },
   "dependencies": {
     "@amarktai/core": "*",
