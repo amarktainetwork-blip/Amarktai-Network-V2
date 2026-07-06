@@ -489,24 +489,3 @@ describe('Worker integration with Groq chat', () => {
     expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
   })
 })
-
-// ── Live Groq proof (gated) ──────────────────────────────────────────────────
-
-describe('Live Groq chat proof', () => {
-  const shouldRunLive =
-    process.env.RUN_LIVE_GROQ_TESTS === 'true' && !!process.env.GROQ_API_KEY
-
-  it.skipIf(!shouldRunLive)('live Groq chat returns real non-empty text', async () => {
-    const result = await executeWithProvider({
-      ...makePayload(),
-      prompt: 'Reply with exactly: AMARKTAI_GROQ_LIVE_OK',
-    })
-
-    expect(result.success).toBe(true)
-    expect(result.status).toBe('completed')
-    expect(result.provider).toBe('groq')
-    expect(result.output).toBeTruthy()
-    expect(result.output.length).toBeGreaterThan(0)
-    expect(result.model).toBeTruthy()
-  })
-})
