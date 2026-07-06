@@ -85,6 +85,23 @@ describe('Stored-key live proof contract', () => {
     expect(capability).toBe('image_generation')
   })
 
+  it('Together stored-key proof resolves image model from DB defaultModel or TOGETHER_IMAGE_MODEL', async () => {
+    const { resolveTogetherImageModel } = await import('@amarktai/providers')
+    const originalTogetherImageModel = process.env.TOGETHER_IMAGE_MODEL
+    try {
+      process.env.TOGETHER_IMAGE_MODEL = 'env-image-model'
+
+      expect(resolveTogetherImageModel({ providerDefaultModel: 'db-image-model' })).toBe('db-image-model')
+      expect(resolveTogetherImageModel()).toBe('env-image-model')
+    } finally {
+      if (originalTogetherImageModel === undefined) {
+        delete process.env.TOGETHER_IMAGE_MODEL
+      } else {
+        process.env.TOGETHER_IMAGE_MODEL = originalTogetherImageModel
+      }
+    }
+  })
+
   it('no GenX/Mimo/DeepInfra execution is invoked', async () => {
     const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
     // These capabilities should return not-implemented
@@ -147,11 +164,12 @@ describe.skipIf(!canRunLive)('Stored-key Groq chat live proof', () => {
 
 describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
   it('resolves stored Together key from DB and generates image buffer', async () => {
-    const { resolveProviderApiKey } = await import('@amarktai/db')
+    const { getProviderCredentialStatus, resolveProviderApiKey } = await import('@amarktai/db')
     const { togetherGenerateImage } = await import('@amarktai/providers')
 
     // Resolve key from DB
     const credential = await resolveProviderApiKey('together')
+    const providerStatus = await getProviderCredentialStatus('together')
     expect(credential.source).toBe('database')
     expect(credential.apiKey).toBeTruthy()
     expect(credential.apiKey.length).toBeGreaterThan(0)
@@ -160,6 +178,7 @@ describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
     const result = await togetherGenerateImage({
       prompt: 'A simple blue circle on a white background, minimal icon style',
       apiKey: credential.apiKey,
+      providerDefaultModel: providerStatus.defaultModel,
       n: 1,
     })
 

@@ -7,8 +7,8 @@
 
 import {
   getTogetherApiKey,
+  getTogetherImageModel,
   TOGETHER_BASE_URL,
-  TOGETHER_DEFAULT_IMAGE_MODEL,
 } from '@amarktai/core'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ export interface TogetherImageRequest {
   prompt: string
   apiKey?: string
   model?: string
+  providerDefaultModel?: string
   width?: number
   height?: number
   steps?: number
@@ -37,13 +38,28 @@ export interface TogetherImageResponse {
   usage: { promptTokens: number; completionTokens: number; totalTokens: number }
 }
 
+export function resolveTogetherImageModel(
+  request: Pick<TogetherImageRequest, 'model' | 'providerDefaultModel'> = {},
+): string {
+  const model =
+    request.model?.trim()
+    || request.providerDefaultModel?.trim()
+    || getTogetherImageModel()
+
+  if (!model) {
+    throw new Error('Together image model is not configured. Set request.model, the Together provider defaultModel, or TOGETHER_IMAGE_MODEL to a serverless-accessible Together image model.')
+  }
+
+  return model
+}
+
 // ── Image Generation ──────────────────────────────────────────────────────────
 
 export async function togetherGenerateImage(
   request: TogetherImageRequest,
 ): Promise<TogetherImageResponse> {
   const apiKey = request.apiKey ?? getTogetherApiKey()
-  const model = request.model ?? TOGETHER_DEFAULT_IMAGE_MODEL
+  const model = resolveTogetherImageModel(request)
   const width = request.width ?? 1024
   const height = request.height ?? 1024
 

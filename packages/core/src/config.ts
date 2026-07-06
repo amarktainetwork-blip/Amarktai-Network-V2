@@ -90,8 +90,14 @@ export const DEEPINFRA_BASE_URL = 'https://api.deepinfra.com/v1'
 export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 export const GROQ_STT_MODEL = 'whisper-large-v3'
 export const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english'
-export const TOGETHER_DEFAULT_IMAGE_MODEL = 'black-forest-labs/FLUX.1-schnell-Free'
+// No unsafe repository fallback is set for Together image generation. Configure
+// a serverless-accessible model through the provider defaultModel or env.
+export const TOGETHER_DEFAULT_IMAGE_MODEL = ''
 export const GROQ_TTS_MAX_CHARS = 200
+
+export function getTogetherImageModel(): string {
+  return process.env.TOGETHER_IMAGE_MODEL?.trim() || TOGETHER_DEFAULT_IMAGE_MODEL
+}
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 

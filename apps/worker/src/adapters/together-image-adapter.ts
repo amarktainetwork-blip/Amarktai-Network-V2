@@ -10,7 +10,6 @@
 
 import { saveArtifact } from '@amarktai/artifacts'
 import { togetherGenerateImage, type TogetherImageRequest } from '@amarktai/providers'
-import { TOGETHER_DEFAULT_IMAGE_MODEL } from '@amarktai/core'
 import type { ProviderAdapter, ProviderExecutionContext, ProviderExecutionResult } from './provider-adapter.js'
 
 export class TogetherImageAdapter implements ProviderAdapter {
@@ -20,7 +19,6 @@ export class TogetherImageAdapter implements ProviderAdapter {
   async execute(context: ProviderExecutionContext): Promise<ProviderExecutionResult> {
     const request: TogetherImageRequest = {
       prompt: context.prompt,
-      model: TOGETHER_DEFAULT_IMAGE_MODEL,
       width: (context.input.width as number) ?? 1024,
       height: (context.input.height as number) ?? 1024,
       steps: (context.input.steps as number) ?? 4,
