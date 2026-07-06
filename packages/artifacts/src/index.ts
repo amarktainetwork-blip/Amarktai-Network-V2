@@ -11,6 +11,8 @@ export {
 
 export {
   saveArtifact,
+  getArtifactPublicUrl,
+  getArtifactRecord,
   getArtifactFile,
   type SaveArtifactOptions,
   type SavedArtifact,
