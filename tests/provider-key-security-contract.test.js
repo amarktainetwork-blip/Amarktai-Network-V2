@@ -161,6 +161,78 @@ describe('Provider key resolver', () => {
     await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({ code: 'disabled' })
   })
 
+  it('disabled provider with empty DB key blocks env fallback', async () => {
+    process.env.GROQ_API_KEY = 'env-groq-key'
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      enabled: false,
+      apiKey: '',
+      maskedPreview: '',
+    }))
+
+    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({
+      code: 'disabled',
+      message: "Provider 'groq' is disabled",
+    })
+  })
+
+  it('clear key disables provider and prevents env fallback', async () => {
+    process.env.GROQ_API_KEY = 'env-groq-key'
+    prismaMock.aiProvider.findUnique
+      .mockResolvedValueOnce(makeRow({ apiKey: 'v1:existing', maskedPreview: 'gsk_********1111' }))
+      .mockResolvedValueOnce(makeRow({ enabled: false, apiKey: '', maskedPreview: '' }))
+      .mockResolvedValueOnce(makeRow({ enabled: false, apiKey: '', maskedPreview: '' }))
+    prismaMock.aiProvider.upsert.mockResolvedValue({})
+
+    const status = await clearProviderCredential('groq')
+    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({ code: 'disabled' })
+
+    const updateData = prismaMock.aiProvider.upsert.mock.calls[0][0].update
+    expect(updateData.enabled).toBe(false)
+    expect(updateData.apiKey).toBe('')
+    expect(updateData.maskedPreview).toBe('')
+    expect(status.enabled).toBe(false)
+  })
+
+  it('enabled provider with empty DB key can use env fallback', async () => {
+    process.env.GROQ_API_KEY = 'env-groq-key'
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      enabled: true,
+      apiKey: '',
+      maskedPreview: '',
+    }))
+
+    const resolved = await resolveProviderApiKey('groq')
+
+    expect(resolved).toEqual({ providerKey: 'groq', apiKey: 'env-groq-key', source: 'env' })
+  })
+
+  it('disabled errors and status do not expose raw keys or ciphertext', async () => {
+    process.env.GROQ_API_KEY = 'env-groq-key'
+    const encrypted = encryptProviderKey('db-groq-key')
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      enabled: false,
+      apiKey: encrypted,
+      maskedPreview: 'gsk_********1234',
+    }))
+
+    try {
+      await resolveProviderApiKey('groq')
+      throw new Error('expected disabled failure')
+    } catch (err) {
+      const serialized = JSON.stringify(err)
+      expect(err.message).toBe("Provider 'groq' is disabled")
+      expect(serialized).not.toContain('env-groq-key')
+      expect(serialized).not.toContain('db-groq-key')
+      expect(serialized).not.toContain(encrypted)
+    }
+
+    const status = await getProviderCredentialStatus('groq')
+    const serializedStatus = JSON.stringify(status)
+    expect(serializedStatus).not.toContain('env-groq-key')
+    expect(serializedStatus).not.toContain('db-groq-key')
+    expect(serializedStatus).not.toContain(encrypted)
+  })
+
   it('status never returns raw key or ciphertext', async () => {
     const encrypted = encryptProviderKey('db-groq-key')
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({

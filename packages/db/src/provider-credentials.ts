@@ -75,11 +75,11 @@ export async function resolveProviderApiKey(providerKey: string): Promise<Resolv
   const key = assertProviderKey(providerKey)
   const row = await prisma.aiProvider.findUnique({ where: { providerKey: key } })
 
-  if (row?.apiKey) {
-    if (!row.enabled) {
-      throw new ProviderConfigError(`Provider '${key}' is disabled`, key, 'disabled')
-    }
+  if (row && !row.enabled) {
+    throw new ProviderConfigError(`Provider '${key}' is disabled`, key, 'disabled')
+  }
 
+  if (row?.apiKey) {
     try {
       return {
         providerKey: key,

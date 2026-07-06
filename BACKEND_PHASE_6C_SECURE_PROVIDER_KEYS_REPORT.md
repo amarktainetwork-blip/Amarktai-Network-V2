@@ -49,10 +49,12 @@ Raw keys are never stored in `maskedPreview`, never returned by API responses, a
 
 1. Validates `providerKey` against the final provider IDs: `genx`, `groq`, `together`, `mimo`, `deepinfra`.
 2. Looks up `AiProvider`.
-3. If an enabled DB row has encrypted `apiKey`, decrypts and returns it with source `database`.
-4. If no DB key exists, falls back to that provider's env var only.
-5. If neither exists, throws a safe `ProviderConfigError`.
-6. If a DB key exists but the provider is disabled, execution is blocked.
+3. If a DB row exists and `enabled === false`, execution is blocked with `ProviderConfigError` code `disabled`, even when env fallback exists.
+4. If an enabled DB row has encrypted `apiKey`, decrypts and returns it with source `database`.
+5. If no DB row exists, or the DB row exists and is enabled with no DB key, falls back to that provider's env var only.
+6. If neither exists, throws a safe `ProviderConfigError`.
+
+Dashboard/admin state is authoritative over env fallback. Env fallback is allowed only when there is no disabled DB row overriding runtime execution.
 
 `getProviderCredentialStatus(providerKey)` returns safe status only: provider key, display name, enabled/configured booleans, source, masked preview, metadata, health fields, and no raw key or ciphertext.
 
@@ -104,6 +106,8 @@ Final command results:
 - Together image execution remains covered and passes with injected resolved keys.
 - Env fallback remains available for development/proof compatibility.
 - DB-backed keys take precedence over env fallback.
+- Dashboard-disabled provider rows block runtime execution even if env fallback exists.
+- Clear-key disables the provider and prevents env fallback until an admin re-enables it.
 - Raw keys are not returned from status or admin routes.
 - Ciphertext is not returned from status or admin routes.
 - Saved key health status is `configured`, not fake `healthy`.
