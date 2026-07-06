@@ -143,12 +143,12 @@ describe.skipIf(!canRunLive)('Stored-key Groq chat live proof', () => {
   })
 })
 
-// ── Live stored-key Together proof ───────────────────────────────────────────
+// ── Live stored-key Together proof (provider-client only, no artifact) ────────
 
 describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
-  it('resolves stored Together key from DB and generates image', async () => {
+  it('resolves stored Together key from DB and generates image buffer', async () => {
     const { resolveProviderApiKey } = await import('@amarktai/db')
-    const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
+    const { togetherGenerateImage } = await import('@amarktai/providers')
 
     // Resolve key from DB
     const credential = await resolveProviderApiKey('together')
@@ -156,21 +156,17 @@ describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
     expect(credential.apiKey).toBeTruthy()
     expect(credential.apiKey.length).toBeGreaterThan(0)
 
-    // Execute image generation through provider executor
-    const result = await executeWithProvider({
-      jobId: 'stored-proof-together',
-      appSlug: 'proof-app',
-      capability: 'image_generation',
+    // Call provider client directly (no artifact saving)
+    const result = await togetherGenerateImage({
       prompt: 'A simple blue circle on a white background, minimal icon style',
-      input: {},
-      metadata: {},
-      traceId: 'trace-stored-together',
+      apiKey: credential.apiKey,
+      n: 1,
     })
 
-    expect(result.success).toBe(true)
-    expect(result.status).toBe('completed')
-    expect(result.provider).toBe('together')
     expect(result.model).toBeTruthy()
+    expect(result.images.length).toBeGreaterThan(0)
+    expect(result.images[0].buffer.length).toBeGreaterThan(0)
+    expect(result.images[0].mimeType).toMatch(/^image\//)
 
     // No key material in output
     const serialized = JSON.stringify(result)
@@ -180,10 +176,10 @@ describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
   })
 })
 
-// ── Full artifact proof (optional) ───────────────────────────────────────────
+// ── Full artifact proof (requires both flags) ────────────────────────────────
 
 describe.skipIf(!canRunArtifact)('Stored-key Together full artifact proof', () => {
-  it('generates image and saves artifact through existing artifact manager', async () => {
+  it('generates image and saves artifact through executeWithProvider', async () => {
     const { resolveProviderApiKey } = await import('@amarktai/db')
     const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
 
