@@ -1,80 +1,82 @@
 # VPS Phase 6F — Stored-Key Live Verification Report
 
-**Branch:** `chore/vps-stored-key-live-verification`
-**Commit:** `docs: record vps stored-key live verification`
-**VPS path:** `C:\amarktai-agent\Amarktai-Network-V2` (local Windows dev machine)
+**Status:** BLOCKED — Not on actual VPS
 
-## Latest Main Commit Confirmed
+## Environment
+
+- **Hostname:** `G` (local Windows machine, not VPS)
+- **OS:** Windows
+- **Repo path:** `C:\amarktai-agent\Amarktai-Network-V2`
+- **Current main commit:** `e6226d5` (PR #32 merge confirmed)
+
+## PR #32 Merge Confirmation
 
 ```
 e6226d5 Merge pull request #32 from amarktainetwork-blip/feat/prove-stored-provider-key-live-execution
 ```
 
-PR #32 is present in `git log --oneline -8`.
+Confirmed present in `git log --oneline -5`.
 
-## Deployment Type
+## Blocker Details
 
-Local Windows development machine — not a VPS.
+This machine is NOT the actual VPS/deployed Linux server. It is a local Windows development machine.
 
-## Services Status
+| Requirement | Status |
+|-------------|--------|
+| Actual VPS | **NO** — local Windows machine |
+| `DATABASE_URL` | Not set |
+| `PROVIDER_KEY_ENCRYPTION_SECRET` | Not set |
+| `JWT_SECRET` | Not set |
+| Running API service | No |
+| Running worker service | No |
+| Running dashboard | No |
+| Running DB | No |
+| Running Redis | No |
+| Encrypted provider keys in DB | Unknown (no DB access) |
 
-Not applicable — no Docker/systemd services running locally.
+## What Cannot Be Verified
 
-## Environment Variables
+1. Dashboard Provider Settings saving Groq/Together keys
+2. DB stores encrypted keys
+3. `resolveProviderApiKey` resolves from DB with `source: 'database'`
+4. Groq stored-key live proof passes
+5. Together provider-client proof passes
+6. Full artifact proof passes
+7. Disabled provider blocks env fallback
+8. Artifact retrieval through secure route
 
-| Variable | Present |
-|----------|---------|
-| `DATABASE_URL` | false |
-| `PROVIDER_KEY_ENCRYPTION_SECRET` | false |
-| `JWT_SECRET` | false |
+## Local Verification Completed
 
-## Dashboard Provider Settings Verification
-
-Not verified — no running dashboard service locally.
-
-## DB Encrypted-Key Verification
-
-Not verified — `DATABASE_URL` not set locally.
-
-## Groq Stored-Key Live Proof
-
-**Skipped.** `RUN_LIVE_STORED_PROVIDER_TESTS`, `DATABASE_URL`, and encryption secret not present.
-
-```
-[stored-key-live-proof] Skipped: RUN_LIVE_STORED_PROVIDER_TESTS not true, DATABASE_URL missing, PROVIDER_KEY_ENCRYPTION_SECRET/JWT_SECRET missing
-```
-
-## Together Provider-Client Proof
-
-**Skipped.** Same reason as Groq.
-
-## Together Full Artifact Proof
-
-**Skipped.** Same reason as Groq.
-
-## Artifact Route Verification
-
-**Skipped.** No running API service locally.
-
-## Disabled-Provider Env Fallback Verification
-
-**Skipped.** No DB connection locally. Existing unit tests prove the contract:
-- `provider-key-security-contract.test.js`: 21 tests pass
-- `stored-provider-key-live-proof.test.js`: contract tests prove disabled row blocks env fallback
-
-## Exact Command Results
-
-| Command | Result |
-|---------|--------|
+| Check | Result |
+|-------|--------|
 | `npm test` | 301 passed, 5 skipped |
 | `npm run build` | passed (9.6s, 23 pages) |
 | `npm run prisma:validate` | passed |
 | `npx prisma generate` | passed |
-| `npm run build --workspace=@amarktai/api` | passed |
-| `npm run build --workspace=@amarktai/worker` | passed |
-| `npm run lint --workspace=@amarktai/api` | passed |
-| `npm run lint --workspace=@amarktai/worker` | passed |
-| `npx vitest run tests/stored-provider-key-live-proof.test.js` | 11 passed, 3 skipped |
+| API build/lint | passed |
+| Worker build/lint | passed |
+| Stored-key proof test | 11 passed, 3 skipped (no DB/secret) |
+
+## Required for VPS Verification
+
+1. Access to actual deployed VPS (Linux server)
+2. `DATABASE_URL` environment variable set
+3. `PROVIDER_KEY_ENCRYPTION_SECRET` or `JWT_SECRET` set
+4. `AiProvider` table with encrypted Groq and Together keys
+5. API, worker, dashboard, DB, Redis running
+
+## VPS Commands to Run
+
+```bash
+# 1. Verify environment (no values printed)
+node -e "console.log('DATABASE_URL', !!process.env.DATABASE_URL); console.log('PROVIDER_KEY_ENCRYPTION_SECRET', !!process.env.PROVIDER_KEY_ENCRYPTION_SECRET); console.log('JWT_SECRET', !!process.env.JWT_SECRET);"
+
+# 2. Run stored-key live proof
+RUN_LIVE_STORED_PROVIDER_TESTS=true npx vitest run tests/stored-provider-key-live-proof.test.js
+
+# 3. Run full artifact proof (both flags required)
+RUN_LIVE_STORED_PROVIDER_TESTS=true RUN_LIVE_STORED_ARTIFACT_TESTS=true npx vitest run tests/stored-provider-key-live-proof.test.js
+```
 
 ## Security Confirmations
 
@@ -88,42 +90,8 @@ Not verified — `DATABASE_URL` not set locally.
 
 - [x] No new provider capabilities
 - [x] No GenX/Mimo/DeepInfra execution
-- [x] No Phase 6G started
+- [x] Phase 6G not started
 
-## Blockers
+## Recommended Next Step
 
-1. **No VPS access from this machine** — This is a local Windows dev environment, not the deployed VPS
-2. **No DATABASE_URL** — Cannot verify DB-stored encrypted keys
-3. **No PROVIDER_KEY_ENCRYPTION_SECRET/JWT_SECRET** — Cannot decrypt stored keys
-4. **No running services** — Cannot verify dashboard, API, worker, or artifact routes
-
-## What Needs to Happen on VPS
-
-The live verification must run on the actual deployed VPS where:
-- `DATABASE_URL` is set and points to the production DB
-- `PROVIDER_KEY_ENCRYPTION_SECRET` or `JWT_SECRET` is set
-- `AiProvider` table contains encrypted Groq and Together keys saved through dashboard
-- API, worker, dashboard, DB, and Redis are running
-
-### VPS Commands to Run
-
-```bash
-# 1. Sync repo
-git checkout main && git pull origin main
-
-# 2. Verify env (no values printed)
-node -e "console.log('DATABASE_URL', !!process.env.DATABASE_URL); console.log('PROVIDER_KEY_ENCRYPTION_SECRET', !!process.env.PROVIDER_KEY_ENCRYPTION_SECRET); console.log('JWT_SECRET', !!process.env.JWT_SECRET);"
-
-# 3. Run tests
-npm test
-
-# 4. Run stored-key live proof
-RUN_LIVE_STORED_PROVIDER_TESTS=true npx vitest run tests/stored-provider-key-live-proof.test.js
-
-# 5. Run full artifact proof (requires both flags)
-RUN_LIVE_STORED_PROVIDER_TESTS=true RUN_LIVE_STORED_ARTIFACT_TESTS=true npx vitest run tests/stored-provider-key-live-proof.test.js
-```
-
-## Recommended Next Phase
-
-Run this verification on the actual VPS with real DB and encrypted provider keys. No code changes needed — just environment verification.
+Run this verification on the actual deployed VPS where `DATABASE_URL` and encryption secrets are configured.
