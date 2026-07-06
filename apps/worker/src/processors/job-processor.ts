@@ -1,16 +1,16 @@
 /**
  * Job processor — BullMQ worker that processes capability jobs.
  *
- * Phase 4: Worker Execution Foundation
  * - Validates payload shape (including prompt)
  * - Loads DB Job row and verifies ownership
  * - Updates status to processing with startedAt
- * - Calls isolated execution placeholder (NO provider execution)
- * - Marks as failed with honest "not implemented" error
- * - THROWS after DB failure so BullMQ records queue job as failed
+ * - Delegates execution to the provider executor
+ * - Currently proven execution paths are Groq chat and Together image generation
+ * - Fails all other capabilities honestly as not implemented
+ * - Successful text jobs may store output
+ * - Successful media jobs may store artifactId and safe output metadata
+ * - Failed execution updates the DB and throws so BullMQ records queue failure
  * - Handles thrown errors safely
- * - Does NOT create artifacts
- * - Does NOT call any provider
  */
 
 import { prisma } from '@amarktai/db'
@@ -36,6 +36,8 @@ export interface ProcessorResult {
   output?: string
   provider?: string
   model?: string
+  artifactId?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ProcessorDeps {
@@ -59,7 +61,8 @@ export function validatePayload(payload: WorkerJobData): string | null {
 }
 
 // ── Default execution — delegates to provider executor ────────────────────────
-// Phase 6A: Only Groq chat executes. All other capabilities return not-implemented.
+// Phase 6B: delegates to the provider executor, which currently supports
+// Groq chat and Together image generation only.
 
 async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
   const { executeWithProvider } = await import('../providers/provider-executor.js')
@@ -111,16 +114,32 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
+        const completedData: {
+          status: string
+          provider: string | null
+          model: string | null
+          output: string | null
+          progress: number
+          completedAt: Date
+          error: null
+          artifactId?: string
+        } = {
+          status: 'completed',
+          provider: result.provider ?? null,
+          model: result.model ?? null,
+          output: result.output ?? null,
+          progress: 100,
+          completedAt: new Date(),
+          error: null,
+        }
+
+        if (result.artifactId) {
+          completedData.artifactId = result.artifactId
+        }
+
         await prisma.job.update({
           where: { id: jobId },
-          data: {
-            status: 'completed',
-            provider: result.provider ?? null,
-            model: result.model ?? null,
-            output: result.output ?? null,
-            progress: 100,
-            completedAt: new Date(),
-          },
+          data: completedData,
         })
         return result
       }
