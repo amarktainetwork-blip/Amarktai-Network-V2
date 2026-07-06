@@ -94,7 +94,12 @@ function makeDbJob(overrides = {}) {
 describe('Worker queue name', () => {
   it('uses the canonical queue name from core', () => {
     expect(WORKER_QUEUE_NAME).toBe(QUEUE_NAMES.JOBS)
-    expect(WORKER_QUEUE_NAME).toBe('amarktai:jobs')
+    expect(WORKER_QUEUE_NAME).toBe('amarktai-jobs')
+  })
+
+  it('queue names do not contain colons (BullMQ safe)', () => {
+    expect(QUEUE_NAMES.JOBS).not.toContain(':')
+    expect(QUEUE_NAMES.RETRY).not.toContain(':')
   })
 })
 

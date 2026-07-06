@@ -12,8 +12,8 @@ import { CAPABILITY_KEYS } from './capabilities.js'
 // ── Queue Names ──────────────────────────────────────────────────────────────
 
 export const QUEUE_NAMES = {
-  JOBS: 'amarktai:jobs',
-  RETRY: 'amarktai:retry',
+  JOBS: 'amarktai-jobs',
+  RETRY: 'amarktai-retry',
 } as const
 
 // ── Job Payload (API → Redis → Worker) ───────────────────────────────────────
