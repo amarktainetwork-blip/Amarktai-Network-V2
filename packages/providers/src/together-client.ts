@@ -15,6 +15,7 @@ import {
 
 export interface TogetherImageRequest {
   prompt: string
+  apiKey?: string
   model?: string
   width?: number
   height?: number
@@ -41,7 +42,7 @@ export interface TogetherImageResponse {
 export async function togetherGenerateImage(
   request: TogetherImageRequest,
 ): Promise<TogetherImageResponse> {
-  const apiKey = getTogetherApiKey()
+  const apiKey = request.apiKey ?? getTogetherApiKey()
   const model = request.model ?? TOGETHER_DEFAULT_IMAGE_MODEL
   const width = request.width ?? 1024
   const height = request.height ?? 1024

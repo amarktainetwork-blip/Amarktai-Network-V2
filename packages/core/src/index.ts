@@ -133,3 +133,12 @@ export {
   type ProviderRouteDecision,
   type RoutingOptions,
 } from './provider-routing.js'
+
+// Provider credential security
+export {
+  getProviderKeyEncryptionSecret,
+  encryptProviderKey,
+  decryptProviderKey,
+  maskProviderKey,
+  isEncryptedProviderKey,
+} from './provider-key-security.js'

@@ -18,6 +18,7 @@ import {
 
 export interface GroqChatRequest {
   prompt: string
+  apiKey?: string
   model?: string
   systemPrompt?: string
   maxTokens?: number
@@ -45,7 +46,7 @@ export interface GroqTtsResponse {
 // ── Chat Completion ───────────────────────────────────────────────────────────
 
 export async function groqChat(request: GroqChatRequest): Promise<GroqChatResponse> {
-  const apiKey = getGroqApiKey()
+  const apiKey = request.apiKey ?? getGroqApiKey()
   const model = request.model ?? GROQ_DEFAULT_MODEL
 
   const messages: Array<{ role: string; content: string }> = []

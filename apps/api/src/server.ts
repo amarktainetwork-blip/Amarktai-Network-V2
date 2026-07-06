@@ -21,6 +21,7 @@ import { healthRoutes } from './routes/health.js'
 import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
 import { authRoutes } from './routes/auth.js'
+import { adminProviderRoutes } from './routes/admin-providers.js'
 
 // ── Admin Safety Net ──────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
 
   await app.register(healthRoutes)
   await app.register(authRoutes)
+  await app.register(adminProviderRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
 

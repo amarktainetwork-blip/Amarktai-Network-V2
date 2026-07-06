@@ -13,6 +13,7 @@ import {
   type CapabilityKey,
   type ProviderKey,
 } from '@amarktai/core'
+import { ProviderConfigError, resolveProviderApiKey } from '@amarktai/db'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
 // Temporary proof gate for live-capable paths. This is not final Brain routing:
@@ -48,13 +49,6 @@ function canExecuteImplementedProvider(
     }
   }
 
-  if (!candidate.configured) {
-    return {
-      allowed: false,
-      reason: `${provider} config missing for capability '${capability}'`,
-    }
-  }
-
   return { allowed: true, reason: null }
 }
 
@@ -65,9 +59,9 @@ function formatSupportedCandidates(capability: CapabilityKey): string {
     .join(', ') || 'none'
 }
 
-function redactProviderSecrets(message: string): string {
+function redactProviderSecrets(message: string, extraKeys: string[] = []): string {
   let safe = message
-  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY]) {
+  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, ...extraKeys]) {
     if (key) {
       safe = safe.split(key).join('[redacted]')
     }
@@ -86,11 +80,15 @@ function readString(input: Record<string, unknown> | undefined, key: string): st
 }
 
 async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
-  const { groqChat } = await import('@amarktai/providers')
+  let apiKey = ''
 
   try {
+    const credential = await resolveProviderApiKey('groq')
+    apiKey = credential.apiKey
+    const { groqChat } = await import('@amarktai/providers')
     const result = await groqChat({
       prompt: payload.prompt,
+      apiKey,
     })
 
     if (!result.content || !result.content.trim()) {
@@ -109,22 +107,27 @@ async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult>
       model: result.model,
     }
   } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown Groq error'
     return {
       success: false,
       status: 'failed',
-      error: `Groq execution failed: ${redactProviderSecrets(message)}`,
+      error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}`,
     }
   }
 }
 
 async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorResult> {
-  const { togetherGenerateImage } = await import('@amarktai/providers')
-  const { saveArtifact } = await import('@amarktai/artifacts')
+  let apiKey = ''
 
   try {
+    const credential = await resolveProviderApiKey('together')
+    apiKey = credential.apiKey
+    const { togetherGenerateImage } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
     const result = await togetherGenerateImage({
       prompt: payload.prompt,
+      apiKey,
       model: TOGETHER_DEFAULT_IMAGE_MODEL,
       width: readNumber(payload.input, 'width'),
       height: readNumber(payload.input, 'height'),
@@ -186,11 +189,12 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
       metadata: output,
     }
   } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown Together error'
     return {
       success: false,
       status: 'failed',
-      error: `Together execution failed: ${redactProviderSecrets(message)}`,
+      error: `Together execution failed: ${redactProviderSecrets(message, [apiKey])}`,
     }
   }
 }
@@ -225,12 +229,23 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
     }
   }
 
-  if (implementedProvider === 'groq' && capability === 'chat') {
-    return executeGroqChat(payload)
-  }
+  try {
+    if (implementedProvider === 'groq' && capability === 'chat') {
+      return await executeGroqChat(payload)
+    }
 
-  if (implementedProvider === 'together' && capability === 'image_generation') {
-    return executeTogetherImage(payload)
+    if (implementedProvider === 'together' && capability === 'image_generation') {
+      return await executeTogetherImage(payload)
+    }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(capability)}. executionAllowed: false`,
+      }
+    }
+    throw err
   }
 
   return {

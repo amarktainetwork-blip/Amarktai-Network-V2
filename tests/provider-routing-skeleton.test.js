@@ -16,7 +16,27 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
+const credentialMocks = vi.hoisted(() => {
+  class ProviderConfigError extends Error {
+    constructor(message, providerKey = 'groq', code = 'missing-config') {
+      super(message)
+      this.providerKey = providerKey
+      this.code = code
+    }
+  }
+  return {
+    ProviderConfigError,
+    resolveProviderApiKey: vi.fn(async (providerKey) => {
+      throw new ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    }),
+  }
+})
+
+vi.mock('@amarktai/db', () => ({
+  prisma: prismaMock,
+  ProviderConfigError: credentialMocks.ProviderConfigError,
+  resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+}))
 
 // ── Import routing and processor ──────────────────────────────────────────────
 
