@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
+import { BLOCKED_OVERRIDE_FIELDS, hasBlockedOverrides } from '../packages/core/src/jobs.ts'
 import { DASHBOARD_TO_BACKEND_CAPABILITY_MAP } from '../lib/capability-map.js'
 import { PROVIDER_CONTRACTS, STUDIO_MODES } from '../lib/dashboard-contract.js'
 import { CAPABILITY_SCHEMAS, REQUIRED_MUSIC_GENRES } from '../lib/studio-capability-schemas.js'
@@ -96,6 +97,56 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
     for (const adapter of ['image', 'text', 'video', 'voice']) {
       expect(fs.existsSync(path.join(ROOT, `apps/worker/src/adapters/${adapter}-simulation.ts`))).toBe(false)
     }
+  })
+
+  it('jobs route no longer uses Math.random for trace IDs', () => {
+    const jobsRouteText = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/jobs.ts'), 'utf8')
+    expect(jobsRouteText).toContain('randomUUID')
+    expect(jobsRouteText).not.toContain('Math.random')
+  })
+
+  it('provider and model override fields remain blocked', () => {
+    expect([...BLOCKED_OVERRIDE_FIELDS]).toEqual([
+      'providerOverride', 'modelOverride', 'provider', 'model', 'providerKey', 'modelId',
+    ])
+
+    for (const field of BLOCKED_OVERRIDE_FIELDS) {
+      expect(hasBlockedOverrides({ [field]: 'blocked' })).toBe(field)
+    }
+    expect(hasBlockedOverrides({ capability: 'chat' })).toBeNull()
+  })
+
+  it('does not add dashboard or Studio job submission API routes', () => {
+    const forbiddenRoutes = [
+      'app/api/jobs/route.js',
+      'app/api/studio/jobs/route.js',
+      'app/api/dashboard/jobs/route.js',
+      'app/api/v1/jobs/route.js',
+    ]
+    for (const route of forbiddenRoutes) {
+      expect(fs.existsSync(path.join(ROOT, route))).toBe(false)
+    }
+  })
+
+  it('does not add Mimo or DeepInfra runtime execution adapters', () => {
+    const workerRegistry = fs.readFileSync(path.join(ROOT, 'apps/worker/src/adapters/index.ts'), 'utf8')
+    const providerFiles = listFiles(path.join(ROOT, 'packages/providers/src'))
+    const adapterFiles = listFiles(path.join(ROOT, 'apps/worker/src/adapters'))
+
+    expect(workerRegistry).not.toMatch(/Mimo|DeepInfra/i)
+    for (const file of [...providerFiles, ...adapterFiles]) {
+      const normalized = file.replace(/\\/g, '/').toLowerCase()
+      expect(normalized).not.toContain('mimo')
+      expect(normalized).not.toContain('deepinfra')
+    }
+  })
+
+  it('backend foundation scripts exist', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
+    expect(pkg.scripts['prisma:validate']).toBe('node scripts/prisma-validate.mjs')
+    expect(pkg.scripts['build:backend']).toContain('@amarktai/core')
+    expect(pkg.scripts['build:backend']).toContain('@amarktai/worker')
+    expect(fs.existsSync(path.join(ROOT, 'scripts/prisma-validate.mjs'))).toBe(true)
   })
 })
 

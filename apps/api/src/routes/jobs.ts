@@ -9,6 +9,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import { Queue } from 'bullmq'
+import { randomUUID } from 'node:crypto'
 import { prisma } from '@amarktai/db'
 import {
   CreateJobRequestSchema,
@@ -183,7 +184,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // 7. Create Job record in MySQL
-    const traceId = `trace_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+    const traceId = `trace_${randomUUID()}`
     const job = await prisma.job.create({
       data: {
         appSlug: auth.app!.slug,

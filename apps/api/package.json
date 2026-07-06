@@ -5,10 +5,10 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -b",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc -b --noEmit"
   },
   "dependencies": {
     "@amarktai/core": "*",

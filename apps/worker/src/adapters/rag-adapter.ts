@@ -16,6 +16,7 @@ import {
   searchVectors,
   ensureCollection,
   type QdrantPoint,
+  type QdrantSearchResult,
 } from '@amarktai/providers'
 import { QDRANT_COLLECTION } from '@amarktai/core'
 import { randomUUID } from 'crypto'
@@ -150,7 +151,7 @@ export class RagAdapter implements ProviderAdapter {
     await this.updateJobStatus(context, 'processing', 80)
 
     // Build citation strings from results
-    const citations = searchResults.map((r, i) => ({
+    const citations = searchResults.map((r: QdrantSearchResult, i: number) => ({
       rank: i + 1,
       score: r.score,
       text: (r.payload.text as string) ?? '',
