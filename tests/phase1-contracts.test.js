@@ -229,10 +229,12 @@ describe('Dashboard truth cleanup', () => {
 
   it('Settings page does not use Save local draft toast', () => {
     const settingsText = fs.readFileSync(path.join(ROOT, 'app/dashboard/settings/page.js'), 'utf8')
+    const providerSettingsText = fs.readFileSync(path.join(ROOT, 'components/dashboard/provider-settings-panel.jsx'), 'utf8')
     expect(settingsText).not.toContain('Save local draft')
     expect(settingsText).not.toContain("toast.info('Local draft only'")
     expect(settingsText).not.toContain('toast.info')
-    expect(settingsText).toContain('Backend required')
+    expect(settingsText).toContain('ProviderSettingsPanel')
+    expect(providerSettingsText).toContain('Backend provider status is the source of truth')
   })
 
   it('Agents page does not show fake agent shell text', () => {
