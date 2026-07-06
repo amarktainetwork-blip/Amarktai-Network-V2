@@ -120,3 +120,16 @@ export {
   CRAWLEE_TIMEOUT_MS,
   TOKEN_COST_MULTIPLIER,
 } from './config.js'
+
+// Provider routing skeleton
+export {
+  routeProvider,
+  isProviderConfigured,
+  isDeepInfraGated,
+  isValidProviderId,
+  getProviderEnvVar,
+  getProviderCategorySupport,
+  type ProviderCandidate,
+  type ProviderRouteDecision,
+  type RoutingOptions,
+} from './provider-routing.js'
