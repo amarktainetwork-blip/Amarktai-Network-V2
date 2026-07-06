@@ -34,7 +34,7 @@ describe.skipIf(!shouldRun)('Live Together image proof (unmocked)', () => {
 
 describe.skipIf(shouldRun)('Live Together proof skipped', () => {
   it('skips because RUN_LIVE_TOGETHER_TESTS or TOGETHER_API_KEY missing', () => {
-    console.log('[live-proof] Skipped: RUN_LIVE_TOGETHER_TESTS and/or TOGETHER_API_KEY not set')
+    console.log('[live-proof] Skipped: RUN_LIVE_TOGETHER_TESTS and/or TOGETHER_API_KEY not set. Set TOGETHER_IMAGE_MODEL to a serverless-accessible image model before running live proof.')
     expect(true).toBe(true)
   })
 })

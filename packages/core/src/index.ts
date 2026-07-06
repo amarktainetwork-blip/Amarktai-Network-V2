@@ -108,6 +108,7 @@ export {
   GROQ_STT_MODEL,
   GROQ_TTS_MODEL,
   TOGETHER_DEFAULT_IMAGE_MODEL,
+  getTogetherImageModel,
   GROQ_TTS_MAX_CHARS,
   getJwtSecret,
   JWT_EXPIRY_SECONDS,

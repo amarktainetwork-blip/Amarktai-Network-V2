@@ -28,6 +28,7 @@ const credentialMocks = vi.hoisted(() => {
   return {
     ProviderConfigError,
     resolveProviderApiKey: vi.fn(),
+    getProviderCredentialStatus: vi.fn(),
   }
 })
 
@@ -44,6 +45,7 @@ const artifactMocks = vi.hoisted(() => ({
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: credentialMocks.ProviderConfigError,
+  getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
 }))
 vi.mock('@amarktai/providers', () => providerMocks)
@@ -53,7 +55,6 @@ import { executeWithProvider } from '../apps/worker/src/providers/provider-execu
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
 import {
   PROVIDER_KEYS,
-  TOGETHER_DEFAULT_IMAGE_MODEL,
   routeProvider,
 } from '../packages/core/src/index.ts'
 
@@ -99,7 +100,7 @@ function makeDbJob(overrides = {}) {
 }
 
 function mockTogetherSuccess(overrides = {}) {
-  providerMocks.togetherGenerateImage.mockResolvedValue({
+  providerMocks.togetherGenerateImage.mockImplementation(async (request = {}) => ({
     images: [
       {
         base64: 'cmVhbC1pbWFnZS1ieXRlcw==',
@@ -109,9 +110,28 @@ function mockTogetherSuccess(overrides = {}) {
         mimeType: 'image/png',
       },
     ],
-    model: TOGETHER_DEFAULT_IMAGE_MODEL,
+    model: request.model ?? request.providerDefaultModel ?? process.env.TOGETHER_IMAGE_MODEL ?? 'test-serverless-image-model',
     usage: { promptTokens: 4, completionTokens: 0, totalTokens: 4 },
     ...overrides,
+  }))
+}
+
+function mockTogetherProviderStatus(defaultModel = 'db-together-image-model') {
+  credentialMocks.getProviderCredentialStatus.mockResolvedValue({
+    providerKey: 'together',
+    displayName: 'Together AI',
+    enabled: true,
+    configured: true,
+    source: 'database',
+    maskedPreview: 'tog_********test',
+    baseUrl: '',
+    defaultModel,
+    fallbackModel: '',
+    healthStatus: 'configured',
+    healthMessage: '',
+    lastCheckedAt: null,
+    sortOrder: 3,
+    notes: '',
   })
 }
 
@@ -141,6 +161,7 @@ describe('Together image executor', () => {
       apiKey: `${providerKey}-test-key`,
       source: 'database',
     }))
+    mockTogetherProviderStatus()
     mockTogetherSuccess()
     mockArtifactSuccess()
   })
@@ -182,7 +203,7 @@ describe('Together image executor', () => {
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 
-  it('uses the internal Together image model, not a user-supplied model', async () => {
+  it('uses the DB Together default model, not a user-supplied model', async () => {
     await executeWithProvider(makePayload({
       input: { model: 'user-model', modelOverride: 'user-model-2' },
       model: 'user-model-3',
@@ -190,7 +211,12 @@ describe('Together image executor', () => {
 
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: TOGETHER_DEFAULT_IMAGE_MODEL,
+        providerDefaultModel: 'db-together-image-model',
+      }),
+    )
+    expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'user-model',
       }),
     )
   })
@@ -209,7 +235,7 @@ describe('Together image executor', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('together')
-    expect(result.model).toBe(TOGETHER_DEFAULT_IMAGE_MODEL)
+    expect(result.model).toBe('db-together-image-model')
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledTimes(1)
   })
 
@@ -229,7 +255,7 @@ describe('Together image executor', () => {
   it('handles empty image data as failure without creating an artifact', async () => {
     providerMocks.togetherGenerateImage.mockResolvedValue({
       images: [],
-      model: TOGETHER_DEFAULT_IMAGE_MODEL,
+      model: 'db-together-image-model',
       usage: { promptTokens: 1, completionTokens: 0, totalTokens: 1 },
     })
 
@@ -302,6 +328,7 @@ describe('Execution routing gate', () => {
       apiKey: `${providerKey}-test-key`,
       source: 'database',
     }))
+    mockTogetherProviderStatus()
     providerMocks.groqChat.mockResolvedValue({
       content: 'chat ok',
       model: 'llama-3.3-70b-versatile',
@@ -378,7 +405,7 @@ describe('Execution routing gate', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('together')
-    expect(result.model).toBe(TOGETHER_DEFAULT_IMAGE_MODEL)
+    expect(result.model).toBe('db-together-image-model')
   })
 
   it('non-image capabilities do not execute Together', async () => {
@@ -406,6 +433,7 @@ describe('Artifact persistence and worker completion', () => {
       apiKey: `${providerKey}-test-key`,
       source: 'database',
     }))
+    mockTogetherProviderStatus()
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
     prismaMock.job.update.mockResolvedValue({})
     mockTogetherSuccess()
@@ -425,7 +453,7 @@ describe('Artifact persistence and worker completion', () => {
         type: 'image',
         subType: 'image_generation',
         provider: 'together',
-        model: TOGETHER_DEFAULT_IMAGE_MODEL,
+        model: 'db-together-image-model',
         traceId: 'trace-image-001',
         mimeType: 'image/png',
       }),
@@ -444,7 +472,7 @@ describe('Artifact persistence and worker completion', () => {
     expect(input.metadata).toMatchObject({
       capability: 'image_generation',
       provider: 'together',
-      model: TOGETHER_DEFAULT_IMAGE_MODEL,
+      model: 'db-together-image-model',
       width: 1024,
       height: 1024,
     })
@@ -475,7 +503,7 @@ describe('Artifact persistence and worker completion', () => {
 
     expect(completedUpdate).toBeDefined()
     expect(completedUpdate[0].data.provider).toBe('together')
-    expect(completedUpdate[0].data.model).toBe(TOGETHER_DEFAULT_IMAGE_MODEL)
+    expect(completedUpdate[0].data.model).toBe('db-together-image-model')
     expect(completedUpdate[0].data.artifactId).toBe('artifact-image-001')
     expect(completedUpdate[0].data.progress).toBe(100)
     expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)

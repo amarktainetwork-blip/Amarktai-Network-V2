@@ -19,6 +19,7 @@ export {
 
 // Together AI — image generation
 export {
+  resolveTogetherImageModel,
   togetherGenerateImage,
   type TogetherImageRequest,
   type TogetherImageResponse,

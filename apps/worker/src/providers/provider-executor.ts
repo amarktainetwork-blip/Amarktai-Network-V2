@@ -8,12 +8,11 @@
  */
 
 import {
-  TOGETHER_DEFAULT_IMAGE_MODEL,
   routeProvider,
   type CapabilityKey,
   type ProviderKey,
 } from '@amarktai/core'
-import { ProviderConfigError, resolveProviderApiKey } from '@amarktai/db'
+import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey } from '@amarktai/db'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
 // Temporary proof gate for live-capable paths. This is not final Brain routing:
@@ -123,12 +122,13 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
   try {
     const credential = await resolveProviderApiKey('together')
     apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('together')
     const { togetherGenerateImage } = await import('@amarktai/providers')
     const { saveArtifact } = await import('@amarktai/artifacts')
     const result = await togetherGenerateImage({
       prompt: payload.prompt,
       apiKey,
-      model: TOGETHER_DEFAULT_IMAGE_MODEL,
+      providerDefaultModel: providerStatus.defaultModel,
       width: readNumber(payload.input, 'width'),
       height: readNumber(payload.input, 'height'),
       steps: readNumber(payload.input, 'steps'),
