@@ -292,9 +292,17 @@ describe('Dashboard truth cleanup', () => {
     expect(qdrantSection).not.toContain('healthcheck:')
   })
 
-  it('Docker dashboard healthcheck targets 127.0.0.1', () => {
+  it('Docker dashboard healthcheck uses Node, not wget/curl', () => {
     const compose = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8')
-    expect(compose).toContain('http://127.0.0.1:3000')
+    const dashboardSection = compose.split('# ── Dashboard')[1]?.split('# ── Volumes')[0] ?? ''
+    // Uses Node HTTP check
+    expect(dashboardSection).toContain('node')
+    expect(dashboardSection).toContain('127.0.0.1:3000')
+    // Does not use wget or curl
+    expect(dashboardSection).not.toContain('wget')
+    expect(dashboardSection).not.toContain('curl')
+    // Uses CMD not CMD-SHELL for direct node execution
+    expect(dashboardSection).toContain('"CMD"')
   })
 })
 
