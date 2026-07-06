@@ -2,7 +2,7 @@
  * Worker execution foundation tests — proves worker can consume queued jobs
  * and update Job lifecycle honestly without calling providers.
  *
- * Phase 4: Worker Execution Foundation
+ * Phase 4: Worker Execution Foundation (tightened)
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -22,6 +22,7 @@ vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
 import {
   processJob,
+  createJobProcessor,
   validatePayload,
   WORKER_QUEUE_NAME,
 } from '../apps/worker/src/processors/job-processor.ts'
@@ -96,6 +97,14 @@ describe('Worker payload validation', () => {
     expect(validatePayload(makePayload({ capability: '' }))).toContain('capability')
   })
 
+  it('rejects missing prompt', () => {
+    expect(validatePayload(makePayload({ prompt: '' }))).toContain('prompt')
+  })
+
+  it('rejects empty prompt', () => {
+    expect(validatePayload(makePayload({ prompt: '   ' }))).toContain('prompt')
+  })
+
   it('rejects missing traceId', () => {
     expect(validatePayload(makePayload({ traceId: '' }))).toContain('traceId')
   })
@@ -117,45 +126,64 @@ describe('Worker payload validation', () => {
   })
 })
 
-// ── Job processor tests ──────────────────────────────────────────────────────
+// ── Job processor — validation rejection tests ───────────────────────────────
 
-describe('Job processor', () => {
+describe('Job processor — validation rejects before DB', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    prismaMock.job.update.mockResolvedValue({})
   })
 
-  it('throws for missing jobId', async () => {
+  it('throws for missing jobId without touching DB', async () => {
     await expect(processJob(makePayload({ jobId: '' }))).rejects.toThrow('jobId')
     expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for missing appSlug', async () => {
+  it('throws for missing appSlug without touching DB', async () => {
     await expect(processJob(makePayload({ appSlug: '' }))).rejects.toThrow('appSlug')
     expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for missing capability', async () => {
+  it('throws for missing capability without touching DB', async () => {
     await expect(processJob(makePayload({ capability: '' }))).rejects.toThrow('capability')
     expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for missing traceId', async () => {
+  it('throws for missing prompt without touching DB', async () => {
+    await expect(processJob(makePayload({ prompt: '' }))).rejects.toThrow('prompt')
+    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).not.toHaveBeenCalled()
+  })
+
+  it('throws for empty prompt without touching DB', async () => {
+    await expect(processJob(makePayload({ prompt: '   ' }))).rejects.toThrow('prompt')
+    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).not.toHaveBeenCalled()
+  })
+
+  it('throws for missing traceId without touching DB', async () => {
     await expect(processJob(makePayload({ traceId: '' }))).rejects.toThrow('traceId')
     expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for invalid capability', async () => {
+  it('throws for invalid capability without touching DB', async () => {
     await expect(processJob(makePayload({ capability: 'fake_capability' }))).rejects.toThrow('Invalid capability')
     expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
+})
 
-  it('throws for missing DB job', async () => {
+// ── Job processor — DB ownership/mismatch tests ──────────────────────────────
+
+describe('Job processor — DB ownership rejects without mutation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws for missing DB job without updating', async () => {
     prismaMock.job.findUnique.mockResolvedValue(null)
 
     await expect(processJob(makePayload())).rejects.toThrow('Job not found')
@@ -163,24 +191,33 @@ describe('Job processor', () => {
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for appSlug mismatch', async () => {
+  it('throws for appSlug mismatch without updating to processing or failed', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ appSlug: 'other-app' }))
 
     await expect(processJob(makePayload())).rejects.toThrow('appSlug mismatch')
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for capability mismatch', async () => {
+  it('throws for capability mismatch without updating to processing or failed', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'image_generation' }))
 
     await expect(processJob(makePayload())).rejects.toThrow('capability mismatch')
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
+})
+
+// ── Job processor — execution lifecycle tests ────────────────────────────────
+
+describe('Job processor — execution lifecycle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.job.update.mockResolvedValue({})
+  })
 
   it('updates queued job to processing with startedAt', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    const result = await processJob(makePayload())
+    await expect(processJob(makePayload())).rejects.toThrow()
 
     expect(prismaMock.job.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -193,80 +230,26 @@ describe('Job processor', () => {
     )
   })
 
-  it('marks provider execution as not implemented honestly', async () => {
+  it('not-implemented execution fails DB job then throws for BullMQ', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    const result = await processJob(makePayload())
+    // processJob must throw so BullMQ records failure
+    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
 
-    expect(result.success).toBe(false)
-    expect(result.status).toBe('failed')
-    expect(result.error).toContain('not implemented')
-  })
-
-  it('sets failed status for not-implemented execution', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
-
-    await processJob(makePayload())
-
-    // Second update should be the failure
-    expect(prismaMock.job.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'job-uuid-001' },
-        data: expect.objectContaining({
-          status: 'failed',
-          error: expect.stringContaining('not implemented'),
-          completedAt: expect.any(Date),
-        }),
-      })
-    )
-  })
-
-  it('sets terminal timestamp on failure', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
-
-    await processJob(makePayload())
-
+    // DB job must be updated to failed
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate).toBeDefined()
+    expect(failedUpdate[0].data.error).toContain('not implemented')
     expect(failedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
-  it('records error text', async () => {
+  it('does not create artifacts or set artifactId', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await processJob(makePayload())
+    await expect(processJob(makePayload())).rejects.toThrow()
 
-    const failedUpdate = prismaMock.job.update.mock.calls.find(
-      (call) => call[0].data.status === 'failed'
-    )
-    expect(failedUpdate[0].data.error).toContain('Provider execution not implemented')
-  })
-
-  it('handles thrown processor errors safely', async () => {
-    prismaMock.job.findUnique.mockRejectedValue(new Error('Database connection lost'))
-
-    await expect(processJob(makePayload())).rejects.toThrow('Database connection lost')
-  })
-
-  it('does not create artifacts', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
-
-    await processJob(makePayload())
-
-    const failedUpdate = prismaMock.job.update.mock.calls.find(
-      (call) => call[0].data.status === 'failed'
-    )
-    expect(failedUpdate[0].data.artifactId).toBeUndefined()
-  })
-
-  it('does not set artifactId', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
-
-    await processJob(makePayload())
-
-    // Check no update sets artifactId
     for (const call of prismaMock.job.update.mock.calls) {
       expect(call[0].data.artifactId).toBeUndefined()
     }
@@ -275,42 +258,89 @@ describe('Job processor', () => {
   it('does not set provider or model', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await processJob(makePayload())
+    await expect(processJob(makePayload())).rejects.toThrow()
 
-    // Check no update sets provider or model
     for (const call of prismaMock.job.update.mock.calls) {
       expect(call[0].data.provider).toBeUndefined()
       expect(call[0].data.model).toBeUndefined()
     }
   })
+})
 
-  it('processor can be tested directly without real provider keys', async () => {
+// ── Job processor — injectable execution tests ───────────────────────────────
+
+describe('Job processor — injectable execution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.job.update.mockResolvedValue({})
+  })
+
+  it('uses injected executeCapability via createJobProcessor', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: false,
+      status: 'failed',
+      error: 'Custom not-implemented message',
+    })
+
+    const processor = createJobProcessor({ executeCapability: mockExecute })
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    // No env vars needed — processor uses mocks
-    const result = await processJob(makePayload())
+    await expect(processor(makePayload())).rejects.toThrow('Custom not-implemented message')
 
-    expect(result).toBeDefined()
-    expect(result.success).toBe(false)
-    expect(result.status).toBe('failed')
+    // executeCapability was called with the payload
+    expect(mockExecute).toHaveBeenCalledWith(makePayload())
+
+    // DB job was updated to failed
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate).toBeDefined()
+    expect(failedUpdate[0].data.error).toBe('Custom not-implemented message')
   })
 
-  it('verifies DB job ownership before processing', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ appSlug: 'wrong-app' }))
+  it('injected execution that throws after processing updates DB to failed', async () => {
+    const mockExecute = vi.fn().mockRejectedValue(new Error('Execution exploded'))
 
-    await expect(processJob(makePayload({ appSlug: 'my-app' }))).rejects.toThrow('appSlug mismatch')
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    // Should not have updated to processing
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    await expect(processor(makePayload())).rejects.toThrow('Execution exploded')
+
+    // DB job was updated to failed
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate).toBeDefined()
+    expect(failedUpdate[0].data.error).toBe('Execution exploded')
+    expect(failedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
-  it('verifies DB job capability before processing', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'video_generation' }))
+  it('injected execution that succeeds completes the job', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: true,
+      status: 'completed',
+    })
 
-    await expect(processJob(makePayload({ capability: 'chat' }))).rejects.toThrow('capability mismatch')
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    // Should not have updated to processing
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    const result = await processor(makePayload())
+
+    expect(result.success).toBe(true)
+
+    // DB job was updated to completed
+    const completedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'completed'
+    )
+    expect(completedUpdate).toBeDefined()
+    expect(completedUpdate[0].data.progress).toBe(100)
+    expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)
+  })
+
+  it('default processor uses not-implemented placeholder', async () => {
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
+
+    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
   })
 })
 
@@ -325,56 +355,60 @@ describe('Worker does not call providers', () => {
   it('does not import or call GenX adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'video_generation' }))
 
-    // Process should fail with "not implemented", not with a provider error
-    const result = await processJob(makePayload({ capability: 'video_generation' }))
-    expect(result.error).toContain('not implemented')
-    expect(result.error).not.toContain('GenX')
-    expect(result.error).not.toContain('genx')
+    await expect(processJob(makePayload({ capability: 'video_generation' }))).rejects.toThrow('not implemented')
+
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.error).not.toContain('GenX')
+    expect(failedUpdate[0].data.error).not.toContain('genx')
   })
 
   it('does not import or call Groq adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    const result = await processJob(makePayload())
-    expect(result.error).toContain('not implemented')
-    expect(result.error).not.toContain('Groq')
-    expect(result.error).not.toContain('groq')
+    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.error).not.toContain('Groq')
+    expect(failedUpdate[0].data.error).not.toContain('groq')
   })
 
   it('does not import or call Together adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'image_generation' }))
 
-    const result = await processJob(makePayload({ capability: 'image_generation' }))
-    expect(result.error).toContain('not implemented')
-    expect(result.error).not.toContain('Together')
-    expect(result.error).not.toContain('together')
+    await expect(processJob(makePayload({ capability: 'image_generation' }))).rejects.toThrow('not implemented')
+
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.error).not.toContain('Together')
+    expect(failedUpdate[0].data.error).not.toContain('together')
   })
 
   it('does not import or call Mimo adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'code' }))
 
-    const result = await processJob(makePayload({ capability: 'code' }))
-    expect(result.error).toContain('not implemented')
-    expect(result.error).not.toContain('Mimo')
-    expect(result.error).not.toContain('mimo')
+    await expect(processJob(makePayload({ capability: 'code' }))).rejects.toThrow('not implemented')
+
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.error).not.toContain('Mimo')
+    expect(failedUpdate[0].data.error).not.toContain('mimo')
   })
 
   it('does not import or call DeepInfra adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'chat' }))
 
-    const result = await processJob(makePayload())
-    expect(result.error).toContain('not implemented')
-    expect(result.error).not.toContain('DeepInfra')
-    expect(result.error).not.toContain('deepinfra')
-  })
+    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
 
-  it('does not expose provider/model selection', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
-
-    const result = await processJob(makePayload())
-
-    // Result should not contain provider/model info
-    expect(result.provider).toBeUndefined()
-    expect(result.model).toBeUndefined()
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.error).not.toContain('DeepInfra')
+    expect(failedUpdate[0].data.error).not.toContain('deepinfra')
   })
 })

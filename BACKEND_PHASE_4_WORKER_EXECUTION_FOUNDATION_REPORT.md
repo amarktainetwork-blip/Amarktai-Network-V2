@@ -1,133 +1,84 @@
-# Backend Phase 4 — Worker Execution Foundation Report
+# Backend Phase 4 — Worker Execution Foundation Report (Tightened)
 
 **Branch:** `feat/prove-worker-execution-foundation`
-**PR:** (see GitHub)
-**Commit:** `feat: prove worker execution foundation`
+**PR:** #26 (https://github.com/amarktainetwork-blip/Amarktai-Network-V2/pull/26)
+**Commit:** `fix: tighten Phase 4 worker execution foundation`
 
-## Exact Scope
+## Fixes Applied
 
-This PR proves the worker can consume queued jobs and update the Job lifecycle honestly without calling providers.
+### BLOCKER 1 — BullMQ failed/completed mismatch
 
-## What Was Proven
+**Problem:** `processJob()` updated DB job to failed for "not implemented" but returned normally. BullMQ treated queue job as completed.
 
-1. Worker subscribes to the canonical queue name `amarktai:jobs`
-2. Worker validates required payload fields (jobId, appSlug, capability, traceId)
-3. Worker rejects missing/invalid fields with thrown errors
-4. Worker loads DB Job row and verifies ownership (appSlug, capability)
-5. Worker updates status from `queued` to `processing` with `startedAt`
-6. Worker calls an isolated execution placeholder that does NOT call providers
-7. Worker marks execution as failed with honest "Provider execution not implemented" error
-8. Worker sets `completedAt` on terminal state
-9. Worker records error text
-10. Worker handles thrown errors safely (updates job to failed, re-throws for BullMQ)
-11. Worker does NOT create artifacts
-12. Worker does NOT set artifactId, provider, or model
-13. Worker does NOT call any active provider
+**Fix:** After updating DB job to failed, `processJob()` now throws the same error so BullMQ records the queue job as failed too.
 
-## What Was Intentionally Not Added
+**Behavior:**
+- DB job becomes `processing`
+- DB job becomes `failed`
+- `completedAt` is set
+- Error text is recorded
+- Processor throws the same honest not-implemented error
+- BullMQ records the job as failed
+- No fake completion path
 
-- Provider execution (GenX, Groq, Together, Mimo, DeepInfra)
-- Real artifact creation
-- Fake completed output
-- Fake product content
-- Studio job submission
-- Dashboard job routes
-- Dashboard UX changes
-- MongoDB/fake/mock/simulation
-- New queue system
-- New backend framework
+### BLOCKER 2 — Injectable execution for testing
+
+**Problem:** Tests could not prove a thrown execution error updates a known DB job to failed and rethrows.
+
+**Fix:** Added `createJobProcessor({ executeCapability })` factory pattern. Default `processJob` export uses the not-implemented placeholder. Tests can inject custom execution functions.
+
+**Tests prove:**
+- Injected execution that throws after processing → DB job updated to failed, error recorded, completedAt set, processor rethrows
+- Injected execution that fails → DB job updated to failed, then throws for BullMQ
+- Injected execution that succeeds → DB job updated to completed (for future use)
+- Missing DB job / mismatch cases rejected without mutation
+
+### BLOCKER 3 — Prompt validation
+
+**Problem:** `validatePayload()` did not reject missing/empty prompt.
+
+**Fix:** Added `if (!payload.prompt || !payload.prompt.trim()) return 'Missing required field: prompt'`
+
+**Tests prove:**
+- Missing prompt rejected
+- Empty/whitespace prompt rejected
+- `processJob` does not touch DB when prompt is missing/empty
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `apps/worker/src/processors/job-processor.ts` | Rewritten: validates payload, verifies DB ownership, marks execution as not-implemented |
-| `apps/worker/src/worker.ts` | Updated: uses new processor signature |
-| `tests/worker-execution-foundation.test.js` | New: 34 tests proving worker foundation |
-| `BACKEND_PHASE_4_WORKER_EXECUTION_FOUNDATION_REPORT.md` | New: this report |
+| `apps/worker/src/processors/job-processor.ts` | Fixed: throws after DB failure, factory pattern, prompt validation |
+| `tests/worker-execution-foundation.test.js` | Rewritten: 33 tests covering all blockers |
+| `BACKEND_PHASE_4_WORKER_EXECUTION_FOUNDATION_REPORT.md` | Updated: accurate report |
 
-## Test Commands Run
+## Exact Test Results
 
-| Command | Result |
-|---------|--------|
-| `npm test` | 155 tests passed (47 + 6 + 34 + 68) |
+```
+npm test
+154 tests passed (47 + 6 + 33 + 68)
+```
 
-## Build Commands Run
+## Exact Build Results
 
-| Command | Result |
-|---------|--------|
-| `npm run build` | Passed (10.7s, 22 pages) |
-| `prisma validate` | DATABASE_URL not set (expected locally) |
-| `npx prisma generate` | Passed |
-| `npm run build --workspace=@amarktai/api` | Passed |
-| `npm run build --workspace=@amarktai/worker` | Passed |
-| `npm run lint --workspace=@amarktai/api` | Passed |
-| `npm run lint --workspace=@amarktai/worker` | Passed |
-
-## Tests Added (34 tests)
-
-### Queue name (1)
-- Worker uses canonical queue name from core
-
-### Payload validation (7)
-- Accepts valid payload
-- Rejects missing jobId
-- Rejects missing appSlug
-- Rejects missing capability
-- Rejects missing traceId
-- Rejects invalid capability
-- Accepts all valid capability keys
-
-### Job processor (18)
-- Throws for missing jobId
-- Throws for missing appSlug
-- Throws for missing capability
-- Throws for missing traceId
-- Throws for invalid capability
-- Throws for missing DB job
-- Throws for appSlug mismatch
-- Throws for capability mismatch
-- Updates queued job to processing with startedAt
-- Marks provider execution as not implemented honestly
-- Sets failed status for not-implemented execution
-- Sets terminal timestamp on failure
-- Records error text
-- Handles thrown processor errors safely
-- Does not create artifacts
-- Does not set artifactId
-- Does not set provider or model
-- Processor can be tested directly without real provider keys
-
-### Provider non-execution (8)
-- Does not import or call GenX adapter
-- Does not import or call Groq adapter
-- Does not import or call Together adapter
-- Does not import or call Mimo adapter
-- Does not import or call DeepInfra adapter
-- Does not expose provider/model selection
-- Verifies DB job ownership before processing
-- Verifies DB job capability before processing
+```
+npm run build: passed (8.0s, 22 pages)
+prisma validate: DATABASE_URL not set (expected locally)
+npx prisma generate: passed
+npm run build --workspace=@amarktai/api: passed
+npm run build --workspace=@amarktai/worker: passed
+npm run lint --workspace=@amarktai/api: passed
+npm run lint --workspace=@amarktai/worker: passed
+```
 
 ## Confirmation
 
-- [x] No provider execution was added
-- [x] No Studio/dashboard job routes were added
-- [x] No dashboard UX changes were made
-- [x] No artifact retrieval changes were made
-- [x] No MongoDB/fake/mock/simulation was added
-- [x] DeepInfra remains gated only
-- [x] Final active providers: genx, groq, together, mimo, deepinfra (gated only)
-
-## Blockers
-
-- DATABASE_URL not set locally (prisma validate requires it)
-- Redis not available locally (worker tests use mock)
-
-## Next Recommended Phase
-
-**Phase 5: Provider Routing Skeleton**
-- Add provider selection logic based on capability (no actual API calls)
-- Wire provider routing into the execution placeholder
-- Add provider health status checks
-- Prove routing selects correct provider for each capability
-- Still no actual provider API calls
+- [x] Not-implemented execution now fails both DB job and BullMQ processor path
+- [x] Execution errors after a known valid job are marked failed and rethrown
+- [x] Missing DB job / mismatch cases rejected without mutation
+- [x] Prompt is validated
+- [x] No provider execution added
+- [x] No fake completed output
+- [x] No artifacts
+- [x] No dashboard/Studio changes
+- [x] Phase 5 was not started
