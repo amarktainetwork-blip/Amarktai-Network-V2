@@ -277,6 +277,25 @@ describe('Dashboard truth cleanup', () => {
     expect(studioText).toContain('DeepInfra gated')
     expect(studioText).toContain('gated: true')
   })
+
+  it('Docker Redis uses BullMQ-safe noeviction policy', () => {
+    const compose = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+    expect(compose).toContain('maxmemory-policy noeviction')
+    expect(compose).not.toContain('maxmemory-policy allkeys-lru')
+  })
+
+  it('Docker Qdrant has no healthcheck', () => {
+    const compose = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+    const qdrantSection = compose.split('# ── Qdrant')[1]?.split('# ── API')[0] ?? ''
+    // No CMD-SHELL healthcheck with curl/wget
+    expect(qdrantSection).not.toContain('CMD-SHELL')
+    expect(qdrantSection).not.toContain('healthcheck:')
+  })
+
+  it('Docker dashboard healthcheck targets 127.0.0.1', () => {
+    const compose = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8')
+    expect(compose).toContain('http://127.0.0.1:3000')
+  })
 })
 
 function listFiles(dir) {
