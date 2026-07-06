@@ -131,6 +131,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      HOSTNAME: 0.0.0.0
       API_URL: http://api:3001
     ports:
       - "3000:3000"
