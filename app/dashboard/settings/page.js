@@ -1,10 +1,11 @@
 'use client'
-import { PageTransition, PageHeader, Field } from '@/components/amarkt/kit'
+import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { PROVIDER_CONTRACTS, OPEN_SOURCE_TOOLS } from '@/lib/dashboard-contract'
-import { HardDrive, KeyRound, Lock, Server, ShieldCheck, SlidersHorizontal, Webhook } from 'lucide-react'
+import { ProviderSettingsPanel } from '@/components/dashboard/provider-settings-panel'
+import { OPEN_SOURCE_TOOLS } from '@/lib/dashboard-contract'
+import { HardDrive, Server, ShieldCheck, SlidersHorizontal, Webhook } from 'lucide-react'
 
 export default function SettingsPage() {
   return (
@@ -22,23 +23,7 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="providers">
-          <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><KeyRound className="h-4 w-4 text-cyan-300" /> Provider Keys</h3>
-            <p className="mb-4 text-xs text-muted-foreground">Provider keys will be configurable after the backend settings route is wired.</p>
-            <div className="space-y-3">
-              {PROVIDER_CONTRACTS.map((provider) => (
-                <div key={provider.id} className="grid gap-2 md:grid-cols-[1fr_auto]">
-                  <div className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
-                    <div className="text-[10px] text-muted-foreground">{provider.name}</div>
-                    <div className="font-mono text-xs">{provider.envKey}</div>
-                  </div>
-                  <button disabled className="flex items-center gap-1 self-end rounded-md border border-white/10 px-3 py-1.5 text-xs text-muted-foreground">
-                    <Lock className="h-3 w-3" /> Backend required
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <ProviderSettingsPanel />
         </TabsContent>
 
         <TabsContent value="policy">
