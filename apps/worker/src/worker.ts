@@ -2,7 +2,11 @@
  * AmarktAI Network — BullMQ Worker Entry Point
  *
  * Connects to Redis, listens on the jobs queue, and dispatches
- * each job to the correct provider adapter via the job processor.
+ * each job to the job processor.
+ *
+ * Phase 4: Worker uses processJob which validates payload,
+ * verifies DB ownership, updates status, and marks execution
+ * as not-implemented honestly.
  *
  * Run with:  pnpm --filter @amarktai/worker dev
  *            or: tsx apps/worker/src/worker.ts
@@ -10,7 +14,7 @@
 
 import { Worker } from 'bullmq'
 import { getRedisUrl, QUEUE_NAMES, WORKER_CONCURRENCY } from '@amarktai/core'
-import { processJob } from './processors/job-processor.js'
+import { processJob, type WorkerJobData } from './processors/job-processor.js'
 
 async function main(): Promise<void> {
   const redisUrl = getRedisUrl()
@@ -20,17 +24,24 @@ async function main(): Promise<void> {
   console.log(`[worker] Queue: ${QUEUE_NAMES.JOBS}`)
   console.log(`[worker] Concurrency: ${WORKER_CONCURRENCY}`)
 
-  const worker = new Worker(QUEUE_NAMES.JOBS, processJob, {
-    connection: {
-      url: redisUrl,
-      maxRetriesPerRequest: null,
+  const worker = new Worker(
+    QUEUE_NAMES.JOBS,
+    async (job) => {
+      const payload = job.data as WorkerJobData
+      return processJob(payload)
     },
-    concurrency: WORKER_CONCURRENCY,
-    limiter: {
-      max: 50,
-      duration: 60_000,
-    },
-  })
+    {
+      connection: {
+        url: redisUrl,
+        maxRetriesPerRequest: null,
+      },
+      concurrency: WORKER_CONCURRENCY,
+      limiter: {
+        max: 50,
+        duration: 60_000,
+      },
+    }
+  )
 
   worker.on('ready', () => {
     console.log('[worker] Connected and listening for jobs')

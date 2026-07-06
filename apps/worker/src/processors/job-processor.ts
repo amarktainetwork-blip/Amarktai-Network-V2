@@ -1,76 +1,172 @@
 /**
  * Job processor — BullMQ worker that processes capability jobs.
  *
- * Flow:
- *   1. Receive job payload from Redis queue
- *   2. Update job status to 'processing' in PostgreSQL
- *   3. Route to the correct provider adapter based on capability prefix
- *   4. Save artifact and update job with result
- *   5. Mark job as 'completed' or 'failed'
+ * Phase 4: Worker Execution Foundation
+ * - Validates payload shape (including prompt)
+ * - Loads DB Job row and verifies ownership
+ * - Updates status to processing with startedAt
+ * - Calls isolated execution placeholder (NO provider execution)
+ * - Marks as failed with honest "not implemented" error
+ * - THROWS after DB failure so BullMQ records queue job as failed
+ * - Handles thrown errors safely
+ * - Does NOT create artifacts
+ * - Does NOT call any provider
  */
 
 import { prisma } from '@amarktai/db'
-import type { Job } from 'bullmq'
-import type { JobPayload } from '@amarktai/core'
-import { getAdapterForCapability, type ProviderExecutionContext } from '../adapters/index.js'
+import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
 
-export async function processJob(job: Job<JobPayload>): Promise<void> {
-  const payload = job.data
-  const { jobId, appSlug, capability, prompt, input, metadata, traceId } = payload
+// ── Types ──────────────────────────────────────────────────────────────────────
 
-  // 1. Mark job as processing
-  await prisma.job.update({
-    where: { id: jobId },
-    data: {
-      status: 'processing',
-      startedAt: new Date(),
-    },
+export interface WorkerJobData {
+  jobId: string
+  appSlug: string
+  capability: string
+  prompt: string
+  input?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+  traceId: string
+  callbackUrl?: string
+}
+
+export interface ProcessorResult {
+  success: boolean
+  status: 'completed' | 'failed'
+  error?: string
+}
+
+export interface ProcessorDeps {
+  executeCapability?: (payload: WorkerJobData) => Promise<ProcessorResult>
+}
+
+// ── Canonical queue name (must match API ingestion) ────────────────────────────
+
+export const WORKER_QUEUE_NAME = QUEUE_NAMES.JOBS
+
+// ── Payload validation ─────────────────────────────────────────────────────────
+
+export function validatePayload(payload: WorkerJobData): string | null {
+  if (!payload.jobId) return 'Missing required field: jobId'
+  if (!payload.appSlug) return 'Missing required field: appSlug'
+  if (!payload.capability) return 'Missing required field: capability'
+  if (!payload.prompt || !payload.prompt.trim()) return 'Missing required field: prompt'
+  if (!payload.traceId) return 'Missing required field: traceId'
+  if (!isValidCapability(payload.capability)) return `Invalid capability: ${payload.capability}`
+  return null
+}
+
+// ── Default execution placeholder ──────────────────────────────────────────────
+// This is the ONLY place provider execution would happen.
+// Phase 4 intentionally does NOT implement it.
+
+function defaultExecuteCapability(_payload: WorkerJobData): Promise<ProcessorResult> {
+  return Promise.resolve({
+    success: false,
+    status: 'failed',
+    error: 'Provider execution not implemented in this phase. Backend Phase 4 proves worker foundation only.',
   })
+}
 
-  try {
-    // 2. Build execution context
-    const context: ProviderExecutionContext = {
-      jobId,
-      appSlug,
-      capability,
-      prompt,
-      input,
-      metadata,
-      traceId,
+// ── Job processor factory ──────────────────────────────────────────────────────
+
+export function createJobProcessor(deps: ProcessorDeps = {}) {
+  const executeCapability = deps.executeCapability ?? defaultExecuteCapability
+
+  return async function processJob(payload: WorkerJobData): Promise<ProcessorResult> {
+    // 1. Validate payload
+    const validationError = validatePayload(payload)
+    if (validationError) {
+      throw new Error(validationError)
     }
 
-    // 3. Route to adapter
-    const adapter = getAdapterForCapability(capability)
-    const result = await adapter.execute(context)
+    const { jobId, appSlug, capability } = payload
 
-    if (!result.success) {
-      throw new Error(result.error ?? 'Provider adapter returned failure')
+    // 2. Load DB Job row
+    const job = await prisma.job.findUnique({ where: { id: jobId } })
+    if (!job) {
+      throw new Error(`Job not found: ${jobId}`)
     }
 
-    // 4. Update job as completed
+    // 3. Verify ownership — appSlug must match
+    if (job.appSlug !== appSlug) {
+      throw new Error(`Job appSlug mismatch: expected '${job.appSlug}', got '${appSlug}'`)
+    }
+
+    // 4. Verify capability must match
+    if (job.capability !== capability) {
+      throw new Error(`Job capability mismatch: expected '${job.capability}', got '${capability}'`)
+    }
+
+    // 5. Update status to processing
     await prisma.job.update({
       where: { id: jobId },
       data: {
-        status: 'completed',
-        provider: result.provider,
-        model: result.model,
-        artifactId: result.artifactId ?? null,
-        progress: 100,
-        output: result.output ?? null,
-        completedAt: new Date(),
+        status: 'processing',
+        startedAt: new Date(),
       },
     })
-  } catch (err) {
-    // 5. Mark job as failed
-    const errorMessage = err instanceof Error ? err.message : 'Unknown worker error'
-    await prisma.job.update({
-      where: { id: jobId },
-      data: {
-        status: 'failed',
-        error: errorMessage,
-        completedAt: new Date(),
-      },
-    })
-    throw err // Re-throw so BullMQ records the failure
+
+    try {
+      // 6. Call execution (does NOT call providers in Phase 4)
+      const result = await executeCapability(payload)
+
+      // 7. Handle result — must be honest about what happened
+      if (result.success) {
+        // This branch should NOT be reached in Phase 4
+        // because defaultExecuteCapability always returns success: false
+        await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date(),
+          },
+        })
+        return result
+      }
+
+      // 8. Execution failed (expected in Phase 4)
+      // Update DB job to failed, then THROW so BullMQ also records failure
+      const errorMsg = result.error ?? 'Execution failed'
+      await prisma.job.update({
+        where: { id: jobId },
+        data: {
+          status: 'failed',
+          error: errorMsg,
+          completedAt: new Date(),
+        },
+      })
+
+      // Throw so BullMQ records the queue job as failed too
+      throw new Error(errorMsg)
+    } catch (err) {
+      // 9. Handle thrown errors safely
+      // This catches:
+      //   - Our throw from step 8 (DB already updated)
+      //   - Errors thrown by executeCapability (DB not yet updated to failed)
+      //   - DB update errors from step 5 or step 8
+      const errorMessage = err instanceof Error ? err.message : 'Unknown worker error'
+
+      // Attempt to update DB to failed state
+      // If step 8 already updated it, this is a harmless no-op (same status)
+      // If executeCapability threw, this records the error
+      await prisma.job.update({
+        where: { id: jobId },
+        data: {
+          status: 'failed',
+          error: errorMessage,
+          completedAt: new Date(),
+        },
+      }).catch(() => {
+        // If DB update fails, the original error is more important
+      })
+
+      // Re-throw so BullMQ records the failure
+      throw err
+    }
   }
 }
+
+// ── Default processor (for backward compatibility) ─────────────────────────────
+
+export const processJob = createJobProcessor()
