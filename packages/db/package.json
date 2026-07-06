@@ -21,6 +21,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@amarktai/core": "*",
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {

@@ -17,6 +17,20 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
+const credentialMocks = vi.hoisted(() => {
+  class ProviderConfigError extends Error {
+    constructor(message, providerKey = 'together', code = 'missing-config') {
+      super(message)
+      this.providerKey = providerKey
+      this.code = code
+    }
+  }
+  return {
+    ProviderConfigError,
+    resolveProviderApiKey: vi.fn(),
+  }
+})
+
 const providerMocks = vi.hoisted(() => ({
   groqChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
@@ -27,7 +41,11 @@ const artifactMocks = vi.hoisted(() => ({
   saveArtifact: vi.fn(),
 }))
 
-vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
+vi.mock('@amarktai/db', () => ({
+  prisma: prismaMock,
+  ProviderConfigError: credentialMocks.ProviderConfigError,
+  resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+}))
 vi.mock('@amarktai/providers', () => providerMocks)
 vi.mock('@amarktai/artifacts', () => artifactMocks)
 
@@ -118,6 +136,11 @@ describe('Together image executor', () => {
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
     }
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => ({
+      providerKey,
+      apiKey: `${providerKey}-test-key`,
+      source: 'database',
+    }))
     mockTogetherSuccess()
     mockArtifactSuccess()
   })
@@ -128,21 +151,33 @@ describe('Together image executor', () => {
 
   it('requires TOGETHER_API_KEY for image_generation execution', async () => {
     delete process.env.TOGETHER_API_KEY
+    credentialMocks.resolveProviderApiKey.mockRejectedValueOnce(
+      new credentialMocks.ProviderConfigError("Provider 'together' is missing configuration", 'together', 'missing-config'),
+    )
 
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('together config missing')
+    expect(result.error).toContain("Provider 'together' is missing configuration")
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
     expect(artifactMocks.saveArtifact).not.toHaveBeenCalled()
   })
 
   it('calls togetherGenerateImage only for image_generation', async () => {
+    credentialMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'together',
+      apiKey: 'db-together-key',
+      source: 'database',
+    })
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('together')
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledTimes(1)
+    expect(providerMocks.togetherGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'db-together-key',
+    }))
+    expect(JSON.stringify(result)).not.toContain('db-together-key')
     expect(providerMocks.groqChat).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
@@ -229,7 +264,11 @@ describe('Together image executor', () => {
   })
 
   it('never includes API keys in returned errors or output', async () => {
-    process.env.TOGETHER_API_KEY = 'super-secret-together-key'
+    credentialMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'together',
+      apiKey: 'super-secret-together-key',
+      source: 'database',
+    })
     providerMocks.togetherGenerateImage.mockRejectedValue(
       new Error('Together image error 401: super-secret-together-key'),
     )
@@ -258,6 +297,11 @@ describe('Execution routing gate', () => {
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
     }
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => ({
+      providerKey,
+      apiKey: `${providerKey}-test-key`,
+      source: 'database',
+    }))
     providerMocks.groqChat.mockResolvedValue({
       content: 'chat ok',
       model: 'llama-3.3-70b-versatile',
@@ -302,6 +346,9 @@ describe('Execution routing gate', () => {
 
   it('missing Together config blocks image execution honestly', async () => {
     delete process.env.TOGETHER_API_KEY
+    credentialMocks.resolveProviderApiKey.mockRejectedValueOnce(
+      new credentialMocks.ProviderConfigError("Provider 'together' is missing configuration", 'together', 'missing-config'),
+    )
 
     const result = await executeWithProvider(makePayload())
 
@@ -354,6 +401,11 @@ describe('Artifact persistence and worker completion', () => {
       TOGETHER_API_KEY: 'together-test-key',
       GROQ_API_KEY: 'groq-test-key',
     }
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => ({
+      providerKey,
+      apiKey: `${providerKey}-test-key`,
+      source: 'database',
+    }))
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
     prismaMock.job.update.mockResolvedValue({})
     mockTogetherSuccess()

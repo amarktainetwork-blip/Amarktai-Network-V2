@@ -16,7 +16,25 @@ const prismaMock = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
+const credentialMocks = vi.hoisted(() => {
+  class ProviderConfigError extends Error {
+    constructor(message, providerKey = 'groq', code = 'missing-config') {
+      super(message)
+      this.providerKey = providerKey
+      this.code = code
+    }
+  }
+  return {
+    ProviderConfigError,
+    resolveProviderApiKey: vi.fn(),
+  }
+})
+
+vi.mock('@amarktai/db', () => ({
+  prisma: prismaMock,
+  ProviderConfigError: credentialMocks.ProviderConfigError,
+  resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+}))
 
 // ── Mock Groq client ─────────────────────────────────────────────────────────
 
@@ -80,6 +98,10 @@ describe('Groq executor — client contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env = { ...originalEnv, GROQ_API_KEY: 'test-key' }
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
+      if (providerKey === 'groq') return { providerKey: 'groq', apiKey: 'test-key', source: 'env' }
+      throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
   })
 
   afterEach(() => {
@@ -98,6 +120,11 @@ describe('Groq executor — client contract', () => {
   })
 
   it('builds request with provider groq', async () => {
+    credentialMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'groq',
+      apiKey: 'db-groq-key',
+      source: 'database',
+    })
     mockGroqChat.mockResolvedValue({
       content: 'Hello!',
       model: 'llama-3.3-70b-versatile',
@@ -109,6 +136,10 @@ describe('Groq executor — client contract', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('groq')
+    expect(mockGroqChat).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'db-groq-key',
+    }))
+    expect(JSON.stringify(result)).not.toContain('db-groq-key')
   })
 
   it('uses internal model only, not user model', async () => {
@@ -226,6 +257,10 @@ describe('Routing/execution gate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env = { ...originalEnv, GROQ_API_KEY: 'test-key' }
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
+      if (providerKey === 'groq') return { providerKey: 'groq', apiKey: 'test-key', source: 'env' }
+      throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
   })
 
   afterEach(() => {
@@ -259,6 +294,9 @@ describe('Routing/execution gate', () => {
 
   it('missing Groq config blocks live execution honestly', async () => {
     delete process.env.GROQ_API_KEY
+    credentialMocks.resolveProviderApiKey.mockRejectedValueOnce(
+      new credentialMocks.ProviderConfigError("Provider 'groq' is missing configuration", 'groq', 'missing-config')
+    )
 
     const result = await executeWithProvider(makePayload())
 
@@ -282,6 +320,10 @@ describe('Worker integration with Groq chat', () => {
     vi.clearAllMocks()
     process.env = { ...originalEnv, GROQ_API_KEY: 'test-key' }
     prismaMock.job.update.mockResolvedValue({})
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
+      if (providerKey === 'groq') return { providerKey: 'groq', apiKey: 'test-key', source: 'env' }
+      throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
     mockGroqChat.mockResolvedValue({
       content: 'Real Groq response text',
       model: 'llama-3.3-70b-versatile',
