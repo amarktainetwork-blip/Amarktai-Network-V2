@@ -91,13 +91,14 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
 
     if (providerKey === 'genx') {
       const providerStatus = await getProviderCredentialStatus('genx')
-      const { genxSubmitVideo } = await import('@amarktai/providers')
+      const { DEFAULT_GENX_VIDEO_MODEL, genxSubmitVideo } = await import('@amarktai/providers')
+      const model = providerStatus.defaultModel?.trim() || DEFAULT_GENX_VIDEO_MODEL
       const result = await genxSubmitVideo({
         prompt: 'A simple blue circle rotating slowly',
+        model,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        providerDefaultModel: providerStatus.defaultModel || undefined,
-        duration: 2,
+        duration: 4,
         aspectRatio: '1:1',
       })
 
@@ -108,7 +109,7 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
       const provider = await updateProviderHealthStatus({
         providerKey,
         healthStatus: 'live',
-        healthMessage: `Live test passed through GenX Router generate endpoint (job: ${result.jobId}).`,
+        healthMessage: `GenX key live submit passed through Router generate endpoint using ${result.model}; completion proof pending (job: ${result.jobId}).`,
       })
       return { provider }
     }

@@ -5,7 +5,8 @@
  * - Loads DB Job row and verifies ownership
  * - Updates status to processing with startedAt
  * - Delegates execution to the provider executor
- * - Currently proven execution paths are Groq chat and Together image generation
+ * - Currently proven execution paths are Groq chat, Together image generation,
+ *   and GenX video generation
  * - Fails all other capabilities honestly as not implemented
  * - Successful text jobs may store output
  * - Successful media jobs may store artifactId and safe output metadata
@@ -61,8 +62,8 @@ export function validatePayload(payload: WorkerJobData): string | null {
 }
 
 // ── Default execution — delegates to provider executor ────────────────────────
-// Phase 6B: delegates to the provider executor, which currently supports
-// Groq chat and Together image generation only.
+// Delegates to the provider executor, which currently supports Groq chat,
+// Together image generation, and GenX video generation.
 
 async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
   const { executeWithProvider } = await import('../providers/provider-executor.js')
@@ -105,6 +106,9 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       data: {
         status: 'processing',
         startedAt: new Date(),
+        completedAt: null,
+        error: null,
+        progress: 0,
       },
     })
 
@@ -152,6 +156,9 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         data: {
           status: 'failed',
           error: errorMsg,
+          provider: result.provider ?? null,
+          model: result.model ?? null,
+          progress: 0,
           completedAt: new Date(),
         },
       })

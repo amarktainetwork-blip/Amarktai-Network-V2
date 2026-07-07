@@ -250,9 +250,35 @@ describe('Job processor — execution lifecycle', () => {
         data: expect.objectContaining({
           status: 'processing',
           startedAt: expect.any(Date),
+          completedAt: null,
+          error: null,
+          progress: 0,
         }),
       })
     )
+  })
+
+  it('clears stale completion fields when a retry starts processing', async () => {
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({
+      status: 'failed',
+      error: 'old failure',
+      completedAt: new Date('2026-07-04T11:00:00Z'),
+      provider: 'genx',
+      model: 'old-model',
+      output: '{"stale":true}',
+      artifactId: 'old-artifact',
+    }))
+
+    await expect(processJob(makePayload())).rejects.toThrow()
+
+    const processingUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'processing'
+    )
+    expect(processingUpdate[0].data).toEqual(expect.objectContaining({
+      completedAt: null,
+      error: null,
+      progress: 0,
+    }))
   })
 
   it('not-implemented execution fails DB job then throws for BullMQ', async () => {
@@ -267,6 +293,7 @@ describe('Job processor — execution lifecycle', () => {
     )
     expect(failedUpdate).toBeDefined()
     expect(failedUpdate[0].data.error).toContain('not implemented')
+    expect(failedUpdate[0].data.status).toBe('failed')
     expect(failedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
@@ -275,9 +302,10 @@ describe('Job processor — execution lifecycle', () => {
 
     await expect(processJob(makePayload())).rejects.toThrow()
 
-    for (const call of prismaMock.job.update.mock.calls) {
-      expect(call[0].data.artifactId).toBeUndefined()
-    }
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.artifactId).toBeUndefined()
   })
 
   it('does not set provider or model', async () => {
@@ -285,10 +313,11 @@ describe('Job processor — execution lifecycle', () => {
 
     await expect(processJob(makePayload())).rejects.toThrow()
 
-    for (const call of prismaMock.job.update.mock.calls) {
-      expect(call[0].data.provider).toBeUndefined()
-      expect(call[0].data.model).toBeUndefined()
-    }
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate[0].data.provider).toBeNull()
+    expect(failedUpdate[0].data.model).toBeNull()
   })
 })
 
@@ -321,6 +350,34 @@ describe('Job processor — injectable execution', () => {
     )
     expect(failedUpdate).toBeDefined()
     expect(failedUpdate[0].data.error).toBe('Custom not-implemented message')
+  })
+
+  it('failed execution stores provider and model when execution returns them', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: false,
+      status: 'failed',
+      error: 'GenX video download error 401',
+      provider: 'genx',
+      model: 'seedance-v1-fast',
+    })
+
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'video_generation' }))
+
+    await expect(processor(makePayload({ capability: 'video_generation' }))).rejects.toThrow('GenX video download error 401')
+
+    const failedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'failed'
+    )
+    expect(failedUpdate).toBeDefined()
+    expect(failedUpdate[0].data).toEqual(expect.objectContaining({
+      status: 'failed',
+      error: 'GenX video download error 401',
+      provider: 'genx',
+      model: 'seedance-v1-fast',
+      progress: 0,
+      completedAt: expect.any(Date),
+    }))
   })
 
   it('injected execution that throws after processing updates DB to failed', async () => {

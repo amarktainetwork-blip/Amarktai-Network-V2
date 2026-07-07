@@ -27,10 +27,12 @@ export {
 
 // GenX — video generation with long-polling
 export {
+  DEFAULT_GENX_VIDEO_MODEL,
   genxSubmitVideo,
   genxPollVideo,
   genxDownloadVideo,
   genxGenerateVideo,
+  resolveGenxVideoModel,
   GENX_POLL_INTERVAL_MS,
   GENX_POLL_MAX_ATTEMPTS,
   type GenxVideoRequest,

@@ -174,6 +174,14 @@ describe('Provider/model override blocking', () => {
       provider: 'groq',
     })).toBe('provider')
   })
+
+  it('blocks provider/model overrides on video generation requests before GenX routing', () => {
+    expect(hasBlockedOverrides({
+      capability: 'video_generation',
+      prompt: 'make a proof clip',
+      model: 'veo-3.1',
+    })).toBe('model')
+  })
 })
 
 // ── Request validation tests ─────────────────────────────────────────────────
