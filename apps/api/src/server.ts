@@ -1,19 +1,14 @@
 /**
- * AmarktAI Network — Fastify API Server
+ * AmarktAI Network API server.
  *
- * Production-grade HTTP API engine with:
- * - Rate limiting
- * - Global error interception
- * - Redis connection
- * - Health, jobs, and artifact routes
- * - All validation from @amarktai/core (single source of truth)
+ * Production HTTP API engine with rate limiting, Redis, auth, jobs,
+ * artifact routes, provider admin routes, and source-of-truth validation.
  */
 
-import Fastify, { type FastifyInstance } from 'fastify'
+import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import cors from '@fastify/cors'
 import { API_PORT, API_HOST, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '@amarktai/core'
-import { prisma } from '@amarktai/db'
 import { redisPluginDecorated } from './plugins/redis.js'
 import { jwtPluginDecorated } from './plugins/jwt.js'
 import { errorHandlerPlugin } from './plugins/error-handler.js'
@@ -22,28 +17,7 @@ import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
 import { authRoutes } from './routes/auth.js'
 import { adminProviderRoutes } from './routes/admin-providers.js'
-
-// ── Admin Safety Net ──────────────────────────────────────────────────────────
-
-const DEFAULT_ADMIN_EMAIL = 'amarktainetwork@gmail.com'
-const DEFAULT_ADMIN_PASSWORD = 'Ashmor12@'
-
-async function ensureAdminExists(log: FastifyInstance['log']): Promise<void> {
-  try {
-    const count = await prisma.adminUser.count()
-    if (count === 0) {
-      log.warn('[boot] No admin user found — creating default admin account')
-      const { hash } = await import('bcryptjs')
-      const passwordHash = await hash(DEFAULT_ADMIN_PASSWORD, 12)
-      await prisma.adminUser.create({
-        data: { email: DEFAULT_ADMIN_EMAIL, passwordHash },
-      })
-      log.info(`[boot] Default admin created: ${DEFAULT_ADMIN_EMAIL}`)
-    }
-  } catch (err) {
-    log.error({ err }, '[boot] Failed to verify/create admin user — login may not work')
-  }
-}
+import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 
 async function main(): Promise<void> {
   const app = Fastify({
@@ -57,8 +31,6 @@ async function main(): Promise<void> {
     trustProxy: true,
   })
 
-  // ── Plugins ──────────────────────────────────────────────────────────────
-
   await app.register(cors, { origin: true })
   await app.register(rateLimit, {
     max: RATE_LIMIT_MAX,
@@ -68,15 +40,13 @@ async function main(): Promise<void> {
   await app.register(jwtPluginDecorated)
   await app.register(errorHandlerPlugin)
 
-  // ── Routes ───────────────────────────────────────────────────────────────
-
   await app.register(healthRoutes)
   await app.register(authRoutes)
   await app.register(adminProviderRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
 
-  // ── Start ────────────────────────────────────────────────────────────────
+  await ensureDefaultAdminExists(app.log)
 
   try {
     await app.listen({ port: API_PORT, host: API_HOST })
@@ -85,11 +55,6 @@ async function main(): Promise<void> {
     app.log.fatal(err, 'Failed to start server')
     process.exit(1)
   }
-
-  // Safety net: ensure admin account exists (covers seed failures)
-  await ensureAdminExists(app.log)
-
-  // ── Graceful shutdown ────────────────────────────────────────────────────
 
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}, shutting down gracefully...`)
