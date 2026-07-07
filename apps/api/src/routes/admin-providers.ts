@@ -12,6 +12,7 @@ import {
   listProviderCredentialStatuses,
   saveProviderCredential,
 } from '@amarktai/db'
+import { testProviderCredential } from '../lib/provider-health-test.js'
 
 export async function adminProviderRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/providers', async (request, reply) => {
@@ -46,6 +47,23 @@ export async function adminProviderRoutes(app: FastifyInstance): Promise<void> {
       }
       request.log.error({ err }, 'Failed to save provider credential')
       return reply.status(500).send({ error: true, message: 'Failed to save provider credential' })
+    }
+  })
+
+  app.post('/api/admin/providers/:providerKey/test', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { providerKey } = request.params as { providerKey: string }
+
+    try {
+      const result = await testProviderCredential(providerKey)
+      return reply.send(result)
+    } catch (err) {
+      if (err instanceof ProviderConfigError && err.code === 'invalid-provider') {
+        return reply.status(400).send({ error: true, message: 'Invalid provider key' })
+      }
+      request.log.error({ err }, 'Failed to test provider credential')
+      return reply.status(500).send({ error: true, message: 'Failed to test provider credential' })
     }
   })
 
