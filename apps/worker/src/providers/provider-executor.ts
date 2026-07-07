@@ -79,6 +79,16 @@ function readString(input: Record<string, unknown> | undefined, key: string): st
   return typeof value === 'string' && value.trim() ? value : undefined
 }
 
+function parseGenxDiscoveredModels(healthMessage: string): string[] {
+  const match = healthMessage.match(/Models seen:\s*(.+)$/i)
+  if (!match?.[1]) return []
+
+  return match[1]
+    .split(',')
+    .map((model) => model.trim().replace(/\.$/, ''))
+    .filter(Boolean)
+}
+
 async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
   let apiKey = ''
 
@@ -208,15 +218,22 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
-    const { DEFAULT_GENX_VIDEO_MODEL, genxGenerateVideo } = await import('@amarktai/providers')
+    const { genxGenerateVideo, resolveGenxVideoModel } = await import('@amarktai/providers')
     const { saveArtifact } = await import('@amarktai/artifacts')
-    model = providerStatus.defaultModel?.trim() || DEFAULT_GENX_VIDEO_MODEL
+    const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
+    model = resolveGenxVideoModel({
+      providerDefaultModel: providerStatus.defaultModel,
+      providerFallbackModel: providerStatus.fallbackModel,
+      providerAvailableModels,
+    })
 
     const result = await genxGenerateVideo({
       prompt: payload.prompt,
       apiKey,
       baseUrl: providerStatus.baseUrl || undefined,
       providerDefaultModel: providerStatus.defaultModel || undefined,
+      providerFallbackModel: providerStatus.fallbackModel || undefined,
+      providerAvailableModels,
       duration: readNumber(payload.input, 'duration'),
       aspectRatio: readString(payload.input, 'aspectRatio'),
       style: readString(payload.input, 'style'),
@@ -248,6 +265,7 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
           width: result.width,
           height: result.height,
           duration: result.duration,
+          providerJobId: result.providerJobId,
         },
       },
       data: result.videoBuffer,
@@ -262,6 +280,8 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       width: result.width,
       height: result.height,
       duration: result.duration,
+      providerJobId: result.providerJobId,
+      selectedModel: result.model || model,
     }
 
     return {
@@ -279,7 +299,7 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     return {
       success: false,
       status: 'failed',
-      error: `GenX execution failed: ${redactProviderSecrets(message, [apiKey])}`,
+      error: `GenX execution failed: provider=genx; selectedModel=${model}; ${redactProviderSecrets(message, [apiKey])}`,
       provider: 'genx',
       model,
     }

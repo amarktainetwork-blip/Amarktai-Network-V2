@@ -23,6 +23,8 @@ export interface GenxVideoRequest {
   apiKey?: string
   baseUrl?: string
   providerDefaultModel?: string
+  providerFallbackModel?: string
+  providerAvailableModels?: string[]
 }
 
 export interface GenxVideoSubmitResponse {
@@ -47,10 +49,16 @@ export interface GenxVideoResult {
   width: number
   height: number
   model: string
+  providerJobId?: string
   metadata: Record<string, unknown>
 }
 
 export const DEFAULT_GENX_VIDEO_MODEL = 'seedance-v1-fast'
+export const GENX_ROUTER_VIDEO_MODEL_PREFERENCE = [
+  'grok-imagine-video',
+  'kling-v2.5-turbo',
+  DEFAULT_GENX_VIDEO_MODEL,
+]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,10 +81,35 @@ function resolveOptionalGenxApiKey(requestApiKey?: string): string {
 }
 
 export function resolveGenxVideoModel(
-  request: Pick<GenxVideoRequest, 'model' | 'providerDefaultModel'> = {},
+  request: Pick<GenxVideoRequest, 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
 ): string {
-  return request.model?.trim()
-    || request.providerDefaultModel?.trim()
+  const explicitModel = request.model?.trim()
+  if (explicitModel) return explicitModel
+
+  const availableModels = normalizeModelList(request.providerAvailableModels)
+  const providerDefaultModel = request.providerDefaultModel?.trim()
+  const providerFallbackModel = request.providerFallbackModel?.trim()
+
+  if (availableModels.length) {
+    if (providerDefaultModel && modelListIncludes(availableModels, providerDefaultModel) && isUsableTextToVideoModel(providerDefaultModel)) {
+      return providerDefaultModel
+    }
+
+    if (providerFallbackModel && modelListIncludes(availableModels, providerFallbackModel) && isUsableTextToVideoModel(providerFallbackModel)) {
+      return providerFallbackModel
+    }
+
+    const preferred = GENX_ROUTER_VIDEO_MODEL_PREFERENCE.find((candidate) => (
+      modelListIncludes(availableModels, candidate) && isUsableTextToVideoModel(candidate)
+    ))
+    if (preferred) return preferred
+
+    const discovered = availableModels.find(isUsableTextToVideoModel)
+    if (discovered) return discovered
+  }
+
+  return providerDefaultModel
+    || providerFallbackModel
     || DEFAULT_GENX_VIDEO_MODEL
 }
 
@@ -114,6 +147,52 @@ function extractResultUrl(data: Record<string, unknown>): string | undefined {
   return undefined
 }
 
+function normalizeModelList(models: string[] | undefined): string[] {
+  return (models ?? [])
+    .map((model) => model.trim())
+    .filter((model, index, all): model is string => !!model && all.indexOf(model) === index)
+}
+
+function modelListIncludes(models: string[], model: string): boolean {
+  return models.some((candidate) => candidate.toLowerCase() === model.toLowerCase())
+}
+
+function isUsableTextToVideoModel(model: string): boolean {
+  const lower = model.toLowerCase()
+  if (lower.includes('avatar')) return false
+  return lower.includes('video')
+    || lower.includes('imagine')
+    || lower.includes('kling')
+    || lower.includes('seedance')
+    || lower.includes('veo')
+    || lower.includes('wan')
+}
+
+function redactSecrets(message: string, secrets: string[]): string {
+  let safe = message
+  for (const secret of secrets) {
+    if (secret) safe = safe.split(secret).join('[redacted]')
+  }
+  return safe
+}
+
+function shortSafeBody(body: string, secrets: string[] = []): string {
+  return redactSecrets(body.replace(/\s+/g, ' ').trim(), secrets).slice(0, 500) || '[empty body]'
+}
+
+export class GenxHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly bodySnippet: string,
+    readonly providerJobId?: string,
+    readonly pollAttempt?: number,
+  ) {
+    super(message)
+    this.name = 'GenxHttpError'
+  }
+}
+
 // ── Submit Video Job ──────────────────────────────────────────────────────────
 
 export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVideoSubmitResponse> {
@@ -146,7 +225,8 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`GenX submit error ${response.status}: ${errBody}`)
+    const bodySnippet = shortSafeBody(errBody, [apiKey])
+    throw new GenxHttpError(`GenX submit error ${response.status}: ${bodySnippet}`, response.status, bodySnippet)
   }
 
   const data = await response.json() as Record<string, unknown>
@@ -160,7 +240,10 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
 
 // ── Poll Video Job Status ─────────────────────────────────────────────────────
 
-export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl'>): Promise<GenxVideoPollResponse> {
+export async function genxPollVideo(
+  jobId: string,
+  request?: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl'> & { pollAttempt?: number },
+): Promise<GenxVideoPollResponse> {
   const apiKey = resolveGenxApiKey(request?.apiKey)
   const baseUrl = resolveGenxBaseUrl(request?.baseUrl)
 
@@ -173,7 +256,15 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`GenX poll error ${response.status}: ${errBody}`)
+    const bodySnippet = shortSafeBody(errBody, [apiKey])
+    const attemptText = request?.pollAttempt ? ` on attempt ${request.pollAttempt}` : ''
+    throw new GenxHttpError(
+      `GenX poll error ${response.status}${attemptText} for providerJobId=${jobId}: ${bodySnippet}`,
+      response.status,
+      bodySnippet,
+      jobId,
+      request?.pollAttempt,
+    )
   }
 
   const data = await response.json() as Record<string, unknown>
@@ -216,7 +307,7 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
 
 export async function genxDownloadVideo(
   url: string,
-  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel'> = {},
+  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
 ): Promise<GenxVideoResult> {
   const apiKey = resolveOptionalGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
@@ -269,6 +360,7 @@ function shouldAuthenticateDownload(url: string, baseUrl?: string): boolean {
 
 export const GENX_POLL_INTERVAL_MS = 5000
 export const GENX_POLL_MAX_ATTEMPTS = 120
+export const GENX_POLL_TRANSIENT_MAX_RETRIES = 5
 
 export interface GenxLongPollCallbacks {
   onProgress?: (progress: number, status: string) => void
@@ -282,24 +374,44 @@ export async function genxGenerateVideo(
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
   const model = resolveGenxVideoModel(request)
 
-  const submitResult = await genxSubmitVideo(request)
+  const submitResult = await genxSubmitVideo({ ...request, model })
   if (!submitResult.jobId) {
     throw new Error('GenX did not return a job ID')
   }
 
   let attempts = 0
+  let transientPollFailures = 0
   while (attempts < GENX_POLL_MAX_ATTEMPTS) {
     await sleep(GENX_POLL_INTERVAL_MS)
     attempts++
 
-    const pollResult = await genxPollVideo(submitResult.jobId, { apiKey, baseUrl })
+    let pollResult: GenxVideoPollResponse
+    try {
+      pollResult = await genxPollVideo(submitResult.jobId, { apiKey, baseUrl, pollAttempt: attempts })
+      transientPollFailures = 0
+    } catch (err) {
+      if (isTransientPollError(err)) {
+        transientPollFailures++
+        if (transientPollFailures <= GENX_POLL_TRANSIENT_MAX_RETRIES) {
+          continue
+        }
+      }
+
+      throw formatGenxPollFailure(err, {
+        model,
+        providerJobId: submitResult.jobId,
+        pollAttempt: attempts,
+        transientPollFailures,
+        baseUrl,
+      })
+    }
 
     if (callbacks?.onProgress) {
       callbacks.onProgress(pollResult.progress, pollResult.status)
     }
 
     if (pollResult.status === 'failed') {
-      throw new Error(`GenX video generation failed: ${pollResult.error ?? 'unknown error'}`)
+      throw new Error(`GenX video generation failed for providerJobId=${submitResult.jobId}; model=${model}; pollAttempt=${attempts}; providerStatus=failed; ${pollResult.error ?? 'unknown error'}`)
     }
 
     if (pollResult.status === 'completed') {
@@ -312,21 +424,71 @@ export async function genxGenerateVideo(
       let lastDownloadError: unknown
       for (const downloadUrl of downloadUrls) {
         try {
-          return await genxDownloadVideo(downloadUrl, {
+          const video = await genxDownloadVideo(downloadUrl, {
             apiKey,
             baseUrl,
             model,
+            providerAvailableModels: request.providerAvailableModels,
           })
+          return {
+            ...video,
+            model,
+            providerJobId: submitResult.jobId,
+            metadata: {
+              ...video.metadata,
+              providerJobId: submitResult.jobId,
+              selectedModel: model,
+              pollAttempt: attempts,
+            },
+          }
         } catch (err) {
           lastDownloadError = err
         }
       }
 
-      throw lastDownloadError instanceof Error
-        ? lastDownloadError
-        : new Error('GenX video download failed')
+      if (lastDownloadError instanceof Error) {
+        throw new Error(`GenX video download failed for providerJobId=${submitResult.jobId}; model=${model}; ${lastDownloadError.message}`)
+      }
+
+      throw new Error(`GenX video download failed for providerJobId=${submitResult.jobId}; model=${model}`)
     }
   }
 
-  throw new Error(`GenX video generation timed out after ${GENX_POLL_MAX_ATTEMPTS} poll attempts`)
+  throw new Error(`GenX video generation timed out after ${GENX_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${submitResult.jobId}; model=${model}`)
+}
+
+function isTransientPollError(err: unknown): boolean {
+  return err instanceof GenxHttpError && [500, 502, 503, 504].includes(err.status)
+}
+
+function formatGenxPollFailure(
+  err: unknown,
+  context: {
+    model: string
+    providerJobId: string
+    pollAttempt: number
+    transientPollFailures: number
+    baseUrl: string
+  },
+): Error {
+  const prefix = `GenX poll failed for providerJobId=${context.providerJobId}; model=${context.model}; baseUrl=${safeBaseUrlDescriptor(context.baseUrl)}; pollAttempt=${context.pollAttempt}`
+
+  if (err instanceof GenxHttpError) {
+    const transient = isTransientPollError(err)
+      ? `; transientRetries=${context.transientPollFailures}/${GENX_POLL_TRANSIENT_MAX_RETRIES}`
+      : ''
+    return new Error(`${prefix}${transient}; httpStatus=${err.status}; body=${err.bodySnippet}`)
+  }
+
+  if (err instanceof Error) return new Error(`${prefix}; ${err.message}`)
+  return new Error(`${prefix}; unknown GenX poll error`)
+}
+
+function safeBaseUrlDescriptor(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl)
+    return `${parsed.origin}${parsed.pathname === '/' ? '' : parsed.pathname}`
+  } catch {
+    return '[invalid-base-url]'
+  }
 }
