@@ -5,9 +5,11 @@ import {
   updateProviderHealthStatus,
   type ProviderCredentialStatus,
 } from '@amarktai/db'
-import { isValidProvider, type ProviderKey } from '@amarktai/core'
+import { getGenxBaseUrl, isValidProvider, type ProviderKey } from '@amarktai/core'
 
 const GATED_PROVIDERS = new Set<ProviderKey>(['mimo', 'deepinfra'])
+const GENX_MODELS_TEST_TIMEOUT_MS = 15_000
+const GENX_VIDEO_MODEL_MARKERS = ['seedance', 'video', 'veo', 'wan', 'kling']
 
 export interface ProviderLiveTestResult {
   provider: ProviderCredentialStatus
@@ -91,25 +93,16 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
 
     if (providerKey === 'genx') {
       const providerStatus = await getProviderCredentialStatus('genx')
-      const { DEFAULT_GENX_VIDEO_MODEL, genxSubmitVideo } = await import('@amarktai/providers')
-      const model = providerStatus.defaultModel?.trim() || DEFAULT_GENX_VIDEO_MODEL
-      const result = await genxSubmitVideo({
-        prompt: 'A simple blue circle rotating slowly',
-        model,
+      const modelNames = await testGenxModelsEndpoint({
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        duration: 4,
-        aspectRatio: '1:1',
       })
-
-      if (!result.jobId) {
-        throw new Error('GenX did not return a job ID from test submission')
-      }
+      const modelSummary = modelNames.slice(0, 3).join(', ')
 
       const provider = await updateProviderHealthStatus({
         providerKey,
         healthStatus: 'live',
-        healthMessage: `GenX key live submit passed through Router generate endpoint using ${result.model}; completion proof pending (job: ${result.jobId}).`,
+        healthMessage: `GenX key validated against Router models endpoint. Video completion proof still required. Models seen: ${modelSummary}.`,
       })
       return { provider }
     }
@@ -150,6 +143,98 @@ function safeErrorMessage(err: unknown): string {
 
   if (err instanceof Error && err.message.trim()) return err.message
   return 'Provider live test failed'
+}
+
+interface GenxModelsTestInput {
+  apiKey: string
+  baseUrl?: string
+}
+
+export async function testGenxModelsEndpoint(input: GenxModelsTestInput): Promise<string[]> {
+  const baseUrl = input.baseUrl?.trim() || getGenxBaseUrl()
+  const url = new URL('/api/v1/models', baseUrl)
+  url.searchParams.set('category', 'video')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), GENX_MODELS_TEST_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    })
+
+    const body = await response.text()
+    if (!response.ok) {
+      throw new Error(`GenX models endpoint HTTP ${response.status}: ${shortSafeBody(body)}`)
+    }
+
+    let data: unknown
+    try {
+      data = body ? JSON.parse(body) : null
+    } catch {
+      throw new Error(`GenX models endpoint returned unreadable JSON: ${shortSafeBody(body)}`)
+    }
+
+    const modelNames = extractModelNames(data)
+    if (!modelNames.length) {
+      throw new Error('GenX models endpoint returned no parseable video models')
+    }
+
+    const hasExpectedVideoModel = modelNames.some((modelName) => {
+      const lower = modelName.toLowerCase()
+      return GENX_VIDEO_MODEL_MARKERS.some((marker) => lower.includes(marker))
+    })
+
+    if (!hasExpectedVideoModel) {
+      throw new Error(`GenX models endpoint returned no expected video model names: ${modelNames.slice(0, 5).join(', ')}`)
+    }
+
+    return modelNames
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw new Error('GenX provider test timed out after 15s')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function extractModelNames(data: unknown): string[] {
+  const candidates = Array.isArray(data)
+    ? data
+    : isRecord(data) && Array.isArray(data.models)
+      ? data.models
+      : isRecord(data) && Array.isArray(data.data)
+        ? data.data
+        : []
+
+  return candidates
+    .map((candidate) => {
+      if (typeof candidate === 'string') return candidate
+      if (!isRecord(candidate)) return ''
+      const name = candidate.id ?? candidate.model ?? candidate.name ?? candidate.slug
+      return typeof name === 'string' ? name : ''
+    })
+    .filter((modelName): modelName is string => !!modelName.trim())
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'AbortError' || err.message.toLowerCase().includes('aborted'))
+}
+
+function shortSafeBody(body: string): string {
+  const collapsed = body.replace(/\s+/g, ' ').trim()
+  return collapsed.slice(0, 500) || '[empty body]'
 }
 
 export function redactProviderSecrets(message: string, extraSecrets: string[] = []): string {

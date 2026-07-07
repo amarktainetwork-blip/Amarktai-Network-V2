@@ -38,6 +38,13 @@ function authMessage(status) {
   return ''
 }
 
+function providerTestErrorMessage(response, data) {
+  return authMessage(response.status)
+    || data.message
+    || data.errorMessage
+    || 'Backend API did not return a provider test message.'
+}
+
 export function ProviderSettingsPanel() {
   const [providers, setProviders] = useState([])
   const [drafts, setDrafts] = useState({})
@@ -223,7 +230,7 @@ export function ProviderSettingsPanel() {
       const data = await readSafeJson(response)
 
       if (!response.ok) {
-        setError(authMessage(response.status) || data.message || 'Backend unavailable. Provider key was not tested.')
+        setError(providerTestErrorMessage(response, data))
         return
       }
 
