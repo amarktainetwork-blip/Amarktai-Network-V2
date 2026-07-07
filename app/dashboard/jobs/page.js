@@ -28,12 +28,12 @@ export default function JobsPage() {
           <AccordionContent>
             <div className="space-y-3 text-xs text-muted-foreground">
               <div className="rounded-md border border-white/[0.06] bg-black/20 p-3">
-                <div className="font-semibold mb-1">Job records</div>
-                <div>Job rows, timeline, provider attempts, and retry logic will appear after backend /api/v1/jobs is wired.</div>
+                <div className="font-semibold mb-1">Job route</div>
+                <div>API job route exists (/api/v1/jobs). Studio UI job submission not connected yet.</div>
               </div>
               <div className="rounded-md border border-white/[0.06] bg-black/20 p-3">
                 <div className="font-semibold mb-1">Artifact storage</div>
-                <div>Artifact previews, signed URLs, and webhook delivery status will appear after backend storage routes are wired.</div>
+                <div>Artifact file route exists. Artifact listing/preview UI still pending.</div>
               </div>
             </div>
           </AccordionContent>

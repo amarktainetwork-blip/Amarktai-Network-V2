@@ -207,9 +207,10 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
-    const { genxSubmitVideo } = await import('@amarktai/providers')
+    const { genxGenerateVideo } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
 
-    const result = await genxSubmitVideo({
+    const result = await genxGenerateVideo({
       prompt: payload.prompt,
       apiKey,
       baseUrl: providerStatus.baseUrl || undefined,
@@ -219,20 +220,56 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       style: readString(payload.input, 'style'),
     })
 
-    if (!result.jobId) {
+    if (!result.videoBuffer || result.videoBuffer.length === 0) {
       return {
         success: false,
         status: 'failed',
-        error: 'GenX did not return a job ID',
+        error: 'GenX returned empty video data',
       }
+    }
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug,
+        type: 'video',
+        subType: 'video_generation',
+        title: `video_generation output for ${payload.appSlug}`,
+        description: 'GenX video_generation artifact',
+        provider: 'genx',
+        model: providerStatus.defaultModel || 'genx-video',
+        traceId: payload.traceId,
+        mimeType: result.mimeType,
+        metadata: {
+          capability: 'video_generation',
+          provider: 'genx',
+          model: providerStatus.defaultModel || 'genx-video',
+          width: result.width,
+          height: result.height,
+          duration: result.duration,
+        },
+      },
+      data: result.videoBuffer,
+      explicitMimeType: result.mimeType,
+    })
+
+    const output = {
+      artifactId: artifact.id,
+      artifactUrl: artifact.storageUrl,
+      mimeType: artifact.mimeType,
+      fileSizeBytes: artifact.fileSizeBytes,
+      width: result.width,
+      height: result.height,
+      duration: result.duration,
     }
 
     return {
       success: true,
       status: 'completed',
-      output: JSON.stringify({ genxJobId: result.jobId, status: result.status }),
       provider: 'genx',
-      model: providerStatus.defaultModel || undefined,
+      model: providerStatus.defaultModel || 'genx-video',
+      artifactId: artifact.id,
+      output: JSON.stringify(output),
+      metadata: output,
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err

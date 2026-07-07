@@ -16,17 +16,17 @@ import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, L
 const STATUS_GRID = [
   ['Dashboard UI status', 'ui_ready', Zap],
   ['API contract status', 'contract_ready', ShieldCheck],
-  ['Provider proof status', 'live_proof_required', AlertTriangle],
-  ['Backend integration status', 'backend_pending', Server],
+  ['Provider proof status', 'Groq/Together live-tested', AlertTriangle],
+  ['Studio connection', 'UI not connected yet', Server],
 ]
 
 const INFRA = ['MariaDB', 'Redis', 'Qdrant', 'Worker/BullMQ', 'Storage', 'Fastify API']
 
 const PENDING = [
-  ['jobs pending backend', 'No job rows are created until /api/v1/jobs is wired.'],
-  ['artifacts pending backend', 'No artifact rows are created until signed storage is wired.'],
-  ['provider health pending backend', 'Provider checks need real health routes.'],
-  ['model catalog pending backend', 'Model sync is disabled until backend routes exist.'],
+  ['Studio job submission', 'API job route exists; Studio UI not connected yet.'],
+  ['Artifact listing UI', 'Artifact file route exists; artifact listing/preview UI still pending.'],
+  ['Provider health UI', 'Provider health routes exist; dashboard health display wiring pending.'],
+  ['Model catalog sync', 'Model sync is disabled until catalog routes are wired.'],
 ]
 
 export default function CommandCenterPage() {
@@ -36,8 +36,9 @@ export default function CommandCenterPage() {
     fetch('/api/admin/providers')
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setProviders(normalizeProviderStatuses(data))
+        const list = Array.isArray(data) ? data : data?.providers ?? []
+        if (Array.isArray(list)) {
+          setProviders(normalizeProviderStatuses(list))
         }
       })
       .catch(() => {
@@ -117,16 +118,21 @@ export default function CommandCenterPage() {
         </Card>
 
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-cyan-300" /> Next Backend Routes</h3>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-cyan-300" /> Integration Status</h3>
           <div className="space-y-2 text-xs text-muted-foreground">
-            {['/api/v1/jobs', '/api/v1/artifacts', '/api/v1/providers/health', '/api/v1/models/sync', '/api/v1/apps'].map((route) => (
-              <div key={route} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
-                <code>{route}</code>
-                <span>not_live_proven_yet</span>
-              </div>
-            ))}
+            <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span>Provider management</span>
+              <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">Settings only</Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span>Studio job submission</span>
+              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">UI not connected</Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span>Artifact listing UI</span>
+              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">Pending</Badge>
+            </div>
           </div>
-          <Button disabled variant="outline" className="mt-4 w-full border-white/10 text-xs"><Lock className="mr-1.5 h-3.5 w-3.5" /> Backend integration pending</Button>
         </Card>
       </div>
 
