@@ -143,15 +143,15 @@ describe('Stored-key live proof contract', () => {
     }
   })
 
-  it('no GenX/Mimo/DeepInfra execution is invoked', async () => {
+  it('no Mimo/DeepInfra execution is invoked for unsupported capabilities', async () => {
     const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
-    // These capabilities should return not-implemented
-    const genxResult = await executeWithProvider({
-      jobId: 'test', appSlug: 'test', capability: 'video_generation',
+    // music_generation is not implemented for any provider
+    const result = await executeWithProvider({
+      jobId: 'test', appSlug: 'test', capability: 'music_generation',
       prompt: 'test', input: {}, metadata: {}, traceId: 'test',
     })
-    expect(genxResult.success).toBe(false)
-    expect(genxResult.error).toContain('not implemented')
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not implemented')
   })
 
   it('DeepInfra remains gated', async () => {

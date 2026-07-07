@@ -21,6 +21,7 @@ import type { WorkerJobData, ProcessorResult } from '../processors/job-processor
 const EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {
   chat: 'groq',
   image_generation: 'together',
+  video_generation: 'genx',
 }
 
 function getImplementedProvider(capability: CapabilityKey): ProviderKey | null {
@@ -60,7 +61,7 @@ function formatSupportedCandidates(capability: CapabilityKey): string {
 
 function redactProviderSecrets(message: string, extraKeys: string[] = []): string {
   let safe = message
-  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, ...extraKeys]) {
+  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, process.env.GENX_API_KEY, ...extraKeys]) {
     if (key) {
       safe = safe.split(key).join('[redacted]')
     }
@@ -199,6 +200,51 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
   }
 }
 
+async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult> {
+  let apiKey = ''
+
+  try {
+    const credential = await resolveProviderApiKey('genx')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('genx')
+    const { genxSubmitVideo } = await import('@amarktai/providers')
+
+    const result = await genxSubmitVideo({
+      prompt: payload.prompt,
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+      providerDefaultModel: providerStatus.defaultModel || undefined,
+      duration: readNumber(payload.input, 'duration'),
+      aspectRatio: readString(payload.input, 'aspectRatio'),
+      style: readString(payload.input, 'style'),
+    })
+
+    if (!result.jobId) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'GenX did not return a job ID',
+      }
+    }
+
+    return {
+      success: true,
+      status: 'completed',
+      output: JSON.stringify({ genxJobId: result.jobId, status: result.status }),
+      provider: 'genx',
+      model: providerStatus.defaultModel || undefined,
+    }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    const message = err instanceof Error ? err.message : 'Unknown GenX error'
+    return {
+      success: false,
+      status: 'failed',
+      error: `GenX execution failed: ${redactProviderSecrets(message, [apiKey])}`,
+    }
+  }
+}
+
 export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
   const capability = payload.capability as CapabilityKey
   const implementedProvider = getImplementedProvider(capability)
@@ -236,6 +282,10 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
 
     if (implementedProvider === 'together' && capability === 'image_generation') {
       return await executeTogetherImage(payload)
+    }
+
+    if (implementedProvider === 'genx' && capability === 'video_generation') {
+      return await executeGenxVideo(payload)
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) {
