@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, KeyRound, Loader2, RefreshCw, Save, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, KeyRound, Loader2, RefreshCw, Save, ShieldCheck, TestTube2, Trash2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -43,6 +43,7 @@ export function ProviderSettingsPanel() {
   const [drafts, setDrafts] = useState({})
   const [loading, setLoading] = useState(true)
   const [savingProvider, setSavingProvider] = useState('')
+  const [testingProvider, setTestingProvider] = useState('')
   const [clearingProvider, setClearingProvider] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -202,6 +203,40 @@ export function ProviderSettingsPanel() {
     }
   }
 
+  const testProvider = async (providerKey) => {
+    setTestingProvider(providerKey)
+    setError('')
+    setNotice('')
+
+    const token = getAdminToken()
+    if (!token) {
+      setError('Admin sign-in required. Provider key was not tested.')
+      setTestingProvider('')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/providers/${providerKey}/test`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await readSafeJson(response)
+
+      if (!response.ok) {
+        setError(authMessage(response.status) || data.message || 'Backend unavailable. Provider key was not tested.')
+        return
+      }
+
+      updateProviderStatus(data.provider)
+      const status = data.provider?.healthStatus === 'live' ? 'live-tested' : data.provider?.healthStatus || 'updated'
+      setNotice(`${data.provider?.displayName ?? providerKey} test finished: ${status}.`)
+    } catch {
+      setError('Backend unavailable. Provider key was not tested.')
+    } finally {
+      setTestingProvider('')
+    }
+  }
+
   return (
     <Card className="border-white/[0.07] bg-white/[0.02] p-5">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -211,7 +246,7 @@ export function ProviderSettingsPanel() {
             Provider Keys
           </h3>
           <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            Backend provider status is the source of truth. Configured means a database credential or server env fallback exists; it does not prove provider execution.
+            Backend provider status is the source of truth. Configured means a credential exists; Live tested means the Test Key action received a real provider response.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" className="border-white/10 text-xs" onClick={loadProviders} disabled={loading}>
@@ -246,6 +281,7 @@ export function ProviderSettingsPanel() {
           {sortedProviders.map((provider) => {
             const draft = drafts[provider.providerKey] ?? makeProviderDraft(provider)
             const isSaving = savingProvider === provider.providerKey
+            const isTesting = testingProvider === provider.providerKey
             const isClearing = clearingProvider === provider.providerKey
             const isDeepInfra = provider.providerKey === 'deepinfra'
 
@@ -269,7 +305,7 @@ export function ProviderSettingsPanel() {
                         {getCredentialSourceLabel(provider.source)}
                       </div>
                       <div>
-                        <span className="text-foreground/70">Configured: </span>
+                        <span className="text-foreground/70">Saved key configured: </span>
                         {provider.configured ? 'Yes' : 'No'}
                       </div>
                       <div>
@@ -351,20 +387,31 @@ export function ProviderSettingsPanel() {
                     size="sm"
                     className="border-rose-500/30 text-xs text-rose-200 hover:bg-rose-500/10"
                     onClick={() => clearProviderKey(provider)}
-                    disabled={isSaving || isClearing}
+                    disabled={isSaving || isTesting || isClearing}
                   >
                     {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     Clear key
                   </Button>
                   <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-cyan-500/30 text-xs text-cyan-100 hover:bg-cyan-500/10"
+                    onClick={() => testProvider(provider.providerKey)}
+                    disabled={isSaving || isTesting || isClearing || !provider.configured}
+                  >
+                    {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TestTube2 className="h-3.5 w-3.5" />}
+                    Test Key
+                  </Button>
+                  <Button
+                    type="button"
                     size="sm"
                     className="text-xs"
                     onClick={() => saveProvider(provider.providerKey)}
-                    disabled={isSaving || isClearing}
+                    disabled={isSaving || isTesting || isClearing}
                   >
                     {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Save settings
+                    Save Key
                   </Button>
                 </div>
               </div>

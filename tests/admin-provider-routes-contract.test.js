@@ -3,7 +3,7 @@
  */
 
 import Fastify from 'fastify'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const dbMocks = vi.hoisted(() => {
   class ProviderConfigError extends Error {
@@ -19,10 +19,19 @@ const dbMocks = vi.hoisted(() => {
     listProviderCredentialStatuses: vi.fn(),
     saveProviderCredential: vi.fn(),
     clearProviderCredential: vi.fn(),
+    resolveProviderApiKey: vi.fn(),
+    getProviderCredentialStatus: vi.fn(),
+    updateProviderHealthStatus: vi.fn(),
   }
 })
 
+const providerMocks = vi.hoisted(() => ({
+  groqChat: vi.fn(),
+  togetherGenerateImage: vi.fn(),
+}))
+
 vi.mock('@amarktai/db', () => dbMocks)
+vi.mock('@amarktai/providers', () => providerMocks)
 
 const { adminProviderRoutes } = await import('../apps/api/src/routes/admin-providers.ts')
 
@@ -60,6 +69,33 @@ async function makeApp(role = 'admin') {
 describe('Admin provider credential routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    dbMocks.resolveProviderApiKey.mockResolvedValue({
+      providerKey: 'groq',
+      apiKey: 'gsk_live_secret_abcd',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValue(makeStatus())
+    dbMocks.updateProviderHealthStatus.mockImplementation(async (input) => makeStatus({
+      providerKey: input.providerKey,
+      healthStatus: input.healthStatus,
+      healthMessage: input.healthMessage,
+      lastCheckedAt: input.lastCheckedAt ?? new Date('2026-07-07T00:00:00Z'),
+    }))
+    providerMocks.groqChat.mockResolvedValue({
+      content: 'AMARKTAI_PROVIDER_TEST_OK',
+      model: 'llama-3.3-70b-versatile',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      finishReason: 'stop',
+    })
+    providerMocks.togetherGenerateImage.mockResolvedValue({
+      images: [{ base64: 'aW1hZ2U=', buffer: Buffer.from('image'), width: 256, height: 256, mimeType: 'image/png' }],
+      model: 'black-forest-labs/FLUX.1-schnell',
+      usage: { promptTokens: 1, completionTokens: 0, totalTokens: 1 },
+    })
+  })
+
+  afterEach(() => {
+    delete process.env.JWT_SECRET
   })
 
   it('rejects unauthenticated list requests', async () => {
@@ -127,6 +163,7 @@ describe('Admin provider credential routes', () => {
     expect(serialized).not.toContain('v1:')
     expect(serialized).not.toContain('apiKey')
     expect(JSON.parse(res.body).provider.healthStatus).toBe('configured')
+    expect(JSON.parse(res.body).provider.healthStatus).not.toBe('live')
   })
 
   it('invalid providerKey is rejected', async () => {
@@ -164,5 +201,156 @@ describe('Admin provider credential routes', () => {
     expect(dbMocks.clearProviderCredential).toHaveBeenCalledWith('groq')
     expect(res.body).not.toContain('apiKey')
     expect(res.body).not.toContain('v1:')
+  })
+
+  it('rejects unauthenticated provider test requests', async () => {
+    const app = await makeApp()
+    const res = await app.inject({ method: 'POST', url: '/api/admin/providers/groq/test' })
+
+    expect(res.statusCode).toBe(401)
+    expect(dbMocks.resolveProviderApiKey).not.toHaveBeenCalled()
+  })
+
+  it('rejects unknown provider keys for test requests', async () => {
+    const app = await makeApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/openai/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
+  })
+
+  it('successful Groq test marks provider live without returning raw keys', async () => {
+    const app = await makeApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/groq/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.groqChat).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'gsk_live_secret_abcd',
+      maxTokens: 16,
+    }))
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'groq',
+      healthStatus: 'live',
+    }))
+    expect(res.body).not.toContain('gsk_live_secret_abcd')
+    expect(res.body).not.toContain('v1:')
+    expect(res.body).not.toContain('apiKey')
+  })
+
+  it('Together test uses provider defaultModel and marks live on real response', async () => {
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'together',
+      apiKey: 'together-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'together',
+      displayName: 'Together AI',
+      defaultModel: 'black-forest-labs/FLUX.1-schnell',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/together/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.togetherGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'together-secret-key',
+      providerDefaultModel: 'black-forest-labs/FLUX.1-schnell',
+    }))
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'together',
+      healthStatus: 'live',
+    }))
+    expect(res.body).not.toContain('together-secret-key')
+  })
+
+  it('test failure marks provider failed and stores safe message', async () => {
+    process.env.JWT_SECRET = 'jwt-secret-value'
+    providerMocks.groqChat.mockRejectedValueOnce(
+      new Error('Groq chat error 401: gsk_live_secret_abcd jwt-secret-value v1:ciphertext'),
+    )
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/groq/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const update = dbMocks.updateProviderHealthStatus.mock.calls[0][0]
+    expect(update.healthStatus).toBe('failed')
+    expect(update.healthMessage).toContain('[redacted]')
+    expect(update.healthMessage).not.toContain('gsk_live_secret_abcd')
+    expect(update.healthMessage).not.toContain('jwt-secret-value')
+    expect(update.healthMessage).not.toContain('v1:ciphertext')
+    expect(res.body).not.toContain('gsk_live_secret_abcd')
+    delete process.env.JWT_SECRET
+  })
+
+  it('Together missing defaultModel returns failed with safe model message', async () => {
+    delete process.env.TOGETHER_IMAGE_MODEL
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'together',
+      apiKey: 'together-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'together',
+      defaultModel: '',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/together/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'together',
+      healthStatus: 'failed',
+      healthMessage: expect.stringContaining('defaultModel'),
+    }))
+  })
+
+  it('gated provider test does not fake live', async () => {
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'deepinfra',
+      apiKey: 'deepinfra-secret-key',
+      source: 'database',
+    })
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/deepinfra/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'deepinfra',
+      healthStatus: 'gated',
+      healthMessage: expect.stringContaining('not implemented'),
+    }))
+    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
+    expect(res.body).not.toContain('deepinfra-secret-key')
   })
 })

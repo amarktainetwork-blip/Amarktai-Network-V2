@@ -59,10 +59,11 @@ describe('Dashboard provider settings UI contract', () => {
   })
 
   it('never treats env fallback as a live provider state', () => {
-    expect(getHealthStatusLabel('healthy')).toBe('Healthy')
+    expect(getHealthStatusLabel('live')).toBe('Live tested')
     expect(getHealthStatusLabel('configured')).toBe('Configured')
+    expect(getHealthStatusLabel('failed')).toBe('Failed')
+    expect(getHealthStatusLabel('gated')).toBe('Gated')
     expect(panelSource).not.toContain('Connected')
-    expect(panelSource).not.toContain('Live')
   })
 
   it('sanitizes raw key and ciphertext fields before UI state', () => {
@@ -125,8 +126,17 @@ describe('Dashboard provider settings UI contract', () => {
     expect(settingsSource).toContain('ProviderSettingsPanel')
     expect(panelSource).toContain("fetch('/api/admin/providers'")
     expect(panelSource).toContain('method: \'PUT\'')
+    expect(panelSource).toContain('method: \'POST\'')
     expect(panelSource).toContain('method: \'DELETE\'')
     expect(panelSource).toContain('Authorization: `Bearer ${token}`')
+  })
+
+  it('separates Save Key from Test Key and configured from live-tested status', () => {
+    expect(panelSource).toContain('Save Key')
+    expect(panelSource).toContain('Test Key')
+    expect(panelSource).toContain('/test`')
+    expect(panelSource).toContain('Saved key configured')
+    expect(panelSource).toContain('Live tested means')
   })
 
   it('clears the password draft after successful save and clear-key responses', () => {

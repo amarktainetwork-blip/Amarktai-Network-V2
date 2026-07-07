@@ -8,7 +8,7 @@
     "build": "tsc -b",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.lint.json --noEmit"
   },
   "dependencies": {
     "@amarktai/core": "*",

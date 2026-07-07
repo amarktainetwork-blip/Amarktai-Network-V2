@@ -52,6 +52,13 @@ export interface SaveProviderCredentialInput {
   notes?: string
 }
 
+export interface UpdateProviderHealthInput {
+  providerKey: string
+  healthStatus: string
+  healthMessage: string
+  lastCheckedAt?: Date
+}
+
 export class ProviderConfigError extends Error {
   constructor(
     message: string,
@@ -181,6 +188,39 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
 
 export async function clearProviderCredential(providerKey: string): Promise<ProviderCredentialStatus> {
   return saveProviderCredential({ providerKey, clearKey: true, enabled: false })
+}
+
+export async function updateProviderHealthStatus(input: UpdateProviderHealthInput): Promise<ProviderCredentialStatus> {
+  const providerKey = assertProviderKey(input.providerKey)
+  const existing = await prisma.aiProvider.findUnique({ where: { providerKey } })
+
+  await prisma.aiProvider.upsert({
+    where: { providerKey },
+    create: {
+      providerKey,
+      displayName: PROVIDER_DISPLAY_NAMES[providerKey],
+      enabled: true,
+      baseUrl: '',
+      defaultModel: '',
+      fallbackModel: '',
+      notes: '',
+      sortOrder: defaultSortOrder(providerKey),
+      apiKey: '',
+      maskedPreview: '',
+      healthStatus: input.healthStatus,
+      healthMessage: input.healthMessage,
+      lastCheckedAt: input.lastCheckedAt ?? new Date(),
+    },
+    update: {
+      healthStatus: input.healthStatus,
+      healthMessage: input.healthMessage,
+      lastCheckedAt: input.lastCheckedAt ?? new Date(),
+      displayName: existing?.displayName ?? PROVIDER_DISPLAY_NAMES[providerKey],
+      sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
+    },
+  })
+
+  return getProviderCredentialStatus(providerKey)
 }
 
 function assertProviderKey(providerKey: string): ProviderKey {

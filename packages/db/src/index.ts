@@ -10,8 +10,10 @@ export {
   listProviderCredentialStatuses,
   saveProviderCredential,
   clearProviderCredential,
+  updateProviderHealthStatus,
   type ProviderCredentialSource,
   type ProviderCredentialStatus,
   type ResolvedProviderApiKey,
   type SaveProviderCredentialInput,
+  type UpdateProviderHealthInput,
 } from './provider-credentials.js'
