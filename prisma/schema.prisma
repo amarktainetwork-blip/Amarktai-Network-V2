@@ -924,7 +924,7 @@ model Artifact {
   type          String   // image | audio | music | video | code | document | report | transcript
   subType       String   @default("") @map("sub_type") // e.g. tts, stt, cover_art, image_edit, suggestive
   title         String   @default("")
-  description   String   @default("")
+  description   String   @db.LongText
 
   /// Provider and model that created this artifact
   provider      String   @default("")
@@ -944,13 +944,13 @@ model Artifact {
 
   /// Status
   status        String   @default("completed") // pending | processing | completed | failed | expired
-  errorMessage  String   @default("") @map("error_message")
+  errorMessage  String   @map("error_message") @db.LongText
 
   /// Cost tracking
   costUsdCents  Int      @default(0) @map("cost_usd_cents")
 
   /// Metadata (JSON blob for type-specific extras like genre, duration, dimensions)
-  metadata      String   @default("{}") // JSON
+  metadata      String   @db.LongText // JSON
 
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -1788,16 +1788,16 @@ model Job {
   appSlug         String    @map("app_slug")
   capability      String
   prompt          String
-  inputJson       String    @default("{}") @map("input_json")
-  metadataJson    String    @default("{}") @map("metadata_json")
+  inputJson       String    @map("input_json") @db.LongText
+  metadataJson    String    @map("metadata_json") @db.LongText
   traceId         String    @default("") @map("trace_id")
   status          String    @default("queued") // queued | processing | completed | failed | cancelled
   provider        String?   @default("")
   model           String?   @default("")
   artifactId      String?   @map("artifact_id")
   progress        Int       @default(0) // 0-100
-  output          String?   @default("")
-  error           String?
+  output          String?   @db.LongText
+  error           String?   @db.LongText
   callbackUrl     String?   @map("callback_url")
   createdAt       DateTime  @default(now()) @map("created_at")
   startedAt       DateTime? @map("started_at")
