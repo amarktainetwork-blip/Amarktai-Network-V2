@@ -80,7 +80,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - api_storage:/var/www/amarktai/storage
+      - artifact_storage:/var/www/amarktai/storage
     depends_on:
       mariadb:
         condition: service_healthy
@@ -107,7 +107,7 @@ services:
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
     volumes:
-      - worker_storage:/var/www/amarktai/storage
+      - artifact_storage:/var/www/amarktai/storage
     depends_on:
       mariadb:
         condition: service_healthy
@@ -155,9 +155,7 @@ volumes:
     driver: local
   qdrant_data:
     driver: local
-  api_storage:
-    driver: local
-  worker_storage:
+  artifact_storage:
     driver: local
 
 # ── Networks ─────────────────────────────────────────────────

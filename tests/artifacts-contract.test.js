@@ -166,6 +166,76 @@ describe('artifact URL alignment and file access contracts', () => {
     expect(routeText).not.toContain("app.get('/api/v1/artifacts/*")
   })
 
+  it('artifact route returns 401 without auth before DB lookup', async () => {
+    const handler = await makeArtifactRouteHandler()
+    const reply = makeReply()
+
+    await handler({ params: { id: 'artifact-id' }, headers: {} }, reply)
+
+    expect(reply.status).toHaveBeenCalledWith(401)
+    expect(reply.send).toHaveBeenCalledWith({ error: true, message: 'Missing or invalid Authorization header' })
+    expect(prismaMock.artifact.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('artifact route lets a same-app API key download its completed file', async () => {
+    const artifact = makeArtifact({
+      appSlug: 'owner-app',
+      type: 'image',
+      storagePath: 'artifacts/owner-app/image/2026-07-07/shared.png',
+      mimeType: 'image/png',
+    })
+    const filePath = path.join(storageRoot, artifact.storagePath)
+    await fsp.mkdir(path.dirname(filePath), { recursive: true })
+    await fsp.writeFile(filePath, Buffer.from('shared artifact bytes'))
+    prismaMock.artifact.findUnique.mockResolvedValue(artifact)
+    prismaMock.appApiKey.findUnique.mockResolvedValueOnce({
+      active: true,
+      appConnection: { id: 'conn-1', appSlug: 'owner-app', status: 'active' },
+    })
+    const handler = await makeArtifactRouteHandler()
+    const reply = makeReply()
+
+    await handler({ params: { id: 'artifact-id' }, headers: { authorization: 'Bearer owner-key' } }, reply)
+
+    expect(reply.status).not.toHaveBeenCalled()
+    expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/png')
+    expect(reply.send).toHaveBeenCalledWith(Buffer.from('shared artifact bytes'))
+  })
+
+  it('artifact route hides artifacts from wrong-app API keys', async () => {
+    prismaMock.artifact.findUnique.mockResolvedValue(makeArtifact({ appSlug: 'owner-app' }))
+    prismaMock.appApiKey.findUnique.mockResolvedValueOnce({
+      active: true,
+      appConnection: { id: 'conn-2', appSlug: 'other-app', status: 'active' },
+    })
+    const handler = await makeArtifactRouteHandler()
+    const reply = makeReply()
+
+    await handler({ params: { id: 'artifact-id' }, headers: { authorization: 'Bearer other-key' } }, reply)
+
+    expect(reply.status).toHaveBeenCalledWith(404)
+    expect(reply.send).toHaveBeenCalledWith({ error: true, message: 'Artifact not found' })
+  })
+
+  it('artifact route returns 404 honestly when the DB record exists but the file is missing', async () => {
+    prismaMock.artifact.findUnique.mockResolvedValue(makeArtifact({
+      appSlug: 'owner-app',
+      storagePath: 'artifacts/owner-app/image/2026-07-07/missing.png',
+      mimeType: 'image/png',
+    }))
+    prismaMock.appApiKey.findUnique.mockResolvedValueOnce({
+      active: true,
+      appConnection: { id: 'conn-1', appSlug: 'owner-app', status: 'active' },
+    })
+    const handler = await makeArtifactRouteHandler()
+    const reply = makeReply()
+
+    await handler({ params: { id: 'artifact-id' }, headers: { authorization: 'Bearer owner-key' } }, reply)
+
+    expect(reply.status).toHaveBeenCalledWith(404)
+    expect(reply.send).toHaveBeenCalledWith({ error: true, message: 'Artifact file not found' })
+  })
+
   it('does not add provider execution, dashboard job routes, MongoDB, or provider-list drift', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
     const activeDependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies }
@@ -189,6 +259,44 @@ describe('artifact URL alignment and file access contracts', () => {
     expect(touchedRuntime).not.toContain('simulation')
   })
 })
+
+async function makeArtifactRouteHandler() {
+  const { artifactRoutes } = await import('../apps/api/src/routes/artifacts.ts')
+  let handler
+  const app = {
+    get: vi.fn((_path, routeHandler) => {
+      handler = routeHandler
+    }),
+    jwtVerify: vi.fn(async () => {
+      throw new Error('not an admin token')
+    }),
+  }
+
+  await artifactRoutes(app)
+  if (!handler) throw new Error('Artifact route handler was not registered')
+  return handler
+}
+
+function makeReply() {
+  const reply = {
+    statusCode: undefined,
+    headers: {},
+    payload: undefined,
+    status: vi.fn((statusCode) => {
+      reply.statusCode = statusCode
+      return reply
+    }),
+    header: vi.fn((name, value) => {
+      reply.headers[name] = value
+      return reply
+    }),
+    send: vi.fn((payload) => {
+      reply.payload = payload
+      return reply
+    }),
+  }
+  return reply
+}
 
 function makeArtifact(overrides = {}) {
   return {
