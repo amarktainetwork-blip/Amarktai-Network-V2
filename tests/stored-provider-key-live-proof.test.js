@@ -14,7 +14,10 @@
  *   RUN_LIVE_STORED_ARTIFACT_TESTS=true
  */
 
-import { describe, expect, it } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const canRunLive =
   process.env.RUN_LIVE_STORED_PROVIDER_TESTS === 'true' &&
@@ -23,6 +26,32 @@ const canRunLive =
 
 const canRunArtifact =
   canRunLive && process.env.RUN_LIVE_STORED_ARTIFACT_TESTS === 'true'
+
+const proofStorageRoot =
+  process.env.STORAGE_ROOT
+  ?? process.env.AMARKTAI_STORAGE_ROOT
+  ?? path.join(os.tmpdir(), 'amarktai-stored-key-artifact-proof')
+
+if (canRunArtifact && !process.env.STORAGE_ROOT && !process.env.AMARKTAI_STORAGE_ROOT) {
+  process.env.STORAGE_ROOT = proofStorageRoot
+}
+
+function safeProofJson(value, extraSecrets = []) {
+  const secrets = [
+    process.env.GROQ_API_KEY,
+    process.env.TOGETHER_API_KEY,
+    process.env.PROVIDER_KEY_ENCRYPTION_SECRET,
+    process.env.JWT_SECRET,
+    ...extraSecrets,
+  ].filter(Boolean)
+
+  let serialized = JSON.stringify(value, null, 2)
+  for (const secret of secrets) {
+    serialized = serialized.split(secret).join('[redacted]')
+  }
+
+  return serialized.replace(/v1:[A-Za-z0-9+/=:_-]+/g, 'v1:[redacted]')
+}
 
 // ── Contract tests (always run) ──────────────────────────────────────────────
 
@@ -64,6 +93,18 @@ describe('Stored-key live proof contract', () => {
     // This test verifies the contract exists
     const db = await import('@amarktai/db')
     expect(db.ProviderConfigError).toBeDefined()
+  })
+
+  it('safe proof diagnostics redact raw keys, ciphertext, and secrets', () => {
+    const safe = safeProofJson({
+      error: 'Together failed with secret-key and v1:ciphertextvalue',
+      nested: { jwt: 'jwt-secret-value' },
+    }, ['secret-key', 'jwt-secret-value'])
+
+    expect(safe).toContain('[redacted]')
+    expect(safe).not.toContain('secret-key')
+    expect(safe).not.toContain('jwt-secret-value')
+    expect(safe).not.toContain('v1:ciphertextvalue')
   })
 
   it('disabled DB row blocks env fallback', async () => {
@@ -162,7 +203,7 @@ describe.skipIf(!canRunLive)('Stored-key Groq chat live proof', () => {
 
 // ── Live stored-key Together proof (provider-client only, no artifact) ────────
 
-describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
+describe.skipIf(!canRunLive || canRunArtifact)('Stored-key Together image live proof', () => {
   it('resolves stored Together key from DB and generates image buffer', async () => {
     const { getProviderCredentialStatus, resolveProviderApiKey } = await import('@amarktai/db')
     const { togetherGenerateImage } = await import('@amarktai/providers')
@@ -198,6 +239,15 @@ describe.skipIf(!canRunLive)('Stored-key Together image live proof', () => {
 // ── Full artifact proof (requires both flags) ────────────────────────────────
 
 describe.skipIf(!canRunArtifact)('Stored-key Together full artifact proof', () => {
+  beforeAll(async () => {
+    const storageRoot = process.env.STORAGE_ROOT || process.env.AMARKTAI_STORAGE_ROOT
+    if (!storageRoot) {
+      throw new Error('STORAGE_ROOT is required for stored-key artifact proof; set STORAGE_ROOT or allow the harness to set its deterministic temp root.')
+    }
+    await fs.mkdir(storageRoot, { recursive: true })
+    console.log(`[stored-key-artifact-proof] Using storage root: ${storageRoot}`)
+  })
+
   it('generates image and saves artifact through executeWithProvider', async () => {
     const { resolveProviderApiKey } = await import('@amarktai/db')
     const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
@@ -214,7 +264,12 @@ describe.skipIf(!canRunArtifact)('Stored-key Together full artifact proof', () =
       traceId: 'trace-stored-artifact',
     })
 
-    expect(result.success).toBe(true)
+    const safeResult = safeProofJson(result, [credential.apiKey])
+    if (!result.success) {
+      console.error(`[stored-key-artifact-proof] executeWithProvider failed safely:\n${safeResult}`)
+    }
+
+    expect(result.success, safeResult).toBe(true)
     expect(result.artifactId).toBeTruthy()
 
     // Verify artifact URL format
@@ -228,6 +283,8 @@ describe.skipIf(!canRunArtifact)('Stored-key Together full artifact proof', () =
     // No key material
     const serialized = JSON.stringify(result)
     expect(serialized).not.toContain(credential.apiKey)
+    expect(serialized).not.toContain(process.env.PROVIDER_KEY_ENCRYPTION_SECRET)
+    expect(serialized).not.toContain(process.env.JWT_SECRET)
   })
 })
 
