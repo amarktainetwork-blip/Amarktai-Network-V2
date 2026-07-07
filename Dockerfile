@@ -33,6 +33,10 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy all source code
 COPY . .
 
+# Never let copied local build artifacts influence Docker composite builds.
+RUN rm -rf .next packages/*/dist apps/*/dist && \
+    find packages apps -name "*.tsbuildinfo" -delete
+
 # Generate Prisma client with correct binaryTargets for Debian
 RUN npx prisma generate --schema=./prisma/schema.prisma
 

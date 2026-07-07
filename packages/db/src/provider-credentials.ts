@@ -78,6 +78,8 @@ const PROVIDER_DISPLAY_NAMES: Record<ProviderKey, string> = {
   deepinfra: 'DeepInfra',
 }
 
+const PROVIDER_KEY_LIST: readonly ProviderKey[] = PROVIDER_KEYS
+
 export async function resolveProviderApiKey(providerKey: string): Promise<ResolvedProviderApiKey> {
   const key = assertProviderKey(providerKey)
   const row = await prisma.aiProvider.findUnique({ where: { providerKey: key } })
@@ -116,7 +118,7 @@ export async function getProviderCredentialStatus(providerKey: string): Promise<
 
   return {
     providerKey: key,
-    displayName: row?.displayName ?? PROVIDER_DISPLAY_NAMES[key],
+    displayName: row?.displayName ?? getProviderDisplayName(key),
     enabled,
     configured: hasDbKey ? enabled : hasEnvKey,
     source,
@@ -133,8 +135,12 @@ export async function getProviderCredentialStatus(providerKey: string): Promise<
 }
 
 export async function listProviderCredentialStatuses(): Promise<ProviderCredentialStatus[]> {
-  const statuses = await Promise.all(PROVIDER_KEYS.map((providerKey) => getProviderCredentialStatus(providerKey)))
-  return statuses.sort((a, b) => a.sortOrder - b.sortOrder || a.providerKey.localeCompare(b.providerKey))
+  const statuses = await Promise.all(
+    PROVIDER_KEY_LIST.map((providerKey: ProviderKey) => getProviderCredentialStatus(providerKey)),
+  )
+  return statuses.sort((a: ProviderCredentialStatus, b: ProviderCredentialStatus) => (
+    a.sortOrder - b.sortOrder || a.providerKey.localeCompare(b.providerKey)
+  ))
 }
 
 export async function saveProviderCredential(input: SaveProviderCredentialInput): Promise<ProviderCredentialStatus> {
@@ -142,7 +148,7 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
   const existing = await prisma.aiProvider.findUnique({ where: { providerKey } })
   const data: Record<string, unknown> = {
     providerKey,
-    displayName: existing?.displayName ?? PROVIDER_DISPLAY_NAMES[providerKey],
+    displayName: existing?.displayName ?? getProviderDisplayName(providerKey),
     sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
   }
 
@@ -168,7 +174,7 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
     where: { providerKey },
     create: {
       providerKey,
-      displayName: PROVIDER_DISPLAY_NAMES[providerKey],
+      displayName: getProviderDisplayName(providerKey),
       enabled: input.enabled ?? false,
       baseUrl: input.baseUrl ?? '',
       defaultModel: input.defaultModel ?? '',
@@ -198,7 +204,7 @@ export async function updateProviderHealthStatus(input: UpdateProviderHealthInpu
     where: { providerKey },
     create: {
       providerKey,
-      displayName: PROVIDER_DISPLAY_NAMES[providerKey],
+      displayName: getProviderDisplayName(providerKey),
       enabled: true,
       baseUrl: '',
       defaultModel: '',
@@ -215,7 +221,7 @@ export async function updateProviderHealthStatus(input: UpdateProviderHealthInpu
       healthStatus: input.healthStatus,
       healthMessage: input.healthMessage,
       lastCheckedAt: input.lastCheckedAt ?? new Date(),
-      displayName: existing?.displayName ?? PROVIDER_DISPLAY_NAMES[providerKey],
+      displayName: existing?.displayName ?? getProviderDisplayName(providerKey),
       sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
     },
   })
@@ -231,5 +237,10 @@ function assertProviderKey(providerKey: string): ProviderKey {
 }
 
 function defaultSortOrder(providerKey: ProviderKey): number {
-  return PROVIDER_KEYS.indexOf(providerKey) + 1
+  const index = PROVIDER_KEY_LIST.indexOf(providerKey)
+  return index >= 0 ? index + 1 : PROVIDER_KEY_LIST.length + 1
+}
+
+function getProviderDisplayName(providerKey: ProviderKey): string {
+  return PROVIDER_DISPLAY_NAMES[providerKey] ?? providerKey
 }

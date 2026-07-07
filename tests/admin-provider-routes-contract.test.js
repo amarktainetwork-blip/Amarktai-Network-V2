@@ -27,7 +27,6 @@ const dbMocks = vi.hoisted(() => {
 
 const providerMocks = vi.hoisted(() => ({
   DEFAULT_GENX_VIDEO_MODEL: 'seedance-v1-fast',
-  genxSubmitVideo: vi.fn(),
   groqChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
 }))
@@ -94,14 +93,11 @@ describe('Admin provider credential routes', () => {
       model: 'black-forest-labs/FLUX.1-schnell',
       usage: { promptTokens: 1, completionTokens: 0, totalTokens: 1 },
     })
-    providerMocks.genxSubmitVideo.mockResolvedValue({
-      jobId: 'genx-test-job-001',
-      status: 'pending',
-      model: 'seedance-v1-fast',
-    })
   })
 
   afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
     delete process.env.JWT_SECRET
   })
 
@@ -336,7 +332,13 @@ describe('Admin provider credential routes', () => {
     }))
   })
 
-  it('GenX test uses duration 4, seedance default, and honest submit-only message', async () => {
+  it('GenX test uses Router models endpoint and does not submit generation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ models: [{ id: 'seedance-v1-fast' }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
     dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
       providerKey: 'genx',
       apiKey: 'genx-secret-key',
@@ -357,18 +359,60 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(providerMocks.genxSubmitVideo).toHaveBeenCalledWith(expect.objectContaining({
-      apiKey: 'genx-secret-key',
-      baseUrl: 'https://query.genx.sh',
-      model: 'seedance-v1-fast',
-      duration: 4,
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url.toString()).toBe('https://query.genx.sh/api/v1/models?category=video')
+    expect(init).toEqual(expect.objectContaining({
+      method: 'GET',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer genx-secret-key',
+      }),
     }))
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'genx',
       healthStatus: 'live',
-      healthMessage: expect.stringContaining('completion proof pending'),
+      healthMessage: expect.stringContaining('Video completion proof still required'),
     }))
-    expect(dbMocks.updateProviderHealthStatus.mock.calls[0][0].healthMessage).not.toContain('complete')
+    expect(dbMocks.updateProviderHealthStatus.mock.calls[0][0].healthMessage).not.toContain('/api/v1/generate')
+    expect(res.body).not.toContain('genx-secret-key')
+  })
+
+  it('GenX test times out cleanly with failed status', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => {
+        const err = new Error('aborted')
+        err.name = 'AbortError'
+        reject(err)
+      })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'genx',
+      apiKey: 'genx-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'genx',
+      displayName: 'GenX',
+      baseUrl: 'https://query.genx.sh',
+    }))
+    const app = await makeApp()
+
+    const responsePromise = app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/genx/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+    await vi.advanceTimersByTimeAsync(15_000)
+    const res = await responsePromise
+
+    expect(res.statusCode).toBe(200)
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'genx',
+      healthStatus: 'failed',
+      healthMessage: 'GenX provider test timed out after 15s',
+    }))
     expect(res.body).not.toContain('genx-secret-key')
   })
 

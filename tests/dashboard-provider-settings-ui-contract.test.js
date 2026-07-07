@@ -149,6 +149,8 @@ describe('Dashboard provider settings UI contract', () => {
     expect(panelSource).toContain('Admin sign-in required')
     expect(panelSource).toContain('Admin access required')
     expect(panelSource).toContain('Backend unavailable')
+    expect(panelSource).toContain('providerTestErrorMessage')
+    expect(panelSource).toContain('data.errorMessage')
   })
 
   it('keeps DeepInfra gated and does not activate execution in UI copy', () => {
