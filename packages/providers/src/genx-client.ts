@@ -28,6 +28,7 @@ export interface GenxVideoRequest {
 export interface GenxVideoSubmitResponse {
   jobId: string
   status: string
+  model: string
 }
 
 export interface GenxVideoPollResponse {
@@ -45,8 +46,11 @@ export interface GenxVideoResult {
   duration: number
   width: number
   height: number
+  model: string
   metadata: Record<string, unknown>
 }
+
+export const DEFAULT_GENX_VIDEO_MODEL = 'seedance-v1-fast'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +60,24 @@ function resolveGenxApiKey(requestApiKey?: string): string {
 
 function resolveGenxBaseUrl(requestBaseUrl?: string): string {
   return requestBaseUrl?.trim() || getGenxBaseUrl()
+}
+
+function resolveOptionalGenxApiKey(requestApiKey?: string): string {
+  if (requestApiKey?.trim()) return requestApiKey.trim()
+
+  try {
+    return getGenxApiKey()
+  } catch {
+    return ''
+  }
+}
+
+export function resolveGenxVideoModel(
+  request: Pick<GenxVideoRequest, 'model' | 'providerDefaultModel'> = {},
+): string {
+  return request.model?.trim()
+    || request.providerDefaultModel?.trim()
+    || DEFAULT_GENX_VIDEO_MODEL
 }
 
 function sleep(ms: number): Promise<void> {
@@ -97,6 +119,7 @@ function extractResultUrl(data: Record<string, unknown>): string | undefined {
 export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVideoSubmitResponse> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
+  const model = resolveGenxVideoModel(request)
 
   const params: Record<string, unknown> = removeUndefined({
     prompt: request.prompt,
@@ -107,7 +130,7 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
   })
 
   const body = removeUndefined({
-    model: request.model || request.providerDefaultModel || 'veo-3.1',
+    model,
     params,
     metadata: { capability: 'video_generation', source: 'amarktai' },
   })
@@ -131,6 +154,7 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
   return {
     jobId: (data.job_id as string) ?? (data.id as string) ?? '',
     status: (data.status as string) ?? 'pending',
+    model,
   }
 }
 
@@ -190,11 +214,29 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
 
 // ── Download Video Result ─────────────────────────────────────────────────────
 
-export async function genxDownloadVideo(url: string): Promise<GenxVideoResult> {
-  const response = await fetch(url)
+export async function genxDownloadVideo(
+  url: string,
+  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel'> = {},
+): Promise<GenxVideoResult> {
+  const apiKey = resolveOptionalGenxApiKey(request.apiKey)
+  const baseUrl = resolveGenxBaseUrl(request.baseUrl)
+  const downloadUrl = baseUrl ? new URL(url, baseUrl).toString() : url
+  const headers: Record<string, string> = {}
+  const authenticated = !!apiKey && shouldAuthenticateDownload(downloadUrl, baseUrl)
+
+  if (authenticated) {
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+
+  const response = await fetch(downloadUrl, { headers })
 
   if (!response.ok) {
     throw new Error(`GenX video download error ${response.status}`)
+  }
+
+  const mimeType = response.headers.get('content-type') ?? 'video/mp4'
+  if (mimeType.includes('application/json')) {
+    throw new Error('GenX video download returned metadata instead of video bytes')
   }
 
   const arrayBuffer = await response.arrayBuffer()
@@ -202,11 +244,24 @@ export async function genxDownloadVideo(url: string): Promise<GenxVideoResult> {
 
   return {
     videoBuffer,
-    mimeType: response.headers.get('content-type') ?? 'video/mp4',
+    mimeType,
     duration: 5,
     width: 1920,
     height: 1080,
-    metadata: { downloaded: true, sizeBytes: videoBuffer.length },
+    model: resolveGenxVideoModel(request),
+    metadata: { downloaded: true, sizeBytes: videoBuffer.length, authenticated },
+  }
+}
+
+function shouldAuthenticateDownload(url: string, baseUrl?: string): boolean {
+  if (!baseUrl) return true
+
+  try {
+    const downloadUrl = new URL(url)
+    const genxBaseUrl = new URL(baseUrl)
+    return downloadUrl.origin === genxBaseUrl.origin
+  } catch {
+    return url.startsWith('/api/v1/jobs/') || url.includes('/api/v1/jobs/')
   }
 }
 
@@ -225,6 +280,7 @@ export async function genxGenerateVideo(
 ): Promise<GenxVideoResult> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
+  const model = resolveGenxVideoModel(request)
 
   const submitResult = await genxSubmitVideo(request)
   if (!submitResult.jobId) {
@@ -247,12 +303,28 @@ export async function genxGenerateVideo(
     }
 
     if (pollResult.status === 'completed') {
-      // Try result URL first, then fallback to /api/v1/jobs/:id/file
-      if (pollResult.resultUrl) {
-        return await genxDownloadVideo(pollResult.resultUrl)
+      const downloadUrls = [
+        pollResult.resultUrl,
+        `${baseUrl}/api/v1/jobs/${submitResult.jobId}/result`,
+        `${baseUrl}/api/v1/jobs/${submitResult.jobId}/file`,
+      ].filter((candidate): candidate is string => !!candidate)
+
+      let lastDownloadError: unknown
+      for (const downloadUrl of downloadUrls) {
+        try {
+          return await genxDownloadVideo(downloadUrl, {
+            apiKey,
+            baseUrl,
+            model,
+          })
+        } catch (err) {
+          lastDownloadError = err
+        }
       }
-      // Fallback: try the file endpoint
-      return await genxDownloadVideo(`${baseUrl}/api/v1/jobs/${submitResult.jobId}/file`)
+
+      throw lastDownloadError instanceof Error
+        ? lastDownloadError
+        : new Error('GenX video download failed')
     }
   }
 

@@ -26,6 +26,8 @@ const dbMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
+  DEFAULT_GENX_VIDEO_MODEL: 'seedance-v1-fast',
+  genxSubmitVideo: vi.fn(),
   groqChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
 }))
@@ -91,6 +93,11 @@ describe('Admin provider credential routes', () => {
       images: [{ base64: 'aW1hZ2U=', buffer: Buffer.from('image'), width: 256, height: 256, mimeType: 'image/png' }],
       model: 'black-forest-labs/FLUX.1-schnell',
       usage: { promptTokens: 1, completionTokens: 0, totalTokens: 1 },
+    })
+    providerMocks.genxSubmitVideo.mockResolvedValue({
+      jobId: 'genx-test-job-001',
+      status: 'pending',
+      model: 'seedance-v1-fast',
     })
   })
 
@@ -327,6 +334,42 @@ describe('Admin provider credential routes', () => {
       healthStatus: 'failed',
       healthMessage: expect.stringContaining('defaultModel'),
     }))
+  })
+
+  it('GenX test uses duration 4, seedance default, and honest submit-only message', async () => {
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'genx',
+      apiKey: 'genx-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'genx',
+      displayName: 'GenX',
+      baseUrl: 'https://query.genx.sh',
+      defaultModel: '',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/genx/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.genxSubmitVideo).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'genx-secret-key',
+      baseUrl: 'https://query.genx.sh',
+      model: 'seedance-v1-fast',
+      duration: 4,
+    }))
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'genx',
+      healthStatus: 'live',
+      healthMessage: expect.stringContaining('completion proof pending'),
+    }))
+    expect(dbMocks.updateProviderHealthStatus.mock.calls[0][0].healthMessage).not.toContain('complete')
+    expect(res.body).not.toContain('genx-secret-key')
   })
 
   it('gated provider test does not fake live', async () => {

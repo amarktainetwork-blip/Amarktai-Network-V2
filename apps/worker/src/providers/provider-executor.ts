@@ -1,7 +1,7 @@
 /**
  * Provider executor - routes execution to implemented provider clients.
  *
- * Phase 6B: Groq chat and Together image_generation are implemented.
+ * Groq chat, Together image_generation, and GenX video_generation are implemented.
  * All other capabilities return "not implemented".
  *
  * This module is the only active worker path that calls provider APIs.
@@ -202,13 +202,15 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
 
 async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult> {
   let apiKey = ''
+  let model = 'seedance-v1-fast'
 
   try {
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
-    const { genxGenerateVideo } = await import('@amarktai/providers')
+    const { DEFAULT_GENX_VIDEO_MODEL, genxGenerateVideo } = await import('@amarktai/providers')
     const { saveArtifact } = await import('@amarktai/artifacts')
+    model = providerStatus.defaultModel?.trim() || DEFAULT_GENX_VIDEO_MODEL
 
     const result = await genxGenerateVideo({
       prompt: payload.prompt,
@@ -236,13 +238,13 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
         title: `video_generation output for ${payload.appSlug}`,
         description: 'GenX video_generation artifact',
         provider: 'genx',
-        model: providerStatus.defaultModel || 'genx-video',
+        model: result.model || model,
         traceId: payload.traceId,
         mimeType: result.mimeType,
         metadata: {
           capability: 'video_generation',
           provider: 'genx',
-          model: providerStatus.defaultModel || 'genx-video',
+          model: result.model || model,
           width: result.width,
           height: result.height,
           duration: result.duration,
@@ -266,7 +268,7 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       success: true,
       status: 'completed',
       provider: 'genx',
-      model: providerStatus.defaultModel || 'genx-video',
+      model: result.model || model,
       artifactId: artifact.id,
       output: JSON.stringify(output),
       metadata: output,
@@ -278,6 +280,8 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       success: false,
       status: 'failed',
       error: `GenX execution failed: ${redactProviderSecrets(message, [apiKey])}`,
+      provider: 'genx',
+      model,
     }
   }
 }
