@@ -217,18 +217,14 @@ describe('Dashboard truth cleanup', () => {
     expect(capText).toContain('Runtime selected')
   })
 
-  it('Providers page does not show COVERAGE or hard-coded capability badges', () => {
-    const provText = fs.readFileSync(path.join(ROOT, 'app/dashboard/providers/page.js'), 'utf8')
-    expect(provText).not.toContain('COVERAGE')
-    expect(provText).not.toContain('contract order')
-    expect(provText).not.toContain('missing_key')
-    expect(provText).not.toContain('not_live_proven')
-    // Page fetches from backend API
-    expect(provText).toContain('/api/admin/providers')
-    expect(provText).toContain('getHealthStatusLabel')
-    // Should not have hardcoded static status strings
-    expect(provText).not.toContain("'Not connected'")
-    expect(provText).not.toContain("'Gated only'")
+  it('Providers dashboard page is removed', () => {
+    expect(fs.existsSync(path.join(ROOT, 'app/dashboard/providers/page.js'))).toBe(false)
+  })
+
+  it('DASHBOARD_PAGES does not include providers', () => {
+    const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
+    const providerPage = DASHBOARD_PAGES.find((p) => p.id === 'providers')
+    expect(providerPage).toBeUndefined()
   })
 
   it('Settings page does not use Save local draft toast', () => {
@@ -307,16 +303,6 @@ describe('Dashboard truth cleanup', () => {
     expect(dashboardSection).not.toContain('curl')
   })
 
-  it('Providers page fetches from backend API, not static contracts', () => {
-    const providersText = fs.readFileSync(path.join(ROOT, 'app/dashboard/providers/page.js'), 'utf8')
-    expect(providersText).toContain('/api/admin/providers')
-    expect(providersText).toContain('normalizeProviderStatuses')
-    expect(providersText).toContain('getHealthStatusLabel')
-    // Should not show static "Not connected" or "Gated only" hardcoded
-    expect(providersText).not.toContain("'Not connected'")
-    expect(providersText).not.toContain("'Gated only'")
-  })
-
   it('Command Center fetches provider status from backend', () => {
     const cmdText = fs.readFileSync(path.join(ROOT, 'app/dashboard/command-center/page.js'), 'utf8')
     expect(cmdText).toContain('/api/admin/providers')
@@ -325,11 +311,8 @@ describe('Dashboard truth cleanup', () => {
     expect(cmdText).not.toContain('{provider.status}')
   })
 
-  it('Provider Settings and Providers page use same status contract', () => {
-    const providersText = fs.readFileSync(path.join(ROOT, 'app/dashboard/providers/page.js'), 'utf8')
+  it('Provider Settings uses backend status contract', () => {
     const settingsText = fs.readFileSync(path.join(ROOT, 'components/dashboard/provider-settings-panel.jsx'), 'utf8')
-    // Both should use getHealthStatusLabel
-    expect(providersText).toContain('getHealthStatusLabel')
     expect(settingsText).toContain('getHealthStatusLabel')
   })
 

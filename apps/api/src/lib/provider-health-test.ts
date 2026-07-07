@@ -7,7 +7,7 @@ import {
 } from '@amarktai/db'
 import { isValidProvider, type ProviderKey } from '@amarktai/core'
 
-const GATED_PROVIDERS = new Set<ProviderKey>(['genx', 'mimo', 'deepinfra'])
+const GATED_PROVIDERS = new Set<ProviderKey>(['mimo', 'deepinfra'])
 
 export interface ProviderLiveTestResult {
   provider: ProviderCredentialStatus
@@ -85,6 +85,30 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
         providerKey,
         healthStatus: 'live',
         healthMessage: `Live test passed through Together image generation (${result.model}).`,
+      })
+      return { provider }
+    }
+
+    if (providerKey === 'genx') {
+      const providerStatus = await getProviderCredentialStatus('genx')
+      const { genxSubmitVideo } = await import('@amarktai/providers')
+      const result = await genxSubmitVideo({
+        prompt: 'A simple blue circle rotating slowly',
+        apiKey,
+        baseUrl: providerStatus.baseUrl || undefined,
+        providerDefaultModel: providerStatus.defaultModel || undefined,
+        duration: 2,
+        aspectRatio: '1:1',
+      })
+
+      if (!result.jobId) {
+        throw new Error('GenX did not return a job ID from test submission')
+      }
+
+      const provider = await updateProviderHealthStatus({
+        providerKey,
+        healthStatus: 'live',
+        healthMessage: `Live test passed through GenX video submit (job: ${result.jobId}).`,
       })
       return { provider }
     }
