@@ -223,8 +223,12 @@ describe('Dashboard truth cleanup', () => {
     expect(provText).not.toContain('contract order')
     expect(provText).not.toContain('missing_key')
     expect(provText).not.toContain('not_live_proven')
-    expect(provText).toContain('Runtime selects providers')
-    expect(provText).toContain('Not connected')
+    // Page fetches from backend API
+    expect(provText).toContain('/api/admin/providers')
+    expect(provText).toContain('getHealthStatusLabel')
+    // Should not have hardcoded static status strings
+    expect(provText).not.toContain("'Not connected'")
+    expect(provText).not.toContain("'Gated only'")
   })
 
   it('Settings page does not use Save local draft toast', () => {
@@ -295,15 +299,44 @@ describe('Dashboard truth cleanup', () => {
   it('Docker dashboard binds to all interfaces and uses Node healthcheck', () => {
     const compose = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8')
     const dashboardSection = compose.split('# ── Dashboard')[1]?.split('# ── Volumes')[0] ?? ''
-    // Binds to all interfaces
     expect(dashboardSection).toContain('HOSTNAME: 0.0.0.0')
     expect(dashboardSection).toContain('PORT: 3000')
-    // Uses Node HTTP check against 127.0.0.1
     expect(dashboardSection).toContain('node')
     expect(dashboardSection).toContain('127.0.0.1:3000')
-    // Does not use wget or curl
     expect(dashboardSection).not.toContain('wget')
     expect(dashboardSection).not.toContain('curl')
+  })
+
+  it('Providers page fetches from backend API, not static contracts', () => {
+    const providersText = fs.readFileSync(path.join(ROOT, 'app/dashboard/providers/page.js'), 'utf8')
+    expect(providersText).toContain('/api/admin/providers')
+    expect(providersText).toContain('normalizeProviderStatuses')
+    expect(providersText).toContain('getHealthStatusLabel')
+    // Should not show static "Not connected" or "Gated only" hardcoded
+    expect(providersText).not.toContain("'Not connected'")
+    expect(providersText).not.toContain("'Gated only'")
+  })
+
+  it('Command Center fetches provider status from backend', () => {
+    const cmdText = fs.readFileSync(path.join(ROOT, 'app/dashboard/command-center/page.js'), 'utf8')
+    expect(cmdText).toContain('/api/admin/providers')
+    expect(cmdText).toContain('getHealthStatusLabel')
+    // Should not show static provider.status from contracts
+    expect(cmdText).not.toContain('{provider.status}')
+  })
+
+  it('Provider Settings and Providers page use same status contract', () => {
+    const providersText = fs.readFileSync(path.join(ROOT, 'app/dashboard/providers/page.js'), 'utf8')
+    const settingsText = fs.readFileSync(path.join(ROOT, 'components/dashboard/provider-settings-panel.jsx'), 'utf8')
+    // Both should use getHealthStatusLabel
+    expect(providersText).toContain('getHealthStatusLabel')
+    expect(settingsText).toContain('getHealthStatusLabel')
+  })
+
+  it('Provider status labels include Live tested for live status', () => {
+    const contractText = fs.readFileSync(path.join(ROOT, 'lib/provider-settings-contract.js'), 'utf8')
+    expect(contractText).toContain('live')
+    expect(contractText).toContain('Live tested')
   })
 })
 
