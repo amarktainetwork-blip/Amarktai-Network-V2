@@ -1,10 +1,10 @@
 /**
- * GenX REST client — live integration for video.generate capabilities.
+ * GenX Router REST client — live integration for video.generate capabilities.
  *
- * Implements async video generation with long-polling:
- *   1. Submit prompt to GenX, receive remote job tracker ID
- *   2. Poll GenX servers at regular intervals for status updates
- *   3. On completion, fetch the MP4 binary and return it
+ * Uses the official GenX Router async contract:
+ *   POST /api/v1/generate          — submit job
+ *   GET  /api/v1/jobs/:id          — poll status
+ *   GET  /api/v1/jobs/:id/file     — download result
  *
  * API key/baseUrl can be passed in from stored-key resolver or env fallback.
  */
@@ -62,27 +62,57 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function removeUndefined(obj: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined && value !== null) {
+      clean[key] = value
+    }
+  }
+  return clean
+}
+
+function extractResultUrl(data: Record<string, unknown>): string | undefined {
+  // Try all known GenX response shapes
+  const direct = data.result_url ?? data.output_url ?? data.file_url ?? data.url
+  if (typeof direct === 'string' && direct) return direct
+
+  const result = data.result as Record<string, unknown> | undefined
+  if (result) {
+    const nested = result.url ?? result.file_url ?? result.output_url ?? result.video_url
+    if (typeof nested === 'string' && nested) return nested
+  }
+
+  const output = data.output as Record<string, unknown> | undefined
+  if (output) {
+    const nested = output.url ?? output.file_url ?? output.video_url
+    if (typeof nested === 'string' && nested) return nested
+  }
+
+  return undefined
+}
+
 // ── Submit Video Job ──────────────────────────────────────────────────────────
 
 export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVideoSubmitResponse> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
 
-  const body: Record<string, unknown> = {
+  const params: Record<string, unknown> = removeUndefined({
     prompt: request.prompt,
-    model: request.model ?? request.providerDefaultModel ?? undefined,
     duration: request.duration ?? 5,
     aspect_ratio: request.aspectRatio ?? '16:9',
-    style: request.style ?? undefined,
-    negative_prompt: request.negativePrompt ?? undefined,
-  }
-
-  // Remove undefined fields
-  Object.keys(body).forEach((key) => {
-    if (body[key] === undefined) delete body[key]
+    style: request.style,
+    negative_prompt: request.negativePrompt,
   })
 
-  const response = await fetch(`${baseUrl}/api/v1/video/generate`, {
+  const body = removeUndefined({
+    model: request.model || request.providerDefaultModel || 'veo-3.1',
+    params,
+    metadata: { capability: 'video_generation', source: 'amarktai' },
+  })
+
+  const response = await fetch(`${baseUrl}/api/v1/generate`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -93,7 +123,7 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`GenX video submit error ${response.status}: ${errBody}`)
+    throw new Error(`GenX submit error ${response.status}: ${errBody}`)
   }
 
   const data = await response.json() as Record<string, unknown>
@@ -110,7 +140,7 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
   const apiKey = resolveGenxApiKey(request?.apiKey)
   const baseUrl = resolveGenxBaseUrl(request?.baseUrl)
 
-  const response = await fetch(`${baseUrl}/api/v1/video/status/${jobId}`, {
+  const response = await fetch(`${baseUrl}/api/v1/jobs/${jobId}`, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -119,7 +149,7 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`GenX video poll error ${response.status}: ${errBody}`)
+    throw new Error(`GenX poll error ${response.status}: ${errBody}`)
   }
 
   const data = await response.json() as Record<string, unknown>
@@ -129,14 +159,19 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
   switch (rawStatus) {
     case 'completed':
     case 'succeeded':
+    case 'success':
       status = 'completed'
       break
     case 'failed':
     case 'error':
+    case 'cancelled':
+    case 'canceled':
       status = 'failed'
       break
     case 'processing':
     case 'running':
+    case 'queued':
+    case 'pending':
       status = 'processing'
       break
     default:
@@ -147,8 +182,8 @@ export async function genxPollVideo(jobId: string, request?: Pick<GenxVideoReque
     jobId,
     status,
     progress: (data.progress as number) ?? (status === 'completed' ? 100 : 0),
-    resultUrl: (data.result_url as string) ?? (data.output_url as string) ?? undefined,
-    error: (data.error as string) ?? undefined,
+    resultUrl: extractResultUrl(data),
+    error: (data.error as string) ?? (data.message as string) ?? undefined,
     metadata: data as Record<string, unknown>,
   }
 }
@@ -178,7 +213,7 @@ export async function genxDownloadVideo(url: string): Promise<GenxVideoResult> {
 // ── Long-Poll Orchestrator ────────────────────────────────────────────────────
 
 export const GENX_POLL_INTERVAL_MS = 5000
-export const GENX_POLL_MAX_ATTEMPTS = 120 // 10 minutes max
+export const GENX_POLL_MAX_ATTEMPTS = 120
 
 export interface GenxLongPollCallbacks {
   onProgress?: (progress: number, status: string) => void
@@ -188,6 +223,9 @@ export async function genxGenerateVideo(
   request: GenxVideoRequest,
   callbacks?: GenxLongPollCallbacks,
 ): Promise<GenxVideoResult> {
+  const apiKey = resolveGenxApiKey(request.apiKey)
+  const baseUrl = resolveGenxBaseUrl(request.baseUrl)
+
   const submitResult = await genxSubmitVideo(request)
   if (!submitResult.jobId) {
     throw new Error('GenX did not return a job ID')
@@ -198,10 +236,7 @@ export async function genxGenerateVideo(
     await sleep(GENX_POLL_INTERVAL_MS)
     attempts++
 
-    const pollResult = await genxPollVideo(submitResult.jobId, {
-      apiKey: request.apiKey,
-      baseUrl: request.baseUrl,
-    })
+    const pollResult = await genxPollVideo(submitResult.jobId, { apiKey, baseUrl })
 
     if (callbacks?.onProgress) {
       callbacks.onProgress(pollResult.progress, pollResult.status)
@@ -211,8 +246,13 @@ export async function genxGenerateVideo(
       throw new Error(`GenX video generation failed: ${pollResult.error ?? 'unknown error'}`)
     }
 
-    if (pollResult.status === 'completed' && pollResult.resultUrl) {
-      return await genxDownloadVideo(pollResult.resultUrl)
+    if (pollResult.status === 'completed') {
+      // Try result URL first, then fallback to /api/v1/jobs/:id/file
+      if (pollResult.resultUrl) {
+        return await genxDownloadVideo(pollResult.resultUrl)
+      }
+      // Fallback: try the file endpoint
+      return await genxDownloadVideo(`${baseUrl}/api/v1/jobs/${submitResult.jobId}/file`)
     }
   }
 

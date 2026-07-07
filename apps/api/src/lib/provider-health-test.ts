@@ -108,7 +108,7 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
       const provider = await updateProviderHealthStatus({
         providerKey,
         healthStatus: 'live',
-        healthMessage: `Live test passed through GenX video submit (job: ${result.jobId}).`,
+        healthMessage: `Live test passed through GenX Router generate endpoint (job: ${result.jobId}).`,
       })
       return { provider }
     }
