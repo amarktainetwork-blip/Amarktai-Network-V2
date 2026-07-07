@@ -81,6 +81,7 @@ export async function saveArtifact(opts: SaveArtifactOptions): Promise<SavedArti
       previewable: isPreviewable(finalMime),
       downloadable: true,
       status: 'completed',
+      errorMessage: '',
       metadata: JSON.stringify(input.metadata),
     },
   })

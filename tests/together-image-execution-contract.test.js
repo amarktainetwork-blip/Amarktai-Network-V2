@@ -518,6 +518,30 @@ describe('Artifact persistence and worker completion', () => {
     expect(completedUpdate[0].data.output).not.toContain('cmVhbC1pbWFnZS1ieXRlcw==')
   })
 
+  it('worker stores Together artifact output metadata above the previous small column limit', async () => {
+    mockArtifactSuccess({
+      id: 'artifact-image-long-output',
+      storageUrl: `/api/v1/artifacts/artifact-image-long-output/file?proof=${'x'.repeat(70_000)}`,
+    })
+    const processor = createJobProcessor()
+    await processor(makePayload())
+
+    const completedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'completed',
+    )
+    const output = JSON.parse(completedUpdate[0].data.output)
+
+    expect(completedUpdate[0].data.artifactId).toBe('artifact-image-long-output')
+    expect(completedUpdate[0].data.output.length).toBeGreaterThan(65_535)
+    expect(output).toMatchObject({
+      artifactId: 'artifact-image-long-output',
+      mimeType: 'image/png',
+      width: 1024,
+      height: 1024,
+    })
+    expect(completedUpdate[0].data.output).not.toContain('cmVhbC1pbWFnZS1ieXRlcw==')
+  })
+
   it('worker marks failed and throws on Together error so BullMQ records failure', async () => {
     providerMocks.togetherGenerateImage.mockRejectedValue(new Error('Together unavailable'))
     const processor = createJobProcessor()

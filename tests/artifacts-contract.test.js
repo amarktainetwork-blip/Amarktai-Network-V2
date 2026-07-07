@@ -77,6 +77,45 @@ describe('artifact URL alignment and file access contracts', () => {
     expect(getArtifactPublicUrl('artifact-id')).toBe('/api/v1/artifacts/artifact-id/file')
   })
 
+  it('saveArtifact persists generated media metadata as JSON', async () => {
+    const { saveArtifact } = await import('../packages/artifacts/src/manager.ts')
+    const metadata = {
+      capability: 'image_generation',
+      provider: 'together',
+      model: 'black-forest-labs/FLUX.1-schnell',
+      width: 1024,
+      height: 1024,
+      providerPayload: 'x'.repeat(70_000),
+    }
+
+    await saveArtifact({
+      input: {
+        appSlug: 'phase2-app',
+        type: 'image',
+        subType: 'image_generation',
+        title: 'Long metadata image artifact',
+        description: 'Generated media artifact metadata storage proof',
+        provider: 'together',
+        model: 'black-forest-labs/FLUX.1-schnell',
+        traceId: 'trace-long-metadata',
+        mimeType: 'image/png',
+        metadata,
+      },
+      data: Buffer.from('png bytes', 'utf8'),
+      explicitMimeType: 'image/png',
+    })
+
+    const createdData = prismaMock.artifact.create.mock.calls[0][0].data
+    expect(createdData.metadata.length).toBeGreaterThan(65_535)
+    expect(JSON.parse(createdData.metadata)).toMatchObject({
+      capability: 'image_generation',
+      provider: 'together',
+      model: 'black-forest-labs/FLUX.1-schnell',
+      width: 1024,
+      height: 1024,
+    })
+  })
+
   it('artifact auth context allows admins and same-app API keys only', async () => {
     const { authenticateArtifactAccess, canAccessArtifact } = await import('../apps/api/src/lib/auth-context.ts')
     const app = {
