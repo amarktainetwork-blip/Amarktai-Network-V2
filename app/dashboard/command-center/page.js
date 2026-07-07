@@ -1,10 +1,16 @@
 'use client'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PROVIDER_CONTRACTS, OPEN_SOURCE_TOOLS } from '@/lib/dashboard-contract'
+import {
+  normalizeProviderStatuses,
+  getHealthStatusLabel,
+  getHealthStatusClasses,
+} from '@/lib/provider-settings-contract'
 import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, Lock, Server, ShieldCheck, Zap } from 'lucide-react'
 
 const STATUS_GRID = [
@@ -24,6 +30,29 @@ const PENDING = [
 ]
 
 export default function CommandCenterPage() {
+  const [providers, setProviders] = useState([])
+
+  useEffect(() => {
+    fetch('/api/admin/providers')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setProviders(normalizeProviderStatuses(data))
+        }
+      })
+      .catch(() => {
+        setProviders(
+          normalizeProviderStatuses(
+            PROVIDER_CONTRACTS.map((p) => ({
+              providerKey: p.id,
+              displayName: p.name,
+              healthStatus: 'unconfigured',
+            }))
+          )
+        )
+      })
+  }, [])
+
   return (
     <PageTransition className="space-y-6">
       <PageHeader title="Command Center" subtitle="Frontend control room for contracts, backend-pending routes, and next integration work.">
@@ -58,17 +87,16 @@ export default function CommandCenterPage() {
         </Card>
 
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Cpu className="h-4 w-4 text-violet-300" /> Provider Lane Summary</h3>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Cpu className="h-4 w-4 text-violet-300" /> Provider Status</h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {PROVIDER_CONTRACTS.map((provider) => (
-              <div key={provider.id} className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+            {providers.map((provider) => (
+              <div key={provider.providerKey} className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium">{provider.name}</span>
-                  <Badge variant="outline" className={provider.gated ? 'border-amber-500/30 text-amber-400 text-[9px]' : 'border-cyan-500/30 text-cyan-300 text-[9px]'}>
-                    {provider.status}
+                  <span className="text-xs font-medium">{provider.displayName}</span>
+                  <Badge variant="outline" className={getHealthStatusClasses(provider.healthStatus)}>
+                    {getHealthStatusLabel(provider.healthStatus)}
                   </Badge>
                 </div>
-                <div className="mt-1 text-[10px] text-muted-foreground">{provider.role}</div>
               </div>
             ))}
           </div>
