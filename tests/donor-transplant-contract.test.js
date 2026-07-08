@@ -10,7 +10,7 @@ import { DESIGN_QUALITY_GATES } from '../lib/design-quality-contract.js'
 
 const ROOT = process.cwd()
 const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-const PROVEN_CAPABILITIES = ['chat', 'image_generation', 'video_generation']
+const PROVEN_CAPABILITIES = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation']
 const REQUIRED_TARGET_CAPABILITIES = [
   'chat',
   'reasoning',
@@ -73,16 +73,16 @@ describe('Donor transplant V2 contract', () => {
     }
   })
 
-  it('keeps proven capabilities exactly the three live runtime paths', () => {
+  it('keeps proven capabilities exactly the live runtime paths', () => {
     const payload = getRuntimeProofStatus()
 
     expect(payload.provenCapabilities.map((item) => item.capability)).toEqual(PROVEN_CAPABILITIES)
     expect(payload.summary).toMatchObject({
       providerCount: 5,
-      provenCount: 3,
+      provenCount: 10,
       source: 'backend-runtime-proof-status',
     })
-    expect(payload.unprovenCapabilities).toHaveLength(31)
+    expect(payload.unprovenCapabilities).toHaveLength(24)
     for (const capability of payload.unprovenCapabilities) {
       expect(capability.readyForDashboardExecution).toBe(false)
     }
