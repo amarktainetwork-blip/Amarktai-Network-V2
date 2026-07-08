@@ -283,11 +283,25 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
               {!backendReady && <span className="text-[10px] text-muted-foreground">Disabled until backend proof passes</span>}
             </div>
             {jobResult && (
-              <div className={`mt-3 rounded-lg border p-3 text-xs ${jobResult.status === 'completed' ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : 'border-rose-500/30 bg-rose-500/[0.04]'}`}>
-                <div className="font-semibold">{jobResult.status === 'completed' ? 'Job completed' : 'Job failed'}</div>
-                {jobResult.output && <pre className="mt-2 overflow-auto max-h-40 text-[10px]">{jobResult.output}</pre>}
+              <div className={`mt-3 rounded-lg border p-3 text-xs ${jobResult.status === 'completed' ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : jobResult.status === 'failed' ? 'border-rose-500/30 bg-rose-500/[0.04]' : 'border-amber-500/30 bg-amber-500/[0.04]'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{jobResult.status === 'completed' ? 'Job completed' : jobResult.status === 'failed' ? 'Job failed' : `Job ${jobResult.status}`}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{jobResult.id?.slice(0, 8)}...</span>
+                </div>
+                {jobResult.provider && <div className="mt-1">Provider: <span className="text-violet-300">{jobResult.provider}</span></div>}
+                {jobResult.model && <div>Model: <span className="font-mono text-[10px]">{jobResult.model}</span></div>}
+                {jobResult.output && <pre className="mt-2 overflow-auto max-h-40 text-[10px] bg-black/30 rounded p-2">{jobResult.output}</pre>}
                 {jobResult.error && <div className="mt-1 text-rose-300">{jobResult.error}</div>}
-                {jobResult.artifactId && <div className="mt-1">Artifact: {jobResult.artifactId}</div>}
+                {jobResult.artifactId && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span>Artifact:</span>
+                    <a href="/dashboard/artifacts" className="text-cyan-300 hover:underline">{jobResult.artifactId.slice(0, 8)}...</a>
+                  </div>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <a href="/dashboard/jobs" className="text-cyan-300 hover:underline text-[10px]">View all jobs</a>
+                  {jobResult.artifactId && <a href="/dashboard/artifacts" className="text-cyan-300 hover:underline text-[10px]">View artifacts</a>}
+                </div>
               </div>
             )}
           </div>
