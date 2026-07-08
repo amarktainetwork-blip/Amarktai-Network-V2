@@ -1,10 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
+import { getBackendCapability } from '../lib/capability-map.js'
+import { useStudioStore } from '../lib/useStudioStore.js'
 
 const ROOT = path.join(import.meta.dirname, '..')
 
 describe('studio execution loop contract', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
   it('Studio uses amarktai_token', () => {
     const storePath = path.join(ROOT, 'lib/useStudioStore.js')
     const content = fs.readFileSync(storePath, 'utf8')
@@ -42,6 +49,90 @@ describe('studio execution loop contract', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
     expect(content).toContain('not proven or not ready for dashboard execution')
+  })
+
+  it.each([
+    ['image.generate', 'image_generation'],
+    ['video.generate', 'video_generation'],
+    ['text.chat', 'chat'],
+    ['text.reasoning', 'reasoning'],
+    ['text.code', 'code'],
+  ])('maps dashboard key %s to backend key %s', (dashboardKey, backendKey) => {
+    expect(getBackendCapability(dashboardKey).backendCapability).toBe(backendKey)
+  })
+
+  it.each([
+    ['image.generate', 'image_generation'],
+    ['video.generate', 'video_generation'],
+    ['text.chat', 'chat'],
+    ['text.reasoning', 'reasoning'],
+    ['text.code', 'code'],
+  ])('Studio store submits %s as canonical %s', async (dashboardKey, backendKey) => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: 'job-123', status: 'queued' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await useStudioStore.getState().submitJob(dashboardKey, { prompt: 'runtime proof prompt' })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+
+    expect(result).toMatchObject({ ok: true, jobId: 'job-123' })
+    expect(body.capability).toBe(backendKey)
+    expect(body.capability).not.toBe(dashboardKey)
+  })
+
+  it('Studio store accepts already-canonical backend capability keys', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: 'job-456', status: 'queued' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await useStudioStore.getState().submitJob('image_generation', { prompt: 'canonical prompt' })
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+
+    expect(result).toMatchObject({ ok: true, jobId: 'job-456' })
+    expect(body.capability).toBe('image_generation')
+  })
+
+  it('Studio store rejects unknown dashboard capability keys before backend submission', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await useStudioStore.getState().submitJob('image.unknown', { prompt: 'bad prompt' })
+
+    expect(result).toEqual({ ok: false, error: 'Capability is not mapped to a backend execution key' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('Studio page submits canonical backend key from handleSubmit', () => {
+    const pagePath = path.join(ROOT, 'app/dashboard/studio/page.jsx')
+    const content = fs.readFileSync(pagePath, 'utf8')
+
+    expect(content).toContain('const backendCapability = backend.backendCapability')
+    expect(content).toContain('submitJob(backendCapability, values)')
+    expect(content).not.toContain('submitJob(meta.capability, values)')
+    expect(content).toContain('Dashboard key')
+    expect(content).toContain('Backend key')
+  })
+
+  it('admin Studio route normalizes known aliases and stores canonical job capability', () => {
+    const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
+    const content = fs.readFileSync(routePath, 'utf8')
+
+    expect(content).toContain("'image.generate': 'image_generation'")
+    expect(content).toContain("'video.generate': 'video_generation'")
+    expect(content).toContain("'text.chat': 'chat'")
+    expect(content).toContain('normalizeStudioCapability(body.capability)')
+    expect(content).toContain('capability: capability as never')
+  })
+
+  it('admin Studio route rejects unknown unmapped capabilities', () => {
+    const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
+    const content = fs.readFileSync(routePath, 'utf8')
+
+    expect(content).toContain('Capability is not mapped to a backend execution key')
   })
 
   it('admin Studio route evaluates runtime proof per request', () => {

@@ -226,11 +226,16 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
 
   const handleSubmit = async () => {
     if (!backendReady || submitting) return
+    const backendCapability = backend.backendCapability
+    if (!backendCapability) {
+      setJobResult({ status: 'failed', error: 'Capability is not mapped to a backend execution key' })
+      return
+    }
     setSubmitting(true)
     setJobResult(null)
     try {
       const { submitJob, pollJob } = useStudioStore.getState()
-      const result = await submitJob(meta.capability, values)
+      const result = await submitJob(backendCapability, values)
       if (result.ok && result.jobId) {
         // Poll until complete or timeout
         let attempts = 0
@@ -342,7 +347,7 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                 <AccordionTrigger className="text-xs py-3">Developer contract</AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-2 text-xs text-muted-foreground">
-                    <div className="flex justify-between"><span>Capability</span><span className="font-mono">{meta.capability}</span></div>
+                    <div className="flex justify-between"><span>Dashboard key</span><span className="font-mono">{meta.capability}</span></div>
                     <div className="flex justify-between"><span>Backend key</span><span className="font-mono">{backend.backendCapability || backend.plannedBackendKey || 'planned'}</span></div>
                     <div className="flex justify-between"><span>Route</span><span>{backend.missing ? 'capability_missing' : 'route_pending'}</span></div>
                     <div className="flex justify-between"><span>Execution</span><span>{backendReady ? 'backend_ready' : 'not_dashboard_ready'}</span></div>
