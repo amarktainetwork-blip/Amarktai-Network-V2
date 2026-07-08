@@ -3,7 +3,6 @@
 # AmarktAI Network V2 Docker entrypoint.
 
 SERVICE="${1:-api}"
-PRISMA="./node_modules/.bin/prisma"
 
 echo "[boot] Starting $SERVICE"
 
@@ -31,7 +30,7 @@ done
 echo "[boot] Redis ready"
 
 echo "[boot] Syncing schema..."
-$PRISMA db push --schema=./prisma/schema.prisma --accept-data-loss --skip-generate 2>&1
+node scripts/prisma-db-push-safe.mjs
 echo "[boot] Schema synced"
 
 if [ "$SERVICE" = "api" ]; then

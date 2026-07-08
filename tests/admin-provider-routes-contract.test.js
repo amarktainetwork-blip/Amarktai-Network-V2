@@ -16,6 +16,7 @@ const dbMocks = vi.hoisted(() => {
 
   return {
     ProviderConfigError,
+    MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE: 'MiMo is configured for coding-tool use only. Backend runtime, worker jobs, and fallback execution are disabled. Use MiMo only through a secure server-side coding tool or terminal session in the future coder/workbench app.',
     listProviderCredentialStatuses: vi.fn(),
     saveProviderCredential: vi.fn(),
     clearProviderCredential: vi.fn(),
@@ -29,7 +30,6 @@ const providerMocks = vi.hoisted(() => ({
   DEFAULT_GENX_VIDEO_MODEL: 'seedance-v1-fast',
   groqChat: vi.fn(),
   deepinfraChat: vi.fn(),
-  mimoChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
 }))
 
@@ -99,12 +99,6 @@ describe('Admin provider credential routes', () => {
     providerMocks.deepinfraChat.mockResolvedValue({
       content: 'AMARKTAI_PROVIDER_TEST_OK',
       model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-      finishReason: 'stop',
-    })
-    providerMocks.mimoChat.mockResolvedValue({
-      content: 'AMARKTAI_PROVIDER_TEST_OK',
-      model: 'mimo-v2.5',
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
       finishReason: 'stop',
     })
@@ -507,16 +501,15 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(providerMocks.mimoChat).not.toHaveBeenCalled()
     expect(dbMocks.resolveProviderApiKey).not.toHaveBeenCalled()
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'mimo',
       healthStatus: 'runtime_restricted',
-      healthMessage: expect.stringContaining('coding/interactive tools'),
+      healthMessage: expect.stringContaining('coding-tool use only'),
     }))
   })
 
-  it('MiMo unknown policy requires review and is not marked live', async () => {
+  it('MiMo unknown policy is still runtime restricted and is not marked live', async () => {
     dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
       providerKey: 'mimo',
       displayName: 'MiMo',
@@ -531,25 +524,20 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(providerMocks.mimoChat).not.toHaveBeenCalled()
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'mimo',
-      healthStatus: 'requires_review',
+      healthStatus: 'runtime_restricted',
+      healthMessage: expect.stringContaining('coding-tool use only'),
     }))
   })
 
-  it('MiMo backend_runtime_allowed policy can run a real live test', async () => {
+  it('MiMo backend_runtime_allowed policy is still disabled for backend runtime', async () => {
     dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
       providerKey: 'mimo',
       displayName: 'MiMo',
       credentialUsagePolicy: 'backend_runtime_allowed',
       defaultModel: 'mimo-v2.5',
     }))
-    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
-      providerKey: 'mimo',
-      apiKey: 'mimo-secret-key',
-      source: 'database',
-    })
     const app = await makeApp()
 
     const res = await app.inject({
@@ -559,14 +547,40 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
-    expect(providerMocks.mimoChat).toHaveBeenCalledWith(expect.objectContaining({
-      apiKey: 'mimo-secret-key',
-      providerDefaultModel: 'mimo-v2.5',
-    }))
+    expect(dbMocks.resolveProviderApiKey).not.toHaveBeenCalled()
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'mimo',
-      healthStatus: 'live',
+      healthStatus: 'runtime_restricted',
+      healthMessage: expect.stringContaining('coding-tool use only'),
     }))
     expect(res.body).not.toContain('mimo-secret-key')
+  })
+
+  it('DeepInfra 402 insufficient balance is normalized safely', async () => {
+    providerMocks.deepinfraChat.mockRejectedValueOnce(new Error('DeepInfra chat error 402: insufficient balance for deepinfra-secret-key'))
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'deepinfra',
+      apiKey: 'deepinfra-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'deepinfra',
+      displayName: 'DeepInfra',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/deepinfra/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'deepinfra',
+      healthStatus: 'failed',
+      healthMessage: 'DeepInfra account has insufficient balance for inference. Add balance/top-up before this provider can be marked live.',
+    }))
+    expect(res.body).not.toContain('deepinfra-secret-key')
   })
 })

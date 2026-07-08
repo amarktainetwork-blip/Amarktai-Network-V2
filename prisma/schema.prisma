@@ -325,7 +325,7 @@ model GitHubPushLog {
   @@map("github_push_logs")
 }
 
-/// Persistent local checkout managed by Repo Workbench.
+/// Legacy local checkout record retained for non-destructive data compatibility.
 model RepoWorkspace {
   id            String   @id @default(cuid())
   provider      String   @default("github")
@@ -349,7 +349,7 @@ model RepoWorkspace {
   @@map("repo_workspaces")
 }
 
-/// A coding-agent task run against a repo workspace.
+/// Legacy coding-agent task record retained for non-destructive data compatibility.
 model RepoTask {
   id                String   @id @default(cuid())
   repoWorkspaceId   String   @map("repo_workspace_id")

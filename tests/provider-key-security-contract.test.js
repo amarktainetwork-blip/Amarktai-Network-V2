@@ -218,11 +218,11 @@ describe('Provider key resolver', () => {
 
     await expect(resolveProviderApiKey('mimo')).rejects.toMatchObject({
       code: 'runtime-restricted',
-      message: expect.stringContaining('coding_tools_only'),
+      message: 'MiMo is configured as a coding-tool-only integration and is not available for backend runtime execution.',
     })
   })
 
-  it('MiMo backend_runtime_allowed credential can resolve for backend runtime', async () => {
+  it('MiMo backend_runtime_allowed credential is still blocked by hotfix runtime disable', async () => {
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       providerKey: 'mimo',
       enabled: true,
@@ -230,9 +230,34 @@ describe('Provider key resolver', () => {
       credentialUsagePolicy: 'backend_runtime_allowed',
     }))
 
-    const resolved = await resolveProviderApiKey('mimo')
+    await expect(resolveProviderApiKey('mimo')).rejects.toMatchObject({
+      code: 'runtime-restricted',
+      message: 'MiMo is configured as a coding-tool-only integration and is not available for backend runtime execution.',
+    })
+  })
 
-    expect(resolved).toEqual({ providerKey: 'mimo', apiKey: 'mimo-secret-key', source: 'database' })
+  it('MiMo status can be configured while runtime remains disabled', async () => {
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      providerKey: 'mimo',
+      enabled: true,
+      apiKey: encryptProviderKey('mimo-secret-key'),
+      maskedPreview: 'mimo_********abcd',
+      credentialUsagePolicy: 'backend_runtime_allowed',
+      healthStatus: 'live',
+    }))
+
+    const status = await getProviderCredentialStatus('mimo')
+
+    expect(status).toMatchObject({
+      providerKey: 'mimo',
+      enabled: false,
+      runtimeEnabled: false,
+      configured: true,
+      credentialUsagePolicy: 'coding_tools_only',
+      healthStatus: 'runtime_restricted',
+      healthMessage: expect.stringContaining('coding-tool use only'),
+    })
+    expect(JSON.stringify(status)).not.toContain('mimo-secret-key')
   })
 
   it('credential usage policy supports approved values and safe defaults', () => {

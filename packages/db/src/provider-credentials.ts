@@ -29,6 +29,7 @@ export interface ProviderCredentialStatus {
   providerKey: ProviderKey
   displayName: string
   enabled: boolean
+  runtimeEnabled: boolean
   configured: boolean
   source: ProviderCredentialSource
   maskedPreview: string
@@ -42,6 +43,10 @@ export interface ProviderCredentialStatus {
   sortOrder: number
   notes: string
 }
+
+export const MIMO_CODING_TOOLS_ONLY_MESSAGE = 'MiMo is configured for coding-tool use only. Backend runtime, worker jobs, and fallback execution are disabled. Use MiMo only through a secure server-side coding tool or terminal session in the future coder/workbench app.'
+export const MIMO_BACKEND_RUNTIME_BLOCKED_MESSAGE = 'MiMo is configured as a coding-tool-only integration and is not available for backend runtime execution.'
+export const MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE = MIMO_CODING_TOOLS_ONLY_MESSAGE
 
 export interface SaveProviderCredentialInput {
   providerKey: string
@@ -95,9 +100,9 @@ export async function resolveProviderApiKey(providerKey: string): Promise<Resolv
     throw new ProviderConfigError(`Provider '${key}' is disabled`, key, 'disabled')
   }
 
-  if (key === 'mimo' && usagePolicy !== 'backend_runtime_allowed') {
+  if (key === 'mimo') {
     throw new ProviderConfigError(
-      `Provider '${key}' credential is restricted to ${usagePolicy}; backend runtime execution is disabled`,
+      MIMO_BACKEND_RUNTIME_BLOCKED_MESSAGE,
       key,
       'runtime-restricted',
     )
@@ -128,26 +133,37 @@ export async function getProviderCredentialStatus(providerKey: string): Promise<
   const row = await prisma.aiProvider.findUnique({ where: { providerKey: key } })
   const hasDbKey = !!row?.apiKey
   const hasEnvKey = !!process.env[getProviderEnvVar(key)]
-  const enabled = row?.enabled ?? false
+  const storedEnabled = row?.enabled ?? false
+  const enabled = key === 'mimo' ? false : storedEnabled
   const source: ProviderCredentialSource = hasDbKey ? 'database' : hasEnvKey ? 'env' : 'missing'
   const credentialUsagePolicy = normalizeCredentialUsagePolicy(
     row?.credentialUsagePolicy,
     key,
   )
+  const configured = key === 'mimo'
+    ? hasDbKey || hasEnvKey
+    : hasDbKey ? enabled : hasEnvKey
+  const healthStatus = key === 'mimo' && configured
+    ? 'runtime_restricted'
+    : row?.healthStatus ?? (hasEnvKey ? 'configured' : 'unconfigured')
+  const healthMessage = key === 'mimo' && configured
+    ? MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE
+    : row?.healthMessage ?? ''
 
   return {
     providerKey: key,
     displayName: row?.displayName ?? getProviderDisplayName(key),
     enabled,
-    configured: hasDbKey ? enabled : hasEnvKey,
+    runtimeEnabled: key === 'mimo' ? false : enabled,
+    configured,
     source,
     maskedPreview: hasDbKey ? row?.maskedPreview ?? '' : '',
     baseUrl: row?.baseUrl ?? '',
     defaultModel: row?.defaultModel ?? '',
     fallbackModel: row?.fallbackModel ?? '',
-    credentialUsagePolicy,
-    healthStatus: row?.healthStatus ?? (hasEnvKey ? 'configured' : 'unconfigured'),
-    healthMessage: row?.healthMessage ?? '',
+    credentialUsagePolicy: key === 'mimo' ? 'coding_tools_only' : credentialUsagePolicy,
+    healthStatus,
+    healthMessage,
     lastCheckedAt: row?.lastCheckedAt ?? null,
     sortOrder: row?.sortOrder ?? defaultSortOrder(key),
     notes: row?.notes ?? '',
@@ -172,7 +188,12 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
     sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
   }
 
-  if (input.enabled !== undefined) data.enabled = input.enabled
+  if (providerKey === 'mimo') {
+    data.enabled = false
+    data.credentialUsagePolicy = 'coding_tools_only'
+    data.healthStatus = 'runtime_restricted'
+    data.healthMessage = MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE
+  } else if (input.enabled !== undefined) data.enabled = input.enabled
   if (input.baseUrl !== undefined) data.baseUrl = input.baseUrl
   if (input.defaultModel !== undefined) data.defaultModel = input.defaultModel
   if (input.fallbackModel !== undefined) data.fallbackModel = input.fallbackModel
@@ -189,11 +210,15 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
   } else if (input.apiKey && input.apiKey.trim()) {
     data.apiKey = encryptProviderKey(input.apiKey.trim())
     data.maskedPreview = maskProviderKey(input.apiKey.trim())
-    data.credentialUsagePolicy = typeof data.credentialUsagePolicy === 'string'
+    data.credentialUsagePolicy = providerKey === 'mimo'
+      ? 'coding_tools_only'
+      : typeof data.credentialUsagePolicy === 'string'
       ? data.credentialUsagePolicy
       : defaultCredentialUsagePolicy(providerKey)
-    data.healthStatus = 'configured'
-    data.healthMessage = 'Credential stored; live health not checked.'
+    data.healthStatus = providerKey === 'mimo' ? 'runtime_restricted' : 'configured'
+    data.healthMessage = providerKey === 'mimo'
+      ? MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE
+      : 'Credential stored; live health not checked.'
   }
 
   await prisma.aiProvider.upsert({
@@ -201,11 +226,13 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
     create: {
       providerKey,
       displayName: getProviderDisplayName(providerKey),
-      enabled: input.enabled ?? false,
+      enabled: providerKey === 'mimo' ? false : input.enabled ?? false,
       baseUrl: input.baseUrl ?? '',
       defaultModel: input.defaultModel ?? '',
       fallbackModel: input.fallbackModel ?? '',
-      credentialUsagePolicy: typeof data.credentialUsagePolicy === 'string'
+      credentialUsagePolicy: providerKey === 'mimo'
+        ? 'coding_tools_only'
+        : typeof data.credentialUsagePolicy === 'string'
         ? data.credentialUsagePolicy
         : defaultCredentialUsagePolicy(providerKey),
       notes: input.notes ?? '',
@@ -228,32 +255,38 @@ export async function clearProviderCredential(providerKey: string): Promise<Prov
 export async function updateProviderHealthStatus(input: UpdateProviderHealthInput): Promise<ProviderCredentialStatus> {
   const providerKey = assertProviderKey(input.providerKey)
   const existing = await prisma.aiProvider.findUnique({ where: { providerKey } })
+  const isMimo = providerKey === 'mimo'
+  const updateData: Record<string, unknown> = {
+    healthStatus: isMimo ? 'runtime_restricted' : input.healthStatus,
+    healthMessage: isMimo ? MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE : input.healthMessage,
+    lastCheckedAt: input.lastCheckedAt ?? new Date(),
+    displayName: existing?.displayName ?? getProviderDisplayName(providerKey),
+    sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
+  }
+  if (isMimo) {
+    updateData.enabled = false
+    updateData.credentialUsagePolicy = 'coding_tools_only'
+  }
 
   await prisma.aiProvider.upsert({
     where: { providerKey },
     create: {
       providerKey,
       displayName: getProviderDisplayName(providerKey),
-      enabled: true,
+      enabled: isMimo ? false : true,
       baseUrl: '',
       defaultModel: '',
       fallbackModel: '',
-      credentialUsagePolicy: defaultCredentialUsagePolicy(providerKey),
+      credentialUsagePolicy: isMimo ? 'coding_tools_only' : defaultCredentialUsagePolicy(providerKey),
       notes: '',
       sortOrder: defaultSortOrder(providerKey),
       apiKey: '',
       maskedPreview: '',
-      healthStatus: input.healthStatus,
-      healthMessage: input.healthMessage,
+      healthStatus: isMimo ? 'runtime_restricted' : input.healthStatus,
+      healthMessage: isMimo ? MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE : input.healthMessage,
       lastCheckedAt: input.lastCheckedAt ?? new Date(),
     },
-    update: {
-      healthStatus: input.healthStatus,
-      healthMessage: input.healthMessage,
-      lastCheckedAt: input.lastCheckedAt ?? new Date(),
-      displayName: existing?.displayName ?? getProviderDisplayName(providerKey),
-      sortOrder: existing?.sortOrder ?? defaultSortOrder(providerKey),
-    },
+    update: updateData,
   })
 
   return getProviderCredentialStatus(providerKey)

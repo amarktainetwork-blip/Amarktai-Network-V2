@@ -5,7 +5,7 @@ import { CAPABILITY_CATALOG, CAPABILITY_KEYS, PROVIDER_KEYS } from '../packages/
 import { getRuntimeProofStatus } from '../apps/api/src/lib/runtime-proof-status.ts'
 import { TARGET_CAPABILITY_CATALOG } from '../lib/capability-display-catalog.js'
 import { fallbackMediaCanProveCapability, MEDIA_TRUTH_CONTRACTS } from '../lib/media-truth-contract.js'
-import { REPO_WORKBENCH_ACTIONS, repoWorkbenchActionResponse } from '../lib/repo-workbench-contract.js'
+import { DASHBOARD_PAGES } from '../lib/dashboard-contract.js'
 import { DESIGN_QUALITY_GATES } from '../lib/design-quality-contract.js'
 
 const ROOT = process.cwd()
@@ -98,18 +98,17 @@ describe('Donor transplant V2 contract', () => {
     expect(studioSource).toContain('disabled until backend proof passes')
   })
 
-  it('Repo Workbench donor section cannot fake PR success', () => {
-    expect(REPO_WORKBENCH_ACTIONS.map((action) => action.id)).toEqual(['analyze', 'repair-plan', 'diff', 'checks', 'pr'])
-    for (const action of REPO_WORKBENCH_ACTIONS) {
-      expect(action.enabled).toBe(false)
-      const response = repoWorkbenchActionResponse(action.id)
-      expect(response.status).toBe(501)
-      expect(response.body).toMatchObject({
-        error: true,
-        enabled: false,
-        fakeSuccess: false,
-      })
-    }
+  it('Repo Workbench is not an active dashboard feature or admin API surface', () => {
+    expect(DASHBOARD_PAGES.find((page) => page.id === 'repo-workbench')).toBeUndefined()
+    expect(fs.existsSync(path.join(ROOT, 'app/dashboard/repo-workbench/page.js'))).toBe(false)
+    expect(fs.existsSync(path.join(ROOT, 'app/api/admin/repo-workbench/[action]/route.js'))).toBe(false)
+    expect(fs.existsSync(path.join(ROOT, 'lib/repo-workbench-contract.js'))).toBe(false)
+
+    const dashboardContract = fs.readFileSync(path.join(ROOT, 'lib/dashboard-contract.js'), 'utf8')
+    const dashboardLayout = fs.readFileSync(path.join(ROOT, 'app/dashboard/layout.js'), 'utf8')
+    expect(dashboardContract).not.toContain('/dashboard/repo-workbench')
+    expect(dashboardContract).not.toContain('Repo Workbench')
+    expect(dashboardLayout).not.toContain('GitPullRequest')
   })
 
   it('fallback media and design gates cannot count as runtime proof', () => {
