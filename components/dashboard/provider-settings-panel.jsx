@@ -46,6 +46,14 @@ function providerTestErrorMessage(response, data) {
     || 'Backend API did not return a provider test message.'
 }
 
+const PROVIDER_ROLES = {
+  genx: { role: 'Premium Media', description: 'Premium video, avatar, and multimodal generation. Default hero/premium tier.' },
+  groq: { role: 'Fast Low-Cost Text/Tool/Speech', description: 'Ultra-low latency chat, reasoning, code explanation, STT, TTS. Standard/draft tier.' },
+  together: { role: 'Broad Serverless Gateway', description: 'Text, image, video, embeddings across many models. Standard/low-cost tier.' },
+  deepinfra: { role: 'Expansion Gateway', description: 'Text, image, video, music, TTS, STT, embeddings, reranking, OCR. Blocked until funded.' },
+  mimo: { role: 'Coding Tool Only', description: 'Exclusive for true coding-agent workflows. Not normal backend runtime. Requires server-side terminal.' },
+}
+
 export function ProviderSettingsPanel() {
   const [providers, setProviders] = useState([])
   const [drafts, setDrafts] = useState({})
@@ -310,6 +318,13 @@ export function ProviderSettingsPanel() {
                         </Badge>
                       )}
                     </div>
+                    {PROVIDER_ROLES[provider.providerKey] && (
+                      <div className="mt-1 text-[11px] text-muted-foreground">
+                        <span className="text-violet-300 font-medium">{PROVIDER_ROLES[provider.providerKey].role}</span>
+                        {' — '}
+                        {PROVIDER_ROLES[provider.providerKey].description}
+                      </div>
+                    )}
                     <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                       <div>
                         <span className="text-foreground/70">Credential source: </span>
