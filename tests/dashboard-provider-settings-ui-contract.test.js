@@ -153,8 +153,8 @@ describe('Dashboard provider settings UI contract', () => {
     expect(panelSource).toContain('data.errorMessage')
   })
 
-  it('keeps DeepInfra gated and does not activate execution in UI copy', () => {
-    expect(panelSource).toContain('DeepInfra remains gated')
+  it('keeps DeepInfra unproven and does not activate execution in UI copy', () => {
+    expect(panelSource).toContain('DeepInfra remains backend controlled and unproven')
     expect(panelSource).toContain('does not activate execution')
   })
 

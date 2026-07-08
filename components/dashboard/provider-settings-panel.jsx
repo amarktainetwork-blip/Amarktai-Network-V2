@@ -303,7 +303,7 @@ export function ProviderSettingsPanel() {
                         {getHealthStatusLabel(provider.healthStatus)}
                       </Badge>
                       {isDeepInfra && (
-                        <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-300">Gated uncensored lane</Badge>
+                        <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-300">Approved, not runtime-proven</Badge>
                       )}
                     </div>
                     <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
@@ -325,7 +325,7 @@ export function ProviderSettingsPanel() {
                       </div>
                     </div>
                     {provider.healthMessage && <p className="mt-2 text-xs text-muted-foreground">{provider.healthMessage}</p>}
-                    {isDeepInfra && <p className="mt-2 text-xs text-amber-200/80">DeepInfra remains gated and backend controlled; this page does not activate execution.</p>}
+                    {isDeepInfra && <p className="mt-2 text-xs text-amber-200/80">DeepInfra remains backend controlled and unproven; this page does not activate execution.</p>}
                   </div>
                   <label className="flex items-center gap-2 self-start rounded-md border border-white/[0.06] px-3 py-2 text-xs">
                     <span>{draft.enabled ? 'Enabled' : 'Disabled'}</span>
