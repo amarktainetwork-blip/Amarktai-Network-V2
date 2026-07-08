@@ -40,6 +40,62 @@ export interface ModelCatalogRefreshSummary {
   errors: Array<{ modelId: string; message: string }>
 }
 
+export interface GenXPricingCatalogSummary {
+  updated: number
+  createdFromPricing: number
+  missingPricingCount: number
+  pricingKnownCount: number
+  pricingUnknownCount: number
+  failedRows: number
+  errors: Array<{ modelId: string; message: string }>
+  source: string
+  catalogSource: string
+  syncedAt: string
+}
+
+interface GenXPricingCatalogData {
+  displayName: string
+  family: string
+  category: string
+  primaryRole: string
+  costTier: string
+  latencyTier: string
+  contextWindow: number
+  estimatedUnitCost: number | null
+  source: string
+  catalogCompleteness: string
+  isLiveDiscovered: boolean
+  modelOwner: string
+  providerRawType: string
+  providerRawCategory: string
+  rawMetadata: string
+  discoveredAt: Date
+  lastSyncedAt: Date
+  pricingSource: string
+  pricingConfidence: string
+  pricingUnit: string
+  pricingCurrency: string
+  pricingRawMetadata: string
+  lastPricingSyncedAt: Date
+  pricingBlocker: string
+  notes: string
+  supportsText: boolean
+  supportsReasoning: boolean
+  supportsCode: boolean
+  supportsChat: boolean
+  supportsImageGeneration: boolean
+  supportsImageEditing: boolean
+  supportsVideoGeneration: boolean
+  supportsStt: boolean
+  supportsTts: boolean
+  supportsEmbeddings: boolean
+  supportsReranking: boolean
+  supportsResearch: boolean
+  supportsMultimodal: boolean
+  supportsToolUse: boolean
+  supportsStructuredOutput: boolean
+}
+
 function safeErrorMessage(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err)
   return message
@@ -97,6 +153,160 @@ function appendNote(notes: string, warning: string): string {
 function appendBlocker(blocker: string, warning: string): string {
   if (!warning) return blocker
   return blocker ? `${blocker};${warning}` : warning
+}
+
+function costTierFromEstimatedUnitCost(estimatedUnitCost: number | null): string {
+  if (estimatedUnitCost === null) return 'unknown'
+  if (estimatedUnitCost === 0) return 'free'
+  if (estimatedUnitCost < 0.000001) return 'very_low'
+  if (estimatedUnitCost < 0.00001) return 'low'
+  if (estimatedUnitCost < 0.0001) return 'medium'
+  if (estimatedUnitCost < 0.001) return 'high'
+  return 'premium'
+}
+
+function metadataString(value: Record<string, unknown>, key: string): string {
+  const direct = value[key]
+  return typeof direct === 'string' ? direct.trim() : ''
+}
+
+function resolveGenXPricingModelId(key: string, rawMetadata: Record<string, unknown>): string {
+  return metadataString(rawMetadata, 'model')
+    || metadataString(rawMetadata, 'id')
+    || metadataString(rawMetadata, 'slug')
+    || key
+}
+
+function mapGenXPricingCapabilities(rawCategoryInput: string, modelId: string): {
+  category: string
+  primaryRole: string
+  capabilities: Record<string, boolean>
+} {
+  const rawCategory = rawCategoryInput.toLowerCase()
+  const id = modelId.toLowerCase()
+  const text = `${rawCategory} ${id}`
+
+  if (text.includes('transcription') || text.includes('speech-to-text') || text.includes('stt') || text.includes('whisper')) {
+    return { category: 'audio', primaryRole: 'stt', capabilities: { supportsStt: true } }
+  }
+
+  if (text.includes('voice') || text.includes('tts') || text.includes('text-to-speech')) {
+    return { category: 'audio', primaryRole: 'tts', capabilities: { supportsTts: true } }
+  }
+
+  if (text.includes('avatar')) {
+    return { category: 'video', primaryRole: 'avatar_generation', capabilities: { supportsVideoGeneration: true } }
+  }
+
+  if (text.includes('image') || text.includes('img')) {
+    return { category: 'image', primaryRole: 'image_generation', capabilities: { supportsImageGeneration: true } }
+  }
+
+  if (text.includes('audio') || text.includes('music')) {
+    return { category: 'audio', primaryRole: 'music_generation', capabilities: {} }
+  }
+
+  if (text.includes('text') || text.includes('chat') || text.includes('reason')) {
+    return { category: 'text', primaryRole: 'chat', capabilities: { supportsChat: true, supportsText: true } }
+  }
+
+  return { category: 'video', primaryRole: 'video_generation', capabilities: { supportsVideoGeneration: true } }
+}
+
+function defaultCapabilityFlags(): Pick<
+  GenXPricingCatalogData,
+  | 'supportsText'
+  | 'supportsReasoning'
+  | 'supportsCode'
+  | 'supportsChat'
+  | 'supportsImageGeneration'
+  | 'supportsImageEditing'
+  | 'supportsVideoGeneration'
+  | 'supportsStt'
+  | 'supportsTts'
+  | 'supportsEmbeddings'
+  | 'supportsReranking'
+  | 'supportsResearch'
+  | 'supportsMultimodal'
+  | 'supportsToolUse'
+  | 'supportsStructuredOutput'
+> {
+  return {
+    supportsText: false,
+    supportsReasoning: false,
+    supportsCode: false,
+    supportsChat: false,
+    supportsImageGeneration: false,
+    supportsImageEditing: false,
+    supportsVideoGeneration: false,
+    supportsStt: false,
+    supportsTts: false,
+    supportsEmbeddings: false,
+    supportsReranking: false,
+    supportsResearch: false,
+    supportsMultimodal: false,
+    supportsToolUse: false,
+    supportsStructuredOutput: false,
+  }
+}
+
+function buildGenXPricingCatalogData(
+  key: string,
+  pricing: GenXPricingResult['pricing'][string],
+  syncedAt: string,
+): {
+  provider: 'genx'
+  modelId: string
+  data: GenXPricingCatalogData
+} {
+  const rawMetadata = pricing.rawMetadata ?? {}
+  const modelId = resolveGenXPricingModelId(key, rawMetadata)
+  const displayName = metadataString(rawMetadata, 'name')
+    || metadataString(rawMetadata, 'displayName')
+    || metadataString(rawMetadata, 'display_name')
+    || modelId
+  const modelOwner = metadataString(rawMetadata, 'provider') || 'genx'
+  const providerRawCategory = metadataString(rawMetadata, 'category')
+  const mapped = mapGenXPricingCapabilities(providerRawCategory, modelId)
+  const rawMetadataJson = stringifyMetadataSafely({ ...rawMetadata, pricingCatalogKey: key }, 'raw_metadata')
+  const pricingRawMetadata = stringifyMetadataSafely(rawMetadata, 'pricing_raw_metadata')
+  const metadataWarning = [rawMetadataJson.warning, pricingRawMetadata.warning].filter(Boolean).join(';')
+  const pricingBlocker = appendBlocker(pricing.pricingBlocker || (pricing.usdEstimateCents === null ? 'genx_pricing_not_usd' : ''), metadataWarning)
+  const syncedAtDate = new Date(syncedAt)
+
+  return {
+    provider: 'genx',
+    modelId,
+    data: {
+      displayName,
+      family: 'genx',
+      category: mapped.category,
+      primaryRole: mapped.primaryRole,
+      costTier: costTierFromEstimatedUnitCost(pricing.usdEstimateCents),
+      latencyTier: mapped.category === 'video' ? 'high' : 'medium',
+      contextWindow: 0,
+      estimatedUnitCost: pricing.usdEstimateCents,
+      source: 'provider_api',
+      catalogCompleteness: 'partial_from_provider_api',
+      isLiveDiscovered: true,
+      modelOwner,
+      providerRawType: 'pricing_entry',
+      providerRawCategory,
+      rawMetadata: rawMetadataJson.json,
+      discoveredAt: syncedAtDate,
+      lastSyncedAt: syncedAtDate,
+      pricingSource: pricing.pricingSource,
+      pricingConfidence: pricing.pricingConfidence,
+      pricingUnit: pricing.unit,
+      pricingCurrency: pricing.currency,
+      pricingRawMetadata: pricingRawMetadata.json,
+      lastPricingSyncedAt: syncedAtDate,
+      pricingBlocker,
+      notes: appendNote('Created from GenX pricing API because /api/v1/models returned no usable GenX catalog rows. Provider remains genx; upstream owner is metadata only.', metadataWarning),
+      ...defaultCapabilityFlags(),
+      ...mapped.capabilities,
+    },
+  }
 }
 
 // Curated seed catalog — source = curated_seed, catalogCompleteness = curated_fallback_only
@@ -271,61 +481,67 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
   return { created, updated }
 }
 
-export async function updateGenXPricingMetadata(result: GenXPricingResult): Promise<{
-  updated: number
-  missingPricingCount: number
-  pricingKnownCount: number
-  pricingUnknownCount: number
-  failedRows: number
-  errors: Array<{ modelId: string; message: string }>
-  source: string
-  syncedAt: string
-}> {
+export async function upsertGenXPricingCatalog(result: GenXPricingResult): Promise<GenXPricingCatalogSummary> {
   const genxModels = await prisma.modelRegistryEntry.findMany({ where: { provider: 'genx' } })
+  const existingByModelId = new Map(genxModels.map((model) => [model.modelId, model]))
   let updated = 0
+  let createdFromPricing = 0
   let missingPricingCount = 0
   let pricingKnownCount = 0
   let pricingUnknownCount = 0
   let failedRows = 0
   const errors: Array<{ modelId: string; message: string }> = []
+  const handledModelIds = new Set<string>()
 
-  for (const model of genxModels) {
-    const pricing = result.pricing[model.modelId]
+  for (const [key, pricing] of Object.entries(result.pricing)) {
+    const catalog = buildGenXPricingCatalogData(key, pricing, result.syncedAt)
+    const existing = existingByModelId.get(catalog.modelId) ?? existingByModelId.get(key)
     try {
-      if (!pricing) {
-        missingPricingCount++
-        pricingUnknownCount++
-        await prisma.modelRegistryEntry.update({
-          where: { id: model.id },
-          data: {
-            pricingSource: 'unknown',
-            pricingConfidence: 'unknown',
-            pricingUnit: '',
-            pricingCurrency: '',
-            pricingRawMetadata: '{}',
-            lastPricingSyncedAt: new Date(result.syncedAt),
-            pricingBlocker: 'genx_pricing_missing_for_model',
-            estimatedUnitCost: null,
-          },
-        })
-        updated++
-        continue
-      }
-
+      handledModelIds.add(catalog.modelId)
+      handledModelIds.add(key)
       if (pricing.pricingConfidence === 'known') pricingKnownCount++
       else pricingUnknownCount++
-      const pricingRawMetadata = stringifyMetadataSafely(pricing.rawMetadata, 'pricing_raw_metadata')
+
+      if (existing) {
+        await prisma.modelRegistryEntry.update({
+          where: { id: existing.id },
+          data: catalog.data,
+        })
+        updated++
+      } else {
+        await prisma.modelRegistryEntry.create({
+          data: {
+            provider: catalog.provider,
+            modelId: catalog.modelId,
+            ...catalog.data,
+          },
+        })
+        createdFromPricing++
+      }
+    } catch (err) {
+      failedRows++
+      if (errors.length < MAX_REFRESH_ERRORS) {
+        errors.push({ modelId: catalog.modelId, message: safeErrorMessage(err) })
+      }
+    }
+  }
+
+  for (const model of genxModels) {
+    if (handledModelIds.has(model.modelId)) continue
+    try {
+      missingPricingCount++
+      pricingUnknownCount++
       await prisma.modelRegistryEntry.update({
         where: { id: model.id },
         data: {
-          pricingSource: pricing.pricingSource,
-          pricingConfidence: pricing.pricingConfidence,
-          pricingUnit: pricing.unit,
-          pricingCurrency: pricing.currency,
-          pricingRawMetadata: pricingRawMetadata.json,
+          pricingSource: 'unknown',
+          pricingConfidence: 'unknown',
+          pricingUnit: '',
+          pricingCurrency: '',
+          pricingRawMetadata: '{}',
           lastPricingSyncedAt: new Date(result.syncedAt),
-          pricingBlocker: appendBlocker(pricing.pricingBlocker, pricingRawMetadata.warning),
-          estimatedUnitCost: pricing.usdEstimateCents,
+          pricingBlocker: 'genx_pricing_missing_for_model',
+          estimatedUnitCost: null,
         },
       })
       updated++
@@ -337,7 +553,22 @@ export async function updateGenXPricingMetadata(result: GenXPricingResult): Prom
     }
   }
 
-  return { updated, missingPricingCount, pricingKnownCount, pricingUnknownCount, failedRows, errors, source: result.source, syncedAt: result.syncedAt }
+  return {
+    updated,
+    createdFromPricing,
+    missingPricingCount,
+    pricingKnownCount,
+    pricingUnknownCount,
+    failedRows,
+    errors,
+    source: result.source,
+    catalogSource: 'provider_api_pricing_fallback',
+    syncedAt: result.syncedAt,
+  }
+}
+
+export async function updateGenXPricingMetadata(result: GenXPricingResult): Promise<GenXPricingCatalogSummary> {
+  return upsertGenXPricingCatalog(result)
 }
 
 export async function getModelCatalog(options?: {

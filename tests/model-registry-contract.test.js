@@ -396,6 +396,72 @@ describe('real provider model discovery and catalog truth', () => {
     }))
   })
 
+  it('GenX pricing entries create catalog rows when model discovery returned zero', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      pricing: {
+        'seedance-v1-fast': { input: 12, unit: 'genx_credits_per_second', currency: 'genx_credits', category: 'video', provider: 'bytedance', name: 'Seedance Fast' },
+        'genxlm-pro-v1-img': { input: 8, unit: 'genx_credits_per_image', currency: 'genx_credits', category: 'image', provider: 'xai', name: 'GenXLM Image' },
+        'genxlm-voice-v1': { input: 4, unit: 'genx_credits_per_request', currency: 'genx_credits', category: 'voice', provider: 'genx', name: 'GenX Voice' },
+        'genxlm-pro-v1-tr': { input: 3, unit: 'genx_credits_per_minute', currency: 'genx_credits', category: 'transcription', provider: 'genx', name: 'GenX Transcription' },
+        'kling-avatar-v2-pro': { input: 20, unit: 'genx_credits_per_second', currency: 'genx_credits', category: 'video', provider: 'kling', name: 'Kling Avatar Pro' },
+      },
+    })))
+    prismaMock.modelRegistryEntry.findMany.mockResolvedValue([])
+    prismaMock.modelRegistryEntry.create.mockResolvedValue({})
+
+    const pricing = await discoverGenXPricing('genx-secret', 'https://query.genx.sh')
+    const update = await updateGenXPricingMetadata(pricing)
+    const createdRows = prismaMock.modelRegistryEntry.create.mock.calls.map((call) => call[0].data)
+
+    expect(update).toMatchObject({
+      updated: 0,
+      createdFromPricing: 5,
+      pricingKnownCount: 0,
+      pricingUnknownCount: 5,
+      catalogSource: 'provider_api_pricing_fallback',
+    })
+    expect(new Set(createdRows.map((row) => row.provider))).toEqual(new Set(['genx']))
+    expect(new Set(createdRows.map((row) => row.modelOwner))).toEqual(new Set(['bytedance', 'xai', 'genx', 'kling']))
+    expect(createdRows.find((row) => row.modelId === 'seedance-v1-fast')).toMatchObject({
+      category: 'video',
+      primaryRole: 'video_generation',
+      supportsVideoGeneration: true,
+      pricingConfidence: 'unknown',
+      pricingCurrency: 'genx_credits',
+      estimatedUnitCost: null,
+      pricingBlocker: expect.stringContaining('genx_pricing_not_usd'),
+    })
+    expect(createdRows.find((row) => row.modelId === 'genxlm-pro-v1-img')).toMatchObject({
+      category: 'image',
+      primaryRole: 'image_generation',
+      supportsImageGeneration: true,
+    })
+    expect(createdRows.find((row) => row.modelId === 'genxlm-voice-v1')).toMatchObject({
+      category: 'audio',
+      primaryRole: 'tts',
+      supportsTts: true,
+    })
+    expect(createdRows.find((row) => row.modelId === 'genxlm-pro-v1-tr')).toMatchObject({
+      category: 'audio',
+      primaryRole: 'stt',
+      supportsStt: true,
+    })
+    expect(createdRows.find((row) => row.modelId === 'kling-avatar-v2-pro')).toMatchObject({
+      provider: 'genx',
+      modelOwner: 'kling',
+      primaryRole: 'avatar_generation',
+      supportsVideoGeneration: true,
+    })
+  })
+
+  it('GenX pricing refresh route exposes createdFromPricing for pricing fallback rows', () => {
+    const routeSource = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/model-registry.ts'), 'utf8')
+
+    expect(routeSource).toContain('upsertGenXPricingCatalog')
+    expect(routeSource).toContain('createdFromPricing')
+    expect(routeSource).toContain('catalogSource')
+  })
+
   it('GenX pricing fetch failure returns safe diagnostics and no fake prices', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('TLS failed for genx-secret')))
 
@@ -430,33 +496,42 @@ describe('real provider model discovery and catalog truth', () => {
     expect(selection.fallbacks.map((candidate) => candidate.provider)).not.toContain('mimo')
   })
 
-  it('capability grouping reports pricing blockers and pricing counts', async () => {
+  it('capability grouping reports pricing blockers and separates catalog from executable/proven truth', async () => {
     prismaMock.modelRegistryEntry.findMany.mockResolvedValue([
-      modelRow({ provider: 'genx', modelId: 'unknown-video', estimatedUnitCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', source: 'provider_api', isLiveDiscovered: true }),
-      modelRow({ provider: 'together', modelId: 'priced-video', estimatedUnitCost: 75, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
+      modelRow({ provider: 'genx', modelId: 'grok-imagine-video', estimatedUnitCost: null, pricingSource: 'provider_api', pricingConfidence: 'unknown', source: 'provider_api', isLiveDiscovered: true }),
+      modelRow({ provider: 'together', modelId: 'priced-video-a', estimatedUnitCost: 75, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
+      modelRow({ provider: 'together', modelId: 'priced-video-b', estimatedUnitCost: 80, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'mimo', modelId: 'mimo-coder', estimatedUnitCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', source: 'curated_seed', isLiveDiscovered: false }),
     ])
     prismaMock.aiProvider.findMany.mockResolvedValue([
-      { providerKey: 'genx', healthStatus: 'live' },
-      { providerKey: 'together', healthStatus: 'live' },
-      { providerKey: 'mimo', healthStatus: 'runtime_restricted' },
+      { providerKey: 'genx', enabled: true, healthStatus: 'live' },
+      { providerKey: 'together', enabled: true, healthStatus: 'live' },
+      { providerKey: 'mimo', enabled: false, healthStatus: 'runtime_restricted' },
     ])
 
     const summary = await getCapabilityGroupSummary('video_generation')
 
     expect(summary).toMatchObject({
-      totalAvailableModels: 3,
-      liveDiscoveredCount: 2,
-      providerCatalogCount: 2,
+      totalAvailableModels: 4,
+      modelsByProvider: { genx: 1, together: 2, mimo: 1 },
+      liveDiscoveredCount: 3,
+      providerCatalogCount: 3,
       curatedFallbackCount: 1,
-      pricingKnownCount: 1,
+      pricingKnownCount: 2,
       pricingUnknownCount: 2,
-      standardEligibleCount: 1,
-      premiumEligibleCount: 1,
+      executorAdapterImplementedCount: 1,
+      executableModels: 1,
+      liveJobProvenCount: 1,
+      provenModels: 1,
+      dashboardReadyCount: 1,
+      dashboardReadyModels: 1,
+      standardEligibleCount: 0,
+      premiumEligibleCount: 0,
       blockedUnknownPricingCount: 1,
     })
     expect(summary.missingExecutorBlockers).toContain('video_generation: 1 media model(s) blocked by unknown pricing')
-    expect(summary.liveJobProvenCount).toBe(2)
+    expect(summary.missingExecutorBlockers).toContain('together: discovered_but_no_executor_adapter for video_generation (2 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('mimo: coding_tool_only, not normal runtime')
   })
 
   it('separates discovery, provider health, and capability proof truth', () => {

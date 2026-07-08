@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { resolveProviderApiKey, getProviderCredentialStatus } from '@amarktai/db'
-import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels, updateGenXPricingMetadata } from '../lib/model-registry.js'
+import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels, upsertGenXPricingCatalog } from '../lib/model-registry.js'
 import { getAllCapabilityGroupSummaries, getCapabilityGroupSummary } from '../lib/capability-groups.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
@@ -143,16 +143,18 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
       const result = await discoverGenXPricing(cred.apiKey, status.baseUrl)
 
       if (result.error) {
-        return reply.send({ success: false, error: result.error, source: result.source, modelsUpdated: 0, pricingKnown: 0, pricingUnknown: 0 })
+        return reply.send({ success: false, error: result.error, source: result.source, modelsUpdated: 0, createdFromPricing: 0, pricingKnown: 0, pricingUnknown: 0 })
       }
 
-      const update = await updateGenXPricingMetadata(result)
+      const update = await upsertGenXPricingCatalog(result)
       return reply.send({
         success: true,
         pricing: result.pricing,
         source: result.source,
+        catalogSource: update.catalogSource,
         update,
         modelsUpdated: update.updated,
+        createdFromPricing: update.createdFromPricing,
         pricingKnown: update.pricingKnownCount,
         pricingUnknown: update.pricingUnknownCount,
       })
