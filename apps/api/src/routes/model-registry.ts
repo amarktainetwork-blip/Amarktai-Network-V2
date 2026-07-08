@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { seedModelCatalog, getModelCatalog } from '../lib/model-registry.js'
+import { resolveProviderApiKey, getProviderCredentialStatus } from '@amarktai/db'
+import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels } from '../lib/model-registry.js'
 import { getAllCapabilityGroupSummaries, getCapabilityGroupSummary } from '../lib/capability-groups.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
+import { discoverTogetherModels, discoverDeepInfraModels, discoverGenXModels, discoverGroqModels, discoverGenXPricing } from '../lib/provider-discovery.js'
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -24,18 +26,127 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
 }
 
 export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
-  // Seed model catalog
-  app.post('/api/admin/model-registry/seed', async (request, reply) => {
+  // Seed curated fallback
+  app.post('/api/admin/model-catalog/seed', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const result = await seedModelCatalog()
-    return reply.send({ success: true, ...result })
+    const result = await seedCuratedFallback()
+    return reply.send({ success: true, ...result, source: 'curated_seed', note: 'Fallback only — not provider truth' })
+  })
+
+  // Refresh all provider catalogs
+  app.post('/api/admin/model-catalog/refresh', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const results: Record<string, { total: number; error: string | null }> = {}
+
+    // Together
+    try {
+      const cred = await resolveProviderApiKey('together')
+      const result = await discoverTogetherModels(cred.apiKey)
+      const upsert = await upsertDiscoveredModels(result)
+      results.together = { total: upsert.total, error: result.error }
+    } catch (err) {
+      results.together = { total: 0, error: err instanceof Error ? err.message : 'Not configured' }
+    }
+
+    // DeepInfra
+    try {
+      const cred = await resolveProviderApiKey('deepinfra')
+      const result = await discoverDeepInfraModels(cred.apiKey)
+      const upsert = await upsertDiscoveredModels(result)
+      results.deepinfra = { total: upsert.total, error: result.error }
+    } catch (err) {
+      results.deepinfra = { total: 0, error: err instanceof Error ? err.message : 'Not configured' }
+    }
+
+    // GenX
+    try {
+      const cred = await resolveProviderApiKey('genx')
+      const status = await getProviderCredentialStatus('genx')
+      const result = await discoverGenXModels(cred.apiKey, status.baseUrl)
+      const upsert = await upsertDiscoveredModels(result)
+      results.genx = { total: upsert.total, error: result.error }
+    } catch (err) {
+      results.genx = { total: 0, error: err instanceof Error ? err.message : 'Not configured' }
+    }
+
+    // Groq
+    try {
+      const cred = await resolveProviderApiKey('groq')
+      const result = await discoverGroqModels(cred.apiKey)
+      const upsert = await upsertDiscoveredModels(result)
+      results.groq = { total: upsert.total, error: result.error }
+    } catch (err) {
+      results.groq = { total: 0, error: err instanceof Error ? err.message : 'Not configured' }
+    }
+
+    // MiMo stays as curated seed
+    results.mimo = { total: 1, error: null }
+
+    return reply.send({ success: true, results })
+  })
+
+  // Refresh single provider
+  app.post('/api/admin/model-catalog/:provider/refresh', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { provider } = request.params as { provider: string }
+
+    try {
+      const cred = await resolveProviderApiKey(provider)
+      let result
+
+      switch (provider) {
+        case 'together':
+          result = await discoverTogetherModels(cred.apiKey)
+          break
+        case 'deepinfra':
+          result = await discoverDeepInfraModels(cred.apiKey)
+          break
+        case 'genx': {
+          const status = await getProviderCredentialStatus('genx')
+          result = await discoverGenXModels(cred.apiKey, status.baseUrl)
+          break
+        }
+        case 'groq':
+          result = await discoverGroqModels(cred.apiKey)
+          break
+        case 'mimo':
+          return reply.send({ success: true, total: 1, source: 'curated_seed', note: 'MiMo is coding-tool-only' })
+        default:
+          return reply.status(400).send({ error: true, message: 'Unknown provider' })
+      }
+
+      const upsert = await upsertDiscoveredModels(result)
+      return reply.send({ success: true, ...upsert, source: result.source, error: result.error })
+    } catch (err) {
+      return reply.status(400).send({ error: true, message: err instanceof Error ? err.message : 'Provider not configured' })
+    }
+  })
+
+  // Refresh GenX pricing
+  app.post('/api/admin/model-catalog/genx/pricing/refresh', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    try {
+      const cred = await resolveProviderApiKey('genx')
+      const status = await getProviderCredentialStatus('genx')
+      const result = await discoverGenXPricing(cred.apiKey, status.baseUrl)
+
+      if (result.error) {
+        return reply.send({ success: false, error: result.error, source: result.source })
+      }
+
+      return reply.send({ success: true, pricing: result.pricing, source: result.source })
+    } catch (err) {
+      return reply.status(400).send({ error: true, message: err instanceof Error ? err.message : 'GenX not configured' })
+    }
   })
 
   // List model catalog
-  app.get('/api/admin/model-registry', async (request, reply) => {
+  app.get('/api/admin/model-catalog', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const { provider, category, capability } = request.query as Record<string, string>
-    const models = await getModelCatalog({ provider, category, capability })
+    const { provider, category, capability, source } = request.query as Record<string, string>
+    const models = await getModelCatalog({ provider, category, capability, source })
     return reply.send({
       models: models.map((m) => ({
         provider: m.provider,
@@ -48,12 +159,24 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
         latencyTier: m.latencyTier,
         contextWindow: m.contextWindow,
         estimatedUnitCost: m.estimatedUnitCost,
-        qualityTier: m.costTier,
         enabled: m.enabled,
+        source: m.source,
+        catalogCompleteness: m.catalogCompleteness,
+        isLiveDiscovered: m.isLiveDiscovered,
+        modelOwner: m.modelOwner,
+        pricingSource: m.pricingSource,
+        pricingConfidence: m.pricingConfidence,
         notes: m.notes,
       })),
       total: models.length,
     })
+  })
+
+  // Catalog summary
+  app.get('/api/admin/model-catalog/summary', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const summaries = await getCatalogSummary()
+    return reply.send({ providers: summaries })
   })
 
   // Capability group summaries
