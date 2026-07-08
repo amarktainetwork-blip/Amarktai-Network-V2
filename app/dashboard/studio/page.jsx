@@ -1,8 +1,14 @@
 'use client'
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { CAPABILITY_SCHEMAS } from '@/lib/studio-capability-schemas'
 import { getBackendCapability } from '@/lib/capability-map'
+import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
+import {
+  getRuntimeCapabilityProof,
+  runtimeProofStatusClasses,
+  runtimeProofStatusLabel,
+} from '@/lib/runtime-proof-status'
 import DynamicFormRenderer from '@/components/amarkt/DynamicFormRenderer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,11 +64,17 @@ const CAPABILITY_GROUPS = [
     { v: 'workflow', label: 'Workflow automation', icon: Wrench },
   ]},
   { label: 'Gated', items: [
-    { v: 'uncensored', label: 'DeepInfra gated text', icon: ShieldAlert },
+    { v: 'uncensored', label: 'Backend-controlled gated text', icon: ShieldAlert },
   ]},
 ]
 
-function CapabilitySelector({ value, onChange }) {
+function getModeProof(runtimeProofStatus, mode) {
+  const meta = MODE_META[mode]
+  const backend = getBackendCapability(meta?.capability)
+  return getRuntimeCapabilityProof(runtimeProofStatus, backend.backendCapability || backend.plannedBackendKey || meta?.capability)
+}
+
+function CapabilitySelector({ value, onChange, runtimeProofStatus }) {
   const allItems = CAPABILITY_GROUPS.flatMap((g) => g.items)
   const current = allItems.find((item) => item.v === value) || allItems[0]
   const Icon = current.icon
@@ -89,11 +101,22 @@ function CapabilitySelector({ value, onChange }) {
           {filteredGroups.map((group) => (
             <div key={group.label}>
               <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</div>
-              {group.items.map((item) => (
-                <SelectItem key={item.v} value={item.v}>
-                  <div className="flex items-center gap-2"><item.icon className="h-3.5 w-3.5 text-cyan-400" /><span>{item.label}</span></div>
-                </SelectItem>
-              ))}
+              {group.items.map((item) => {
+                const proof = getModeProof(runtimeProofStatus, item.v)
+                const ready = proof.readyForDashboardExecution === true
+
+                return (
+                  <SelectItem key={item.v} value={item.v} disabled={!ready}>
+                    <div className="flex items-center gap-2">
+                      <item.icon className="h-3.5 w-3.5 text-cyan-400" />
+                      <span>{item.label}</span>
+                      <span className={`ml-auto text-[9px] ${ready ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {ready ? 'Backend ready' : 'Not proven'}
+                      </span>
+                    </div>
+                  </SelectItem>
+                )
+              })}
             </div>
           ))}
           {filteredGroups.length === 0 && <div className="px-3 py-4 text-center text-xs text-muted-foreground">No capabilities found</div>}
@@ -129,7 +152,7 @@ const MODE_META = {
   app_request: { capability: 'app.request', label: 'App request' },
   agent_task: { capability: 'agent.task', label: 'Agent task' },
   workflow: { capability: 'workflow.automation', label: 'Workflow automation' },
-  uncensored: { capability: 'uncensored.text', label: 'DeepInfra gated', gated: true },
+  uncensored: { capability: 'uncensored.text', label: 'Gated text', gated: true },
 }
 
 // Modes that share a schema use the primary mode's schema
@@ -166,7 +189,7 @@ const ASSETS_LABELS = {
 }
 
 // ─── Director Block ─────────────────────────────────────────────
-function DirectorBlock({ mode, onModeChange }) {
+function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
   const { chatHistory, submitDraft } = useStudioStore()
   const [input, setInput] = useState('')
   const scrollRef = useRef(null)
@@ -182,6 +205,8 @@ function DirectorBlock({ mode, onModeChange }) {
   }
 
   const meta = MODE_META[mode]
+  const proof = getModeProof(runtimeProofStatus, mode)
+  const backendReady = proof.readyForDashboardExecution === true
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-white/[0.07] bg-white/[0.02]">
@@ -195,7 +220,7 @@ function DirectorBlock({ mode, onModeChange }) {
             <div className="text-[10px] text-muted-foreground">Describe what you want to create</div>
           </div>
         </div>
-        <CapabilitySelector value={mode} onChange={onModeChange} />
+        <CapabilitySelector value={mode} onChange={onModeChange} runtimeProofStatus={runtimeProofStatus} />
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
@@ -225,7 +250,7 @@ function DirectorBlock({ mode, onModeChange }) {
           />
           <Button
             onClick={send}
-            disabled={!input.trim()}
+            disabled={!input.trim() || !backendReady}
             className="h-9 shrink-0 rounded-lg bg-gradient-to-r from-cyan-400 to-violet-500 px-3 text-black"
           >
             <Send className="h-4 w-4" />
@@ -233,7 +258,11 @@ function DirectorBlock({ mode, onModeChange }) {
         </div>
         <div className="mt-2 flex items-center gap-2">
           <span className="text-[10px] text-muted-foreground">Runtime selected</span>
-          {meta.gated && <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">DeepInfra gated lane</Badge>}
+          <Badge variant="outline" className={`text-[9px] ${runtimeProofStatusClasses(proof)}`}>
+            {runtimeProofStatusLabel(proof)}
+          </Badge>
+          {!backendReady && <span className="text-[10px] text-muted-foreground">Disabled until backend proof passes</span>}
+          {meta.gated && <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">Backend controlled gated lane</Badge>}
         </div>
       </div>
     </div>
@@ -241,12 +270,14 @@ function DirectorBlock({ mode, onModeChange }) {
 }
 
 // ─── Right Block: Options / Preview / Assets / Developer ────────
-function OptionsBlock({ mode, uxMode, values, setValues }) {
+function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
   const [activeTab, setActiveTab] = useState('options')
   const meta = MODE_META[mode]
   const schemaKey = SCHEMA_MAP[mode] || mode
   const schema = CAPABILITY_SCHEMAS[schemaKey] || {}
   const backend = getBackendCapability(meta.capability)
+  const proof = getModeProof(runtimeProofStatus, mode)
+  const backendReady = proof.readyForDashboardExecution === true
 
   const tabs = [
     { key: 'options', label: 'Options', icon: Settings },
@@ -264,7 +295,10 @@ function OptionsBlock({ mode, uxMode, values, setValues }) {
             <tab.icon className="h-3 w-3" />{tab.label}
           </button>
         ))}
-        <div className="ml-auto"><Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">{meta.label}</Badge></div>
+        <div className="ml-auto flex items-center gap-2">
+          <Badge variant="outline" className={`text-[10px] ${runtimeProofStatusClasses(proof)}`}>{runtimeProofStatusLabel(proof)}</Badge>
+          <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">{meta.label}</Badge>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -312,7 +346,8 @@ function OptionsBlock({ mode, uxMode, values, setValues }) {
                     <div className="flex justify-between"><span>Capability</span><span className="font-mono">{meta.capability}</span></div>
                     <div className="flex justify-between"><span>Backend key</span><span className="font-mono">{backend.backendCapability || backend.plannedBackendKey || 'planned'}</span></div>
                     <div className="flex justify-between"><span>Route</span><span>{backend.missing ? 'capability_missing' : 'route_pending'}</span></div>
-                    <div className="flex justify-between"><span>Execution</span><span>{meta.gated ? 'gated_backend_pending' : 'backend_pending'}</span></div>
+                    <div className="flex justify-between"><span>Execution</span><span>{backendReady ? 'backend_ready' : 'not_dashboard_ready'}</span></div>
+                    <div className="flex justify-between"><span>Proof source</span><span>backend-runtime-proof-status</span></div>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -329,6 +364,7 @@ export default function Studio() {
   const [mode, setMode] = useState('chat')
   const [uxMode, setUxMode] = useState('creator')
   const [valuesByMode, setValuesByMode] = useState({})
+  const { status: runtimeProofStatus } = useRuntimeProofStatus()
   const currentValues = valuesByMode[mode] || {}
   const setCurrentValues = (next) => setValuesByMode((prev) => ({ ...prev, [mode]: next }))
 
@@ -347,8 +383,8 @@ export default function Studio() {
       </header>
 
       <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(320px,0.45fr)_1fr]">
-        <DirectorBlock mode={mode} onModeChange={setMode} />
-        <OptionsBlock mode={mode} uxMode={uxMode} values={currentValues} setValues={setCurrentValues} />
+        <DirectorBlock mode={mode} onModeChange={setMode} runtimeProofStatus={runtimeProofStatus} />
+        <OptionsBlock mode={mode} uxMode={uxMode} values={currentValues} setValues={setCurrentValues} runtimeProofStatus={runtimeProofStatus} />
       </div>
     </div>
   )

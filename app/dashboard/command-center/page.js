@@ -5,18 +5,19 @@ import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { RuntimeProofSummary, getAdminToken } from '@/components/dashboard/runtime-proof-summary'
 import { PROVIDER_CONTRACTS, OPEN_SOURCE_TOOLS } from '@/lib/dashboard-contract'
 import {
   normalizeProviderStatuses,
   getHealthStatusLabel,
   getHealthStatusClasses,
 } from '@/lib/provider-settings-contract'
-import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, Lock, Server, ShieldCheck, Zap } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, Server, ShieldCheck, Zap } from 'lucide-react'
 
 const STATUS_GRID = [
   ['Dashboard UI status', 'ui_ready', Zap],
   ['API contract status', 'contract_ready', ShieldCheck],
-  ['Provider proof status', 'Groq/Together live-tested', AlertTriangle],
+  ['Runtime proof source', 'backend-runtime-proof-status', AlertTriangle],
   ['Studio connection', 'UI not connected yet', Server],
 ]
 
@@ -25,7 +26,7 @@ const INFRA = ['MariaDB', 'Redis', 'Qdrant', 'Worker/BullMQ', 'Storage', 'Fastif
 const PENDING = [
   ['Studio job submission', 'API job route exists; Studio UI not connected yet.'],
   ['Artifact listing UI', 'Artifact file route exists; artifact listing/preview UI still pending.'],
-  ['Provider health UI', 'Provider health routes exist; dashboard health display wiring pending.'],
+  ['Unproven capabilities', 'Only backend-proven runtime capabilities are dashboard-ready.'],
   ['Model catalog sync', 'Model sync is disabled until catalog routes are wired.'],
 ]
 
@@ -33,7 +34,15 @@ export default function CommandCenterPage() {
   const [providers, setProviders] = useState([])
 
   useEffect(() => {
-    fetch('/api/admin/providers')
+    const token = getAdminToken()
+    if (!token) {
+      setProviders(normalizeProviderStatuses([]))
+      return
+    }
+
+    fetch('/api/admin/providers', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.providers ?? []
@@ -73,6 +82,8 @@ export default function CommandCenterPage() {
           </Card>
         ))}
       </div>
+
+      <RuntimeProofSummary compact />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1.1fr]">
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">

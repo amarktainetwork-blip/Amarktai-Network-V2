@@ -30,11 +30,11 @@ describe('Phase 1 provider source of truth', () => {
     }
   })
 
-  it('DeepInfra exists as the gated uncensored lane', () => {
+  it('DeepInfra exists as an approved but unproven backend-controlled lane', () => {
     const deepinfra = PROVIDER_CONTRACTS.find((provider) => provider.id === 'deepinfra')
     expect(deepinfra).toMatchObject({
       finalProvider: true, gated: true, gatedCapability: 'uncensored.text',
-      role: 'gated_uncensored_lane', status: 'gated_backend_pending',
+      role: 'gated_uncensored_lane', status: 'backend_pending',
     })
   })
 
@@ -210,11 +210,13 @@ describe('Dashboard truth cleanup', () => {
     expect(jobsText).toContain('No creations yet')
   })
 
-  it('Capability Library shows Visible in Studio not Studio UI ready', () => {
+  it('Capability Library uses backend proof status instead of blanket Studio readiness', () => {
     const capText = fs.readFileSync(path.join(ROOT, 'app/dashboard/capabilities/page.js'), 'utf8')
-    expect(capText).toContain('Visible in Studio')
+    expect(capText).toContain('RuntimeProofSummary')
+    expect(capText).toContain('runtimeProofStatusLabel')
+    expect(capText).toContain('Disabled until backend proof passes')
+    expect(capText).not.toContain('Visible in Studio')
     expect(capText).not.toContain('Studio UI ready')
-    expect(capText).toContain('Runtime selected')
   })
 
   it('Providers dashboard page is removed', () => {
@@ -272,10 +274,11 @@ describe('Dashboard truth cleanup', () => {
     expect(PROVIDER_CONTRACTS.map((p) => p.id)).toEqual(FINAL_PROVIDERS)
   })
 
-  it('DeepInfra remains gated only', () => {
+  it('DeepInfra gated Studio mode remains disabled until backend proof passes', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-    expect(studioText).toContain('DeepInfra gated')
+    expect(studioText).toContain('Backend-controlled gated text')
     expect(studioText).toContain('gated: true')
+    expect(studioText).toContain('Disabled until backend proof passes')
   })
 
   it('Docker Redis uses BullMQ-safe noeviction policy', () => {

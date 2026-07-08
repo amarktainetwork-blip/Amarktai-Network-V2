@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProviderSettingsPanel } from '@/components/dashboard/provider-settings-panel'
+import { RuntimeProofSummary } from '@/components/dashboard/runtime-proof-summary'
 import { OPEN_SOURCE_TOOLS } from '@/lib/dashboard-contract'
 import { HardDrive, Server, ShieldCheck, SlidersHorizontal, Webhook } from 'lucide-react'
 
@@ -27,29 +28,32 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="policy">
-          <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal className="h-4 w-4 text-violet-300" /> Runtime Policy</h3>
-            <div className="space-y-4">
-              <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
-                <div className="text-sm font-semibold mb-2">Provider routing</div>
-                <p className="text-xs text-muted-foreground">The backend runtime selects providers and models by capability, quality, speed, cost, policy, and availability.</p>
+          <div className="space-y-4">
+            <RuntimeProofSummary compact />
+            <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><SlidersHorizontal className="h-4 w-4 text-violet-300" /> Runtime Policy</h3>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
+                  <div className="text-sm font-semibold mb-2">Provider routing</div>
+                  <p className="text-xs text-muted-foreground">The backend runtime selects providers and models by capability, quality, speed, cost, policy, and availability.</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
+                    <span>Routing mode</span>
+                    <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">Runtime selected</Badge>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
+                    <span>Policy control</span>
+                    <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">Backend controlled</Badge>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-xs">
+                    <span>Unproven capabilities</span>
+                    <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">Disabled until backend proof passes</Badge>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
-                  <span>Routing mode</span>
-                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">Runtime selected</Badge>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
-                  <span>Policy control</span>
-                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">Backend controlled</Badge>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 text-xs">
-                  <span>DeepInfra</span>
-                  <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[10px]">Gated only, excluded from normal flows</Badge>
-                </div>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="storage">
