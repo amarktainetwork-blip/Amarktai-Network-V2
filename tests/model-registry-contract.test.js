@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
 import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverGroqModels, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
@@ -17,9 +19,11 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
-const { updateGenXPricingMetadata } = await import('../apps/api/src/lib/model-registry.ts')
+const { stringifyMetadataSafely, updateGenXPricingMetadata, upsertDiscoveredModels } = await import('../apps/api/src/lib/model-registry.ts')
 const { selectRuntimeModel } = await import('../apps/api/src/lib/runtime-selector.ts')
 const { getCapabilityGroupSummary } = await import('../apps/api/src/lib/capability-groups.ts')
+
+const ROOT = process.cwd()
 
 function jsonResponse(payload, ok = true, status = 200) {
   return {
@@ -62,6 +66,7 @@ function modelRow(overrides = {}) {
 describe('real provider model discovery and catalog truth', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
@@ -70,6 +75,122 @@ describe('real provider model discovery and catalog truth', () => {
     for (const banned of ['openai', 'anthropic', 'google', 'qwen', 'wan', 'pixverse', 'minimax', 'gemini', 'resemble']) {
       expect(PROVIDER_KEYS).not.toContain(banned)
     }
+  })
+
+  it('stores provider raw metadata and pricing metadata in LongText fields', () => {
+    const schema = fs.readFileSync(path.join(ROOT, 'prisma/schema.prisma'), 'utf8')
+
+    expect(schema).toMatch(/rawMetadata\s+String\s+@default\("\{}"\)\s+@map\("raw_metadata"\)\s+@db\.LongText/)
+    expect(schema).toMatch(/pricingRawMetadata\s+String\s+@default\("\{}"\)\s+@map\("pricing_raw_metadata"\)\s+@db\.LongText/)
+    expect(schema).toMatch(/notes\s+String\s+@default\(""\)\s+@db\.LongText/)
+  })
+
+  it('stringifies circular and very large metadata safely', () => {
+    const circular = { id: 'model-a' }
+    circular.self = circular
+    const circularResult = stringifyMetadataSafely(circular, 'raw_metadata')
+    expect(circularResult.json).toContain('[circular]')
+    expect(circularResult.warning).toBe('')
+
+    const largeResult = stringifyMetadataSafely({ payload: 'x'.repeat(600_000) }, 'raw_metadata')
+    const parsed = JSON.parse(largeResult.json)
+    expect(parsed).toMatchObject({ summarized: true, truncated: true, label: 'raw_metadata' })
+    expect(largeResult.warning).toBe('raw_metadata_truncated')
+  })
+
+  it('provider refresh persists large metadata safely and does not fail all rows when one row fails', async () => {
+    prismaMock.modelRegistryEntry.findUnique.mockResolvedValue(null)
+    prismaMock.modelRegistryEntry.create
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('Row too large for raw_metadata secret-token'))
+
+    const result = await upsertDiscoveredModels({
+      provider: 'together',
+      totalDiscovered: 2,
+      source: 'provider_api',
+      catalogCompleteness: 'partial_from_provider_api',
+      discoveredAt: new Date().toISOString(),
+      error: null,
+      models: [
+        {
+          provider: 'together',
+          modelId: 'safe-large-model',
+          displayName: 'Safe Large Model',
+          family: 'owner',
+          category: 'text',
+          primaryRole: 'chat',
+          costTier: 'low',
+          latencyTier: 'medium',
+          contextWindow: 4096,
+          capabilities: { supportsChat: true, supportsText: true },
+          estimatedUnitCost: null,
+          qualityTier: 'standard',
+          source: 'provider_api',
+          catalogCompleteness: 'partial_from_provider_api',
+          isLiveDiscovered: true,
+          modelOwner: 'owner',
+          providerRawType: 'model',
+          providerRawCategory: '',
+          notes: 'large metadata test',
+          rawMetadata: { payload: 'x'.repeat(600_000) },
+          discoveredAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          pricingSource: 'unknown',
+          pricingConfidence: 'unknown',
+          pricingUnit: '',
+          pricingCurrency: '',
+          pricingRawMetadata: { pricePayload: 'y'.repeat(600_000) },
+          lastPricingSyncedAt: null,
+          pricingBlocker: 'pricing_unknown',
+        },
+        {
+          provider: 'together',
+          modelId: 'failing-model',
+          displayName: 'Failing Model',
+          family: 'owner',
+          category: 'text',
+          primaryRole: 'chat',
+          costTier: 'low',
+          latencyTier: 'medium',
+          contextWindow: 4096,
+          capabilities: { supportsChat: true, supportsText: true },
+          estimatedUnitCost: null,
+          qualityTier: 'standard',
+          source: 'provider_api',
+          catalogCompleteness: 'partial_from_provider_api',
+          isLiveDiscovered: true,
+          modelOwner: 'owner',
+          providerRawType: 'model',
+          providerRawCategory: '',
+          notes: 'failing row test',
+          rawMetadata: {},
+          discoveredAt: new Date().toISOString(),
+          lastSyncedAt: new Date().toISOString(),
+          pricingSource: 'unknown',
+          pricingConfidence: 'unknown',
+          pricingUnit: '',
+          pricingCurrency: '',
+          pricingRawMetadata: {},
+          lastPricingSyncedAt: null,
+          pricingBlocker: 'pricing_unknown',
+        },
+      ],
+    })
+
+    expect(result).toMatchObject({
+      providerKey: 'together',
+      totalFetched: 2,
+      created: 1,
+      updated: 0,
+      failedRows: 1,
+    })
+    expect(result.errors[0]).toMatchObject({ modelId: 'failing-model' })
+    expect(result.errors[0].message).not.toContain('secret-token')
+    const firstCreateData = prismaMock.modelRegistryEntry.create.mock.calls[0][0].data
+    expect(JSON.parse(firstCreateData.rawMetadata)).toMatchObject({ summarized: true, truncated: true })
+    expect(JSON.parse(firstCreateData.pricingRawMetadata)).toMatchObject({ summarized: true, truncated: true })
+    expect(firstCreateData.notes).toContain('raw_metadata_truncated')
+    expect(firstCreateData.pricingBlocker).toContain('pricing_raw_metadata_truncated')
   })
 
   it('Together discovery returns all API models, captures pricing, and does not claim full video/audio completeness', async () => {
@@ -183,6 +304,31 @@ describe('real provider model discovery and catalog truth', () => {
     expect(result.models.some((model) => model.category === 'audio')).toBe(true)
   })
 
+  it('GenX discovery uses the existing runtime base URL default when no DB baseUrl is configured', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ models: [{ id: 'seedance-v1-fast', category: 'video' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await discoverGenXModels('genx-secret')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('https://query.genx.sh/api/v1/models')
+  })
+
+  it('GenX fetch failure returns safe diagnostics without crashing or exposing keys', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('getaddrinfo ENOTFOUND query.genx.sh genx-secret')))
+
+    const result = await discoverGenXModels('genx-secret', 'https://query.genx.sh')
+
+    expect(result).toMatchObject({
+      provider: 'genx',
+      totalDiscovered: 0,
+      source: 'provider_api_failed',
+      catalogCompleteness: 'discovery_failed',
+    })
+    expect(result.error).toContain('/api/v1/models')
+    expect(result.error).toContain('host=query.genx.sh')
+    expect(result.error).not.toContain('genx-secret')
+  })
+
   it('Groq discovery returns all models and maps STT/TTS/vision/tool capabilities', async () => {
     const groqModels = Array.from({ length: 20 }, (_, index) => ({
       id: [
@@ -210,7 +356,7 @@ describe('real provider model discovery and catalog truth', () => {
   it('GenX pricing refresh updates catalog rows and keeps credit-only pricing out of fake USD estimates', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
       pricing: {
-        'seedance-v1-fast': { input: 12, unit: 'genx_credits_per_second', currency: 'genx_credits' },
+        'seedance-v1-fast': { input: 12, unit: 'genx_credits_per_second', currency: 'genx_credits', metadata: 'z'.repeat(600_000) },
       },
     })))
     prismaMock.modelRegistryEntry.findMany.mockResolvedValue([
@@ -222,7 +368,7 @@ describe('real provider model discovery and catalog truth', () => {
     const pricing = await discoverGenXPricing('genx-secret', 'https://query.genx.sh')
     const update = await updateGenXPricingMetadata(pricing)
 
-    expect(update).toMatchObject({ updated: 2, missingPricingCount: 1, source: 'provider_api' })
+    expect(update).toMatchObject({ updated: 2, missingPricingCount: 1, pricingKnownCount: 0, pricingUnknownCount: 2, source: 'provider_api' })
     expect(pricing.pricing['seedance-v1-fast']).toMatchObject({
       currency: 'genx_credits',
       usdEstimateCents: null,
@@ -237,7 +383,7 @@ describe('real provider model discovery and catalog truth', () => {
         pricingUnit: 'genx_credits_per_second',
         pricingCurrency: 'genx_credits',
         estimatedUnitCost: null,
-        pricingBlocker: 'genx_pricing_not_usd',
+        pricingBlocker: expect.stringContaining('genx_pricing_not_usd'),
       }),
     }))
     expect(prismaMock.modelRegistryEntry.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -248,6 +394,20 @@ describe('real provider model discovery and catalog truth', () => {
         pricingBlocker: 'genx_pricing_missing_for_model',
       }),
     }))
+  })
+
+  it('GenX pricing fetch failure returns safe diagnostics and no fake prices', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('TLS failed for genx-secret')))
+
+    const pricing = await discoverGenXPricing('genx-secret', 'https://query.genx.sh')
+
+    expect(pricing).toMatchObject({
+      pricing: {},
+      source: 'provider_api_failed',
+    })
+    expect(pricing.error).toContain('/api/v1/account/pricing')
+    expect(pricing.error).toContain('host=query.genx.sh')
+    expect(pricing.error).not.toContain('genx-secret')
   })
 
   it('runtime selector blocks unknown-cost media for standard automatic selection and excludes MiMo', async () => {

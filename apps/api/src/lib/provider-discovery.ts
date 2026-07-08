@@ -1,3 +1,5 @@
+import { getGenxBaseUrl } from '@amarktai/core'
+
 export interface DiscoveredModel {
   provider: string
   modelId: string
@@ -114,10 +116,47 @@ function payloadProvesComplete(payload: unknown, itemCount: number): boolean {
   return false
 }
 
+function safeEndpointDescriptor(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return `${parsed.origin}${parsed.pathname}${parsed.search}`
+  } catch {
+    return '[invalid-url]'
+  }
+}
+
+function safeHostDescriptor(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return '[invalid-host]'
+  }
+}
+
+function redactSecret(value: string, secret: string): string {
+  return secret ? value.split(secret).join('[redacted]') : value
+}
+
+function safeFetchFailureMessage(err: unknown, url: string, apiKey: string): string {
+  const rawMessage = err instanceof Error && err.message ? err.message : 'fetch failed'
+  const message = redactSecret(rawMessage, apiKey)
+  return `fetch failed for ${safeEndpointDescriptor(url)}; host=${safeHostDescriptor(url)}; message=${message}`
+}
+
+function resolveGenxDiscoveryBaseUrl(baseUrl?: string): string {
+  return baseUrl?.trim() || getGenxBaseUrl()
+}
+
 async function fetchJson(url: string, apiKey: string): Promise<{ ok: boolean; status: number; payload: unknown; text: string }> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    })
+  } catch (err) {
+    throw new Error(safeFetchFailureMessage(err, url, apiKey))
+  }
+
   const text = await response.text()
   let payload: unknown = null
   try {
@@ -146,7 +185,14 @@ async function fetchPaginated(url: string, apiKey: string): Promise<{
 
   while (nextUrl && !seenUrls.has(nextUrl)) {
     seenUrls.add(nextUrl)
-    const result = await fetchJson(nextUrl, apiKey)
+    let result: { ok: boolean; status: number; payload: unknown; text: string }
+    try {
+      result = await fetchJson(nextUrl, apiKey)
+    } catch (err) {
+      failedCalls++
+      errors.push(err instanceof Error ? err.message : `fetch failed for ${safeEndpointDescriptor(nextUrl)}`)
+      break
+    }
     if (!result.ok) {
       failedCalls++
       errors.push(`${nextUrl} returned ${result.status}`)
@@ -383,7 +429,7 @@ function mapGenXCategory(rawCategory: string, id: string): { category: string; r
 
 export async function discoverGenXModels(apiKey: string, baseUrl?: string): Promise<DiscoveryResult> {
   const discoveredAt = new Date().toISOString()
-  const base = baseUrl || 'https://api.genx.ai'
+  const base = resolveGenxDiscoveryBaseUrl(baseUrl)
   const deduped = new Map<string, Record<string, unknown>>()
   let successfulCalls = 0
   let failedCalls = 0
@@ -408,7 +454,7 @@ export async function discoverGenXModels(apiKey: string, baseUrl?: string): Prom
   }
 
   if (!deduped.size) {
-    return { provider: 'genx', models: [], totalDiscovered: 0, source: 'provider_api', catalogCompleteness: 'discovery_failed', discoveredAt, error: errors[0] ?? 'GenX discovery returned no models' }
+    return { provider: 'genx', models: [], totalDiscovered: 0, source: 'provider_api_failed', catalogCompleteness: 'discovery_failed', discoveredAt, error: errors[0] ?? `GenX discovery returned no models from host=${safeHostDescriptor(base)}` }
   }
 
   const attemptedAllCategories = GENX_MODEL_CATEGORIES.length
@@ -514,12 +560,13 @@ export async function discoverGroqModels(apiKey: string): Promise<DiscoveryResul
 
 export async function discoverGenXPricing(apiKey: string, baseUrl?: string): Promise<GenXPricingResult> {
   const syncedAt = new Date().toISOString()
-  const base = baseUrl || 'https://api.genx.ai'
+  const base = resolveGenxDiscoveryBaseUrl(baseUrl)
 
   try {
-    const response = await fetchJson(new URL('/api/v1/account/pricing', base).toString(), apiKey)
+    const pricingUrl = new URL('/api/v1/account/pricing', base).toString()
+    const response = await fetchJson(pricingUrl, apiKey)
     if (!response.ok) {
-      return { pricing: {}, source: 'unknown', syncedAt, error: `GenX pricing API returned ${response.status}` }
+      return { pricing: {}, source: 'provider_api_failed', syncedAt, error: `GenX pricing API returned ${response.status} for ${safeEndpointDescriptor(pricingUrl)}` }
     }
 
     const pricing: Record<string, GenXPricingEntry> = {}
@@ -553,6 +600,6 @@ export async function discoverGenXPricing(apiKey: string, baseUrl?: string): Pro
 
     return { pricing, source: 'provider_api', syncedAt, error: null }
   } catch (err) {
-    return { pricing: {}, source: 'unknown', syncedAt, error: err instanceof Error ? err.message : 'Unknown error' }
+    return { pricing: {}, source: 'provider_api_failed', syncedAt, error: err instanceof Error ? err.message : 'Unknown GenX pricing error' }
   }
 }

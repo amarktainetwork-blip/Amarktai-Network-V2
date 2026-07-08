@@ -462,14 +462,14 @@ model ModelRegistryEntry {
   modelOwner           String @default("") @map("model_owner")
   providerRawType      String @default("") @map("provider_raw_type")
   providerRawCategory  String @default("") @map("provider_raw_category")
-  rawMetadata          String @default("{}") @map("raw_metadata") // JSON
+  rawMetadata          String @default("{}") @map("raw_metadata") @db.LongText // JSON
   discoveredAt         DateTime? @map("discovered_at")
   lastSyncedAt         DateTime? @map("last_synced_at")
   pricingSource        String @default("unknown") @map("pricing_source") // provider_api | admin_manual | unknown
   pricingConfidence    String @default("unknown") @map("pricing_confidence") // known | estimated | unknown
   pricingUnit          String @default("") @map("pricing_unit")
   pricingCurrency      String @default("") @map("pricing_currency")
-  pricingRawMetadata   String @default("{}") @map("pricing_raw_metadata") // JSON
+  pricingRawMetadata   String @default("{}") @map("pricing_raw_metadata") @db.LongText // JSON
   lastPricingSyncedAt  DateTime? @map("last_pricing_synced_at")
   pricingBlocker       String @default("") @map("pricing_blocker")
 
@@ -477,7 +477,7 @@ model ModelRegistryEntry {
   estimatedUnitCost Float?  @map("estimated_unit_cost")
   enabled           Boolean @default(true)
   hidden            Boolean @default(false)
-  notes             String  @default("")
+  notes             String  @default("") @db.LongText
   safetyTags        String  @default("") @map("safety_tags")
 
   createdAt DateTime @default(now()) @map("created_at")
