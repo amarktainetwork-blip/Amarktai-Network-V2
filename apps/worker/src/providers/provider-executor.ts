@@ -20,6 +20,13 @@ import type { WorkerJobData, ProcessorResult } from '../processors/job-processor
 // latency, quality, safety, budget, fallback, and subtask requirements.
 const EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {
   chat: 'groq',
+  reasoning: 'groq',
+  code: 'groq',
+  summarization: 'groq',
+  translation: 'groq',
+  classification: 'groq',
+  extraction: 'groq',
+  structured_output: 'groq',
   image_generation: 'together',
   video_generation: 'genx',
 }
@@ -126,6 +133,58 @@ async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult>
     }
   }
 }
+
+// ── Groq Text Capabilities ───────────────────────────────────────────────────
+
+const TEXT_CAPABILITY_SYSTEM_PROMPTS: Partial<Record<CapabilityKey, (payload: WorkerJobData) => string>> = {
+  reasoning: () => 'You are a reasoning engine. Think step by step. Show your reasoning process clearly before giving a final answer.',
+  code: () => 'You are a code generation assistant. Write clean, well-documented code. Include comments explaining your approach.',
+  summarization: () => 'You are a text summarization assistant. Provide clear, concise summaries that capture the key points.',
+  translation: () => 'You are a translation assistant. Translate the provided text accurately while preserving meaning and tone.',
+  classification: () => 'You are a text classification assistant. Classify the provided text into the given categories. Return the classification result clearly.',
+  extraction: () => 'You are a data extraction assistant. Extract structured information from the provided text. Return JSON when possible.',
+  structured_output: (payload) => {
+    const schema = readString(payload.input, 'schema') || readString(payload.metadata, 'schema')
+    return `You are a structured output assistant. Return valid JSON that matches this schema: ${schema || 'No schema provided - infer appropriate structure'}. Return ONLY valid JSON, no explanation.`
+  },
+}
+
+async function executeGroqTextCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  let apiKey = ''
+
+  try {
+    const credential = await resolveProviderApiKey('groq')
+    apiKey = credential.apiKey
+    const { groqChat } = await import('@amarktai/providers')
+
+    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
+    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
+
+    const result = await groqChat({
+      prompt: payload.prompt,
+      apiKey,
+      systemPrompt,
+    })
+
+    if (!result.content || !result.content.trim()) {
+      return { success: false, status: 'failed', error: 'Groq returned empty response' }
+    }
+
+    if (payload.capability === 'structured_output') {
+      try { JSON.parse(result.content) } catch {
+        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
+      }
+    }
+
+    return { success: true, status: 'completed', output: result.content, provider: 'groq', model: result.model }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    const message = err instanceof Error ? err.message : 'Unknown Groq error'
+    return { success: false, status: 'failed', error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}` }
+  }
+}
+
+// ── Together Image Generation ────────────────────────────────────────────────
 
 async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorResult> {
   let apiKey = ''
@@ -337,14 +396,22 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
   }
 
   try {
+    // Groq chat (original)
     if (implementedProvider === 'groq' && capability === 'chat') {
       return await executeGroqChat(payload)
     }
 
+    // Groq text capabilities (reasoning, code, summarization, translation, classification, extraction, structured_output)
+    if (implementedProvider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
+      return await executeGroqTextCapability(payload)
+    }
+
+    // Together image
     if (implementedProvider === 'together' && capability === 'image_generation') {
       return await executeTogetherImage(payload)
     }
 
+    // GenX video
     if (implementedProvider === 'genx' && capability === 'video_generation') {
       return await executeGenxVideo(payload)
     }

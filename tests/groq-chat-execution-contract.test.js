@@ -506,10 +506,11 @@ describe('Worker integration with Groq chat', () => {
   })
 
   it('worker does not call Mimo', async () => {
-    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'code' }))
+    // music_generation does not route to groq
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'music_generation' }))
 
     const processor = createJobProcessor()
-    await expect(processor(makePayload({ capability: 'code' }))).rejects.toThrow()
+    await expect(processor(makePayload({ capability: 'music_generation' }))).rejects.toThrow()
 
     expect(mockGroqChat).not.toHaveBeenCalled()
   })

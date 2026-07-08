@@ -409,7 +409,8 @@ describe('Execution routing gate', () => {
   })
 
   it('non-image capabilities do not execute Together', async () => {
-    const result = await executeWithProvider(makePayload({ capability: 'code' }))
+    // music_generation does not route to Together
+    const result = await executeWithProvider(makePayload({ capability: 'music_generation' }))
 
     expect(result.success).toBe(false)
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
