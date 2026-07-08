@@ -11,6 +11,7 @@ import {
   normalizeProviderStatuses,
   sanitizeProviderStatus,
 } from '../lib/provider-settings-contract.js'
+import { PROVIDER_CONTRACTS } from '../lib/dashboard-contract.js'
 
 const ROOT = process.cwd()
 const panelSource = fs.readFileSync(path.join(ROOT, 'components/dashboard/provider-settings-panel.jsx'), 'utf8')
@@ -98,6 +99,7 @@ describe('Dashboard provider settings UI contract', () => {
 
     expect(draft.apiKey).toBe('')
     expect(panelSource).toContain('Masked preview')
+    expect(panelSource).toContain('Runtime enabled')
     expect(panelSource).toContain('value={draft.apiKey}')
     expect(panelSource).not.toContain('value={provider.maskedPreview}')
   })
@@ -172,7 +174,21 @@ describe('Dashboard provider settings UI contract', () => {
   it('shows DeepInfra fallback truth and MiMo runtime restriction copy', () => {
     expect(panelSource).toContain('DeepInfra can be live-tested and used as backend-controlled text fallback')
     expect(panelSource).toContain('provider health does not create new capability proof')
-    expect(panelSource).toContain('MiMo is never used for backend runtime unless its credential policy is Backend runtime allowed')
+    expect(panelSource).toContain('MiMo is configured for coding-tool use only')
+    expect(panelSource).toContain('Backend runtime, worker jobs, and fallback execution are disabled')
+    expect(panelSource).toContain('secure server-side coding tool or terminal session')
+  })
+
+  it('marks MiMo as coding-tools-only and never browser or worker runtime eligible', () => {
+    const mimo = PROVIDER_CONTRACTS.find((item) => item.id === 'mimo')
+    expect(mimo).toMatchObject({
+      runtimeUse: 'coding_tools_only',
+      backendRuntimeAllowed: false,
+      workerRuntimeAllowed: false,
+      fallbackEligible: false,
+      browserExposureAllowed: false,
+      requiresServerSideTerminal: true,
+    })
   })
 
   it('does not expose provider or model selection to Studio or apps', () => {

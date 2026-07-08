@@ -47,7 +47,7 @@ const PROVIDER_CATEGORY_SUPPORT: Record<ProviderKey, string[]> = {
   genx: ['video', 'image', 'audio'],
   groq: ['text', 'code', 'audio'],
   together: ['text', 'image', 'code', 'retrieval', 'document'],
-  mimo: ['text', 'code'],
+  mimo: [],
   deepinfra: ['text', 'code'],
 }
 

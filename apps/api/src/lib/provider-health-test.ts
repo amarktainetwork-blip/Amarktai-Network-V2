@@ -1,6 +1,7 @@
 import {
   ProviderConfigError,
   getProviderCredentialStatus,
+  MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE,
   resolveProviderApiKey,
   updateProviderHealthStatus,
   type ProviderCredentialStatus,
@@ -9,8 +10,6 @@ import { getGenxBaseUrl, isValidProvider, type ProviderKey } from '@amarktai/cor
 
 const GENX_MODELS_TEST_TIMEOUT_MS = 15_000
 const GENX_VIDEO_MODEL_MARKERS = ['seedance', 'video', 'veo', 'wan', 'kling']
-const MIMO_CODING_TOOLS_ONLY_MESSAGE = 'MiMo credential is configured but restricted to coding/interactive tools, so backend runtime is disabled until a backend/application-allowed MiMo key is supplied.'
-const MIMO_REVIEW_REQUIRED_MESSAGE = 'MiMo credential usage policy requires admin review before backend runtime testing or execution.'
 
 export interface ProviderLiveTestResult {
   provider: ProviderCredentialStatus
@@ -160,57 +159,12 @@ async function testMimoCredential(): Promise<ProviderLiveTestResult> {
     return { provider }
   }
 
-  if (providerStatus.credentialUsagePolicy === 'coding_tools_only') {
-    const provider = await updateProviderHealthStatus({
-      providerKey: 'mimo',
-      healthStatus: 'runtime_restricted',
-      healthMessage: MIMO_CODING_TOOLS_ONLY_MESSAGE,
-    })
-    return { provider }
-  }
-
-  if (providerStatus.credentialUsagePolicy === 'unknown_requires_review') {
-    const provider = await updateProviderHealthStatus({
-      providerKey: 'mimo',
-      healthStatus: 'requires_review',
-      healthMessage: MIMO_REVIEW_REQUIRED_MESSAGE,
-    })
-    return { provider }
-  }
-
-  let apiKey = ''
-  try {
-    const credential = await resolveProviderApiKey('mimo')
-    apiKey = credential.apiKey
-    const { mimoChat } = await import('@amarktai/providers')
-    const result = await mimoChat({
-      apiKey,
-      baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: providerStatus.defaultModel,
-      prompt: 'Reply with exactly: AMARKTAI_PROVIDER_TEST_OK',
-      maxTokens: 16,
-      temperature: 0,
-    })
-
-    if (!result.content?.trim()) {
-      throw new Error('MiMo returned an empty provider test response')
-    }
-
-    const provider = await updateProviderHealthStatus({
-      providerKey: 'mimo',
-      healthStatus: 'live',
-      healthMessage: `Live test passed through MiMo chat (${result.model}) with backend_runtime_allowed credential policy.`,
-    })
-    return { provider }
-  } catch (err) {
-    const status = providerStatusForError(err)
-    const provider = await updateProviderHealthStatus({
-      providerKey: 'mimo',
-      healthStatus: status,
-      healthMessage: redactProviderSecrets(safeErrorMessage(err), [apiKey]),
-    })
-    return { provider }
-  }
+  const provider = await updateProviderHealthStatus({
+    providerKey: 'mimo',
+    healthStatus: 'runtime_restricted',
+    healthMessage: MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE,
+  })
+  return { provider }
 }
 
 function providerStatusForError(err: unknown): 'unconfigured' | 'failed' | 'gated' {
@@ -221,13 +175,18 @@ function providerStatusForError(err: unknown): 'unconfigured' | 'failed' | 'gate
 }
 
 function safeErrorMessage(err: unknown): string {
+  const rawMessage = err instanceof Error ? err.message : ''
+  if (/deepinfra/i.test(rawMessage) && (/402/.test(rawMessage) || /insufficient|balance|payment/i.test(rawMessage))) {
+    return 'DeepInfra account has insufficient balance for inference. Add balance/top-up before this provider can be marked live.'
+  }
+
   if (err instanceof ProviderConfigError) {
     if (err.code === 'missing-config') return err.message
     if (err.code === 'disabled') return err.message
     if (err.code === 'decrypt-failed') return err.message
   }
 
-  if (err instanceof Error && err.message.trim()) return err.message
+  if (rawMessage.trim()) return rawMessage
   return 'Provider live test failed'
 }
 

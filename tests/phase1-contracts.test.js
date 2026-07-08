@@ -45,7 +45,14 @@ describe('Phase 1 provider source of truth', () => {
     expect(mimo).toMatchObject({
       finalProvider: true,
       role: 'coding_reasoning',
-      status: 'runtime_restricted_by_policy',
+      status: 'runtime_disabled',
+      integrationType: 'coding_tool',
+      runtimeUse: 'coding_tools_only',
+      backendRuntimeAllowed: false,
+      workerRuntimeAllowed: false,
+      fallbackEligible: false,
+      browserExposureAllowed: false,
+      requiresServerSideTerminal: true,
       credentialUsagePolicy: 'coding_tools_only',
     })
   })
@@ -152,6 +159,18 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
     expect(executorText).toContain('executeDeepInfraTextCapability')
     expect(executorText).not.toContain("EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {\n  mimo")
     expect(executorText).toContain('resolveProviderApiKey')
+  })
+
+  it('does not keep Repo Workbench as an active dashboard or admin API feature', () => {
+    const dashboardContractText = fs.readFileSync(path.join(ROOT, 'lib/dashboard-contract.js'), 'utf8')
+    const dashboardLayoutText = fs.readFileSync(path.join(ROOT, 'app/dashboard/layout.js'), 'utf8')
+
+    expect(fs.existsSync(path.join(ROOT, 'app/dashboard/repo-workbench/page.js'))).toBe(false)
+    expect(fs.existsSync(path.join(ROOT, 'app/api/admin/repo-workbench/[action]/route.js'))).toBe(false)
+    expect(fs.existsSync(path.join(ROOT, 'lib/repo-workbench-contract.js'))).toBe(false)
+    expect(dashboardContractText).not.toContain('/dashboard/repo-workbench')
+    expect(dashboardContractText).not.toContain('Repo Workbench')
+    expect(dashboardLayoutText).not.toContain('GitPullRequest')
   })
 
   it('backend foundation scripts exist', () => {

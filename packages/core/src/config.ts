@@ -69,12 +69,6 @@ export function getGenxBaseUrl(): string {
   return process.env.GENX_BASE_URL ?? 'https://query.genx.sh'
 }
 
-export function getMimoApiKey(): string {
-  const key = process.env.MIMO_API_KEY
-  if (!key) throw new Error('MIMO_API_KEY environment variable is required')
-  return key
-}
-
 export function getDeepinfraApiKey(): string {
   const key = process.env.DEEPINFRA_API_KEY
   if (!key) throw new Error('DEEPINFRA_API_KEY environment variable is required')
@@ -87,20 +81,9 @@ export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const TOGETHER_BASE_URL = 'https://api.together.xyz/v1'
 export const DEEPINFRA_BASE_URL = 'https://api.deepinfra.com/v1'
 export const DEEPINFRA_OPENAI_BASE_URL = 'https://api.deepinfra.com/v1/openai'
-export const MIMO_OPENAI_BASE_URL = 'https://token-plan-sgp.xiaomimimo.com/v1'
-export const MIMO_ANTHROPIC_BASE_URL = 'https://token-plan-sgp.xiaomimimo.com/anthropic'
 
 export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 export const DEEPINFRA_DEFAULT_CHAT_MODEL = process.env.DEEPINFRA_DEFAULT_MODEL ?? 'meta-llama/Meta-Llama-3.1-8B-Instruct'
-export const MIMO_DEFAULT_CHAT_MODEL = process.env.MIMO_DEFAULT_MODEL ?? 'mimo-v2.5'
-export const MIMO_SUPPORTED_MODELS = [
-  'mimo-v2.5-pro',
-  'mimo-v2.5',
-  'mimo-v2.5-asr',
-  'mimo-v2.5-tts-voiceclone',
-  'mimo-v2.5-tts-voicedesign',
-  'mimo-v2.5-tts',
-] as const
 export const GROQ_STT_MODEL = 'whisper-large-v3'
 export const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english'
 // No unsafe repository fallback is set for Together image generation. Configure
