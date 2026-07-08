@@ -37,6 +37,7 @@ export async function adminProviderRoutes(app: FastifyInstance): Promise<void> {
         baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl : undefined,
         defaultModel: typeof body.defaultModel === 'string' ? body.defaultModel : undefined,
         fallbackModel: typeof body.fallbackModel === 'string' ? body.fallbackModel : undefined,
+        credentialUsagePolicy: typeof body.credentialUsagePolicy === 'string' ? body.credentialUsagePolicy : undefined,
         notes: typeof body.notes === 'string' ? body.notes : undefined,
       })
 

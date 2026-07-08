@@ -24,6 +24,7 @@ const {
   ProviderConfigError,
   clearProviderCredential,
   getProviderCredentialStatus,
+  normalizeCredentialUsagePolicy,
   resolveProviderApiKey,
   saveProviderCredential,
 } = await import('../packages/db/src/provider-credentials.ts')
@@ -41,6 +42,7 @@ function makeRow(overrides = {}) {
     baseUrl: '',
     defaultModel: '',
     fallbackModel: '',
+    credentialUsagePolicy: 'backend_runtime_allowed',
     healthStatus: 'unconfigured',
     healthMessage: '',
     lastCheckedAt: null,
@@ -206,6 +208,41 @@ describe('Provider key resolver', () => {
     expect(resolved).toEqual({ providerKey: 'groq', apiKey: 'env-groq-key', source: 'env' })
   })
 
+  it('MiMo defaults to coding tools only and blocks backend runtime resolver', async () => {
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      providerKey: 'mimo',
+      enabled: true,
+      apiKey: encryptProviderKey('mimo-secret-key'),
+      credentialUsagePolicy: '',
+    }))
+
+    await expect(resolveProviderApiKey('mimo')).rejects.toMatchObject({
+      code: 'runtime-restricted',
+      message: expect.stringContaining('coding_tools_only'),
+    })
+  })
+
+  it('MiMo backend_runtime_allowed credential can resolve for backend runtime', async () => {
+    prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
+      providerKey: 'mimo',
+      enabled: true,
+      apiKey: encryptProviderKey('mimo-secret-key'),
+      credentialUsagePolicy: 'backend_runtime_allowed',
+    }))
+
+    const resolved = await resolveProviderApiKey('mimo')
+
+    expect(resolved).toEqual({ providerKey: 'mimo', apiKey: 'mimo-secret-key', source: 'database' })
+  })
+
+  it('credential usage policy supports approved values and safe defaults', () => {
+    expect(normalizeCredentialUsagePolicy('backend_runtime_allowed', 'mimo')).toBe('backend_runtime_allowed')
+    expect(normalizeCredentialUsagePolicy('coding_tools_only', 'mimo')).toBe('coding_tools_only')
+    expect(normalizeCredentialUsagePolicy('unknown_requires_review', 'mimo')).toBe('unknown_requires_review')
+    expect(normalizeCredentialUsagePolicy('', 'mimo')).toBe('coding_tools_only')
+    expect(normalizeCredentialUsagePolicy('', 'deepinfra')).toBe('backend_runtime_allowed')
+  })
+
   it('disabled errors and status do not expose raw keys or ciphertext', async () => {
     process.env.GROQ_API_KEY = 'env-groq-key'
     const encrypted = encryptProviderKey('db-groq-key')
@@ -269,6 +306,7 @@ describe('Provider key resolver', () => {
     expect(createData.apiKey).not.toBe('gsk_test_secret_abcd')
     expect(createData.apiKey).toMatch(/^v1:/)
     expect(createData.maskedPreview).toBe('gsk_********abcd')
+    expect(createData.credentialUsagePolicy).toBe('backend_runtime_allowed')
     expect(createData.healthStatus).toBe('configured')
     expect(createData.healthStatus).not.toBe('healthy')
     expect(JSON.stringify(status)).not.toContain('gsk_test_secret_abcd')

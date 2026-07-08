@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import {
   buildProviderUpdatePayload,
+  getCredentialUsagePolicyLabel,
   getCredentialSourceLabel,
   getHealthStatusClasses,
   getHealthStatusLabel,
@@ -291,6 +292,7 @@ export function ProviderSettingsPanel() {
             const isTesting = testingProvider === provider.providerKey
             const isClearing = clearingProvider === provider.providerKey
             const isDeepInfra = provider.providerKey === 'deepinfra'
+            const isMimo = provider.providerKey === 'mimo'
 
             return (
               <div key={provider.providerKey} className="rounded-md border border-white/[0.06] bg-black/20 p-4">
@@ -302,8 +304,10 @@ export function ProviderSettingsPanel() {
                       <Badge variant="outline" className={`text-[10px] ${getHealthStatusClasses(provider.healthStatus)}`}>
                         {getHealthStatusLabel(provider.healthStatus)}
                       </Badge>
-                      {isDeepInfra && (
-                        <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-300">Approved, not runtime-proven</Badge>
+                      {(isDeepInfra || isMimo) && (
+                        <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-300">
+                          {isMimo ? getCredentialUsagePolicyLabel(provider.credentialUsagePolicy) : 'Approved runtime fallback'}
+                        </Badge>
                       )}
                     </div>
                     <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
@@ -325,7 +329,8 @@ export function ProviderSettingsPanel() {
                       </div>
                     </div>
                     {provider.healthMessage && <p className="mt-2 text-xs text-muted-foreground">{provider.healthMessage}</p>}
-                    {isDeepInfra && <p className="mt-2 text-xs text-amber-200/80">DeepInfra remains backend controlled and unproven; this page does not activate execution.</p>}
+                    {isDeepInfra && <p className="mt-2 text-xs text-amber-200/80">DeepInfra can be live-tested and used as backend-controlled text fallback, but provider health does not create new capability proof.</p>}
+                    {isMimo && <p className="mt-2 text-xs text-amber-200/80">MiMo is never used for backend runtime unless its credential policy is Backend runtime allowed and a real test passes.</p>}
                   </div>
                   <label className="flex items-center gap-2 self-start rounded-md border border-white/[0.06] px-3 py-2 text-xs">
                     <span>{draft.enabled ? 'Enabled' : 'Disabled'}</span>
@@ -375,6 +380,18 @@ export function ProviderSettingsPanel() {
                       placeholder="Internal runtime fallback, optional"
                       className="border-white/[0.08] bg-white/[0.03] text-sm"
                     />
+                  </label>
+                  <label className="space-y-1.5 text-xs">
+                    <span className="text-muted-foreground">Credential usage policy</span>
+                    <select
+                      value={draft.credentialUsagePolicy}
+                      onChange={(event) => updateDraft(provider.providerKey, { credentialUsagePolicy: event.target.value })}
+                      className="h-10 w-full rounded-md border border-white/[0.08] bg-black px-3 text-sm text-foreground"
+                    >
+                      <option value="backend_runtime_allowed">Backend runtime allowed</option>
+                      <option value="coding_tools_only">Coding tools only</option>
+                      <option value="unknown_requires_review">Requires admin review</option>
+                    </select>
                   </label>
                   <label className="space-y-1.5 text-xs lg:col-span-2">
                     <span className="text-muted-foreground">Admin notes</span>

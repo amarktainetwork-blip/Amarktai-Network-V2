@@ -33,14 +33,21 @@ describe('Phase 1 provider source of truth', () => {
   it('DeepInfra exists as an approved but unproven backend-controlled lane', () => {
     const deepinfra = PROVIDER_CONTRACTS.find((provider) => provider.id === 'deepinfra')
     expect(deepinfra).toMatchObject({
-      finalProvider: true, gated: true, gatedCapability: 'uncensored.text',
-      role: 'gated_uncensored_lane', status: 'backend_pending',
+      finalProvider: true,
+      role: 'backend_text_fallback',
+      status: 'backend_text_fallback',
+      proofStatus: 'live_testable_not_capability_proof',
     })
   })
 
-  it('MiMo exists as a final coding and reasoning provider', () => {
+  it('MiMo exists as a final coding and reasoning provider with policy restriction', () => {
     const mimo = PROVIDER_CONTRACTS.find((provider) => provider.id === 'mimo')
-    expect(mimo).toMatchObject({ finalProvider: true, role: 'coding_reasoning', status: 'backend_pending' })
+    expect(mimo).toMatchObject({
+      finalProvider: true,
+      role: 'coding_reasoning',
+      status: 'runtime_restricted_by_policy',
+      credentialUsagePolicy: 'coding_tools_only',
+    })
   })
 })
 
@@ -137,17 +144,14 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
     }
   })
 
-  it('does not add Mimo or DeepInfra runtime execution adapters', () => {
+  it('does not expose Mimo or DeepInfra as app-selected runtime adapters', () => {
     const workerRegistry = fs.readFileSync(path.join(ROOT, 'apps/worker/src/adapters/index.ts'), 'utf8')
-    const providerFiles = listFiles(path.join(ROOT, 'packages/providers/src'))
-    const adapterFiles = listFiles(path.join(ROOT, 'apps/worker/src/adapters'))
+    const executorText = fs.readFileSync(path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts'), 'utf8')
 
     expect(workerRegistry).not.toMatch(/Mimo|DeepInfra/i)
-    for (const file of [...providerFiles, ...adapterFiles]) {
-      const normalized = file.replace(/\\/g, '/').toLowerCase()
-      expect(normalized).not.toContain('mimo')
-      expect(normalized).not.toContain('deepinfra')
-    }
+    expect(executorText).toContain('executeDeepInfraTextCapability')
+    expect(executorText).not.toContain("EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {\n  mimo")
+    expect(executorText).toContain('resolveProviderApiKey')
   })
 
   it('backend foundation scripts exist', () => {

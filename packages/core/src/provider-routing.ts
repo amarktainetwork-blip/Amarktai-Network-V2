@@ -35,7 +35,7 @@ export interface ProviderRouteDecision {
 }
 
 export interface RoutingOptions {
-  /** Allow DeepInfra selection (default: false) */
+  /** Reserved for future internally gated lanes. */
   allowGated?: boolean
 }
 
@@ -48,7 +48,7 @@ const PROVIDER_CATEGORY_SUPPORT: Record<ProviderKey, string[]> = {
   groq: ['text', 'code', 'audio'],
   together: ['text', 'image', 'code', 'retrieval', 'document'],
   mimo: ['text', 'code'],
-  deepinfra: ['text', 'image'],
+  deepinfra: ['text', 'code'],
 }
 
 // ── Provider Env Var Map ───────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export function isProviderConfigured(provider: ProviderKey): boolean {
 // ── DeepInfra Gate ─────────────────────────────────────────────────────────────
 
 export function isDeepInfraGated(): boolean {
-  return true // DeepInfra is always gated by default
+  return false
 }
 
 // ── Provider Routing ──────────────────────────────────────────────────────────
@@ -88,11 +88,11 @@ export function routeProvider(
 
   // Build candidate list
   const candidates: ProviderCandidate[] = PROVIDER_KEYS.map((provider) => {
-    const isGated = provider === 'deepinfra'
+    const isGated = false
     const supportsCategory = PROVIDER_CATEGORY_SUPPORT[provider]?.includes(category) ?? false
     const configured = isProviderConfigured(provider)
 
-    // DeepInfra gating
+    // Reserved gated-lane support
     if (isGated && !allowGated) {
       return {
         provider,
@@ -155,8 +155,9 @@ export function routeProvider(
   let blockReason: string | null = null
 
   if (eligible.length > 0) {
-    // Deterministic: pick first alphabetically
-    eligible.sort((a, b) => a.provider.localeCompare(b.provider))
+    // Deterministic: preserve final provider priority. Groq remains primary
+    // for text while DeepInfra participates as a later fallback candidate.
+    eligible.sort((a, b) => PROVIDER_KEYS.indexOf(a.provider) - PROVIDER_KEYS.indexOf(b.provider))
     const best = eligible[0]
     if (best) {
       selectedProvider = best.provider

@@ -28,6 +28,8 @@ const dbMocks = vi.hoisted(() => {
 const providerMocks = vi.hoisted(() => ({
   DEFAULT_GENX_VIDEO_MODEL: 'seedance-v1-fast',
   groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
+  mimoChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
 }))
 
@@ -47,6 +49,7 @@ function makeStatus(overrides = {}) {
     baseUrl: '',
     defaultModel: 'llama-3.3-70b-versatile',
     fallbackModel: '',
+    credentialUsagePolicy: 'backend_runtime_allowed',
     healthStatus: 'configured',
     healthMessage: 'Credential stored; live health not checked.',
     lastCheckedAt: null,
@@ -92,6 +95,18 @@ describe('Admin provider credential routes', () => {
       images: [{ base64: 'aW1hZ2U=', buffer: Buffer.from('image'), width: 256, height: 256, mimeType: 'image/png' }],
       model: 'black-forest-labs/FLUX.1-schnell',
       usage: { promptTokens: 1, completionTokens: 0, totalTokens: 1 },
+    })
+    providerMocks.deepinfraChat.mockResolvedValue({
+      content: 'AMARKTAI_PROVIDER_TEST_OK',
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      finishReason: 'stop',
+    })
+    providerMocks.mimoChat.mockResolvedValue({
+      content: 'AMARKTAI_PROVIDER_TEST_OK',
+      model: 'mimo-v2.5',
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      finishReason: 'stop',
     })
   })
 
@@ -416,12 +431,17 @@ describe('Admin provider credential routes', () => {
     expect(res.body).not.toContain('genx-secret-key')
   })
 
-  it('gated provider test does not fake live', async () => {
+  it('DeepInfra test performs a live chat request and marks provider live', async () => {
     dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
       providerKey: 'deepinfra',
       apiKey: 'deepinfra-secret-key',
       source: 'database',
     })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'deepinfra',
+      displayName: 'DeepInfra',
+      defaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+    }))
     const app = await makeApp()
 
     const res = await app.inject({
@@ -431,13 +451,122 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(200)
+    expect(providerMocks.deepinfraChat).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'deepinfra-secret-key',
+      providerDefaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      maxTokens: 16,
+    }))
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'deepinfra',
-      healthStatus: 'gated',
-      healthMessage: expect.stringContaining('not implemented'),
+      healthStatus: 'live',
+      healthMessage: expect.stringContaining('capability proof still requires completed jobs'),
     }))
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
-    expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
     expect(res.body).not.toContain('deepinfra-secret-key')
+  })
+
+  it('DeepInfra invalid key marks failed with redacted error', async () => {
+    providerMocks.deepinfraChat.mockRejectedValueOnce(new Error('DeepInfra chat error 401: deepinfra-secret-key v1:ciphertext'))
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'deepinfra',
+      apiKey: 'deepinfra-secret-key',
+      source: 'database',
+    })
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'deepinfra',
+      displayName: 'DeepInfra',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/deepinfra/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const update = dbMocks.updateProviderHealthStatus.mock.calls[0][0]
+    expect(update.providerKey).toBe('deepinfra')
+    expect(update.healthStatus).toBe('failed')
+    expect(update.healthMessage).not.toContain('deepinfra-secret-key')
+    expect(update.healthMessage).not.toContain('v1:ciphertext')
+    expect(res.body).not.toContain('deepinfra-secret-key')
+  })
+
+  it('MiMo coding-tools-only policy is runtime restricted and does not call MiMo', async () => {
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'mimo',
+      displayName: 'MiMo',
+      credentialUsagePolicy: 'coding_tools_only',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/mimo/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.mimoChat).not.toHaveBeenCalled()
+    expect(dbMocks.resolveProviderApiKey).not.toHaveBeenCalled()
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'mimo',
+      healthStatus: 'runtime_restricted',
+      healthMessage: expect.stringContaining('coding/interactive tools'),
+    }))
+  })
+
+  it('MiMo unknown policy requires review and is not marked live', async () => {
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'mimo',
+      displayName: 'MiMo',
+      credentialUsagePolicy: 'unknown_requires_review',
+    }))
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/mimo/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.mimoChat).not.toHaveBeenCalled()
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'mimo',
+      healthStatus: 'requires_review',
+    }))
+  })
+
+  it('MiMo backend_runtime_allowed policy can run a real live test', async () => {
+    dbMocks.getProviderCredentialStatus.mockResolvedValueOnce(makeStatus({
+      providerKey: 'mimo',
+      displayName: 'MiMo',
+      credentialUsagePolicy: 'backend_runtime_allowed',
+      defaultModel: 'mimo-v2.5',
+    }))
+    dbMocks.resolveProviderApiKey.mockResolvedValueOnce({
+      providerKey: 'mimo',
+      apiKey: 'mimo-secret-key',
+      source: 'database',
+    })
+    const app = await makeApp()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/providers/mimo/test',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(providerMocks.mimoChat).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'mimo-secret-key',
+      providerDefaultModel: 'mimo-v2.5',
+    }))
+    expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
+      providerKey: 'mimo',
+      healthStatus: 'live',
+    }))
+    expect(res.body).not.toContain('mimo-secret-key')
   })
 })

@@ -5,6 +5,7 @@ import {
   FINAL_PROVIDER_IDS,
   buildProviderUpdatePayload,
   getCredentialSourceLabel,
+  getCredentialUsagePolicyLabel,
   getHealthStatusLabel,
   makeProviderDraft,
   normalizeProviderStatuses,
@@ -28,6 +29,7 @@ function provider(overrides = {}) {
     baseUrl: '',
     defaultModel: 'llama-3.3-70b-versatile',
     fallbackModel: '',
+    credentialUsagePolicy: 'backend_runtime_allowed',
     healthStatus: 'configured',
     healthMessage: 'Credential stored; live health not checked.',
     lastCheckedAt: null,
@@ -63,7 +65,19 @@ describe('Dashboard provider settings UI contract', () => {
     expect(getHealthStatusLabel('configured')).toBe('Configured')
     expect(getHealthStatusLabel('failed')).toBe('Failed')
     expect(getHealthStatusLabel('gated')).toBe('Gated')
+    expect(getHealthStatusLabel('runtime_restricted')).toBe('Runtime restricted')
+    expect(getHealthStatusLabel('requires_review')).toBe('Requires review')
     expect(panelSource).not.toContain('Connected')
+  })
+
+  it('shows credential usage policy separately from provider health', () => {
+    expect(getCredentialUsagePolicyLabel('backend_runtime_allowed')).toBe('Backend runtime allowed')
+    expect(getCredentialUsagePolicyLabel('coding_tools_only')).toBe('Coding tools only')
+    expect(getCredentialUsagePolicyLabel('unknown_requires_review')).toBe('Requires admin review')
+    expect(panelSource).toContain('Credential usage policy')
+    expect(panelSource).toContain('Backend runtime allowed')
+    expect(panelSource).toContain('Coding tools only')
+    expect(panelSource).toContain('Requires admin review')
   })
 
   it('sanitizes raw key and ciphertext fields before UI state', () => {
@@ -95,6 +109,7 @@ describe('Dashboard provider settings UI contract', () => {
       baseUrl: 'https://api.groq.com/openai/v1',
       defaultModel: 'llama-3.3-70b-versatile',
       fallbackModel: '',
+      credentialUsagePolicy: 'backend_runtime_allowed',
       notes: 'admin metadata',
     })
 
@@ -115,6 +130,7 @@ describe('Dashboard provider settings UI contract', () => {
       baseUrl: '',
       defaultModel: 'llama-3.3-70b-versatile',
       fallbackModel: '',
+      credentialUsagePolicy: 'backend_runtime_allowed',
       notes: 'metadata only',
     })
 
@@ -153,9 +169,10 @@ describe('Dashboard provider settings UI contract', () => {
     expect(panelSource).toContain('data.errorMessage')
   })
 
-  it('keeps DeepInfra unproven and does not activate execution in UI copy', () => {
-    expect(panelSource).toContain('DeepInfra remains backend controlled and unproven')
-    expect(panelSource).toContain('does not activate execution')
+  it('shows DeepInfra fallback truth and MiMo runtime restriction copy', () => {
+    expect(panelSource).toContain('DeepInfra can be live-tested and used as backend-controlled text fallback')
+    expect(panelSource).toContain('provider health does not create new capability proof')
+    expect(panelSource).toContain('MiMo is never used for backend runtime unless its credential policy is Backend runtime allowed')
   })
 
   it('does not expose provider or model selection to Studio or apps', () => {

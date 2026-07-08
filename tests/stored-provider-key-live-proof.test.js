@@ -154,11 +154,13 @@ describe('Stored-key live proof contract', () => {
     expect(result.error).toContain('not implemented')
   })
 
-  it('DeepInfra remains gated', async () => {
+  it('DeepInfra is approved as text fallback but does not create proof by routing alone', async () => {
     const { routeProvider } = await import('@amarktai/core')
     const decision = routeProvider('chat')
     const deepinfra = decision.candidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfra?.gated).toBe(true)
+    expect(deepinfra?.supported).toBe(true)
+    expect(deepinfra?.gated).toBe(false)
+    expect(decision.executionAllowed).toBe(false)
   })
 })
 

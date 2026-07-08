@@ -10,6 +10,7 @@ export {
   listProviderCredentialStatuses,
   saveProviderCredential,
   clearProviderCredential,
+  normalizeCredentialUsagePolicy,
   updateProviderHealthStatus,
   type ProviderCredentialSource,
   type ProviderCredentialStatus,

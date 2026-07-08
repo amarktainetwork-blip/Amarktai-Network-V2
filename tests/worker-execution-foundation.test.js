@@ -26,6 +26,7 @@ const credentialMocks = vi.hoisted(() => {
   }
   return {
     ProviderConfigError,
+    getProviderCredentialStatus: vi.fn(),
     resolveProviderApiKey: vi.fn(async (providerKey) => {
       throw new ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
     }),
@@ -35,6 +36,7 @@ const credentialMocks = vi.hoisted(() => {
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: credentialMocks.ProviderConfigError,
+  getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
 }))
 

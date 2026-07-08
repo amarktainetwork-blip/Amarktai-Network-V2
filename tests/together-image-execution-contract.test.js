@@ -391,11 +391,12 @@ describe('Execution routing gate', () => {
     expect(result.error).toContain("not implemented for 'image_edit'")
   })
 
-  it('DeepInfra remains gated', () => {
+  it('DeepInfra is not an image_generation runtime candidate', () => {
     const decision = routeProvider('image_generation')
     const deepinfra = decision.candidates.find((candidate) => candidate.provider === 'deepinfra')
 
-    expect(deepinfra?.gated).toBe(true)
+    expect(deepinfra?.supported).toBe(false)
+    expect(deepinfra?.gated).toBe(false)
   })
 
   it('provider/model user override is ignored by the executor', async () => {

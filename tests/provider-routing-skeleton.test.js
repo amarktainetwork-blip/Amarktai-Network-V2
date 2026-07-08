@@ -26,6 +26,7 @@ const credentialMocks = vi.hoisted(() => {
   }
   return {
     ProviderConfigError,
+    getProviderCredentialStatus: vi.fn(),
     resolveProviderApiKey: vi.fn(async (providerKey) => {
       throw new ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
     }),
@@ -35,6 +36,7 @@ const credentialMocks = vi.hoisted(() => {
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: credentialMocks.ProviderConfigError,
+  getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
 }))
 
@@ -123,9 +125,9 @@ describe('Provider identity', () => {
     }
   })
 
-  it('DeepInfra exists but is gated by default', () => {
+  it('DeepInfra exists as an approved backend text fallback candidate', () => {
     expect(PROVIDER_KEYS).toContain('deepinfra')
-    expect(isDeepInfraGated()).toBe(true)
+    expect(isDeepInfraGated()).toBe(false)
   })
 })
 
@@ -218,28 +220,43 @@ describe('Capability routing', () => {
 
 // ── DeepInfra gating tests ───────────────────────────────────────────────────
 
-describe('DeepInfra gating', () => {
-  it('DeepInfra is not selected by default', () => {
+describe('DeepInfra routing', () => {
+  const originalEnv = process.env
+
+  beforeEach(() => {
+    process.env = { ...originalEnv }
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('DeepInfra is not selected before configured primary text providers', () => {
+    process.env.GROQ_API_KEY = 'test-key'
+    process.env.DEEPINFRA_API_KEY = 'test-key'
     const decision = routeProvider('chat')
     expect(decision.selectedProvider).not.toBe('deepinfra')
   })
 
-  it('DeepInfra can only be selected when explicit internal gate is true', () => {
-    const decisionWithoutGate = routeProvider('chat')
-    expect(decisionWithoutGate.selectedProvider).not.toBe('deepinfra')
+  it('DeepInfra is a supported text candidate without being capability proof', () => {
+    process.env.DEEPINFRA_API_KEY = 'test-key'
+    delete process.env.GROQ_API_KEY
+    delete process.env.TOGETHER_API_KEY
+    delete process.env.MIMO_API_KEY
 
-    const decisionWithGate = routeProvider('chat', { allowGated: true })
-    // DeepInfra might be selected if configured and no other provider available
-    // But since we're testing without env vars, it won't be selected
-    // The key test is that the gate flag changes behavior
-    const deepinfraCandidate = decisionWithGate.candidates.find(
+    const decision = routeProvider('chat')
+    const deepinfraCandidate = decision.candidates.find(
       (c) => c.provider === 'deepinfra'
     )
-    expect(deepinfraCandidate?.gated).toBe(true)
+    expect(deepinfraCandidate).toMatchObject({
+      supported: true,
+      gated: false,
+      configured: true,
+    })
   })
 
-  it('DeepInfra gate does not enable live calls', () => {
-    const decision = routeProvider('chat', { allowGated: true })
+  it('routing still does not enable live calls', () => {
+    const decision = routeProvider('chat')
     expect(decision.executionAllowed).toBe(false)
   })
 })
