@@ -60,7 +60,6 @@ export interface GenXPricingResult {
 }
 
 const GENX_MODEL_CATEGORIES = ['', 'video', 'image', 'avatar', 'audio', 'voice', 'multimodal']
-const MEDIA_CATEGORY_SET = new Set(['video', 'image', 'audio', 'voice', 'multimodal'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
