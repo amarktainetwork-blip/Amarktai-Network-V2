@@ -5,7 +5,7 @@ const { adminRuntimeProofRoutes } = await import('../apps/api/src/routes/admin-r
 const { getRuntimeProofStatus } = await import('../apps/api/src/lib/runtime-proof-status.ts')
 
 const APPROVED_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-const PROVEN_CAPABILITIES = ['chat', 'image_generation', 'video_generation']
+const PROVEN_CAPABILITIES = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation']
 const DISALLOWED_PROVIDERS = [
   'openai',
   'anthropic',
@@ -82,20 +82,36 @@ describe('Admin runtime proof status route', () => {
     expect(body.providers).toEqual(APPROVED_PROVIDERS)
     expect(body.provenCapabilities.map((item) => item.capability)).toEqual(PROVEN_CAPABILITIES)
     expect(body.summary).toEqual({
-      provenCount: 3,
+      provenCount: 10,
       providerCount: 5,
       lastUpdatedFrom: 'runtime-proof-code',
       source: 'backend-runtime-proof-status',
     })
   })
 
-  it('marks only the three live-proven backend capability paths ready', () => {
+  it('marks only the live-proven backend capability paths ready', () => {
     const payload = getRuntimeProofStatus()
     const chat = byCapability(payload.provenCapabilities, 'chat')
+    const reasoning = byCapability(payload.provenCapabilities, 'reasoning')
+    const code = byCapability(payload.provenCapabilities, 'code')
     const image = byCapability(payload.provenCapabilities, 'image_generation')
     const video = byCapability(payload.provenCapabilities, 'video_generation')
 
     expect(chat).toMatchObject({
+      status: 'proven',
+      provider: 'groq',
+      artifactRequired: false,
+      proofLevel: 'live_external_app_job',
+      readyForDashboardExecution: true,
+    })
+    expect(reasoning).toMatchObject({
+      status: 'proven',
+      provider: 'groq',
+      artifactRequired: false,
+      proofLevel: 'live_external_app_job',
+      readyForDashboardExecution: true,
+    })
+    expect(code).toMatchObject({
       status: 'proven',
       provider: 'groq',
       artifactRequired: false,

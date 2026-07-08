@@ -11,7 +11,7 @@ import {
 
 const ROOT = process.cwd()
 const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-const PROVEN_CAPABILITIES = ['chat', 'image_generation', 'video_generation']
+const PROVEN_CAPABILITIES = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation']
 const BANNED_PROVIDER_NAMES = [
   'OpenAI',
   'Anthropic',
@@ -47,10 +47,10 @@ describe('Dashboard runtime proof status UI contract', () => {
     expect(normalized.provenCapabilities.map((item) => item.capability)).toEqual(PROVEN_CAPABILITIES)
     expect(normalized.summary).toMatchObject({
       providerCount: 5,
-      provenCount: 3,
+      provenCount: 10,
       source: 'backend-runtime-proof-status',
     })
-    expect(normalized.unprovenCapabilities).toHaveLength(31)
+    expect(normalized.unprovenCapabilities).toHaveLength(24)
   })
 
   it('marks only backend-proven capabilities dashboard-ready', () => {
