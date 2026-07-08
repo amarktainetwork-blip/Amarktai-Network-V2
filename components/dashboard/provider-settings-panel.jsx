@@ -320,6 +320,10 @@ export function ProviderSettingsPanel() {
                         {provider.configured ? 'Yes' : 'No'}
                       </div>
                       <div>
+                        <span className="text-foreground/70">Runtime enabled: </span>
+                        {provider.runtimeEnabled ? 'Yes' : 'No'}
+                      </div>
+                      <div>
                         <span className="text-foreground/70">Masked preview: </span>
                         <span className="font-mono">{provider.maskedPreview || 'None'}</span>
                       </div>
@@ -330,7 +334,7 @@ export function ProviderSettingsPanel() {
                     </div>
                     {provider.healthMessage && <p className="mt-2 text-xs text-muted-foreground">{provider.healthMessage}</p>}
                     {isDeepInfra && <p className="mt-2 text-xs text-amber-200/80">DeepInfra can be live-tested and used as backend-controlled text fallback, but provider health does not create new capability proof.</p>}
-                    {isMimo && <p className="mt-2 text-xs text-amber-200/80">MiMo is never used for backend runtime unless its credential policy is Backend runtime allowed and a real test passes.</p>}
+                    {isMimo && <p className="mt-2 text-xs text-amber-200/80">MiMo backend runtime is disabled. Current credentials are treated as interactive coding tools only, and Test Key does not call MiMo externally.</p>}
                   </div>
                   <label className="flex items-center gap-2 self-start rounded-md border border-white/[0.06] px-3 py-2 text-xs">
                     <span>{draft.enabled ? 'Enabled' : 'Disabled'}</span>

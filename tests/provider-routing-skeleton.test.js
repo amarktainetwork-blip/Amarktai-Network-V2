@@ -158,9 +158,10 @@ describe('Capability routing', () => {
       (c) => c.supported && !c.gated
     )
     expect(textProviders.length).toBeGreaterThan(0)
-    // groq, together, mimo all support text category
+    // groq, together, and deepinfra support text category; MiMo is approved but runtime-disabled
     const providerNames = textProviders.map((c) => c.provider)
     expect(providerNames).toContain('groq')
+    expect(providerNames).not.toContain('mimo')
   })
 
   it('code capability routes to eligible text/code provider', () => {
@@ -169,7 +170,7 @@ describe('Capability routing', () => {
     expect(supported.length).toBeGreaterThan(0)
     const names = supported.map((c) => c.provider)
     expect(names).toContain('groq')
-    expect(names).toContain('mimo')
+    expect(names).not.toContain('mimo')
   })
 
   it('image capability routes only if canonical capability exists', () => {
@@ -253,6 +254,20 @@ describe('DeepInfra routing', () => {
       gated: false,
       configured: true,
     })
+  })
+
+  it('MiMo remains approved but is not runtime eligible even when configured', () => {
+    process.env.MIMO_API_KEY = 'mimo-test-key'
+    const decision = routeProvider('code')
+    const mimo = decision.candidates.find((candidate) => candidate.provider === 'mimo')
+
+    expect(PROVIDER_KEYS).toContain('mimo')
+    expect(mimo).toMatchObject({
+      supported: false,
+      gated: false,
+      configured: true,
+    })
+    expect(getProviderCategorySupport('mimo')).toEqual([])
   })
 
   it('routing still does not enable live calls', () => {

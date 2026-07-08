@@ -25,13 +25,9 @@ export {
   type DeepInfraChatResponse,
 } from './deepinfra-client.js'
 
-// MiMo — OpenAI-compatible text client, gated by credential usage policy
-export {
-  mimoChat,
-  resolveMimoChatModel,
-  type MimoChatRequest,
-  type MimoChatResponse,
-} from './mimo-client.js'
+// MiMo remains approved but backend runtime is disabled. Do not export a
+// callable MiMo provider client until a backend/application-allowed credential
+// and runtime policy are approved.
 
 // Together AI — image generation
 export {

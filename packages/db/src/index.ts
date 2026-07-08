@@ -5,6 +5,7 @@
 export { prisma } from './client.js'
 export {
   ProviderConfigError,
+  MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE,
   resolveProviderApiKey,
   getProviderCredentialStatus,
   listProviderCredentialStatuses,

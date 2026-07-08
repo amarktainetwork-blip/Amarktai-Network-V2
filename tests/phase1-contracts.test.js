@@ -45,7 +45,7 @@ describe('Phase 1 provider source of truth', () => {
     expect(mimo).toMatchObject({
       finalProvider: true,
       role: 'coding_reasoning',
-      status: 'runtime_restricted_by_policy',
+      status: 'runtime_disabled',
       credentialUsagePolicy: 'coding_tools_only',
     })
   })

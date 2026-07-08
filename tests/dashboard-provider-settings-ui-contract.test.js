@@ -98,6 +98,7 @@ describe('Dashboard provider settings UI contract', () => {
 
     expect(draft.apiKey).toBe('')
     expect(panelSource).toContain('Masked preview')
+    expect(panelSource).toContain('Runtime enabled')
     expect(panelSource).toContain('value={draft.apiKey}')
     expect(panelSource).not.toContain('value={provider.maskedPreview}')
   })
@@ -172,7 +173,8 @@ describe('Dashboard provider settings UI contract', () => {
   it('shows DeepInfra fallback truth and MiMo runtime restriction copy', () => {
     expect(panelSource).toContain('DeepInfra can be live-tested and used as backend-controlled text fallback')
     expect(panelSource).toContain('provider health does not create new capability proof')
-    expect(panelSource).toContain('MiMo is never used for backend runtime unless its credential policy is Backend runtime allowed')
+    expect(panelSource).toContain('MiMo backend runtime is disabled')
+    expect(panelSource).toContain('Test Key does not call MiMo externally')
   })
 
   it('does not expose provider or model selection to Studio or apps', () => {
