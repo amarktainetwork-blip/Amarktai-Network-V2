@@ -25,6 +25,7 @@ const BANNED_PROVIDER_NAMES = [
 
 const dashboardTruthFiles = [
   'lib/runtime-proof-status.js',
+  'lib/capability-display-catalog.js',
   'components/dashboard/runtime-proof-summary.jsx',
   'app/dashboard/command-center/page.js',
   'app/dashboard/capabilities/page.js',
@@ -49,7 +50,7 @@ describe('Dashboard runtime proof status UI contract', () => {
       provenCount: 3,
       source: 'backend-runtime-proof-status',
     })
-    expect(normalized.unprovenCapabilities).toHaveLength(16)
+    expect(normalized.unprovenCapabilities).toHaveLength(31)
   })
 
   it('marks only backend-proven capabilities dashboard-ready', () => {

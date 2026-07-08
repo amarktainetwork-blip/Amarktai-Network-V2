@@ -6,11 +6,11 @@ import { NAV } from '@/lib/appdata'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, FlaskConical, Plug, Palette, Boxes, Settings, Zap, ArrowLeft, Menu, X, LogOut,
-  Activity, Cpu, Bot,
+  Activity, Cpu, Bot, Package, GitPullRequest,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-const ICONS = { LayoutDashboard, FlaskConical, Plug, Palette, Boxes, Settings, Activity, Cpu, Bot }
+const ICONS = { LayoutDashboard, FlaskConical, Plug, Palette, Boxes, Settings, Activity, Cpu, Bot, Package, GitPullRequest }
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname()
