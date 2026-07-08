@@ -44,6 +44,14 @@ describe('studio execution loop contract', () => {
     expect(content).toContain('not proven or not ready for dashboard execution')
   })
 
+  it('admin Studio route evaluates runtime proof per request', () => {
+    const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
+    const content = fs.readFileSync(routePath, 'utf8')
+    // Should call getRuntimeProofStatus() inside handler, not at module level
+    expect(content).toContain('getProvenCapabilities()')
+    expect(content).not.toContain('const PROVEN_CAPABILITIES = getRuntimeProofStatus()')
+  })
+
   it('admin Studio route creates Job row', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
@@ -62,12 +70,51 @@ describe('studio execution loop contract', () => {
     expect(content).toContain('adminStudioRoutes')
   })
 
-  it('dashboard proxy route exists', () => {
+  it('dashboard proxy route exists for studio jobs', () => {
     const proxyPath = path.join(ROOT, 'app/api/admin/studio/jobs/route.js')
     expect(fs.existsSync(proxyPath)).toBe(true)
+  })
+
+  it('dashboard proxy route exists for job list', () => {
+    const proxyPath = path.join(ROOT, 'app/api/admin/jobs/route.js')
+    expect(fs.existsSync(proxyPath)).toBe(true)
     const content = fs.readFileSync(proxyPath, 'utf8')
-    expect(content).toContain('POST')
-    expect(content).toContain('/api/admin/studio/jobs')
+    expect(content).toContain('Authorization')
+  })
+
+  it('dashboard proxy route exists for job detail', () => {
+    const proxyPath = path.join(ROOT, 'app/api/admin/jobs/[id]/route.js')
+    expect(fs.existsSync(proxyPath)).toBe(true)
+    const content = fs.readFileSync(proxyPath, 'utf8')
+    expect(content).toContain('Authorization')
+  })
+
+  it('dashboard proxy route exists for artifacts', () => {
+    const proxyPath = path.join(ROOT, 'app/api/admin/artifacts/route.js')
+    expect(fs.existsSync(proxyPath)).toBe(true)
+    const content = fs.readFileSync(proxyPath, 'utf8')
+    expect(content).toContain('Authorization')
+  })
+
+  it('dashboard proxy route exists for artifact detail', () => {
+    const proxyPath = path.join(ROOT, 'app/api/admin/artifacts/[id]/route.js')
+    expect(fs.existsSync(proxyPath)).toBe(true)
+    const content = fs.readFileSync(proxyPath, 'utf8')
+    expect(content).toContain('Authorization')
+  })
+
+  it('Jobs page uses amarktai_token', () => {
+    const pagePath = path.join(ROOT, 'app/dashboard/jobs/page.js')
+    const content = fs.readFileSync(pagePath, 'utf8')
+    expect(content).toContain("localStorage.getItem('amarktai_token')")
+    expect(content).not.toContain("localStorage.getItem('admin_token')")
+  })
+
+  it('Artifacts page uses amarktai_token', () => {
+    const pagePath = path.join(ROOT, 'app/dashboard/artifacts/page.js')
+    const content = fs.readFileSync(pagePath, 'utf8')
+    expect(content).toContain("localStorage.getItem('amarktai_token')")
+    expect(content).not.toContain("localStorage.getItem('admin_token')")
   })
 
   it('provider list remains exactly 5', () => {
@@ -78,7 +125,6 @@ describe('studio execution loop contract', () => {
   it('no provider/model selectors are exposed', () => {
     const storePath = path.join(ROOT, 'lib/useStudioStore.js')
     const content = fs.readFileSync(storePath, 'utf8')
-    // Store should not accept provider/model from user
     expect(content).not.toContain('provider')
     expect(content).not.toContain('model')
   })

@@ -22,7 +22,10 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/jobs?limit=50')
+    const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
+    fetch('/api/admin/jobs?limit=50', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then((r) => r.json())
       .then((data) => setJobs(data?.jobs ?? []))
       .catch(() => {})

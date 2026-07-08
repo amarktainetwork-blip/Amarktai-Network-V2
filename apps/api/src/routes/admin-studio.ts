@@ -23,10 +23,12 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
   }
 }
 
-const PROVEN_CAPABILITIES = getRuntimeProofStatus()
-  .provenCapabilities
-  .filter((c) => c.readyForDashboardExecution)
-  .map((c) => c.capability)
+function getProvenCapabilities(): string[] {
+  return getRuntimeProofStatus()
+    .provenCapabilities
+    .filter((c) => c.readyForDashboardExecution)
+    .map((c) => c.capability)
+}
 
 export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
   // Lazily create queue
@@ -54,8 +56,9 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: true, message: 'Provider/model override not allowed. Runtime selects provider/model.' })
     }
 
-    // Check capability is proven
-    if (!(PROVEN_CAPABILITIES as string[]).includes(capability)) {
+    // Evaluate runtime proof per request
+    const provenCapabilities = getProvenCapabilities()
+    if (!provenCapabilities.includes(capability)) {
       return reply.status(400).send({ error: true, message: `Capability "${capability}" is not proven or not ready for dashboard execution` })
     }
 
