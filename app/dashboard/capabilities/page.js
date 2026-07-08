@@ -1,7 +1,7 @@
 'use client'
 
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
-import { RuntimeProofSummary, useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
+import { RuntimeProofSummary, useRuntimeProofStatus, getAdminToken } from '@/components/dashboard/runtime-proof-summary'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import {
   runtimeProofStatusClasses,
   runtimeProofStatusLabel,
 } from '@/lib/runtime-proof-status'
+import { useEffect, useState } from 'react'
 import { Bot, Database, FileText, Globe, Image as ImageIcon, MessageSquare, Mic, Music, Settings, ShieldAlert, Sparkles, User, Video, Zap } from 'lucide-react'
 
 const ICONS = {
@@ -30,6 +31,18 @@ const ICONS = {
 export default function CapabilitiesPage() {
   const { status } = useRuntimeProofStatus()
   const groups = groupedCapabilities()
+  const [capabilityGroups, setCapabilityGroups] = useState([])
+
+  useEffect(() => {
+    const token = getAdminToken()
+    if (!token) return
+    fetch('/api/admin/capability-groups', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setCapabilityGroups(data?.capabilities ?? []))
+      .catch(() => {})
+  }, [])
+
+  const getGroupSummary = (capabilityKey) => capabilityGroups.find((g) => g.capabilityKey === capabilityKey)
 
   return (
     <PageTransition className="space-y-6">
@@ -51,6 +64,7 @@ export default function CapabilitiesPage() {
                 {group.items.map((item) => {
                   const proof = getRuntimeCapabilityProof(status, item.key)
                   const ready = proof.readyForDashboardExecution === true
+                  const summary = getGroupSummary(item.key)
 
                   return (
                     <div
@@ -70,9 +84,14 @@ export default function CapabilitiesPage() {
                         <Badge variant="outline" className="border-white/10 text-[9px]">{item.outputType}</Badge>
                         {item.artifactRequired && <Badge variant="outline" className="border-cyan-500/30 text-[9px] text-cyan-300">Artifact</Badge>}
                         {item.policyRequirement !== 'standard' && <Badge variant="outline" className="border-amber-500/30 text-[9px] text-amber-300">{item.policyRequirement}</Badge>}
+                        {summary && summary.totalModels > 0 && (
+                          <Badge variant="outline" className="border-violet-500/30 text-[9px] text-violet-300">
+                            {summary.totalModels} models · {Object.keys(summary.modelsByProvider).length} providers
+                          </Badge>
+                        )}
                       </div>
                       <p className="mt-2 text-[9px] text-muted-foreground">
-                        {ready ? `Runtime proven through ${proof.provider}` : 'Disabled until backend proof passes'}
+                        {ready ? `Runtime proven through ${proof.provider}` : summary ? `${summary.executableModels} executable models available` : 'Disabled until backend proof passes'}
                       </p>
                     </div>
                   )
