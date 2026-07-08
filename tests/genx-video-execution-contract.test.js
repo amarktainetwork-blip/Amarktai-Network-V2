@@ -1,0 +1,207 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const credentialMocks = vi.hoisted(() => {
+  class ProviderConfigError extends Error {
+    constructor(message, providerKey = 'genx', code = 'missing-config') {
+      super(message)
+      this.providerKey = providerKey
+      this.code = code
+    }
+  }
+
+  return {
+    ProviderConfigError,
+    resolveProviderApiKey: vi.fn(),
+    getProviderCredentialStatus: vi.fn(),
+  }
+})
+
+const providerMocks = vi.hoisted(() => ({
+  groqChat: vi.fn(),
+  togetherGenerateImage: vi.fn(),
+  genxGenerateVideo: vi.fn(),
+  resolveGenxVideoModel: vi.fn((request = {}) => {
+    const available = request.providerAvailableModels ?? []
+    if (request.model?.trim()) return request.model.trim()
+    if (request.providerDefaultModel?.trim() && available.includes(request.providerDefaultModel.trim())) {
+      return request.providerDefaultModel.trim()
+    }
+    return available.find((model) => !model.toLowerCase().includes('avatar')) ?? request.providerDefaultModel ?? 'seedance-v1-fast'
+  }),
+}))
+
+const artifactMocks = vi.hoisted(() => ({
+  saveArtifact: vi.fn(),
+}))
+
+vi.mock('@amarktai/db', () => ({
+  ProviderConfigError: credentialMocks.ProviderConfigError,
+  getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
+  resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+}))
+
+vi.mock('@amarktai/providers', () => providerMocks)
+vi.mock('@amarktai/artifacts', () => artifactMocks)
+
+import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
+import { PROVIDER_KEYS } from '../packages/core/src/index.ts'
+
+const ORIGINAL_ENV = process.env
+
+function makePayload(overrides = {}) {
+  return {
+    jobId: 'job-genx-video-001',
+    appSlug: 'runtime-proof-genx-video',
+    capability: 'video_generation',
+    prompt: 'A simple red ball bouncing gently on a white background',
+    input: { duration: 4, aspectRatio: '16:9' },
+    metadata: {},
+    traceId: 'trace-genx-video-001',
+    ...overrides,
+  }
+}
+
+function mockGenxProviderStatus(overrides = {}) {
+  credentialMocks.getProviderCredentialStatus.mockResolvedValue({
+    providerKey: 'genx',
+    displayName: 'GenX',
+    enabled: true,
+    configured: true,
+    source: 'database',
+    maskedPreview: 'genx_********test',
+    baseUrl: 'https://query.genx.sh',
+    defaultModel: 'seedance-v1-fast',
+    fallbackModel: '',
+    healthStatus: 'live',
+    healthMessage: 'GenX key validated against Router models endpoint. Video completion proof still required. Models seen: grok-imagine-video, kling-avatar-v2-pro, kling-v2.5-turbo.',
+    lastCheckedAt: null,
+    sortOrder: 1,
+    notes: '',
+    ...overrides,
+  })
+}
+
+describe('GenX video executor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env = {
+      ...ORIGINAL_ENV,
+      GENX_API_KEY: 'genx-test-key',
+      GROQ_API_KEY: 'groq-test-key',
+      TOGETHER_API_KEY: 'together-test-key',
+    }
+    credentialMocks.resolveProviderApiKey.mockResolvedValue({
+      providerKey: 'genx',
+      apiKey: 'genx-secret-key',
+      source: 'database',
+    })
+    mockGenxProviderStatus()
+    providerMocks.genxGenerateVideo.mockResolvedValue({
+      videoBuffer: Buffer.from('video-bytes'),
+      mimeType: 'video/mp4',
+      duration: 4,
+      width: 1280,
+      height: 720,
+      model: 'grok-imagine-video',
+      providerJobId: 'genx-provider-job-001',
+      metadata: {
+        providerJobId: 'genx-provider-job-001',
+        selectedModel: 'grok-imagine-video',
+      },
+    })
+    artifactMocks.saveArtifact.mockResolvedValue({
+      id: 'artifact-video-001',
+      storagePath: 'artifacts/runtime-proof-genx-video/video/proof.mp4',
+      storageUrl: '/api/v1/artifacts/artifact-video-001/file',
+      mimeType: 'video/mp4',
+      fileSizeBytes: 11,
+    })
+  })
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV
+  })
+
+  it('uses discovered Router models instead of an unsupported stale default', async () => {
+    const result = await executeWithProvider(makePayload({
+      provider: 'together',
+      model: 'user-supplied-model',
+      input: {
+        duration: 4,
+        aspectRatio: '16:9',
+        provider: 'together',
+        model: 'user-supplied-model',
+      },
+    }))
+
+    expect(result.success).toBe(true)
+    expect(result.provider).toBe('genx')
+    expect(result.model).toBe('grok-imagine-video')
+    expect(providerMocks.resolveGenxVideoModel).toHaveBeenCalledWith({
+      providerDefaultModel: 'seedance-v1-fast',
+      providerFallbackModel: '',
+      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
+    })
+    expect(providerMocks.genxGenerateVideo).toHaveBeenCalledWith(expect.objectContaining({
+      providerDefaultModel: 'seedance-v1-fast',
+      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
+    }))
+    expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBeUndefined()
+  })
+
+  it('saves a video artifact and returns provider job metadata in output', async () => {
+    const result = await executeWithProvider(makePayload())
+
+    expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({
+        type: 'video',
+        subType: 'video_generation',
+        provider: 'genx',
+        model: 'grok-imagine-video',
+        metadata: expect.objectContaining({
+          providerJobId: 'genx-provider-job-001',
+          model: 'grok-imagine-video',
+          duration: 4,
+        }),
+      }),
+      data: Buffer.from('video-bytes'),
+      explicitMimeType: 'video/mp4',
+    }))
+
+    const output = JSON.parse(result.output)
+    expect(output).toMatchObject({
+      artifactId: 'artifact-video-001',
+      artifactUrl: '/api/v1/artifacts/artifact-video-001/file',
+      mimeType: 'video/mp4',
+      fileSizeBytes: 11,
+      width: 1280,
+      height: 720,
+      duration: 4,
+      providerJobId: 'genx-provider-job-001',
+      selectedModel: 'grok-imagine-video',
+    })
+  })
+
+  it('returns safe GenX failure diagnostics without leaking the API key', async () => {
+    providerMocks.genxGenerateVideo.mockRejectedValueOnce(
+      new Error('GenX poll failed for providerJobId=job-remote; model=grok-imagine-video; pollAttempt=41; httpStatus=500; body=Internal Server Error genx-secret-key'),
+    )
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(false)
+    expect(result.provider).toBe('genx')
+    expect(result.model).toBe('grok-imagine-video')
+    expect(result.error).toContain('provider=genx')
+    expect(result.error).toContain('selectedModel=grok-imagine-video')
+    expect(result.error).toContain('providerJobId=job-remote')
+    expect(result.error).toContain('pollAttempt=41')
+    expect(result.error).toContain('httpStatus=500')
+    expect(result.error).toContain('[redacted]')
+    expect(result.error).not.toContain('genx-secret-key')
+  })
+
+  it('keeps the approved provider set unchanged', () => {
+    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+  })
+})

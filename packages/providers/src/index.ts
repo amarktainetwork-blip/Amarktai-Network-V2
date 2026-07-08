@@ -28,6 +28,7 @@ export {
 // GenX — video generation with long-polling
 export {
   DEFAULT_GENX_VIDEO_MODEL,
+  GENX_ROUTER_VIDEO_MODEL_PREFERENCE,
   genxSubmitVideo,
   genxPollVideo,
   genxDownloadVideo,
@@ -35,6 +36,8 @@ export {
   resolveGenxVideoModel,
   GENX_POLL_INTERVAL_MS,
   GENX_POLL_MAX_ATTEMPTS,
+  GENX_POLL_TRANSIENT_MAX_RETRIES,
+  GenxHttpError,
   type GenxVideoRequest,
   type GenxVideoSubmitResponse,
   type GenxVideoPollResponse,
