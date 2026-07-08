@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { resolveProviderApiKey, getProviderCredentialStatus } from '@amarktai/db'
-import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels } from '../lib/model-registry.js'
+import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels, updateGenXPricingMetadata } from '../lib/model-registry.js'
 import { getAllCapabilityGroupSummaries, getCapabilityGroupSummary } from '../lib/capability-groups.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
@@ -136,7 +136,8 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
         return reply.send({ success: false, error: result.error, source: result.source })
       }
 
-      return reply.send({ success: true, pricing: result.pricing, source: result.source })
+      const update = await updateGenXPricingMetadata(result)
+      return reply.send({ success: true, pricing: result.pricing, source: result.source, update })
     } catch (err) {
       return reply.status(400).send({ error: true, message: err instanceof Error ? err.message : 'GenX not configured' })
     }
@@ -166,6 +167,10 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
         modelOwner: m.modelOwner,
         pricingSource: m.pricingSource,
         pricingConfidence: m.pricingConfidence,
+        pricingUnit: m.pricingUnit,
+        pricingCurrency: m.pricingCurrency,
+        pricingBlocker: m.pricingBlocker,
+        lastPricingSyncedAt: m.lastPricingSyncedAt,
         notes: m.notes,
       })),
       total: models.length,
@@ -197,7 +202,7 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
   // Video budget planner
   app.post('/api/admin/video-planner', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const plan = planVideoBudget(request.body as Record<string, unknown>)
+    const plan = await planVideoBudget(request.body as Record<string, unknown>)
     return reply.send(plan)
   })
 

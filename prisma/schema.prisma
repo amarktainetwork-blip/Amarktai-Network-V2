@@ -467,6 +467,11 @@ model ModelRegistryEntry {
   lastSyncedAt         DateTime? @map("last_synced_at")
   pricingSource        String @default("unknown") @map("pricing_source") // provider_api | admin_manual | unknown
   pricingConfidence    String @default("unknown") @map("pricing_confidence") // known | estimated | unknown
+  pricingUnit          String @default("") @map("pricing_unit")
+  pricingCurrency      String @default("") @map("pricing_currency")
+  pricingRawMetadata   String @default("{}") @map("pricing_raw_metadata") // JSON
+  lastPricingSyncedAt  DateTime? @map("last_pricing_synced_at")
+  pricingBlocker       String @default("") @map("pricing_blocker")
 
   // Metadata
   estimatedUnitCost Float?  @map("estimated_unit_cost")

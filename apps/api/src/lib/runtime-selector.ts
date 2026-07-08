@@ -8,6 +8,9 @@ export interface RuntimeCandidate {
   qualityTier: string
   latencyTier: string
   estimatedCost: number | null
+  pricingSource: string
+  pricingConfidence: string
+  pricingBlocker: string
   score: number
   reason: string
 }
@@ -28,9 +31,10 @@ export async function selectRuntimeModel(
     maxCostCents?: number
     budgetProfile?: string
     excludeProviders?: string[]
+    allowUnknownCostPremium?: boolean
   },
 ): Promise<RuntimeSelection> {
-  const { qualityTier = 'standard', maxCostCents, excludeProviders = [] } = options || {}
+  const { qualityTier = 'standard', maxCostCents, excludeProviders = [], allowUnknownCostPremium = false } = options || {}
 
   // Map capability to model support field
   const capabilityFieldMap: Record<string, string> = {
@@ -62,6 +66,10 @@ export async function selectRuntimeModel(
       proofStatus: 'unsupported',
     }
   }
+
+  const isMediaCapability = ['image_generation', 'image_edit', 'video_generation', 'text_to_speech', 'speech_to_text'].includes(capability)
+  const isStandardAutoSelection = qualityTier === 'standard' || qualityTier === 'draft'
+  const isPremiumAutoSelection = qualityTier === 'premium' || qualityTier === 'hero'
 
   // Get all enabled models
   const allModels = await prisma.modelRegistryEntry.findMany({
@@ -118,6 +126,20 @@ export async function selectRuntimeModel(
       continue
     }
 
+    const pricingKnown = model.estimatedUnitCost !== null
+      && (model.pricingSource === 'provider_api' || model.pricingSource === 'admin_manual')
+      && (model.pricingConfidence === 'known' || model.pricingConfidence === 'admin_manual')
+
+    if (isMediaCapability && !pricingKnown && isStandardAutoSelection) {
+      rejected.push({ provider: model.provider, model: model.modelId, reason: 'unknown_pricing_blocks_standard_auto_selection' })
+      continue
+    }
+
+    if (isMediaCapability && !pricingKnown && isPremiumAutoSelection && !allowUnknownCostPremium) {
+      rejected.push({ provider: model.provider, model: model.modelId, reason: 'unknown_pricing_requires_admin_approval' })
+      continue
+    }
+
     // Check cost cap
     if (maxCostCents && model.estimatedUnitCost && model.estimatedUnitCost * 100 > maxCostCents) {
       rejected.push({ provider: model.provider, model: model.modelId, reason: 'exceeds_cost_cap' })
@@ -156,6 +178,9 @@ export async function selectRuntimeModel(
       qualityTier: model.costTier,
       latencyTier: model.latencyTier,
       estimatedCost: model.estimatedUnitCost,
+      pricingSource: model.pricingSource,
+      pricingConfidence: model.pricingConfidence,
+      pricingBlocker: model.pricingBlocker,
       score,
       reason: health.healthStatus === 'live' ? 'live_proven' : 'configured',
     })

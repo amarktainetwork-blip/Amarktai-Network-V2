@@ -1,12 +1,25 @@
 import { prisma } from '@amarktai/db'
+import { getRuntimeProofStatus } from './runtime-proof-status.js'
 
 export interface CapabilityGroupSummary {
   capabilityKey: string
   label: string
   category: string
   totalModels: number
+  totalAvailableModels: number
   modelsByProvider: Record<string, number>
   modelsByTier: Record<string, number>
+  liveDiscoveredCount: number
+  providerCatalogCount: number
+  curatedFallbackCount: number
+  pricingKnownCount: number
+  pricingUnknownCount: number
+  standardEligibleCount: number
+  premiumEligibleCount: number
+  blockedUnknownPricingCount: number
+  executorAdapterImplementedCount: number
+  liveJobProvenCount: number
+  dashboardReadyCount: number
   executableModels: number
   provenModels: number
   dashboardReadyModels: number
@@ -16,6 +29,8 @@ export interface CapabilityGroupSummary {
   providerHealthBlockers: string[]
   missingExecutorBlockers: string[]
 }
+
+const MEDIA_CAPABILITIES = new Set(['image_generation', 'image_edit', 'video_generation', 'text_to_speech', 'speech_to_text'])
 
 const CAPABILITY_LABELS: Record<string, { label: string; category: string }> = {
   chat: { label: 'Chat', category: 'text' },
@@ -72,10 +87,35 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
 
   const modelsByProvider: Record<string, number> = {}
   const modelsByTier: Record<string, number> = {}
+  let liveDiscoveredCount = 0
+  let providerCatalogCount = 0
+  let curatedFallbackCount = 0
+  let pricingKnownCount = 0
+  let pricingUnknownCount = 0
+  let standardEligibleCount = 0
+  let premiumEligibleCount = 0
+  let blockedUnknownPricingCount = 0
 
   for (const m of eligible) {
     modelsByProvider[m.provider] = (modelsByProvider[m.provider] || 0) + 1
     modelsByTier[m.costTier] = (modelsByTier[m.costTier] || 0) + 1
+    if (m.isLiveDiscovered) liveDiscoveredCount++
+    if (m.source === 'provider_api' || m.source === 'provider_docs_catalog') providerCatalogCount++
+    if (m.source === 'curated_seed' || m.source === 'curated_provider_catalog') curatedFallbackCount++
+
+    const pricingKnown = m.estimatedUnitCost !== null
+      && (m.pricingSource === 'provider_api' || m.pricingSource === 'admin_manual')
+      && (m.pricingConfidence === 'known' || m.pricingConfidence === 'admin_manual')
+    if (pricingKnown) pricingKnownCount++
+    else pricingUnknownCount++
+
+    if (m.provider !== 'mimo' && pricingKnown) {
+      if (m.costTier !== 'premium' && m.costTier !== 'high') standardEligibleCount++
+      premiumEligibleCount++
+    }
+    if (m.provider !== 'mimo' && MEDIA_CAPABILITIES.has(capabilityKey) && !pricingKnown) {
+      blockedUnknownPricingCount++
+    }
   }
 
   const costs = eligible
@@ -101,16 +141,40 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
     if (provider === 'mimo') missingExecutorBlockers.push('mimo: coding_tool_only, not normal runtime')
   }
 
+  if (blockedUnknownPricingCount > 0) {
+    missingExecutorBlockers.push(`${capabilityKey}: ${blockedUnknownPricingCount} media model(s) blocked by unknown pricing`)
+  }
+
+  const runtimeProof = getRuntimeProofStatus()
+  const proof = runtimeProof.provenCapabilities.find((item) => item.capability === capabilityKey)
+  const isLiveJobProven = proof?.status === 'proven'
+  const isDashboardReady = proof?.readyForDashboardExecution === true
+  const executorAdapterImplementedCount = isLiveJobProven ? eligible.filter((m) => m.provider !== 'mimo').length : 0
+  const liveJobProvenCount = isLiveJobProven ? eligible.filter((m) => m.provider !== 'mimo').length : 0
+  const dashboardReadyCount = isDashboardReady ? liveJobProvenCount : 0
+
   return {
     capabilityKey,
     label: meta.label,
     category: meta.category,
     totalModels: eligible.length,
+    totalAvailableModels: eligible.length,
     modelsByProvider,
     modelsByTier,
+    liveDiscoveredCount,
+    providerCatalogCount,
+    curatedFallbackCount,
+    pricingKnownCount,
+    pricingUnknownCount,
+    standardEligibleCount,
+    premiumEligibleCount,
+    blockedUnknownPricingCount,
+    executorAdapterImplementedCount,
+    liveJobProvenCount,
+    dashboardReadyCount,
     executableModels: eligible.filter((m) => m.provider !== 'mimo').length,
-    provenModels: 0, // populated by runtime proof separately
-    dashboardReadyModels: 0, // populated by runtime proof separately
+    provenModels: liveJobProvenCount,
+    dashboardReadyModels: dashboardReadyCount,
     cheapestEstimatedCost: costs[0] || null,
     standardEstimatedCost: costs[Math.floor(costs.length * 0.25)] || null,
     premiumEstimatedCost: costs[Math.floor(costs.length * 0.75)] || null,

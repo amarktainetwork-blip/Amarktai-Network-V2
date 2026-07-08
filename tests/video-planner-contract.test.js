@@ -1,42 +1,120 @@
-import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { getBudgetProfiles, planVideoBudget } from '../apps/api/src/lib/video-planner.ts'
 
-// Inline planner logic for testing
-const BUDGET_PROFILES = {
-  draft: { targetCostCents: 20, hardCapCents: 50, allowPremium: false, allowHero: false },
-  standard: { targetCostCents: 100, hardCapCents: 120, allowPremium: false, allowHero: false },
-  premium: { targetCostCents: 400, hardCapCents: 500, allowPremium: true, allowHero: true },
-  custom: { targetCostCents: 200, hardCapCents: 300, allowPremium: true, allowHero: false },
+const ROOT = process.cwd()
+
+function candidate(overrides = {}) {
+  return {
+    provider: 'together',
+    model: 'catalog-selected-model',
+    displayName: 'Catalog Selected Model',
+    costTier: 'low',
+    qualityTier: 'standard',
+    latencyTier: 'medium',
+    estimatedCost: 12,
+    pricingSource: 'provider_api',
+    pricingConfidence: 'known',
+    pricingBlocker: '',
+    score: 80,
+    reason: 'configured',
+    ...overrides,
+  }
 }
 
 describe('video budget planner contract', () => {
-  it('budget profiles exist for draft/standard/premium/custom', () => {
-    expect(BUDGET_PROFILES.draft).toBeTruthy()
-    expect(BUDGET_PROFILES.standard).toBeTruthy()
-    expect(BUDGET_PROFILES.premium).toBeTruthy()
-    expect(BUDGET_PROFILES.custom).toBeTruthy()
+  it('budget profiles exist without claiming exact production prices', () => {
+    const profiles = getBudgetProfiles()
+    expect(profiles.draft).toBeTruthy()
+    expect(profiles.standard).toBeTruthy()
+    expect(profiles.premium).toBeTruthy()
+    expect(profiles.custom).toBeTruthy()
   })
 
-  it('draft profile targets lowest cost', () => {
-    expect(BUDGET_PROFILES.draft.targetCostCents).toBeLessThan(BUDGET_PROFILES.standard.targetCostCents)
-    expect(BUDGET_PROFILES.draft.hardCapCents).toBeLessThan(BUDGET_PROFILES.standard.hardCapCents)
+  it('does not keep hardcoded fake pricing constants or production model choices', () => {
+    const source = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/video-planner.ts'), 'utf8')
+    for (const banned of [
+      'VIDEO_COST_PER_SECOND',
+      'IMAGE_COST',
+      'TEXT_COST_PER_1M_TOKENS',
+      'wan-ai/Wan2.1-T2V-14B',
+      'grok-imagine-video',
+      'music-gen',
+      'playai-tts',
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+    ]) {
+      expect(source).not.toContain(banned)
+    }
   })
 
-  it('standard 120-second video has target around $1', () => {
-    expect(BUDGET_PROFILES.standard.targetCostCents).toBe(100) // $1.00
-    expect(BUDGET_PROFILES.standard.hardCapCents).toBe(120) // $1.20
+  it('blocks standard video when required media pricing is unknown', async () => {
+    const plan = await planVideoBudget({
+      qualityTier: 'standard',
+      targetDurationSeconds: 120,
+      selectedCandidates: {
+        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        style_frames: candidate({ provider: 'together', model: 'catalog-image', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', pricingBlocker: 'pricing_unknown' }),
+        main_clips: candidate({ provider: 'genx', model: 'catalog-video', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', pricingBlocker: 'genx_pricing_missing_for_model' }),
+      },
+    })
+
+    expect(plan.estimatedCostCents).toBeNull()
+    expect(plan.usdEstimateConfidence).toBe('unknown')
+    expect(plan.selectedStrategy).toBe('blocked_pending_pricing')
+    expect(plan.blockedReason).toContain('Pricing is unknown')
+    expect(plan.blockedReason).toContain('style_frames')
+    expect(plan.blockedReason).toContain('main_clips')
+    expect(plan.requiresApproval).toBe(false)
   })
 
-  it('premium 120-second video has target around $4', () => {
-    expect(BUDGET_PROFILES.premium.targetCostCents).toBe(400) // $4.00
-    expect(BUDGET_PROFILES.premium.hardCapCents).toBe(500) // $5.00
+  it('premium unknown-cost media requires admin approval/manual pricing', async () => {
+    const plan = await planVideoBudget({
+      qualityTier: 'premium',
+      targetDurationSeconds: 120,
+      heroShotCount: 1,
+      selectedCandidates: {
+        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        style_frames: candidate({ provider: 'together', model: 'catalog-image', estimatedCost: 2 }),
+        main_clips: candidate({ provider: 'genx', model: 'catalog-video', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown' }),
+        hero_shots: candidate({ provider: 'genx', model: 'catalog-hero', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown' }),
+      },
+    })
+
+    expect(plan.estimatedCostCents).toBeNull()
+    expect(plan.usdEstimateConfidence).toBe('unknown')
+    expect(plan.requiresApproval).toBe(true)
+    expect(plan.blockedReason).toContain('Admin approval or manual pricing is required')
   })
 
-  it('premium allows hero shots', () => {
-    expect(BUDGET_PROFILES.premium.allowHero).toBe(true)
-    expect(BUDGET_PROFILES.standard.allowHero).toBe(false)
-  })
+  it('uses selected candidates from the runtime selector/catalog and totals only known USD pricing', async () => {
+    const plan = await planVideoBudget({
+      qualityTier: 'standard',
+      selectedCandidates: {
+        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        style_frames: candidate({ provider: 'together', model: 'catalog-style-frame', estimatedCost: 3 }),
+        main_clips: candidate({ provider: 'genx', model: 'catalog-main-video', estimatedCost: 75 }),
+      },
+    })
 
-  it('draft does not allow premium', () => {
-    expect(BUDGET_PROFILES.draft.allowPremium).toBe(false)
+    expect(plan.estimatedCostCents).toBe(80)
+    expect(plan.usdEstimateConfidence).toBe('known')
+    expect(plan.blockedReason).toBeNull()
+    expect(plan.plannedSteps.find((step) => step.stepKey === 'main_clips')).toMatchObject({
+      provider: 'genx',
+      model: 'catalog-main-video',
+      pricingSource: 'provider_api',
+      selectedCandidate: expect.objectContaining({ model: 'catalog-main-video' }),
+    })
+    expect(plan.plannedSteps.find((step) => step.stepKey === 'assembly')).toMatchObject({
+      provider: 'local',
+      model: 'ffmpeg',
+      estimatedCostCents: 0,
+      pricingSource: 'local_free_tool',
+    })
   })
 })

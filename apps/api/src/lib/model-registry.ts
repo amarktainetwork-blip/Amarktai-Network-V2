@@ -1,5 +1,5 @@
 import { prisma } from '@amarktai/db'
-import type { DiscoveryResult } from './provider-discovery.js'
+import type { DiscoveryResult, GenXPricingResult } from './provider-discovery.js'
 
 export interface ModelCatalogEntry {
   provider: string
@@ -19,6 +19,13 @@ export interface ModelCatalogEntry {
   isLiveDiscovered: boolean
   modelOwner: string
   notes: string
+  pricingSource?: string
+  pricingConfidence?: string
+  pricingUnit?: string
+  pricingCurrency?: string
+  pricingRawMetadata?: Record<string, unknown>
+  lastPricingSyncedAt?: string | null
+  pricingBlocker?: string
 }
 
 // Curated seed catalog — source = curated_seed, catalogCompleteness = curated_fallback_only
@@ -36,6 +43,13 @@ export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = [
     contextWindow: 128000,
     capabilities: { supportsCode: true, supportsToolUse: true },
     estimatedUnitCost: 0.00001,
+    pricingSource: 'unknown',
+    pricingConfidence: 'unknown',
+    pricingUnit: '',
+    pricingCurrency: '',
+    pricingRawMetadata: {},
+    lastPricingSyncedAt: null,
+    pricingBlocker: 'coding_tool_only_not_backend_runtime',
     qualityTier: 'premium',
     source: 'curated_seed',
     catalogCompleteness: 'curated_fallback_only',
@@ -74,6 +88,11 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<{
       lastSyncedAt: new Date(model.lastSyncedAt),
       pricingSource: model.pricingSource,
       pricingConfidence: model.pricingConfidence,
+      pricingUnit: model.pricingUnit,
+      pricingCurrency: model.pricingCurrency,
+      pricingRawMetadata: JSON.stringify(model.pricingRawMetadata),
+      lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
+      pricingBlocker: model.pricingBlocker,
       notes: model.notes,
       ...model.capabilities,
     }
@@ -117,6 +136,13 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           latencyTier: model.latencyTier,
           contextWindow: model.contextWindow,
           estimatedUnitCost: model.estimatedUnitCost,
+          pricingSource: model.pricingSource ?? 'unknown',
+          pricingConfidence: model.pricingConfidence ?? 'unknown',
+          pricingUnit: model.pricingUnit ?? '',
+          pricingCurrency: model.pricingCurrency ?? '',
+          pricingRawMetadata: JSON.stringify(model.pricingRawMetadata ?? {}),
+          lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
+          pricingBlocker: model.pricingBlocker ?? 'pricing_unknown',
           source: model.source,
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
@@ -139,6 +165,13 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           latencyTier: model.latencyTier,
           contextWindow: model.contextWindow,
           estimatedUnitCost: model.estimatedUnitCost,
+          pricingSource: model.pricingSource ?? 'unknown',
+          pricingConfidence: model.pricingConfidence ?? 'unknown',
+          pricingUnit: model.pricingUnit ?? '',
+          pricingCurrency: model.pricingCurrency ?? '',
+          pricingRawMetadata: JSON.stringify(model.pricingRawMetadata ?? {}),
+          lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
+          pricingBlocker: model.pricingBlocker ?? 'pricing_unknown',
           source: model.source,
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
@@ -152,6 +185,56 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
   }
 
   return { created, updated }
+}
+
+export async function updateGenXPricingMetadata(result: GenXPricingResult): Promise<{
+  updated: number
+  missingPricingCount: number
+  source: string
+  syncedAt: string
+}> {
+  const genxModels = await prisma.modelRegistryEntry.findMany({ where: { provider: 'genx' } })
+  let updated = 0
+  let missingPricingCount = 0
+
+  for (const model of genxModels) {
+    const pricing = result.pricing[model.modelId]
+    if (!pricing) {
+      missingPricingCount++
+      await prisma.modelRegistryEntry.update({
+        where: { id: model.id },
+        data: {
+          pricingSource: 'unknown',
+          pricingConfidence: 'unknown',
+          pricingUnit: '',
+          pricingCurrency: '',
+          pricingRawMetadata: '{}',
+          lastPricingSyncedAt: new Date(result.syncedAt),
+          pricingBlocker: 'genx_pricing_missing_for_model',
+          estimatedUnitCost: null,
+        },
+      })
+      updated++
+      continue
+    }
+
+    await prisma.modelRegistryEntry.update({
+      where: { id: model.id },
+      data: {
+        pricingSource: pricing.pricingSource,
+        pricingConfidence: pricing.pricingConfidence,
+        pricingUnit: pricing.unit,
+        pricingCurrency: pricing.currency,
+        pricingRawMetadata: JSON.stringify(pricing.rawMetadata),
+        lastPricingSyncedAt: new Date(result.syncedAt),
+        pricingBlocker: pricing.pricingBlocker,
+        estimatedUnitCost: pricing.usdEstimateCents,
+      },
+    })
+    updated++
+  }
+
+  return { updated, missingPricingCount, source: result.source, syncedAt: result.syncedAt }
 }
 
 export async function getModelCatalog(options?: {

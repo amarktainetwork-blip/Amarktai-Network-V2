@@ -1,8 +1,11 @@
+import { selectRuntimeModel, type RuntimeCandidate } from './runtime-selector.js'
+
 export interface BudgetPlan {
   profile: string
   targetDurationSeconds: number
   qualityTier: string
-  estimatedCostCents: number
+  estimatedCostCents: number | null
+  usdEstimateConfidence: 'known' | 'unknown'
   targetCostCents: number
   hardCapCents: number
   selectedStrategy: string
@@ -20,22 +23,39 @@ export interface PlannedStep {
   capability: string
   provider: string
   model: string
-  estimatedCostCents: number
+  selectedCandidate: RuntimeCandidate | null
+  pricingSource: string
+  usdEstimateConfidence: 'known' | 'unknown'
+  estimatedCostCents: number | null
   qualityTier: string
   notes: string
+  blockedReason: string | null
 }
 
 export interface CostBreakdown {
-  scriptPlanning: number
-  promptGeneration: number
-  styleFrames: number
-  mainVideoClips: number
-  heroShots: number
-  tts: number
-  music: number
-  captions: number
+  scriptPlanning: number | null
+  promptGeneration: number | null
+  styleFrames: number | null
+  mainVideoClips: number | null
+  heroShots: number | null
+  tts: number | null
+  music: number | null
+  captions: number | null
   ffmpegAssembly: number
-  total: number
+  total: number | null
+}
+
+interface PlannerInput {
+  targetDurationSeconds?: number
+  qualityTier?: string
+  outputFormat?: string
+  needsNarration?: boolean
+  needsMusic?: boolean
+  needsCaptions?: boolean
+  heroShotCount?: number
+  budgetCapCents?: number
+  allowPremiumUnknownPricing?: boolean
+  selectedCandidates?: Partial<Record<string, RuntimeCandidate | null>>
 }
 
 const BUDGET_PROFILES = {
@@ -81,111 +101,147 @@ const BUDGET_PROFILES = {
   },
 }
 
-// Cost estimates per second of video by tier (cents)
-const VIDEO_COST_PER_SECOND: Record<string, number> = {
-  draft: 0.1,
-  standard: 0.5,
-  premium: 2.5,
-  hero: 5.0,
-}
+type CandidateRole = 'script' | 'prompts' | 'style_frames' | 'main_clips' | 'hero_shots' | 'tts' | 'music' | 'captions'
 
-// Cost estimates per image by tier (cents)
-const IMAGE_COST: Record<string, number> = {
-  draft: 0,
-  standard: 0.3,
-  premium: 2.5,
-}
-
-// Cost estimates per 1M tokens (cents)
-const TEXT_COST_PER_1M_TOKENS: Record<string, number> = {
-  draft: 0.05,
-  standard: 0.1,
-  premium: 0.6,
-}
-
-export function planVideoBudget(input: {
-  targetDurationSeconds?: number
-  qualityTier?: string
-  outputFormat?: string
-  needsNarration?: boolean
-  needsMusic?: boolean
-  needsCaptions?: boolean
-  heroShotCount?: number
-  budgetCapCents?: number
-}): BudgetPlan {
-  const {
-    targetDurationSeconds = 120,
-    qualityTier = 'standard',
-    needsNarration = false,
-    needsMusic = false,
-    needsCaptions = false,
-    heroShotCount = 0,
-    budgetCapCents,
-  } = input
-
-  const profile = BUDGET_PROFILES[qualityTier as keyof typeof BUDGET_PROFILES] || BUDGET_PROFILES.standard
-  const hardCap = budgetCapCents || profile.hardCapCents
-
-  // Calculate cost breakdown
-  const scriptPlanning = Math.ceil(targetDurationSeconds * 0.01 * (TEXT_COST_PER_1M_TOKENS.standard ?? 0.1) * 100)
-  const promptGeneration = Math.ceil(targetDurationSeconds * 0.005 * (TEXT_COST_PER_1M_TOKENS.standard ?? 0.1) * 100)
-  const styleFrames = Math.ceil(3 * (IMAGE_COST.standard ?? 0.3))
-  const mainVideoSeconds = targetDurationSeconds - (heroShotCount * 5)
-  const mainVideoClips = Math.ceil(mainVideoSeconds * (VIDEO_COST_PER_SECOND.standard ?? 0.5))
-  const heroShots = heroShotCount > 0 && profile.allowHero
-    ? Math.ceil(heroShotCount * 5 * (VIDEO_COST_PER_SECOND.premium ?? 2.5))
-    : 0
-  const tts = needsNarration ? Math.ceil(targetDurationSeconds * 0.05) : 0
-  const music = needsMusic ? 5 : 0
-  const captions = needsCaptions ? 2 : 0
-  const ffmpegAssembly = 0 // local, free
-
-  const total = scriptPlanning + promptGeneration + styleFrames + mainVideoClips + heroShots + tts + music + captions + ffmpegAssembly
-
-  const costBreakdown: CostBreakdown = {
-    scriptPlanning,
-    promptGeneration,
-    styleFrames,
-    mainVideoClips,
-    heroShots,
-    tts,
-    music,
-    captions,
-    ffmpegAssembly,
-    total,
+async function candidateFor(input: PlannerInput, role: CandidateRole, capability: string, qualityTier: string): Promise<RuntimeCandidate | null> {
+  if (Object.prototype.hasOwnProperty.call(input.selectedCandidates ?? {}, role)) {
+    return input.selectedCandidates?.[role] ?? null
   }
 
-  // Check if over budget
+  const result = await selectRuntimeModel(capability, {
+    qualityTier,
+    allowUnknownCostPremium: input.allowPremiumUnknownPricing === true,
+  })
+  return result.selected
+}
+
+function knownCost(candidate: RuntimeCandidate | null): number | null {
+  if (!candidate) return null
+  const confidenceKnown = candidate.pricingConfidence === 'known' || candidate.pricingConfidence === 'admin_manual'
+  const sourceKnown = candidate.pricingSource === 'provider_api' || candidate.pricingSource === 'admin_manual'
+  if (!sourceKnown || !confidenceKnown || candidate.estimatedCost === null) return null
+  return Math.ceil(candidate.estimatedCost)
+}
+
+function makeStep(input: {
+  stepKey: CandidateRole | 'assembly'
+  role: string
+  capability: string
+  candidate: RuntimeCandidate | null
+  estimatedCostCents: number | null
+  qualityTier: string
+  notes: string
+  localFree?: boolean
+}): PlannedStep {
+  if (input.localFree) {
+    return {
+      stepKey: input.stepKey,
+      role: input.role,
+      capability: input.capability,
+      provider: 'local',
+      model: 'ffmpeg',
+      selectedCandidate: null,
+      pricingSource: 'local_free_tool',
+      usdEstimateConfidence: 'known',
+      estimatedCostCents: 0,
+      qualityTier: input.qualityTier,
+      notes: input.notes,
+      blockedReason: null,
+    }
+  }
+
+  const pricingKnown = input.estimatedCostCents !== null
+  return {
+    stepKey: input.stepKey,
+    role: input.role,
+    capability: input.capability,
+    provider: input.candidate?.provider ?? '',
+    model: input.candidate?.model ?? '',
+    selectedCandidate: input.candidate,
+    pricingSource: input.candidate?.pricingSource ?? 'unknown',
+    usdEstimateConfidence: pricingKnown ? 'known' : 'unknown',
+    estimatedCostCents: input.estimatedCostCents,
+    qualityTier: input.qualityTier,
+    notes: input.notes,
+    blockedReason: pricingKnown ? null : 'pricing_unknown',
+  }
+}
+
+export async function planVideoBudget(rawInput: PlannerInput = {}): Promise<BudgetPlan> {
+  const qualityTier = rawInput.qualityTier ?? 'standard'
+  const profile = BUDGET_PROFILES[qualityTier as keyof typeof BUDGET_PROFILES] || BUDGET_PROFILES.standard
+  const targetDurationSeconds = rawInput.targetDurationSeconds ?? profile.defaultDurationSeconds
+  const needsNarration = rawInput.needsNarration === true
+  const needsMusic = rawInput.needsMusic === true
+  const needsCaptions = rawInput.needsCaptions === true
+  const heroShotCount = rawInput.heroShotCount ?? 0
+  const hardCapCents = rawInput.budgetCapCents ?? profile.hardCapCents
+
+  const script = await candidateFor(rawInput, 'script', 'structured_output', 'standard')
+  const prompts = await candidateFor(rawInput, 'prompts', 'structured_output', 'draft')
+  const styleFrames = await candidateFor(rawInput, 'style_frames', 'image_generation', 'standard')
+  const mainClips = await candidateFor(rawInput, 'main_clips', 'video_generation', qualityTier)
+  const heroShots = heroShotCount > 0 && profile.allowHero
+    ? await candidateFor(rawInput, 'hero_shots', 'video_generation', 'premium')
+    : null
+  const narration = needsNarration ? await candidateFor(rawInput, 'tts', 'text_to_speech', 'standard') : null
+  const music = needsMusic ? await candidateFor(rawInput, 'music', 'music_generation', 'standard') : null
+  const captions = needsCaptions ? await candidateFor(rawInput, 'captions', 'structured_output', 'draft') : null
+
+  const steps: PlannedStep[] = [
+    makeStep({ stepKey: 'script', role: 'planner', capability: 'structured_output', candidate: script, estimatedCostCents: knownCost(script), qualityTier: 'standard', notes: 'Script and shot plan selected from runtime catalog.' }),
+    makeStep({ stepKey: 'prompts', role: 'prompt_writer', capability: 'structured_output', candidate: prompts, estimatedCostCents: knownCost(prompts), qualityTier: 'draft', notes: 'Prompt generation selected from runtime catalog.' }),
+    makeStep({ stepKey: 'style_frames', role: 'style_frame', capability: 'image_generation', candidate: styleFrames, estimatedCostCents: knownCost(styleFrames), qualityTier: 'standard', notes: 'Reference style frames require priced catalog image candidate.' }),
+    makeStep({ stepKey: 'main_clips', role: 'main_clip', capability: 'video_generation', candidate: mainClips, estimatedCostCents: knownCost(mainClips), qualityTier, notes: `${targetDurationSeconds}s main video requires priced catalog video candidate.` }),
+  ]
+
+  if (heroShotCount > 0) {
+    steps.push(makeStep({ stepKey: 'hero_shots', role: 'hero_clip', capability: 'video_generation', candidate: heroShots, estimatedCostCents: knownCost(heroShots), qualityTier: 'premium', notes: `${heroShotCount} premium hero shot(s) require admin-approved priced candidate.` }))
+  }
+  if (needsNarration) {
+    steps.push(makeStep({ stepKey: 'tts', role: 'narration', capability: 'text_to_speech', candidate: narration, estimatedCostCents: knownCost(narration), qualityTier: 'standard', notes: 'Narration requires priced catalog TTS candidate.' }))
+  }
+  if (needsMusic) {
+    steps.push(makeStep({ stepKey: 'music', role: 'music', capability: 'music_generation', candidate: music, estimatedCostCents: knownCost(music), qualityTier: 'standard', notes: 'Music generation is pending priced eligible catalog support.' }))
+  }
+  if (needsCaptions) {
+    steps.push(makeStep({ stepKey: 'captions', role: 'captions', capability: 'structured_output', candidate: captions, estimatedCostCents: knownCost(captions), qualityTier: 'draft', notes: 'Captions selected from runtime catalog.' }))
+  }
+
+  steps.push(makeStep({ stepKey: 'assembly', role: 'assembly', capability: 'system_ops', candidate: null, estimatedCostCents: 0, qualityTier: 'standard', notes: 'Local FFmpeg assembly.', localFree: true }))
+
+  const breakdown: CostBreakdown = {
+    scriptPlanning: steps.find((step) => step.stepKey === 'script')?.estimatedCostCents ?? null,
+    promptGeneration: steps.find((step) => step.stepKey === 'prompts')?.estimatedCostCents ?? null,
+    styleFrames: steps.find((step) => step.stepKey === 'style_frames')?.estimatedCostCents ?? null,
+    mainVideoClips: steps.find((step) => step.stepKey === 'main_clips')?.estimatedCostCents ?? null,
+    heroShots: steps.find((step) => step.stepKey === 'hero_shots')?.estimatedCostCents ?? (heroShotCount > 0 ? null : 0),
+    tts: steps.find((step) => step.stepKey === 'tts')?.estimatedCostCents ?? (needsNarration ? null : 0),
+    music: steps.find((step) => step.stepKey === 'music')?.estimatedCostCents ?? (needsMusic ? null : 0),
+    captions: steps.find((step) => step.stepKey === 'captions')?.estimatedCostCents ?? (needsCaptions ? null : 0),
+    ffmpegAssembly: 0,
+    total: null,
+  }
+
+  const paidSteps = steps.filter((step) => step.stepKey !== 'assembly')
+  const unknownSteps = paidSteps.filter((step) => step.estimatedCostCents === null)
+  const knownTotal = steps.reduce((sum, step) => sum + (step.estimatedCostCents ?? 0), 0)
+  const estimatedCostCents = unknownSteps.length ? null : knownTotal
+  breakdown.total = estimatedCostCents
+
   let blockedReason: string | null = null
   let requiresApproval = false
 
-  if (total > hardCap) {
-    // Try downgrading
-    if (qualityTier === 'premium') {
-      // Downgrade main clips to standard
-      const downgradedMain = Math.ceil(mainVideoSeconds * (VIDEO_COST_PER_SECOND.standard ?? 0.5))
-      const downgradedTotal = scriptPlanning + promptGeneration + styleFrames + downgradedMain + heroShots + tts + music + captions
+  if (unknownSteps.length > 0) {
+    blockedReason = `Pricing is unknown for required step(s): ${unknownSteps.map((step) => step.stepKey).join(', ')}. Standard automatic selection is blocked until provider API or admin manual USD pricing exists.`
+    requiresApproval = qualityTier === 'premium' || qualityTier === 'hero'
+  } else if (estimatedCostCents !== null && estimatedCostCents > hardCapCents) {
+    blockedReason = `Catalog-backed estimate ${estimatedCostCents} cents exceeds hard cap ${hardCapCents} cents.`
+    requiresApproval = true
+  }
 
-      if (downgradedTotal <= hardCap) {
-        return {
-          profile: qualityTier,
-          targetDurationSeconds,
-          qualityTier,
-          estimatedCostCents: downgradedTotal,
-          targetCostCents: profile.targetCostCents,
-          hardCapCents: hardCap,
-          selectedStrategy: 'downgraded_main_clips_to_standard',
-          plannedSteps: buildSteps('standard', heroShotCount, needsNarration, needsMusic, needsCaptions, targetDurationSeconds),
-          fallbackPlan: 'Use standard video for main clips, premium only for hero shots',
-          downgradeOptions: ['Reduce hero shots', 'Use draft for previews', 'Shorten duration'],
-          costBreakdown: { ...costBreakdown, mainVideoClips: downgradedMain, total: downgradedTotal },
-          blockedReason: null,
-          requiresApproval: false,
-        }
-      }
-    }
-
-    blockedReason = `Estimated cost ${total}¢ exceeds hard cap ${hardCap}¢`
+  if ((qualityTier === 'premium' || qualityTier === 'hero') && unknownSteps.length > 0) {
+    blockedReason = `Premium video includes unknown-cost step(s): ${unknownSteps.map((step) => step.stepKey).join(', ')}. Admin approval or manual pricing is required before selection.`
     requiresApproval = true
   }
 
@@ -193,62 +249,18 @@ export function planVideoBudget(input: {
     profile: qualityTier,
     targetDurationSeconds,
     qualityTier,
-    estimatedCostCents: total,
+    estimatedCostCents,
+    usdEstimateConfidence: estimatedCostCents === null ? 'unknown' : 'known',
     targetCostCents: profile.targetCostCents,
-    hardCapCents: hardCap,
-    selectedStrategy: total <= profile.targetCostCents ? 'within_target' : 'over_target_under_cap',
-    plannedSteps: buildSteps(qualityTier, heroShotCount, needsNarration, needsMusic, needsCaptions, targetDurationSeconds),
-    fallbackPlan: profile.allowPremium ? 'Can downgrade main clips to standard' : 'Already at standard tier',
-    downgradeOptions: ['Reduce hero shots', 'Use draft for previews', 'Shorten duration', 'Remove music'],
-    costBreakdown,
+    hardCapCents,
+    selectedStrategy: blockedReason ? 'blocked_pending_pricing' : estimatedCostCents !== null && estimatedCostCents <= profile.targetCostCents ? 'within_target_catalog_priced' : 'over_target_catalog_priced',
+    plannedSteps: steps,
+    fallbackPlan: 'Use only catalog-priced provider candidates; local FFmpeg remains zero-cost assembly.',
+    downgradeOptions: ['Add admin manual USD pricing', 'Use a priced lower-cost catalog model', 'Shorten duration', 'Remove optional media steps'],
+    costBreakdown: breakdown,
     blockedReason,
     requiresApproval,
   }
-}
-
-function buildSteps(
-  qualityTier: string,
-  heroShotCount: number,
-  needsNarration: boolean,
-  needsMusic: boolean,
-  needsCaptions: boolean,
-  duration: number,
-): PlannedStep[] {
-  const steps: PlannedStep[] = [
-    { stepKey: 'script', role: 'planner', capability: 'structured_output', provider: 'groq', model: 'llama-3.3-70b-versatile', estimatedCostCents: 1, qualityTier: 'standard', notes: 'Script and shot plan' },
-    { stepKey: 'prompts', role: 'prompt_writer', capability: 'structured_output', provider: 'groq', model: 'llama-3.1-8b-instant', estimatedCostCents: 1, qualityTier: 'draft', notes: 'Generate video prompts per shot' },
-    { stepKey: 'style_frames', role: 'style_frame', capability: 'image_generation', provider: 'together', model: 'black-forest-labs/FLUX.1-schnell', estimatedCostCents: 3, qualityTier: 'standard', notes: '3 reference style frames' },
-    { stepKey: 'main_clips', role: 'main_clip', capability: 'video_generation', provider: 'together', model: 'wan-ai/Wan2.1-T2V-14B', estimatedCostCents: Math.ceil(duration * 0.5), qualityTier, notes: `${duration}s main video at standard tier` },
-  ]
-
-  if (heroShotCount > 0) {
-    steps.push({
-      stepKey: 'hero_shots',
-      role: 'hero_clip',
-      capability: 'video_generation',
-      provider: 'genx',
-      model: 'grok-imagine-video',
-      estimatedCostCents: Math.ceil(heroShotCount * 5 * 2.5),
-      qualityTier: 'premium',
-      notes: `${heroShotCount} hero shots at premium tier`,
-    })
-  }
-
-  if (needsNarration) {
-    steps.push({ stepKey: 'tts', role: 'narration', capability: 'text_to_speech', provider: 'groq', model: 'playai-tts', estimatedCostCents: Math.ceil(duration * 0.05), qualityTier: 'standard', notes: 'TTS narration' })
-  }
-
-  if (needsMusic) {
-    steps.push({ stepKey: 'music', role: 'music', capability: 'music_generation', provider: 'deepinfra', model: 'music-gen', estimatedCostCents: 5, qualityTier: 'standard', notes: 'Background music' })
-  }
-
-  if (needsCaptions) {
-    steps.push({ stepKey: 'captions', role: 'captions', capability: 'structured_output', provider: 'groq', model: 'llama-3.1-8b-instant', estimatedCostCents: 2, qualityTier: 'draft', notes: 'Caption generation' })
-  }
-
-  steps.push({ stepKey: 'assembly', role: 'assembly', capability: 'system_ops', provider: 'local', model: 'ffmpeg', estimatedCostCents: 0, qualityTier: 'standard', notes: 'Local FFmpeg assembly' })
-
-  return steps
 }
 
 export function getBudgetProfiles() {
