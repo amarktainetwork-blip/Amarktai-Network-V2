@@ -1,0 +1,87 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { prisma } from '@amarktai/db'
+
+async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+  const auth = request.headers.authorization
+  if (!auth?.startsWith('Bearer ')) {
+    reply.status(401).send({ error: true, message: 'Authorization required' })
+    return false
+  }
+  try {
+    const payload = await app.jwtVerify(auth.replace('Bearer ', ''))
+    if (payload?.role !== 'admin') {
+      reply.status(403).send({ error: true, message: 'Admin access required' })
+      return false
+    }
+    return true
+  } catch {
+    reply.status(401).send({ error: true, message: 'Invalid authorization' })
+    return false
+  }
+}
+
+export async function adminJobRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/admin/jobs', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { status, capability, provider, limit = '50', offset = '0' } = request.query as Record<string, string>
+
+    const where: Record<string, unknown> = {}
+    if (status) where.status = status
+    if (capability) where.capability = capability
+    if (provider) where.provider = provider
+
+    const jobs = await prisma.job.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(Number(limit) || 50, 200),
+      skip: Number(offset) || 0,
+    })
+
+    const total = await prisma.job.count({ where })
+
+    return reply.send({
+      jobs: jobs.map((job) => ({
+        id: job.id,
+        appSlug: job.appSlug,
+        capability: job.capability,
+        status: job.status,
+        provider: job.provider || null,
+        model: job.model || null,
+        artifactId: job.artifactId || null,
+        progress: job.progress,
+        error: job.error || null,
+        createdAt: job.createdAt?.toISOString(),
+        startedAt: job.startedAt?.toISOString() || null,
+        completedAt: job.completedAt?.toISOString() || null,
+      })),
+      total,
+      limit: Math.min(Number(limit) || 50, 200),
+      offset: Number(offset) || 0,
+    })
+  })
+
+  app.get('/api/admin/jobs/:id', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { id } = request.params as { id: string }
+    const job = await prisma.job.findUnique({ where: { id } })
+    if (!job) return reply.status(404).send({ error: true, message: 'Job not found' })
+
+    return reply.send({
+      id: job.id,
+      appSlug: job.appSlug,
+      capability: job.capability,
+      status: job.status,
+      provider: job.provider || null,
+      model: job.model || null,
+      artifactId: job.artifactId || null,
+      progress: job.progress,
+      output: job.output || null,
+      error: job.error || null,
+      createdAt: job.createdAt?.toISOString(),
+      startedAt: job.startedAt?.toISOString() || null,
+      completedAt: job.completedAt?.toISOString() || null,
+    })
+  })
+}

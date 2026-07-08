@@ -1,93 +1,100 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { RuntimeProofSummary } from '@/components/dashboard/runtime-proof-summary'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Activity, Boxes, Clock, Lock, RotateCcw, Settings, XCircle } from 'lucide-react'
+import { Activity, Boxes, Clock, ExternalLink, Lock, RotateCcw, Settings, XCircle } from 'lucide-react'
 
-const JOB_COLUMNS = ['Job', 'Capability', 'Queue', 'Runtime provider', 'Runtime model', 'Artifact', 'Safe error']
-const TIMELINE = [
-  { label: 'Queued', status: 'backend_exists', description: 'External app job route creates queued DB jobs and pushes BullMQ work.' },
-  { label: 'Processing', status: 'backend_exists', description: 'Worker updates status and delegates to provider executor.' },
-  { label: 'Completed', status: 'backend_exists', description: 'Proven chat/image/video paths store output and artifact metadata.' },
-  { label: 'Failed', status: 'backend_exists', description: 'Worker records safe errors and BullMQ records failure.' },
-  { label: 'Retry / cancel', status: 'dashboard_pending', description: 'Dashboard controls remain disabled until admin job action routes exist.' },
-]
+const STATUS_COLORS = {
+  queued: 'border-amber-500/30 text-amber-300',
+  processing: 'border-cyan-500/30 text-cyan-300',
+  completed: 'border-emerald-500/30 text-emerald-300',
+  failed: 'border-rose-500/30 text-rose-300',
+}
 
 export default function JobsPage() {
+  const [jobs, setJobs] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/admin/jobs?limit=50')
+      .then((r) => r.json())
+      .then((data) => setJobs(data?.jobs ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Work Library" subtitle="Job status, runtime provider/model, queue state, and artifact linkage contracts for V2 jobs." />
+      <PageHeader title="Work Library" subtitle="Real backend jobs, runtime provider/model, and artifact linkage." />
 
       <RuntimeProofSummary compact />
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-cyan-300" /> Job list contract</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Admin job listing is not wired yet. External job polling remains available through /api/v1/jobs/:id.</p>
+            <h3 className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-cyan-300" /> Jobs</h3>
+            <p className="mt-1 text-xs text-muted-foreground">{jobs.length} job{jobs.length !== 1 ? 's' : ''} total</p>
           </div>
           <Link href="/dashboard/studio">
             <Button className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black text-xs">Open Studio</Button>
           </Link>
         </div>
 
-        <div className="overflow-hidden rounded-md border border-white/[0.06]">
-          <div className="grid grid-cols-7 bg-white/[0.03] text-[10px] font-semibold uppercase text-muted-foreground">
-            {JOB_COLUMNS.map((column) => <div key={column} className="px-3 py-2">{column}</div>)}
+        {loading ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">Loading jobs...</div>
+        ) : jobs.length === 0 ? (
+          <div className="py-8 text-center">
+            <Boxes className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">No jobs yet</p>
+            <p className="mt-1 text-xs text-muted-foreground/60">Submit a capability from Studio to see jobs here.</p>
           </div>
-          <div className="grid grid-cols-7 items-center border-t border-white/[0.06] text-xs text-muted-foreground">
-            <div className="px-3 py-4">No admin listing endpoint</div>
-            <div className="px-3 py-4">Proof-gated</div>
-            <div className="px-3 py-4"><Badge variant="outline" className="border-cyan-500/30 text-[9px] text-cyan-300">BullMQ</Badge></div>
-            <div className="px-3 py-4">Runtime selected</div>
-            <div className="px-3 py-4">Runtime selected</div>
-            <div className="px-3 py-4">Linked when artifactId exists</div>
-            <div className="px-3 py-4">Redacted provider errors only</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.06] text-left text-[10px] uppercase text-muted-foreground">
+                  <th className="px-3 py-2">Job</th>
+                  <th className="px-3 py-2">Capability</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Provider</th>
+                  <th className="px-3 py-2">Model</th>
+                  <th className="px-3 py-2">Artifact</th>
+                  <th className="px-3 py-2">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((job) => (
+                  <tr key={job.id} className="border-b border-white/[0.04]">
+                    <td className="px-3 py-2 font-mono text-[10px]">{job.id.slice(0, 8)}...</td>
+                    <td className="px-3 py-2">{job.capability}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className={STATUS_COLORS[job.status] ?? 'border-white/10 text-[9px]'}>
+                        {job.status}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">{job.provider || '—'}</td>
+                    <td className="px-3 py-2 font-mono text-[10px]">{job.model || '—'}</td>
+                    <td className="px-3 py-2">
+                      {job.artifactId ? (
+                        <Link href={`/dashboard/artifacts`} className="text-cyan-300 hover:underline">
+                          {job.artifactId.slice(0, 8)}...
+                        </Link>
+                      ) : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-rose-300 max-w-[200px] truncate">{job.error || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        )}
       </Card>
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr]">
-        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-violet-300" /> Status timeline</h3>
-          <div className="space-y-3">
-            {TIMELINE.map((item) => (
-              <div key={item.label} className="rounded-md border border-white/[0.06] bg-black/20 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold">{item.label}</span>
-                  <Badge variant="outline" className={item.status === 'backend_exists' ? 'border-emerald-500/30 text-[9px] text-emerald-300' : 'border-amber-500/30 text-[9px] text-amber-300'}>
-                    {item.status}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-cyan-300" /> Job actions</h3>
-          <div className="space-y-3">
-            <Button disabled variant="outline" className="w-full justify-start border-white/10 text-xs">
-              <RotateCcw className="h-3.5 w-3.5" />
-              Retry job
-            </Button>
-            <Button disabled variant="outline" className="w-full justify-start border-white/10 text-xs">
-              <XCircle className="h-3.5 w-3.5" />
-              Cancel job
-            </Button>
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-3 text-xs text-amber-100/80">
-              <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Actions stay disabled until V2 has admin job action routes with ownership, retry, and cancellation semantics.
-            </div>
-          </div>
-        </Card>
-      </div>
 
       <Accordion type="single" collapsible>
         <AccordionItem value="dev" className="rounded-xl border border-white/[0.06] px-4">
@@ -95,12 +102,12 @@ export default function JobsPage() {
           <AccordionContent>
             <div className="space-y-3 text-xs text-muted-foreground">
               <div className="rounded-md border border-white/[0.06] bg-black/20 p-3">
-                <div className="font-semibold mb-1">Job route</div>
-                <div>API job route exists (/api/v1/jobs). Studio UI job submission is still proof-gated.</div>
+                <div className="font-semibold mb-1">Job API</div>
+                <div>Admin job listing at /api/admin/jobs with status/capability/provider filters.</div>
               </div>
               <div className="rounded-md border border-white/[0.06] bg-black/20 p-3">
-                <div className="font-semibold mb-1">Artifact route</div>
-                <div>Artifact file route exists. Admin artifact listing/preview UI remains disabled until a list endpoint exists.</div>
+                <div className="font-semibold mb-1">Artifact API</div>
+                <div>Artifact file route exists at /api/v1/artifacts/:id/file.</div>
               </div>
             </div>
           </AccordionContent>

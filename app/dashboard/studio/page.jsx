@@ -208,6 +208,8 @@ function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
 
 function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
   const [activeTab, setActiveTab] = useState('options')
+  const [submitting, setSubmitting] = useState(false)
+  const [jobResult, setJobResult] = useState(null)
   const meta = MODE_META[mode] ?? MODE_META.chat
   const schemaKey = meta.schemaKey || mode
   const schema = CAPABILITY_SCHEMAS[schemaKey] || CAPABILITY_SCHEMAS.chat || {}
@@ -221,6 +223,34 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
     { key: 'assets', label: 'Assets', icon: Package },
     { key: 'developer', label: 'Developer', icon: Wrench },
   ]
+
+  const handleSubmit = async () => {
+    if (!backendReady || submitting) return
+    setSubmitting(true)
+    setJobResult(null)
+    try {
+      const { submitJob, pollJob } = useStudioStore.getState()
+      const result = await submitJob(meta.capability, values)
+      if (result.ok && result.jobId) {
+        // Poll until complete or timeout
+        let attempts = 0
+        let job = null
+        while (attempts < 60) {
+          job = await pollJob(result.jobId)
+          if (!job || job.status === 'completed' || job.status === 'failed') break
+          await new Promise((r) => setTimeout(r, 2000))
+          attempts++
+        }
+        setJobResult(job || { status: 'timeout', error: 'Job polling timed out' })
+      } else {
+        setJobResult({ status: 'failed', error: result.error })
+      }
+    } catch (err) {
+      setJobResult({ status: 'failed', error: err.message })
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-white/[0.07] bg-white/[0.02]">
@@ -241,6 +271,25 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
         {activeTab === 'options' && (
           <div className="p-4">
             <DynamicFormRenderer schema={schema} values={values} onChange={setValues} mode={uxMode} capability={schemaKey} />
+            <div className="mt-4 flex items-center gap-3">
+              <Button
+                onClick={handleSubmit}
+                disabled={!backendReady || submitting}
+                className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black text-xs"
+              >
+                <Send className="mr-1.5 h-3 w-3" />
+                {submitting ? 'Submitting...' : 'Run'}
+              </Button>
+              {!backendReady && <span className="text-[10px] text-muted-foreground">Disabled until backend proof passes</span>}
+            </div>
+            {jobResult && (
+              <div className={`mt-3 rounded-lg border p-3 text-xs ${jobResult.status === 'completed' ? 'border-emerald-500/30 bg-emerald-500/[0.04]' : 'border-rose-500/30 bg-rose-500/[0.04]'}`}>
+                <div className="font-semibold">{jobResult.status === 'completed' ? 'Job completed' : 'Job failed'}</div>
+                {jobResult.output && <pre className="mt-2 overflow-auto max-h-40 text-[10px]">{jobResult.output}</pre>}
+                {jobResult.error && <div className="mt-1 text-rose-300">{jobResult.error}</div>}
+                {jobResult.artifactId && <div className="mt-1">Artifact: {jobResult.artifactId}</div>}
+              </div>
+            )}
           </div>
         )}
 

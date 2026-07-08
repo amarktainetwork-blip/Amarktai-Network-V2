@@ -18,6 +18,8 @@ import { artifactRoutes } from './routes/artifacts.js'
 import { authRoutes } from './routes/auth.js'
 import { adminProviderRoutes } from './routes/admin-providers.js'
 import { adminRuntimeProofRoutes } from './routes/admin-runtime-proofs.js'
+import { adminJobRoutes } from './routes/admin-jobs.js'
+import { adminArtifactRoutes } from './routes/admin-artifacts.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 
 async function main(): Promise<void> {
@@ -45,6 +47,8 @@ async function main(): Promise<void> {
   await app.register(authRoutes)
   await app.register(adminProviderRoutes)
   await app.register(adminRuntimeProofRoutes)
+  await app.register(adminJobRoutes)
+  await app.register(adminArtifactRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
 
