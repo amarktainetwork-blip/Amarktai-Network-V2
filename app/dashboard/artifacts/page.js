@@ -21,7 +21,10 @@ export default function ArtifactsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/artifacts?limit=50')
+    const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
+    fetch('/api/admin/artifacts?limit=50', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then((r) => r.json())
       .then((data) => setArtifacts(data?.artifacts ?? []))
       .catch(() => {})
