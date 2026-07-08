@@ -87,6 +87,9 @@ COPY packages/artifacts/package.json packages/artifacts/package.json
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Copy schema sync script
+COPY scripts/prisma-db-push-safe.mjs scripts/prisma-db-push-safe.mjs
+
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
 
