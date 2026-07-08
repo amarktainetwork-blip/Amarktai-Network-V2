@@ -210,15 +210,14 @@ describe('Dashboard truth cleanup', () => {
     expect(appText).toContain('Supported app types')
   })
 
-  it('Work Library does not show active tabs/search', () => {
+  it('Work Library fetches real backend data', () => {
     const jobsText = fs.readFileSync(path.join(ROOT, 'app/dashboard/jobs/page.js'), 'utf8')
     expect(jobsText).not.toContain('Provider attempts panel')
     expect(jobsText).not.toContain('Signed URL status')
     expect(jobsText).not.toContain('Proof status')
-    expect(jobsText).toContain('Job list contract')
-    expect(jobsText).toContain('Admin job listing is not wired yet')
-    expect(jobsText).toContain('Retry job')
-    expect(jobsText).toContain('disabled')
+    expect(jobsText).toContain('/api/admin/jobs')
+    expect(jobsText).toContain('RuntimeProofSummary')
+    expect(jobsText).toContain('Loading jobs')
   })
 
   it('Capability Library uses backend proof status instead of blanket Studio readiness', () => {
