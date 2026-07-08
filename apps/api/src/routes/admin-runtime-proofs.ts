@@ -3,7 +3,7 @@ import { getRuntimeProofStatus } from '../lib/runtime-proof-status.js'
 
 export async function adminRuntimeProofRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/runtime-proofs', async (request, reply) => {
-    if (!(await requireAdmin(app, request, reply))) return
+    if (!(await requireAdmin(app, request, reply))) return reply
 
     return reply.send(getRuntimeProofStatus())
   })

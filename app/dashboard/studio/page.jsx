@@ -1,8 +1,10 @@
 'use client'
-import { useRef, useState, useEffect } from 'react'
+
+import { useEffect, useRef, useState } from 'react'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { CAPABILITY_SCHEMAS } from '@/lib/studio-capability-schemas'
 import { getBackendCapability } from '@/lib/capability-map'
+import { TARGET_CAPABILITY_CATALOG, groupedCapabilities } from '@/lib/capability-display-catalog'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import {
   getRuntimeCapabilityProof,
@@ -17,65 +19,63 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import {
-  MessageSquare, Image as ImageIcon, Video, Film, Music, Mic, User, Globe, Database,
-  Send, Zap, Code2, ShieldAlert, Settings, Paperclip, Wrench, Eye, Package, Layers, Lock,
+  MessageSquare, Image as ImageIcon, Video, Music, User, Globe, Database,
+  Send, Zap, ShieldAlert, Settings, Paperclip, Wrench, Eye, Package, Layers, Lock, FileText,
 } from 'lucide-react'
 
-// ─── Grouped Capability Selector ────────────────────────────────
-const CAPABILITY_GROUPS = [
-  { label: 'Chat & Reasoning', items: [
-    { v: 'chat', label: 'Chat', icon: MessageSquare },
-    { v: 'reasoning', label: 'Reasoning', icon: Code2 },
-    { v: 'code', label: 'Code', icon: Code2 },
-    { v: 'research', label: 'Research', icon: Globe },
-  ]},
-  { label: 'Image', items: [
-    { v: 'image', label: 'Image generation', icon: ImageIcon },
-    { v: 'image_edit', label: 'Image editing', icon: ImageIcon },
-  ]},
-  { label: 'Video', items: [
-    { v: 'video', label: 'Short video', icon: Video },
-    { v: 'longvideo', label: 'Long-form video', icon: Film },
-    { v: 'image_to_video', label: 'Image-to-video', icon: Film },
-    { v: 'video_edit', label: 'Video edit / remix', icon: Video },
-  ]},
-  { label: 'Audio', items: [
-    { v: 'music', label: 'Music / Song', icon: Music },
-    { v: 'voice', label: 'Voice / TTS', icon: Mic },
-    { v: 'voice_stt', label: 'Speech-to-text', icon: Mic },
-  ]},
-  { label: 'Avatar', items: [
-    { v: 'avatar', label: 'Avatar generation', icon: User },
-    { v: 'talking_avatar', label: 'Talking avatar', icon: User },
-    { v: 'lip_sync', label: 'Lip-sync avatar', icon: User },
-  ]},
-  { label: 'Brand & Marketing', items: [
-    { v: 'scrape', label: 'Website scrape / BrandPack', icon: Globe },
-    { v: 'campaign', label: 'Campaign content', icon: Layers },
-    { v: 'social_reel', label: 'Social / reel pack', icon: Film },
-  ]},
-  { label: 'Knowledge', items: [
-    { v: 'rag', label: 'RAG ingest', icon: Database },
-    { v: 'rag_search', label: 'RAG search', icon: Database },
-  ]},
-  { label: 'Apps & Agents', items: [
-    { v: 'app_request', label: 'App request', icon: Zap },
-    { v: 'agent_task', label: 'Agent task', icon: Layers },
-    { v: 'workflow', label: 'Workflow automation', icon: Wrench },
-  ]},
-  { label: 'Gated', items: [
-    { v: 'uncensored', label: 'Backend-controlled gated text', icon: ShieldAlert },
-  ]},
-]
+const STUDIO_ICON_BY_FAMILY = {
+  Language: MessageSquare,
+  Intelligence: Globe,
+  Image: ImageIcon,
+  Video,
+  Audio: Music,
+  Avatar: User,
+  Knowledge: Database,
+  Document: FileText,
+  Marketing: Layers,
+  Multimodal: Zap,
+  'Adult Governed': ShieldAlert,
+}
+
+const CAPABILITY_GROUPS = groupedCapabilities().map((group) => ({
+  label: group.family,
+  items: group.items.map((item) => ({
+    v: item.studioMode,
+    label: item.label,
+    icon: STUDIO_ICON_BY_FAMILY[item.family] ?? Wrench,
+  })),
+}))
+
+const MODE_META = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
+  item.studioMode,
+  {
+    capability: item.dashboardType,
+    label: item.label,
+    schemaKey: item.schemaKey,
+    outputType: item.outputType,
+    artifactRequired: item.artifactRequired,
+    gated: item.policyRequirement !== 'standard',
+  },
+]))
+
+const PREVIEW_LABELS = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
+  item.studioMode,
+  `${item.label} preview will appear here`,
+]))
+
+const ASSETS_LABELS = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
+  item.studioMode,
+  item.artifactRequired ? `${item.label} assets and artifacts` : `${item.label} context`,
+]))
 
 function getModeProof(runtimeProofStatus, mode) {
-  const meta = MODE_META[mode]
-  const backend = getBackendCapability(meta?.capability)
-  return getRuntimeCapabilityProof(runtimeProofStatus, backend.backendCapability || backend.plannedBackendKey || meta?.capability)
+  const meta = MODE_META[mode] ?? MODE_META.chat
+  const backend = getBackendCapability(meta.capability)
+  return getRuntimeCapabilityProof(runtimeProofStatus, backend.backendCapability || backend.plannedBackendKey || meta.capability)
 }
 
 function CapabilitySelector({ value, onChange, runtimeProofStatus }) {
-  const allItems = CAPABILITY_GROUPS.flatMap((g) => g.items)
+  const allItems = CAPABILITY_GROUPS.flatMap((group) => group.items)
   const current = allItems.find((item) => item.v === value) || allItems[0]
   const Icon = current.icon
   const [search, setSearch] = useState('')
@@ -89,14 +89,14 @@ function CapabilitySelector({ value, onChange, runtimeProofStatus }) {
 
   return (
     <div className="relative">
-      <Select value={value} onValueChange={(v) => { onChange(v); setSearch('') }}>
-        <SelectTrigger className="h-9 w-auto min-w-[200px] gap-2 border-white/[0.08] bg-white/[0.04] text-xs">
+      <Select value={value} onValueChange={(nextMode) => { onChange(nextMode); setSearch('') }}>
+        <SelectTrigger className="h-9 w-auto min-w-[220px] gap-2 border-white/[0.08] bg-white/[0.04] text-xs">
           <Icon className="h-3.5 w-3.5 text-cyan-400" />
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="max-h-[400px]">
           <div className="sticky top-0 z-10 border-b border-white/[0.06] bg-[hsl(240_14%_4%)] px-2 py-1.5">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search capabilities..." className="h-7 border-0 bg-white/[0.04] text-xs focus-visible:ring-0" onKeyDown={(e) => e.stopPropagation()} />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search capabilities..." className="h-7 border-0 bg-white/[0.04] text-xs focus-visible:ring-0" onKeyDown={(event) => event.stopPropagation()} />
           </div>
           {filteredGroups.map((group) => (
             <div key={group.label}>
@@ -126,69 +126,6 @@ function CapabilitySelector({ value, onChange, runtimeProofStatus }) {
   )
 }
 
-// ─── Mode metadata ──────────────────────────────────────────────
-const MODE_META = {
-  chat: { capability: 'text.chat', label: 'Chat' },
-  reasoning: { capability: 'text.reasoning', label: 'Reasoning' },
-  code: { capability: 'text.code', label: 'Code' },
-  research: { capability: 'research', label: 'Research' },
-  image: { capability: 'image.generate', label: 'Image generation' },
-  image_edit: { capability: 'image.edit', label: 'Image editing' },
-  video: { capability: 'video.generate', label: 'Short video' },
-  longvideo: { capability: 'video.longform', label: 'Long-form video' },
-  image_to_video: { capability: 'video.image_to_video', label: 'Image-to-video' },
-  video_edit: { capability: 'video.edit', label: 'Video edit / remix' },
-  music: { capability: 'music.generate', label: 'Music / Song' },
-  voice: { capability: 'voice.tts', label: 'Voice / TTS' },
-  voice_stt: { capability: 'voice.stt', label: 'Speech-to-text' },
-  avatar: { capability: 'avatar.generate', label: 'Avatar generation' },
-  talking_avatar: { capability: 'avatar.generate', label: 'Talking avatar' },
-  lip_sync: { capability: 'avatar.generate', label: 'Lip-sync avatar' },
-  scrape: { capability: 'scrape.crawl', label: 'Website scrape' },
-  campaign: { capability: 'campaign.generate', label: 'Campaign content' },
-  social_reel: { capability: 'social.reel_pack', label: 'Social / reel pack' },
-  rag: { capability: 'rag.ingest', label: 'RAG ingest' },
-  rag_search: { capability: 'rag.query', label: 'RAG search' },
-  app_request: { capability: 'app.request', label: 'App request' },
-  agent_task: { capability: 'agent.task', label: 'Agent task' },
-  workflow: { capability: 'workflow.automation', label: 'Workflow automation' },
-  uncensored: { capability: 'uncensored.text', label: 'Gated text', gated: true },
-}
-
-// Modes that share a schema use the primary mode's schema
-const SCHEMA_MAP = {
-  image_edit: 'image',
-  voice_stt: 'voice',
-  talking_avatar: 'avatar',
-  lip_sync: 'avatar',
-}
-
-const PREVIEW_LABELS = {
-  music: 'Song preview will appear here', voice: 'Voice preview will appear here',
-  video: 'Video/storyboard preview will appear here', longvideo: 'Storyboard preview will appear here',
-  image_to_video: 'Video preview will appear here', video_edit: 'Edited video preview will appear here',
-  image: 'Image canvas will appear here', image_edit: 'Edited image preview will appear here',
-  avatar: 'Avatar preview will appear here', talking_avatar: 'Talking avatar preview will appear here',
-  lip_sync: 'Lip-sync preview will appear here', app_request: 'App request preview will appear here',
-  agent_task: 'Agent task plan will appear here', workflow: 'Workflow diagram will appear here',
-  scrape: 'BrandPack preview will appear here', campaign: 'Campaign pack preview will appear here',
-  social_reel: 'Reel pack preview will appear here', rag: 'Knowledge base preview will appear here',
-  rag_search: 'Search results will appear here', research: 'Research report will appear here',
-  code: 'Code output will appear here', reasoning: 'Reasoning output will appear here',
-}
-const ASSETS_LABELS = {
-  music: 'Reference tracks / stems', voice: 'Voice clones / source audio',
-  video: 'Source clips / frames', longvideo: 'Scripts / scene assets',
-  image_to_video: 'Source images / reference frames', video_edit: 'Source video / assets',
-  image: 'References / brand assets', image_edit: 'Source images / masks',
-  avatar: 'Avatar images / voice sources', talking_avatar: 'Avatar images / voice sources',
-  lip_sync: 'Avatar images / audio tracks', scrape: 'Brand assets / URLs',
-  campaign: 'Brand assets / product images', social_reel: 'Brand assets / music',
-  rag: 'Documents / URLs', rag_search: 'Knowledge sets',
-  research: 'Source references', code: 'Repository context', reasoning: 'Reference documents',
-}
-
-// ─── Director Block ─────────────────────────────────────────────
 function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
   const { chatHistory, submitDraft } = useStudioStore()
   const [input, setInput] = useState('')
@@ -198,15 +135,15 @@ function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [chatHistory])
 
+  const meta = MODE_META[mode] ?? MODE_META.chat
+  const proof = getModeProof(runtimeProofStatus, mode)
+  const backendReady = proof.readyForDashboardExecution === true
+
   const send = () => {
-    if (!input.trim()) return
+    if (!input.trim() || !backendReady) return
     submitDraft(input)
     setInput('')
   }
-
-  const meta = MODE_META[mode]
-  const proof = getModeProof(runtimeProofStatus, mode)
-  const backendReady = proof.readyForDashboardExecution === true
 
   return (
     <div className="flex min-h-0 flex-col rounded-xl border border-white/[0.07] bg-white/[0.02]">
@@ -226,7 +163,7 @@ function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
         {chatHistory.length === 0 && (
           <div className="flex h-full items-center justify-center">
-            <p className="text-xs text-muted-foreground/50">Draft your request below. Backend connection required to submit.</p>
+            <p className="text-xs text-muted-foreground/50">Draft your request below. Backend proof is required before Studio submission.</p>
           </div>
         )}
         {chatHistory.map((message, index) => (
@@ -243,8 +180,8 @@ function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
           </button>
           <Input
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send()}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && !event.shiftKey && send()}
             placeholder={`Describe your ${meta.label.toLowerCase()} request...`}
             className="h-9 bg-white/[0.04] text-sm"
           />
@@ -256,25 +193,24 @@ function DirectorBlock({ mode, onModeChange, runtimeProofStatus }) {
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-[10px] text-muted-foreground">Runtime selected</span>
           <Badge variant="outline" className={`text-[9px] ${runtimeProofStatusClasses(proof)}`}>
             {runtimeProofStatusLabel(proof)}
           </Badge>
           {!backendReady && <span className="text-[10px] text-muted-foreground">Disabled until backend proof passes</span>}
-          {meta.gated && <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">Backend controlled gated lane</Badge>}
+          {meta.gated && <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">Policy gated</Badge>}
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Right Block: Options / Preview / Assets / Developer ────────
 function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
   const [activeTab, setActiveTab] = useState('options')
-  const meta = MODE_META[mode]
-  const schemaKey = SCHEMA_MAP[mode] || mode
-  const schema = CAPABILITY_SCHEMAS[schemaKey] || {}
+  const meta = MODE_META[mode] ?? MODE_META.chat
+  const schemaKey = meta.schemaKey || mode
+  const schema = CAPABILITY_SCHEMAS[schemaKey] || CAPABILITY_SCHEMAS.chat || {}
   const backend = getBackendCapability(meta.capability)
   const proof = getModeProof(runtimeProofStatus, mode)
   const backendReady = proof.readyForDashboardExecution === true
@@ -313,8 +249,8 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
             <div className="text-center">
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]"><Eye className="h-6 w-6 opacity-20" /></div>
               <p className="text-sm font-medium text-foreground">{PREVIEW_LABELS[mode] || 'Output preview will appear here'}</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Connect Studio to backend to see real output here.</p>
-              <Button disabled variant="outline" size="sm" className="mt-4 border-white/10 text-xs"><Lock className="mr-1 h-3 w-3" /> Backend connection required</Button>
+              <p className="mt-1 text-xs text-muted-foreground/70">Real previews appear only after backend jobs and artifacts are wired and proven.</p>
+              <Button disabled variant="outline" size="sm" className="mt-4 border-white/10 text-xs"><Lock className="mr-1 h-3 w-3" /> Backend proof required</Button>
             </div>
           </div>
         )}
@@ -324,7 +260,7 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
             <div className="text-center">
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]"><Package className="h-6 w-6 opacity-20" /></div>
               <p className="text-sm font-medium text-foreground">{ASSETS_LABELS[mode] || 'Asset library'}</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Upload and manage assets for your {meta.label.toLowerCase()} creations.</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Uploaded inputs and generated artifacts stay backend-controlled.</p>
             </div>
           </div>
         )}
@@ -336,7 +272,7 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                 <AccordionTrigger className="text-xs py-3">Selected controls</AccordionTrigger>
                 <AccordionContent>
                   <pre className="overflow-auto rounded-md bg-black/30 p-3 text-[10px] text-muted-foreground">{JSON.stringify(values, null, 2) || '{}'}</pre>
-                  <p className="mt-2 text-[10px] text-muted-foreground">Selected controls will be submitted with the Studio job once backend job routes are wired.</p>
+                  <p className="mt-2 text-[10px] text-muted-foreground">Selected controls will be submitted with the Studio job only after backend submission is explicitly wired.</p>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="contract" className="rounded-lg border border-white/[0.06] px-4">
@@ -347,6 +283,8 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                     <div className="flex justify-between"><span>Backend key</span><span className="font-mono">{backend.backendCapability || backend.plannedBackendKey || 'planned'}</span></div>
                     <div className="flex justify-between"><span>Route</span><span>{backend.missing ? 'capability_missing' : 'route_pending'}</span></div>
                     <div className="flex justify-between"><span>Execution</span><span>{backendReady ? 'backend_ready' : 'not_dashboard_ready'}</span></div>
+                    <div className="flex justify-between"><span>Output type</span><span>{meta.outputType}</span></div>
+                    <div className="flex justify-between"><span>Artifact</span><span>{meta.artifactRequired ? 'required' : 'not required'}</span></div>
                     <div className="flex justify-between"><span>Proof source</span><span>backend-runtime-proof-status</span></div>
                   </div>
                 </AccordionContent>
@@ -359,7 +297,6 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
   )
 }
 
-// ─── Main Studio Page ───────────────────────────────────────────
 export default function Studio() {
   const [mode, setMode] = useState('chat')
   const [uxMode, setUxMode] = useState('creator')

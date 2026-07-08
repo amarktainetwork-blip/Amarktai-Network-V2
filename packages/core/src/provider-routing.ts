@@ -46,7 +46,7 @@ export interface RoutingOptions {
 const PROVIDER_CATEGORY_SUPPORT: Record<ProviderKey, string[]> = {
   genx: ['video', 'image', 'audio'],
   groq: ['text', 'code', 'audio'],
-  together: ['text', 'image', 'code', 'retrieval'],
+  together: ['text', 'image', 'code', 'retrieval', 'document'],
   mimo: ['text', 'code'],
   deepinfra: ['text', 'image'],
 }

@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 const { adminRuntimeProofRoutes } = await import('../apps/api/src/routes/admin-runtime-proofs.ts')
 const { getRuntimeProofStatus } = await import('../apps/api/src/lib/runtime-proof-status.ts')
@@ -16,6 +16,7 @@ const DISALLOWED_PROVIDERS = [
   'minimax',
   'replicate',
 ]
+const testApps = []
 
 async function makeApp(role = 'admin') {
   const app = Fastify({ logger: false })
@@ -24,6 +25,8 @@ async function makeApp(role = 'admin') {
     return { sub: 'admin@example.com', role, iat: 1, exp: 9999999999 }
   })
   await app.register(adminRuntimeProofRoutes)
+  await app.ready()
+  testApps.push(app)
   return app
 }
 
@@ -32,6 +35,10 @@ function byCapability(items, capability) {
 }
 
 describe('Admin runtime proof status route', () => {
+  afterEach(async () => {
+    await Promise.all(testApps.splice(0).map((app) => app.close()))
+  })
+
   it('requires Authorization header', async () => {
     const app = await makeApp()
 

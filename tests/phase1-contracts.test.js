@@ -47,20 +47,29 @@ describe('Phase 1 provider source of truth', () => {
 describe('Phase 1 capability map', () => {
   it.each([
     ['text.chat', 'chat'], ['text.reasoning', 'reasoning'], ['text.code', 'code'],
+    ['text.summarization', 'summarization'], ['text.translation', 'translation'],
+    ['text.classification', 'classification'], ['text.extraction', 'extraction'],
+    ['text.structured_output', 'structured_output'], ['text.tool_use', 'tool_use'],
     ['image.generate', 'image_generation'], ['image.edit', 'image_edit'],
-    ['video.generate', 'video_generation'], ['music.generate', 'music_generation'],
+    ['video.generate', 'video_generation'], ['video.longform', 'long_form_video'],
+    ['video.image_to_video', 'image_to_video'], ['music.generate', 'music_generation'],
     ['voice.tts', 'tts'], ['voice.stt', 'stt'], ['avatar.generate', 'avatar_generation'],
     ['scrape.crawl', 'brand_scrape'], ['rag.ingest', 'rag_ingest'], ['rag.query', 'rag_search'],
+    ['knowledge.embeddings', 'embeddings'], ['knowledge.reranking', 'reranking'],
+    ['document.qa', 'document_qa'], ['document.ocr', 'ocr'], ['campaign.generate', 'campaign_generation'],
+    ['social.reel_pack', 'social_content_generation'], ['adult.text', 'adult_text'],
+    ['adult.image', 'adult_image'], ['adult.voice', 'adult_voice'], ['adult.avatar', 'adult_avatar'],
+    ['adult.video', 'adult_video'],
   ])('%s maps to %s', (dashboardCapability, backendCapability) => {
     expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP[dashboardCapability]).toMatchObject({ backendCapability, missing: false })
   })
 
-  it('video.longform remains missing until backend canonical support exists', () => {
-    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.longform']).toMatchObject({ backendCapability: null, missing: true, expectedBackendKey: 'long_form_video' })
+  it('video.longform is represented but not proof-ready by default', () => {
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['video.longform']).toMatchObject({ backendCapability: 'long_form_video', missing: false })
   })
 
-  it('uncensored.text remains a gated planned capability until backend support exists', () => {
-    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['uncensored.text']).toMatchObject({ backendCapability: null, missing: true, plannedBackendKey: 'uncensored_text', gated: true, providerId: 'deepinfra' })
+  it('uncensored.text maps to governed adult_text without proving execution', () => {
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['uncensored.text']).toMatchObject({ backendCapability: 'adult_text', missing: false, gated: true, providerId: 'deepinfra' })
   })
 })
 
@@ -164,12 +173,11 @@ describe('Dashboard truth cleanup', () => {
     expect(pageIndex).toContain("redirect('/dashboard/studio')")
   })
 
-  it('Studio SCHEMA_MAP includes image_edit, voice_stt, talking_avatar, lip_sync', () => {
+  it('Studio derives schema keys from the capability catalog', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-    expect(studioText).toContain("image_edit: 'image'")
-    expect(studioText).toContain("voice_stt: 'voice'")
-    expect(studioText).toContain("talking_avatar: 'avatar'")
-    expect(studioText).toContain("lip_sync: 'avatar'")
+    expect(studioText).toContain('TARGET_CAPABILITY_CATALOG')
+    expect(studioText).toContain('schemaKey: item.schemaKey')
+    expect(studioText).not.toContain('const SCHEMA_MAP')
   })
 
   it('every Studio selector mode resolves to a non-empty schema', () => {
@@ -207,7 +215,10 @@ describe('Dashboard truth cleanup', () => {
     expect(jobsText).not.toContain('Provider attempts panel')
     expect(jobsText).not.toContain('Signed URL status')
     expect(jobsText).not.toContain('Proof status')
-    expect(jobsText).toContain('No creations yet')
+    expect(jobsText).toContain('Job list contract')
+    expect(jobsText).toContain('Admin job listing is not wired yet')
+    expect(jobsText).toContain('Retry job')
+    expect(jobsText).toContain('disabled')
   })
 
   it('Capability Library uses backend proof status instead of blanket Studio readiness', () => {
@@ -274,10 +285,11 @@ describe('Dashboard truth cleanup', () => {
     expect(PROVIDER_CONTRACTS.map((p) => p.id)).toEqual(FINAL_PROVIDERS)
   })
 
-  it('DeepInfra gated Studio mode remains disabled until backend proof passes', () => {
+  it('governed adult Studio modes remain disabled until backend proof passes', () => {
     const studioText = fs.readFileSync(path.join(ROOT, 'app/dashboard/studio/page.jsx'), 'utf8')
-    expect(studioText).toContain('Backend-controlled gated text')
-    expect(studioText).toContain('gated: true')
+    const modeContracts = STUDIO_MODES.filter((mode) => mode.gated)
+    expect(modeContracts.map((mode) => mode.id)).toEqual(['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video'])
+    expect(modeContracts.every((mode) => mode.disabled === true)).toBe(true)
     expect(studioText).toContain('Disabled until backend proof passes')
   })
 
