@@ -91,10 +91,6 @@ const PROVIDER_KEY_LIST: readonly ProviderKey[] = PROVIDER_KEYS
 export async function resolveProviderApiKey(providerKey: string): Promise<ResolvedProviderApiKey> {
   const key = assertProviderKey(providerKey)
   const row = await prisma.aiProvider.findUnique({ where: { providerKey: key } })
-  const usagePolicy = normalizeCredentialUsagePolicy(
-    row?.credentialUsagePolicy,
-    key,
-  )
 
   if (row && !row.enabled) {
     throw new ProviderConfigError(`Provider '${key}' is disabled`, key, 'disabled')
