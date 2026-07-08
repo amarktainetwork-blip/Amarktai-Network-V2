@@ -26,6 +26,7 @@ const credentialMocks = vi.hoisted(() => {
   }
   return {
     ProviderConfigError,
+    getProviderCredentialStatus: vi.fn(),
     resolveProviderApiKey: vi.fn(),
   }
 })
@@ -33,15 +34,18 @@ const credentialMocks = vi.hoisted(() => {
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: credentialMocks.ProviderConfigError,
+  getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
 }))
 
 // ── Mock Groq client ─────────────────────────────────────────────────────────
 
 const mockGroqChat = vi.fn()
+const mockDeepInfraChat = vi.fn()
 
 vi.mock('@amarktai/providers', () => ({
   groqChat: mockGroqChat,
+  deepinfraChat: mockDeepInfraChat,
 }))
 
 // ── Imports ──────────────────────────────────────────────────────────────────
@@ -101,6 +105,23 @@ describe('Groq executor — client contract', () => {
     credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
       if (providerKey === 'groq') return { providerKey: 'groq', apiKey: 'test-key', source: 'env' }
       throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
+    credentialMocks.getProviderCredentialStatus.mockResolvedValue({
+      providerKey: 'deepinfra',
+      displayName: 'DeepInfra',
+      enabled: true,
+      configured: true,
+      source: 'database',
+      maskedPreview: 'di_********abcd',
+      baseUrl: '',
+      defaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      fallbackModel: '',
+      credentialUsagePolicy: 'backend_runtime_allowed',
+      healthStatus: 'live',
+      healthMessage: '',
+      lastCheckedAt: null,
+      sortOrder: 5,
+      notes: '',
     })
   })
 
@@ -304,6 +325,37 @@ describe('Routing/execution gate', () => {
     expect(result.error).toContain('not implemented')
   })
 
+  it('chat can fall back to DeepInfra when Groq config is missing', async () => {
+    delete process.env.GROQ_API_KEY
+    process.env.DEEPINFRA_API_KEY = 'deepinfra-test-key'
+    credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
+      if (providerKey === 'groq') {
+        throw new credentialMocks.ProviderConfigError("Provider 'groq' is missing configuration", 'groq', 'missing-config')
+      }
+      if (providerKey === 'deepinfra') {
+        return { providerKey: 'deepinfra', apiKey: 'deepinfra-db-key', source: 'database' }
+      }
+      throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
+    mockDeepInfraChat.mockResolvedValue({
+      content: 'DeepInfra fallback response',
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      finishReason: 'stop',
+    })
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(true)
+    expect(result.provider).toBe('deepinfra')
+    expect(result.output).toBe('DeepInfra fallback response')
+    expect(mockDeepInfraChat).toHaveBeenCalledWith(expect.objectContaining({
+      apiKey: 'deepinfra-db-key',
+      providerDefaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+    }))
+    expect(JSON.stringify(result)).not.toContain('deepinfra-db-key')
+  })
+
   it('config presence does not mean provider is generally live', () => {
     // Even with GROQ_API_KEY set, only chat is live
     const imageResult = executeWithProvider(makePayload({ capability: 'image_generation' }))
@@ -323,6 +375,23 @@ describe('Worker integration with Groq chat', () => {
     credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => {
       if (providerKey === 'groq') return { providerKey: 'groq', apiKey: 'test-key', source: 'env' }
       throw new credentialMocks.ProviderConfigError(`Provider '${providerKey}' is missing configuration`, providerKey, 'missing-config')
+    })
+    credentialMocks.getProviderCredentialStatus.mockResolvedValue({
+      providerKey: 'deepinfra',
+      displayName: 'DeepInfra',
+      enabled: true,
+      configured: true,
+      source: 'database',
+      maskedPreview: 'di_********abcd',
+      baseUrl: '',
+      defaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      fallbackModel: '',
+      credentialUsagePolicy: 'backend_runtime_allowed',
+      healthStatus: 'live',
+      healthMessage: '',
+      lastCheckedAt: null,
+      sortOrder: 5,
+      notes: '',
     })
     mockGroqChat.mockResolvedValue({
       content: 'Real Groq response text',

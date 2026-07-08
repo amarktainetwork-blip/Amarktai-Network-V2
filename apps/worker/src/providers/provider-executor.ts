@@ -68,7 +68,7 @@ function formatSupportedCandidates(capability: CapabilityKey): string {
 
 function redactProviderSecrets(message: string, extraKeys: string[] = []): string {
   let safe = message
-  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, process.env.GENX_API_KEY, ...extraKeys]) {
+  for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, process.env.GENX_API_KEY, process.env.DEEPINFRA_API_KEY, process.env.MIMO_API_KEY, ...extraKeys]) {
     if (key) {
       safe = safe.split(key).join('[redacted]')
     }
@@ -181,6 +181,86 @@ async function executeGroqTextCapability(payload: WorkerJobData): Promise<Proces
     if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown Groq error'
     return { success: false, status: 'failed', error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}` }
+  }
+}
+
+async function executeDeepInfraTextCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  let apiKey = ''
+
+  try {
+    const credential = await resolveProviderApiKey('deepinfra')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('deepinfra')
+    const { deepinfraChat } = await import('@amarktai/providers')
+
+    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
+    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
+
+    const result = await deepinfraChat({
+      prompt: payload.prompt,
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+      providerDefaultModel: providerStatus.defaultModel,
+      systemPrompt,
+    })
+
+    if (!result.content || !result.content.trim()) {
+      return { success: false, status: 'failed', error: 'DeepInfra returned empty response' }
+    }
+
+    if (payload.capability === 'structured_output') {
+      try { JSON.parse(result.content) } catch {
+        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
+      }
+    }
+
+    return { success: true, status: 'completed', output: result.content, provider: 'deepinfra', model: result.model }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    const message = err instanceof Error ? err.message : 'Unknown DeepInfra error'
+    return { success: false, status: 'failed', error: `DeepInfra execution failed: ${redactProviderSecrets(message, [apiKey])}` }
+  }
+}
+
+async function executeTextCapabilityWithFallback(payload: WorkerJobData): Promise<ProcessorResult> {
+  try {
+    return await executeGroqTextCapability(payload)
+  } catch (err) {
+    if (!(err instanceof ProviderConfigError)) throw err
+  }
+
+  try {
+    return await executeDeepInfraTextCapability(payload)
+  } catch (err) {
+    if (err instanceof ProviderConfigError) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
+      }
+    }
+    throw err
+  }
+}
+
+async function executeChatWithFallback(payload: WorkerJobData): Promise<ProcessorResult> {
+  try {
+    return await executeGroqChat(payload)
+  } catch (err) {
+    if (!(err instanceof ProviderConfigError)) throw err
+  }
+
+  try {
+    return await executeDeepInfraTextCapability(payload)
+  } catch (err) {
+    if (err instanceof ProviderConfigError) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
+      }
+    }
+    throw err
   }
 }
 
@@ -398,12 +478,12 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
   try {
     // Groq chat (original)
     if (implementedProvider === 'groq' && capability === 'chat') {
-      return await executeGroqChat(payload)
+      return await executeChatWithFallback(payload)
     }
 
-    // Groq text capabilities (reasoning, code, summarization, translation, classification, extraction, structured_output)
+    // Groq primary text capabilities with DeepInfra as backend-owned fallback.
     if (implementedProvider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      return await executeGroqTextCapability(payload)
+      return await executeTextCapabilityWithFallback(payload)
     }
 
     // Together image

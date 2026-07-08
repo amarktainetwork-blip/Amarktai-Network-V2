@@ -18,6 +18,11 @@ export type ProviderKey = (typeof PROVIDER_KEYS)[number]
 export const PROVIDER_HEALTH_STATUSES = [
   'unconfigured',
   'configured',
+  'live',
+  'failed',
+  'gated',
+  'runtime_restricted',
+  'requires_review',
   'healthy',
   'degraded',
   'error',
@@ -25,6 +30,14 @@ export const PROVIDER_HEALTH_STATUSES = [
 ] as const
 
 export type ProviderHealthStatus = (typeof PROVIDER_HEALTH_STATUSES)[number]
+
+export const CREDENTIAL_USAGE_POLICIES = [
+  'backend_runtime_allowed',
+  'coding_tools_only',
+  'unknown_requires_review',
+] as const
+
+export type CredentialUsagePolicy = (typeof CREDENTIAL_USAGE_POLICIES)[number]
 
 // ── Cost Tiers ────────────────────────────────────────────────────────────────
 
@@ -47,6 +60,7 @@ export const ProviderDefinitionSchema = z.object({
   baseUrl: z.string().default(''),
   defaultModel: z.string().default(''),
   fallbackModel: z.string().default(''),
+  credentialUsagePolicy: z.enum(CREDENTIAL_USAGE_POLICIES).default('backend_runtime_allowed'),
   healthStatus: z.enum(PROVIDER_HEALTH_STATUSES).default('unconfigured'),
 })
 

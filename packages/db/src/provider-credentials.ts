@@ -12,6 +12,7 @@ import {
   getProviderEnvVar,
   isValidProvider,
   maskProviderKey,
+  type CredentialUsagePolicy,
   type ProviderKey,
 } from '@amarktai/core'
 import { prisma } from './client.js'
@@ -34,6 +35,7 @@ export interface ProviderCredentialStatus {
   baseUrl: string
   defaultModel: string
   fallbackModel: string
+  credentialUsagePolicy: CredentialUsagePolicy
   healthStatus: string
   healthMessage: string
   lastCheckedAt: Date | null
@@ -49,6 +51,7 @@ export interface SaveProviderCredentialInput {
   baseUrl?: string
   defaultModel?: string
   fallbackModel?: string
+  credentialUsagePolicy?: string
   notes?: string
 }
 
@@ -63,7 +66,7 @@ export class ProviderConfigError extends Error {
   constructor(
     message: string,
     readonly providerKey: string,
-    readonly code: 'invalid-provider' | 'missing-config' | 'disabled' | 'decrypt-failed',
+    readonly code: 'invalid-provider' | 'missing-config' | 'disabled' | 'decrypt-failed' | 'runtime-restricted',
   ) {
     super(message)
     this.name = 'ProviderConfigError'
@@ -83,9 +86,21 @@ const PROVIDER_KEY_LIST: readonly ProviderKey[] = PROVIDER_KEYS
 export async function resolveProviderApiKey(providerKey: string): Promise<ResolvedProviderApiKey> {
   const key = assertProviderKey(providerKey)
   const row = await prisma.aiProvider.findUnique({ where: { providerKey: key } })
+  const usagePolicy = normalizeCredentialUsagePolicy(
+    row?.credentialUsagePolicy,
+    key,
+  )
 
   if (row && !row.enabled) {
     throw new ProviderConfigError(`Provider '${key}' is disabled`, key, 'disabled')
+  }
+
+  if (key === 'mimo' && usagePolicy !== 'backend_runtime_allowed') {
+    throw new ProviderConfigError(
+      `Provider '${key}' credential is restricted to ${usagePolicy}; backend runtime execution is disabled`,
+      key,
+      'runtime-restricted',
+    )
   }
 
   if (row?.apiKey) {
@@ -115,6 +130,10 @@ export async function getProviderCredentialStatus(providerKey: string): Promise<
   const hasEnvKey = !!process.env[getProviderEnvVar(key)]
   const enabled = row?.enabled ?? false
   const source: ProviderCredentialSource = hasDbKey ? 'database' : hasEnvKey ? 'env' : 'missing'
+  const credentialUsagePolicy = normalizeCredentialUsagePolicy(
+    row?.credentialUsagePolicy,
+    key,
+  )
 
   return {
     providerKey: key,
@@ -126,6 +145,7 @@ export async function getProviderCredentialStatus(providerKey: string): Promise<
     baseUrl: row?.baseUrl ?? '',
     defaultModel: row?.defaultModel ?? '',
     fallbackModel: row?.fallbackModel ?? '',
+    credentialUsagePolicy,
     healthStatus: row?.healthStatus ?? (hasEnvKey ? 'configured' : 'unconfigured'),
     healthMessage: row?.healthMessage ?? '',
     lastCheckedAt: row?.lastCheckedAt ?? null,
@@ -156,6 +176,9 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
   if (input.baseUrl !== undefined) data.baseUrl = input.baseUrl
   if (input.defaultModel !== undefined) data.defaultModel = input.defaultModel
   if (input.fallbackModel !== undefined) data.fallbackModel = input.fallbackModel
+  if (input.credentialUsagePolicy !== undefined) {
+    data.credentialUsagePolicy = normalizeCredentialUsagePolicy(input.credentialUsagePolicy, providerKey)
+  }
   if (input.notes !== undefined) data.notes = input.notes
 
   if (input.clearKey) {
@@ -166,6 +189,9 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
   } else if (input.apiKey && input.apiKey.trim()) {
     data.apiKey = encryptProviderKey(input.apiKey.trim())
     data.maskedPreview = maskProviderKey(input.apiKey.trim())
+    data.credentialUsagePolicy = typeof data.credentialUsagePolicy === 'string'
+      ? data.credentialUsagePolicy
+      : defaultCredentialUsagePolicy(providerKey)
     data.healthStatus = 'configured'
     data.healthMessage = 'Credential stored; live health not checked.'
   }
@@ -179,6 +205,9 @@ export async function saveProviderCredential(input: SaveProviderCredentialInput)
       baseUrl: input.baseUrl ?? '',
       defaultModel: input.defaultModel ?? '',
       fallbackModel: input.fallbackModel ?? '',
+      credentialUsagePolicy: typeof data.credentialUsagePolicy === 'string'
+        ? data.credentialUsagePolicy
+        : defaultCredentialUsagePolicy(providerKey),
       notes: input.notes ?? '',
       sortOrder: defaultSortOrder(providerKey),
       apiKey: typeof data.apiKey === 'string' ? data.apiKey : '',
@@ -209,6 +238,7 @@ export async function updateProviderHealthStatus(input: UpdateProviderHealthInpu
       baseUrl: '',
       defaultModel: '',
       fallbackModel: '',
+      credentialUsagePolicy: defaultCredentialUsagePolicy(providerKey),
       notes: '',
       sortOrder: defaultSortOrder(providerKey),
       apiKey: '',
@@ -227,6 +257,24 @@ export async function updateProviderHealthStatus(input: UpdateProviderHealthInpu
   })
 
   return getProviderCredentialStatus(providerKey)
+}
+
+export function normalizeCredentialUsagePolicy(
+  policy: string | null | undefined,
+  providerKey: ProviderKey,
+): CredentialUsagePolicy {
+  if (
+    policy === 'backend_runtime_allowed'
+    || policy === 'coding_tools_only'
+    || policy === 'unknown_requires_review'
+  ) {
+    return policy
+  }
+  return defaultCredentialUsagePolicy(providerKey)
+}
+
+function defaultCredentialUsagePolicy(providerKey: ProviderKey): CredentialUsagePolicy {
+  return providerKey === 'mimo' ? 'coding_tools_only' : 'backend_runtime_allowed'
 }
 
 function assertProviderKey(providerKey: string): ProviderKey {

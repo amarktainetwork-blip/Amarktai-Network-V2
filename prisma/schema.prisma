@@ -198,6 +198,7 @@ model AiProvider {
   baseUrl       String    @default("") @map("base_url")
   defaultModel  String    @default("") @map("default_model")
   fallbackModel String    @default("") @map("fallback_model")
+  credentialUsagePolicy String @default("backend_runtime_allowed") @map("credential_usage_policy")
   healthStatus  String    @default("unconfigured") @map("health_status") // unconfigured|configured|healthy|degraded|error|disabled
   healthMessage String    @default("") @map("health_message")
   lastCheckedAt DateTime? @map("last_checked_at")

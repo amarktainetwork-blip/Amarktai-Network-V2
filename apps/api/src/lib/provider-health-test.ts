@@ -7,9 +7,10 @@ import {
 } from '@amarktai/db'
 import { getGenxBaseUrl, isValidProvider, type ProviderKey } from '@amarktai/core'
 
-const GATED_PROVIDERS = new Set<ProviderKey>(['mimo', 'deepinfra'])
 const GENX_MODELS_TEST_TIMEOUT_MS = 15_000
 const GENX_VIDEO_MODEL_MARKERS = ['seedance', 'video', 'veo', 'wan', 'kling']
+const MIMO_CODING_TOOLS_ONLY_MESSAGE = 'MiMo credential is configured but restricted to coding/interactive tools, so backend runtime is disabled until a backend/application-allowed MiMo key is supplied.'
+const MIMO_REVIEW_REQUIRED_MESSAGE = 'MiMo credential usage policy requires admin review before backend runtime testing or execution.'
 
 export interface ProviderLiveTestResult {
   provider: ProviderCredentialStatus
@@ -24,14 +25,33 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
   let apiKey = ''
 
   try {
+    if (providerKey === 'mimo') {
+      return testMimoCredential()
+    }
+
     const credential = await resolveProviderApiKey(providerKey)
     apiKey = credential.apiKey
 
-    if (GATED_PROVIDERS.has(providerKey)) {
+    if (providerKey === 'deepinfra') {
+      const providerStatus = await getProviderCredentialStatus('deepinfra')
+      const { deepinfraChat } = await import('@amarktai/providers')
+      const result = await deepinfraChat({
+        apiKey,
+        baseUrl: providerStatus.baseUrl || undefined,
+        providerDefaultModel: providerStatus.defaultModel,
+        prompt: 'Reply with exactly: AMARKTAI_PROVIDER_TEST_OK',
+        maxTokens: 16,
+        temperature: 0,
+      })
+
+      if (!result.content?.trim()) {
+        throw new Error('DeepInfra returned an empty provider test response')
+      }
+
       const provider = await updateProviderHealthStatus({
         providerKey,
-        healthStatus: 'gated',
-        healthMessage: `${providerKey} live key testing is not implemented yet. Provider was not marked live.`,
+        healthStatus: 'live',
+        healthMessage: `Live test passed through DeepInfra chat (${result.model}). Provider health is live; capability proof still requires completed jobs.`,
       })
       return { provider }
     }
@@ -128,9 +148,75 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
   }
 }
 
+async function testMimoCredential(): Promise<ProviderLiveTestResult> {
+  const providerStatus = await getProviderCredentialStatus('mimo')
+
+  if (!providerStatus.configured) {
+    const provider = await updateProviderHealthStatus({
+      providerKey: 'mimo',
+      healthStatus: 'unconfigured',
+      healthMessage: 'MiMo credential is not configured.',
+    })
+    return { provider }
+  }
+
+  if (providerStatus.credentialUsagePolicy === 'coding_tools_only') {
+    const provider = await updateProviderHealthStatus({
+      providerKey: 'mimo',
+      healthStatus: 'runtime_restricted',
+      healthMessage: MIMO_CODING_TOOLS_ONLY_MESSAGE,
+    })
+    return { provider }
+  }
+
+  if (providerStatus.credentialUsagePolicy === 'unknown_requires_review') {
+    const provider = await updateProviderHealthStatus({
+      providerKey: 'mimo',
+      healthStatus: 'requires_review',
+      healthMessage: MIMO_REVIEW_REQUIRED_MESSAGE,
+    })
+    return { provider }
+  }
+
+  let apiKey = ''
+  try {
+    const credential = await resolveProviderApiKey('mimo')
+    apiKey = credential.apiKey
+    const { mimoChat } = await import('@amarktai/providers')
+    const result = await mimoChat({
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+      providerDefaultModel: providerStatus.defaultModel,
+      prompt: 'Reply with exactly: AMARKTAI_PROVIDER_TEST_OK',
+      maxTokens: 16,
+      temperature: 0,
+    })
+
+    if (!result.content?.trim()) {
+      throw new Error('MiMo returned an empty provider test response')
+    }
+
+    const provider = await updateProviderHealthStatus({
+      providerKey: 'mimo',
+      healthStatus: 'live',
+      healthMessage: `Live test passed through MiMo chat (${result.model}) with backend_runtime_allowed credential policy.`,
+    })
+    return { provider }
+  } catch (err) {
+    const status = providerStatusForError(err)
+    const provider = await updateProviderHealthStatus({
+      providerKey: 'mimo',
+      healthStatus: status,
+      healthMessage: redactProviderSecrets(safeErrorMessage(err), [apiKey]),
+    })
+    return { provider }
+  }
+}
+
 function providerStatusForError(err: unknown): 'unconfigured' | 'failed' | 'gated' {
   if (err instanceof ProviderConfigError && err.code === 'missing-config') return 'unconfigured'
   if (err instanceof ProviderConfigError && err.code === 'disabled') return 'gated'
+  if (err instanceof ProviderConfigError && err.code === 'runtime-restricted') return 'gated'
   return 'failed'
 }
 

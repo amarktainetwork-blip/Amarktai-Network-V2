@@ -17,6 +17,22 @@ export {
   type GroqTtsResponse,
 } from './groq-client.js'
 
+// DeepInfra — OpenAI-compatible text fallback/runtime diagnostics
+export {
+  deepinfraChat,
+  resolveDeepInfraChatModel,
+  type DeepInfraChatRequest,
+  type DeepInfraChatResponse,
+} from './deepinfra-client.js'
+
+// MiMo — OpenAI-compatible text client, gated by credential usage policy
+export {
+  mimoChat,
+  resolveMimoChatModel,
+  type MimoChatRequest,
+  type MimoChatResponse,
+} from './mimo-client.js'
+
 // Together AI — image generation
 export {
   resolveTogetherImageModel,
