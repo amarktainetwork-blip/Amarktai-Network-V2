@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "prisma:validate": "node scripts/prisma-validate.mjs",
     "proof": "npx tsx scripts/run-core-proof.ts",
+    "proof:router-app-contract": "node scripts/proof-router-app-contract.mjs",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
