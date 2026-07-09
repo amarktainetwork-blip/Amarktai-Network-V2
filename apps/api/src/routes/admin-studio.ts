@@ -4,6 +4,19 @@ import { prisma } from '@amarktai/db'
 import { QUEUE_NAMES } from '@amarktai/core'
 import { getRuntimeProofStatus } from '../lib/runtime-proof-status.js'
 
+const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
+  'text.chat': 'chat',
+  'text.reasoning': 'reasoning',
+  'text.code': 'code',
+  'text.summarization': 'summarization',
+  'text.translation': 'translation',
+  'text.classification': 'classification',
+  'text.extraction': 'extraction',
+  'text.structured_output': 'structured_output',
+  'image.generate': 'image_generation',
+  'video.generate': 'video_generation',
+}
+
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
@@ -30,6 +43,15 @@ function getProvenCapabilities(): string[] {
     .map((c) => c.capability)
 }
 
+function normalizeStudioCapability(capability: unknown): string | null {
+  if (typeof capability !== 'string' || !capability.trim()) return null
+  const value = capability.trim()
+  if (STUDIO_CAPABILITY_ALIASES[value]) return STUDIO_CAPABILITY_ALIASES[value]
+  const provenOrKnown = getRuntimeProofStatus().provenCapabilities.some((item) => item.capability === value)
+    || getRuntimeProofStatus().unprovenCapabilities.some((item) => item.capability === value)
+  return provenOrKnown ? value : null
+}
+
 export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
   // Lazily create queue
   let queue: Queue | null = null
@@ -46,10 +68,14 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     if (!(await requireAdmin(app, request, reply))) return
 
     const body = request.body as Record<string, unknown>
-    const capability = body.capability as string
+    const capability = normalizeStudioCapability(body.capability)
     const inputObj = (body.input || body) as Record<string, unknown>
     const prompt = String(body.prompt || inputObj.prompt || inputObj.text || '')
     const metadata = (body.metadata || {}) as Record<string, unknown>
+
+    if (!capability) {
+      return reply.status(400).send({ error: true, message: 'Capability is not mapped to a backend execution key' })
+    }
 
     // Reject provider/model override
     if (body.provider || body.model || metadata.provider || metadata.model) {
