@@ -310,6 +310,15 @@ export default function CapabilityLabPage() {
         )
       })}
 
+      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-cyan-200">
+          <Zap className="h-3.5 w-3.5" /> Pre-deploy proof pack
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Run <code className="rounded bg-black/30 px-1 py-0.5 text-[9px] text-cyan-300">npm run proof:router-app-contract</code> to verify app contract, Brain Router, and executable paths before deploy.
+        </p>
+      </div>
+
       <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
           <AlertTriangle className="h-3.5 w-3.5" /> No fake ready states
