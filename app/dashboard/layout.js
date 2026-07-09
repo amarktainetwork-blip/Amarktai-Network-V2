@@ -2,20 +2,20 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { NAV } from '@/lib/appdata'
+import { NAV, ADVANCED_NAV } from '@/lib/appdata'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, FlaskConical, Plug, Palette, Boxes, Settings, Zap, ArrowLeft, Menu, X, LogOut,
-  Activity, Cpu, Bot, Package,
+  MessageSquare, Image as ImageIcon, Video, Music, Search, Library, Activity, Settings, Zap, ArrowLeft, Menu, X, LogOut,
+  FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package, ChevronDown, ChevronUp,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 
-const ICONS = { LayoutDashboard, FlaskConical, Plug, Palette, Boxes, Settings, Activity, Cpu, Bot, Package }
+const ICONS = { MessageSquare, ImageIcon, Video, Music, Search, Library, Activity, Settings, FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package }
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [user, setUser] = useState(null)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const studioRoute = pathname === '/dashboard/studio'
 
   useEffect(() => {
@@ -33,7 +33,6 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/[0.06] bg-[hsl(240_14%_3.5%)] md:flex">
         <Link href="/" className="flex items-center gap-2.5 border-b border-white/[0.06] px-5 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-cyan-400 to-violet-500 text-black">
@@ -66,6 +65,40 @@ export default function DashboardLayout({ children }) {
               </Link>
             )
           })}
+
+          <div className="pt-3 mt-3 border-t border-white/[0.06]">
+            <button
+              onClick={() => setAdvancedOpen(!advancedOpen)}
+              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
+            >
+              Advanced
+              {advancedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+            {advancedOpen && (
+              <div className="mt-1 space-y-1">
+                {ADVANCED_NAV.map((item) => {
+                  const Icon = ICONS[item.icon]
+                  const active = pathname === item.href
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      prefetch={false}
+                      className={cn(
+                        'group flex items-center gap-3 rounded-md px-3 py-2 text-xs transition',
+                        active
+                          ? 'bg-white/[0.06] text-foreground'
+                          : 'text-muted-foreground hover:bg-white/[0.03] hover:text-foreground'
+                      )}
+                    >
+                      <Icon className={cn('h-3.5 w-3.5 transition', active ? 'text-cyan-300' : 'text-muted-foreground group-hover:text-foreground')} />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="border-t border-white/[0.06] p-3">
@@ -83,7 +116,6 @@ export default function DashboardLayout({ children }) {
         </div>
       </aside>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setMobileOpen(false)}>
           <aside className="h-full w-64 bg-[hsl(240_14%_3.5%)] p-3" onClick={(e) => e.stopPropagation()}>
@@ -105,12 +137,30 @@ export default function DashboardLayout({ children }) {
                   </Link>
                 )
               })}
+              <div className="pt-3 mt-3 border-t border-white/[0.06]">
+                <button
+                  onClick={() => setAdvancedOpen(!advancedOpen)}
+                  className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+                >
+                  Advanced
+                  {advancedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+                {advancedOpen && ADVANCED_NAV.map((item) => {
+                  const Icon = ICONS[item.icon]
+                  const active = pathname === item.href
+                  return (
+                    <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
+                      className={cn('flex items-center gap-3 rounded-md px-3 py-2 text-xs transition', active ? 'bg-white/[0.06] text-foreground' : 'text-muted-foreground hover:bg-white/[0.03] hover:text-foreground')}>
+                      <Icon className={cn('h-3.5 w-3.5', active ? 'text-cyan-300' : '')} />{item.label}
+                    </Link>
+                  )
+                })}
+              </div>
             </nav>
           </aside>
         </div>
       )}
 
-      {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
         {!studioRoute && <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-background/70 px-5 py-3 backdrop-blur-xl md:px-8">
           <button className="md:hidden" onClick={() => setMobileOpen(true)}>

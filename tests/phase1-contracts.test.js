@@ -191,9 +191,9 @@ describe('Dashboard truth cleanup', () => {
     expect(layoutText).toContain("pathname === '/dashboard/studio'")
   })
 
-  it('dashboard index redirects to Studio', () => {
+  it('dashboard index redirects to Chat workspace', () => {
     const pageIndex = fs.readFileSync(path.join(ROOT, 'app/dashboard/page.js'), 'utf8')
-    expect(pageIndex).toContain("redirect('/dashboard/studio')")
+    expect(pageIndex).toContain("redirect('/dashboard/chat')")
   })
 
   it('Studio derives schema keys from the capability catalog', () => {
