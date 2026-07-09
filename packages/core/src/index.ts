@@ -183,3 +183,34 @@ export {
   maskProviderKey,
   isEncryptedProviderKey,
 } from './provider-key-security.js'
+
+// Long-form video orchestration
+export {
+  LongFormVideoRequestSchema,
+  LongFormVideoPlanSchema,
+  LongFormSceneSchema,
+  LongFormStoryboardSchema,
+  LongFormRenderStepSchema,
+  LongFormVideoArtifactPlanSchema,
+  LongFormVideoSafetyLevel,
+  LongFormVideoAspectRatio,
+  LongFormVideoStyle,
+  LongFormVideoTone,
+  LongFormSceneStatus,
+  LongFormRenderStepType,
+  LongFormRenderStatus,
+  LONG_FORM_VIDEO_STATUS,
+  validateLongFormVideoRequest,
+  validateLongFormVideoPlan,
+  type LongFormVideoRequest,
+  type LongFormVideoPlan,
+  type LongFormScene,
+  type LongFormStoryboard,
+  type LongFormRenderStep,
+  type LongFormVideoArtifactPlan,
+  type LongFormVideoStatus,
+} from './long-form-video.js'
+
+export {
+  createLongFormVideoPlan,
+} from './long-form-planner.js'

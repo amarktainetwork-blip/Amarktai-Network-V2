@@ -85,11 +85,11 @@ export default function VideoStudioPage() {
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Long-Form Video</span>
-            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
-              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[9px]">
+              <Zap className="mr-1 h-2.5 w-2.5" /> Phase 1 Ready
             </Badge>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">Storyboard, stitching, multi-scene</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Orchestration foundation ready. Final render pending.</p>
         </Card>
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
@@ -229,6 +229,45 @@ export default function VideoStudioPage() {
               <p className="text-xs text-amber-200">Job {jobResult.status || 'pending'}</p>
             </div>
           )}
+        </Card>
+      )}
+
+      {mode === 'long' && (
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Video Phase 1</h3>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
+              <p className="text-xs font-semibold text-cyan-200">Orchestration Foundation Ready</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Schema, planner, and scene splitter are ready. Admin API can create plans.
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
+              <p className="text-xs font-semibold text-amber-200">Final Rendering Pending</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Per-scene video generation is possible using existing video_generation capability.
+              </p>
+              <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                <p className="font-semibold text-amber-300">Missing Dependencies:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Scene execution pipeline (Phase 2)</li>
+                  <li>ffmpeg/stitching (Phase 4)</li>
+                  <li>Voiceover backend (if enabled)</li>
+                  <li>Subtitle backend (if enabled)</li>
+                  <li>Music bed backend (if enabled)</li>
+                  <li>Final artifact assembly (Phase 5)</li>
+                </ul>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+              <p className="text-[10px] text-muted-foreground">
+                <span className="font-semibold text-cyan-300">Admin API:</span> POST /api/admin/long-form-video/plan
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground/60">
+                Creates a plan without executing video generation. Returns missing dependencies and next steps.
+              </p>
+            </div>
+          </div>
         </Card>
       )}
 

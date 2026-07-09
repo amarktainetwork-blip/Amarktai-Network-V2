@@ -490,13 +490,21 @@ async function runAudit() {
     ]
   }
   
-  // Long-form video readiness with complete missing parts list
+  // Long-form video readiness with Phase 1 orchestration foundation detection
+  const longFormSchemaExists = await fileExists('packages/core/src/long-form-video.ts')
+  const longFormPlannerExists = await fileExists('packages/core/src/long-form-planner.ts')
+  const longFormPlanRouteExists = await fileExists('apps/api/src/routes/admin-long-form-video.ts')
+  
   const longFormReadiness = {
-    scriptPlanner: false,
-    sceneSplitter: false,
-    sceneJobCreation: false,
-    promptEnhancement: false,
-    perSceneGeneration: false,
+    orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,
+    schemaExists: longFormSchemaExists,
+    plannerExists: longFormPlannerExists,
+    planRouteExists: longFormPlanRouteExists,
+    scriptPlanner: longFormPlannerExists,
+    sceneSplitter: longFormPlannerExists, // Phase 1 includes scene splitting
+    sceneJobCreation: false, // Phase 2
+    promptEnhancement: false, // Phase 2
+    perSceneGeneration: false, // Phase 2
     voiceover: false,
     subtitles: false,
     musicBed: false,
