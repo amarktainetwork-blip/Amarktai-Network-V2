@@ -214,3 +214,15 @@ export {
 export {
   createLongFormVideoPlan,
 } from './long-form-planner.js'
+
+export {
+  buildSceneVideoPrompt,
+  createSceneExecutionPayloads,
+  createLongFormExecutionState,
+  updateSceneExecutionState,
+  calculateLongFormProgress,
+  getExecutionSummary,
+  type SceneExecutionPayload,
+  type SceneExecutionState,
+  type LongFormExecutionState,
+} from './long-form-execution.js'

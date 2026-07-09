@@ -490,21 +490,33 @@ async function runAudit() {
     ]
   }
   
-  // Long-form video readiness with Phase 1 orchestration foundation detection
+  // Long-form video readiness with Phase 2 scene execution detection
   const longFormSchemaExists = await fileExists('packages/core/src/long-form-video.ts')
   const longFormPlannerExists = await fileExists('packages/core/src/long-form-planner.ts')
+  const longFormExecutionExists = await fileExists('packages/core/src/long-form-execution.ts')
   const longFormPlanRouteExists = await fileExists('apps/api/src/routes/admin-long-form-video.ts')
+  
+  // Check for execute-scenes route in the admin route file
+  let longFormExecuteRouteExists = false
+  if (longFormPlanRouteExists) {
+    const routeContent = await safeRead('apps/api/src/routes/admin-long-form-video.ts')
+    longFormExecuteRouteExists = routeContent?.includes('execute-scenes') || false
+  }
   
   const longFormReadiness = {
     orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,
     schemaExists: longFormSchemaExists,
     plannerExists: longFormPlannerExists,
+    executionModuleExists: longFormExecutionExists,
     planRouteExists: longFormPlanRouteExists,
+    executeScenesRouteExists: longFormExecuteRouteExists,
+    perSceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
     scriptPlanner: longFormPlannerExists,
     sceneSplitter: longFormPlannerExists, // Phase 1 includes scene splitting
-    sceneJobCreation: false, // Phase 2
-    promptEnhancement: false, // Phase 2
-    perSceneGeneration: false, // Phase 2
+    sceneExecutionPayloadBuilder: longFormExecutionExists,
+    sceneJobCreation: longFormExecuteRouteExists, // Phase 2 queues jobs
+    promptEnhancement: longFormExecutionExists, // Phase 2 builds enhanced prompts
+    perSceneGeneration: longFormExecuteRouteExists, // Phase 2 can generate per-scene
     voiceover: false,
     subtitles: false,
     musicBed: false,
