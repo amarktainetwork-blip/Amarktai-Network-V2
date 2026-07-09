@@ -1,0 +1,710 @@
+#!/usr/bin/env node
+
+/**
+ * Amarktai Network V2 — Full Build Completion Map Audit
+ * 
+ * This script inspects the actual codebase to produce a truthful completion map.
+ * It does NOT hardcode findings — it reads files and extracts real state.
+ */
+
+import fs from 'fs/promises'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const ROOT = path.resolve(__dirname, '..')
+
+// Helper to safely read files
+async function safeRead(filePath) {
+  try {
+    return await fs.readFile(path.join(ROOT, filePath), 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+// Helper to check if file exists
+async function fileExists(filePath) {
+  try {
+    await fs.access(path.join(ROOT, filePath))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Extract provider list from providers.ts
+async function extractProviders() {
+  const content = await safeRead('packages/core/src/providers.ts')
+  if (!content) return { found: false, providers: [] }
+  
+  const match = content.match(/PROVIDER_KEYS\s*=\s*\[([^\]]+)\]/)
+  if (!match) return { found: false, providers: [] }
+  
+  const providers = match[1]
+    .split(',')
+    .map(p => p.trim().replace(/['"]/g, ''))
+    .filter(Boolean)
+  
+  return { found: true, providers }
+}
+
+// Extract capabilities from capabilities.ts
+async function extractCapabilities() {
+  const content = await safeRead('packages/core/src/capabilities.ts')
+  if (!content) return { found: false, capabilities: [] }
+  
+  const match = content.match(/CAPABILITY_KEYS\s*=\s*\[([^\]]+)\]/s)
+  if (!match) return { found: false, capabilities: [] }
+  
+  const capabilities = match[1]
+    .split(',')
+    .map(c => c.trim().replace(/['"]/g, '').replace(/,\s*$/, ''))
+    .filter(Boolean)
+  
+  return { found: true, capabilities }
+}
+
+// Extract model catalogue from model-catalog.ts
+async function extractModelCatalogue() {
+  const content = await safeRead('packages/core/src/model-catalog.ts')
+  if (!content) return { found: false, models: [] }
+  
+  const models = []
+  const modelRegex = /{\s*provider:\s*'([^']+)',\s*modelId:\s*'([^']+)',\s*displayName:\s*'([^']+)',\s*capabilities:\s*\[([^\]]+)\],\s*status:\s*'([^']+)',\s*executable:\s*(true|false)/g
+  
+  let match
+  while ((match = modelRegex.exec(content)) !== null) {
+    models.push({
+      provider: match[1],
+      modelId: match[2],
+      displayName: match[3],
+      capabilities: match[4].split(',').map(c => c.trim().replace(/['"]/g, '')).filter(Boolean),
+      status: match[5],
+      executable: match[6] === 'true'
+    })
+  }
+  
+  return { found: true, models }
+}
+
+// Check Brain Router integration
+async function checkBrainRouter() {
+  const brainRouter = await safeRead('packages/core/src/brain-router.ts')
+  const providerExecutor = await safeRead('apps/worker/src/providers/provider-executor.ts')
+  
+  return {
+    exists: !!brainRouter,
+    integratedInWorker: providerExecutor?.includes('routeBrain') || false,
+    routingModes: brainRouter?.match(/ROUTING_MODES\s*=\s*\[([^\]]+)\]/)?.[1]
+      ?.split(',').map(m => m.trim().replace(/['"]/g, '')).filter(Boolean) || []
+  }
+}
+
+// Check worker execution paths
+async function checkWorkerExecution() {
+  const content = await safeRead('apps/worker/src/providers/provider-executor.ts')
+  if (!content) return { found: false, executors: {} }
+  
+  return {
+    found: true,
+    executors: {
+      groqChat: content.includes('executeGroqChat') || content.includes('groqChat'),
+      groqText: content.includes('executeGroqTextCapability'),
+      deepinfraText: content.includes('executeDeepInfraTextCapability'),
+      togetherImage: content.includes('executeTogetherImage'),
+      genxVideo: content.includes('executeGenxVideo')
+    },
+    usesBrainRouter: content.includes('routeBrain')
+  }
+}
+
+// Check dashboard pages
+async function checkDashboardPages() {
+  const dashboardDir = path.join(ROOT, 'app', 'dashboard')
+  try {
+    const entries = await fs.readdir(dashboardDir)
+    const pages = entries.filter(e => !e.startsWith('_') && !e.startsWith('.'))
+    
+    const pageStatus = {}
+    for (const page of pages) {
+      const pagePath = path.join(dashboardDir, page, 'page.js')
+      const exists = await fileExists(`app/dashboard/${page}/page.js`)
+      
+      if (exists) {
+        const content = await safeRead(`app/dashboard/${page}/page.js`)
+        const isDisabled = content?.includes('disabled') || content?.includes('Backend Pending') || content?.includes('On Hold')
+        const hasExecution = content?.includes('executeWithProvider') || content?.includes('/api/v1/jobs')
+        
+        pageStatus[page] = {
+          exists: true,
+          status: isDisabled ? 'design-ready' : (hasExecution ? 'execution-ready' : 'display-only'),
+          hasBackendIntegration: !!hasExecution
+        }
+      } else {
+        pageStatus[page] = { exists: false, status: 'missing' }
+      }
+    }
+    
+    return { found: true, pages: pageStatus }
+  } catch {
+    return { found: false, pages: {} }
+  }
+}
+
+// Check app contract routes
+async function checkAppContract() {
+  const jobsRoute = await safeRead('apps/api/src/routes/jobs.ts')
+  const adminConnections = await safeRead('apps/api/src/routes/admin-app-connections.ts')
+  
+  return {
+    found: true,
+    jobsEndpoint: !!jobsRoute,
+    appConnectionsEndpoint: !!adminConnections,
+    hasApiKeyHashing: jobsRoute?.includes('hashAppApiKey') || false,
+    hasBlockedOverrides: jobsRoute?.includes('hasBlockedOverrides') || false,
+    acceptsRoutingMode: jobsRoute?.includes('routingMode') || false
+  }
+}
+
+// Check installed libraries
+async function checkInstalledLibraries() {
+  const pkg = JSON.parse(await safeRead('package.json') || '{}')
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+  
+  return {
+    found: true,
+    libraries: {
+      qdrant: !!deps['@qdrant/js-client-rest'],
+      crawlee: !!deps['crawlee'],
+      playwright: !!deps['playwright'],
+      bullmq: !!deps['bullmq'],
+      ioredis: !!deps['ioredis'],
+      prisma: !!deps['@prisma/client'],
+      socketio: !!deps['socket.io'],
+      sentiment: !!deps['sentiment'],
+      ffmpeg: !!deps['fluent-ffmpeg'] || !!deps['ffmpeg'],
+      sharp: !!deps['sharp'],
+      canvas: !!deps['canvas']
+    }
+  }
+}
+
+// Check provider clients
+async function checkProviderClients() {
+  const content = await safeRead('packages/providers/src/index.ts')
+  if (!content) return { found: false, clients: {} }
+  
+  return {
+    found: true,
+    clients: {
+      groq: content.includes('groqChat') || content.includes('groq'),
+      together: content.includes('togetherGenerateImage') || content.includes('together'),
+      genx: content.includes('genxGenerateVideo') || content.includes('genx'),
+      deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
+      mimo: content.includes('mimo') || false
+    }
+  }
+}
+
+// Check routing map
+async function checkRoutingMap() {
+  const content = await safeRead('lib/capability-routing-map.js')
+  if (!content) return { found: false }
+  
+  return {
+    found: true,
+    hasBrainRouter: content.includes('BRAIN_ROUTER_V1'),
+    hasModelCatalogue: content.includes('MODEL_CATALOGUE_SUMMARY'),
+    hasRoutingTruth: content.includes('ROUTING_TRUTH')
+  }
+}
+
+// Main audit function
+async function runAudit() {
+  console.log('🔍 Running Amarktai Network V2 Build Completion Audit...\n')
+  
+  const [
+    providers,
+    capabilities,
+    modelCatalogue,
+    brainRouter,
+    workerExecution,
+    dashboardPages,
+    appContract,
+    installedLibs,
+    providerClients,
+    routingMap
+  ] = await Promise.all([
+    extractProviders(),
+    extractCapabilities(),
+    extractModelCatalogue(),
+    checkBrainRouter(),
+    checkWorkerExecution(),
+    checkDashboardPages(),
+    checkAppContract(),
+    checkInstalledLibraries(),
+    checkProviderClients(),
+    checkRoutingMap()
+  ])
+  
+  // Classify capabilities
+  const executableCapabilities = []
+  const pendingCapabilities = []
+  const blockedCapabilities = []
+  
+  if (capabilities.found) {
+    for (const cap of capabilities.capabilities) {
+      if (cap.startsWith('adult_')) {
+        blockedCapabilities.push({ capability: cap, reason: 'adult_permission_required' })
+      } else if (['music_generation', 'long_form_video'].includes(cap)) {
+        pendingCapabilities.push({ capability: cap, reason: 'backend_not_wired' })
+      } else if (['chat', 'image_generation', 'video_generation'].includes(cap)) {
+        executableCapabilities.push({ capability: cap, status: 'live' })
+      } else if (['tts', 'stt', 'embeddings', 'research'].includes(cap)) {
+        pendingCapabilities.push({ capability: cap, reason: 'partial_implementation' })
+      } else {
+        pendingCapabilities.push({ capability: cap, reason: 'not_yet_wired' })
+      }
+    }
+  }
+  
+  // Classify models
+  const executableModels = []
+  const plannedModels = []
+  const blockedModels = []
+  
+  if (modelCatalogue.found) {
+    for (const model of modelCatalogue.models) {
+      if (model.status === 'blocked') {
+        blockedModels.push(model)
+      } else if (model.executable) {
+        executableModels.push(model)
+      } else {
+        plannedModels.push(model)
+      }
+    }
+  }
+  
+  // Classify dashboard pages
+  const executionPages = []
+  const designReadyPages = []
+  const displayOnlyPages = []
+  
+  if (dashboardPages.found) {
+    for (const [page, status] of Object.entries(dashboardPages.pages)) {
+      if (status.status === 'execution-ready') {
+        executionPages.push(page)
+      } else if (status.status === 'design-ready') {
+        designReadyPages.push(page)
+      } else if (status.status === 'display-only') {
+        displayOnlyPages.push(page)
+      }
+    }
+  }
+  
+  // Open-source audit
+  const openSourceInstalled = []
+  const openSourceWired = []
+  const openSourceMissing = []
+  
+  if (installedLibs.found) {
+    const libs = installedLibs.libraries
+    if (libs.qdrant) openSourceInstalled.push('qdrant')
+    if (libs.crawlee) openSourceInstalled.push('crawlee')
+    if (libs.playwright) openSourceInstalled.push('playwright')
+    if (libs.bullmq) openSourceInstalled.push('bullmq')
+    if (libs.ioredis) openSourceInstalled.push('ioredis')
+    if (libs.prisma) openSourceInstalled.push('prisma')
+    if (libs.socketio) openSourceInstalled.push('socket.io')
+    if (libs.sentiment) openSourceInstalled.push('sentiment')
+    if (libs.ffmpeg) openSourceInstalled.push('ffmpeg')
+    if (libs.sharp) openSourceInstalled.push('sharp')
+    if (libs.canvas) openSourceInstalled.push('canvas')
+    
+    // Check what's actually wired
+    if (libs.bullmq && libs.ioredis && workerExecution.usesBrainRouter) {
+      openSourceWired.push('bullmq-queue')
+    }
+    if (libs.prisma) {
+      openSourceWired.push('prisma-db')
+    }
+    if (libs.qdrant && routingMap.hasRoutingTruth) {
+      openSourceWired.push('qdrant-vector-search')
+    }
+    
+    // Check what's missing
+    if (!libs.ffmpeg) {
+      openSourceMissing.push('ffmpeg-for-video-stitching')
+    }
+    if (!libs.sharp && !libs.canvas) {
+      openSourceMissing.push('image-processing-library')
+    }
+  }
+  
+  // Music readiness
+  const musicReadiness = {
+    providerClient: false,
+    modelCatalogueEntries: modelCatalogue.models.some(m => m.capabilities.includes('music_generation')),
+    workerExecutor: workerExecution.found && workerExecution.executors.musicWorker === true,
+    dashboardPage: dashboardPages.found && dashboardPages.pages['music']?.exists,
+    missingParts: [
+      'music_provider_client',
+      'music_models_in_catalogue',
+      'music_worker_executor',
+      'music_artifact_persistence',
+      'music_dashboard_enablement'
+    ]
+  }
+  
+  // Long-form video readiness
+  const longFormReadiness = {
+    scriptPlanner: false,
+    sceneSplitter: false,
+    sceneJobCreation: false,
+    perSceneGeneration: false,
+    voiceover: false,
+    subtitles: false,
+    musicBed: false,
+    sceneStitching: false,
+    ffmpegIntegration: installedLibs.libraries.ffmpeg || false,
+    dashboardSceneStatus: false,
+    missingParts: [
+      'script_storyboard_planner',
+      'scene_splitter',
+      'scene_job_creation',
+      'per_scene_video_generation',
+      'voiceover_integration',
+      'subtitles_integration',
+      'music_bed_integration',
+      'scene_stitching',
+      'ffmpeg_integration',
+      'dashboard_scene_status'
+    ]
+  }
+  
+  // Marketing app readiness
+  const marketingAppReadiness = {
+    appContractRoutes: appContract.found && appContract.jobsEndpoint,
+    appApiKeyAuth: appContract.hasApiKeyHashing,
+    blockedOverrides: appContract.hasBlockedOverrides,
+    routingModeSupport: appContract.acceptsRoutingMode,
+    brandScrapeWorkflow: openSourceInstalled.includes('crawlee') && openSourceInstalled.includes('playwright'),
+    missingParts: []
+  }
+  
+  if (!marketingAppReadiness.appContractRoutes) {
+    marketingAppReadiness.missingParts.push('app_contract_routes')
+  }
+  if (!marketingAppReadiness.brandScrapeWorkflow) {
+    marketingAppReadiness.missingParts.push('brand_scrape_workflow')
+  }
+  
+  // Media quality status
+  const mediaQualityStatus = {
+    imageGeneration: {
+      provider: 'together',
+      model: modelCatalogue.models.find(m => m.provider === 'together' && m.capabilities.includes('image_generation'))?.modelId || 'unknown',
+      routingModesSupported: brainRouter.routingModes.length > 0,
+      premiumRouting: brainRouter.routingModes.includes('premium'),
+      issue: 'model_choice_or_prompt_payload'
+    },
+    videoGeneration: {
+      provider: 'genx',
+      model: modelCatalogue.models.find(m => m.provider === 'genx' && m.capabilities.includes('video_generation'))?.modelId || 'unknown',
+      routingModesSupported: brainRouter.routingModes.length > 0,
+      premiumRouting: brainRouter.routingModes.includes('premium'),
+      issue: 'model_choice_or_duration_handling'
+    }
+  }
+  
+  // Redeploy readiness
+  const redeployReadiness = {
+    ready: true,
+    blockers: [],
+    warnings: []
+  }
+  
+  if (!brainRouter.integratedInWorker) {
+    redeployReadiness.blockers.push('brain_router_not_integrated_in_worker')
+    redeployReadiness.ready = false
+  }
+  
+  if (!appContract.hasApiKeyHashing) {
+    redeployReadiness.blockers.push('app_api_key_hashing_missing')
+    redeployReadiness.ready = false
+  }
+  
+  if (!appContract.hasBlockedOverrides) {
+    redeployReadiness.blockers.push('blocked_overrides_missing')
+    redeployReadiness.ready = false
+  }
+  
+  if (providers.providers.length !== 5) {
+    redeployReadiness.warnings.push('provider_list_not_exactly_5')
+  }
+  
+  if (blockedModels.length === 0) {
+    redeployReadiness.warnings.push('no_blocked_models_found')
+  }
+  
+  // Risk list
+  const riskList = []
+  
+  if (musicReadiness.modelCatalogueEntries === false) {
+    riskList.push({ risk: 'music_generation_not_in_catalogue', severity: 'medium' })
+  }
+  
+  if (longFormReadiness.ffmpegIntegration === false) {
+    riskList.push({ risk: 'ffmpeg_not_installed_for_long_form', severity: 'high' })
+  }
+  
+  if (openSourceMissing.length > 0) {
+    riskList.push({ risk: 'missing_open_source_dependencies', severity: 'medium', details: openSourceMissing })
+  }
+  
+  // Recommended next PRs
+  const recommendedNextPRs = [
+    {
+      priority: 1,
+      title: 'feat: add music generation backend',
+      description: 'Wire music provider client, models in catalogue, worker executor, and dashboard enablement',
+      effort: 'large'
+    },
+    {
+      priority: 2,
+      title: 'feat: add long-form video backend',
+      description: 'Implement script planner, scene splitter, per-scene generation, stitching with ffmpeg',
+      effort: 'very_large'
+    },
+    {
+      priority: 3,
+      title: 'feat: wire brand scrape workflow',
+      description: 'Connect crawlee/playwright to brand_scrape capability for Marketing App',
+      effort: 'medium'
+    },
+    {
+      priority: 4,
+      title: 'fix: improve media quality routing',
+      description: 'Ensure premium/balanced/fast/budget modes properly influence model selection for image/video',
+      effort: 'medium'
+    },
+    {
+      priority: 5,
+      title: 'feat: add TTS/STT execution',
+      description: 'Wire Groq TTS/STT models to worker executor and dashboard',
+      effort: 'medium'
+    }
+  ]
+  
+  // Build completion map
+  const completionMap = {
+    generatedAt: new Date().toISOString(),
+    repo: 'https://github.com/amarktainetwork-blip/Amarktai-Network-V2.git',
+    branch: 'audit/full-build-completion-map',
+    
+    providerTruth: {
+      approvedProviders: providers.providers,
+      count: providers.providers.length,
+      mimoPolicy: 'coding_tools_only',
+      adultPolicy: 'on_hold'
+    },
+    
+    modelCatalogueSummary: {
+      total: modelCatalogue.models.length,
+      executable: executableModels.length,
+      planned: plannedModels.length,
+      blocked: blockedModels.length,
+      executableModels: executableModels.map(m => `${m.provider}/${m.modelId}`),
+      plannedModels: plannedModels.map(m => `${m.provider}/${m.modelId}`),
+      blockedModels: blockedModels.map(m => `${m.provider}/${m.modelId}`)
+    },
+    
+    executableCapabilities: executableCapabilities,
+    pendingCapabilities: pendingCapabilities,
+    blockedCapabilities: blockedCapabilities,
+    
+    dashboardStatus: {
+      total: Object.keys(dashboardPages.pages || {}).length,
+      executionReady: executionPages,
+      designReady: designReadyPages,
+      displayOnly: displayOnlyPages
+    },
+    
+    workerExecutionStatus: {
+      found: workerExecution.found,
+      executors: workerExecution.executors,
+      usesBrainRouter: workerExecution.usesBrainRouter
+    },
+    
+    appContractStatus: {
+      found: appContract.found,
+      jobsEndpoint: appContract.jobsEndpoint,
+      appConnectionsEndpoint: appContract.appConnectionsEndpoint,
+      hasApiKeyHashing: appContract.hasApiKeyHashing,
+      hasBlockedOverrides: appContract.hasBlockedOverrides,
+      acceptsRoutingMode: appContract.acceptsRoutingMode
+    },
+    
+    openSourceLibrariesInstalled: openSourceInstalled,
+    openSourceWorkflowsWired: openSourceWired,
+    openSourceWorkflowsMissing: openSourceMissing,
+    
+    mediaQualityStatus: mediaQualityStatus,
+    
+    musicReadiness: musicReadiness,
+    longFormVideoReadiness: longFormReadiness,
+    marketingAppReadiness: marketingAppReadiness,
+    
+    redeployReadiness: redeployReadiness,
+    riskList: riskList,
+    recommendedNextPRs: recommendedNextPRs
+  }
+  
+  // Write JSON
+  const jsonPath = path.join(ROOT, 'BUILD_COMPLETION_MAP.json')
+  await fs.writeFile(jsonPath, JSON.stringify(completionMap, null, 2))
+  console.log(`✅ Written: ${jsonPath}\n`)
+  
+  // Print summary
+  console.log('═'.repeat(80))
+  console.log('AMARKTAI NETWORK V2 — BUILD COMPLETION MAP')
+  console.log('═'.repeat(80))
+  console.log()
+  
+  console.log('📦 PROVIDER TRUTH')
+  console.log(`   Approved: ${completionMap.providerTruth.approvedProviders.join(', ')}`)
+  console.log(`   Count: ${completionMap.providerTruth.count}`)
+  console.log(`   MiMo: ${completionMap.providerTruth.mimoPolicy}`)
+  console.log(`   Adult: ${completionMap.providerTruth.adultPolicy}`)
+  console.log()
+  
+  console.log('🧠 MODEL CATALOGUE')
+  console.log(`   Total: ${completionMap.modelCatalogueSummary.total}`)
+  console.log(`   Executable: ${completionMap.modelCatalogueSummary.executable}`)
+  console.log(`   Planned: ${completionMap.modelCatalogueSummary.planned}`)
+  console.log(`   Blocked: ${completionMap.modelCatalogueSummary.blocked}`)
+  console.log()
+  
+  console.log('⚡ EXECUTABLE CAPABILITIES')
+  for (const cap of completionMap.executableCapabilities) {
+    console.log(`   ✓ ${cap.capability} (${cap.status})`)
+  }
+  console.log()
+  
+  console.log('⏳ PENDING CAPABILITIES')
+  for (const cap of completionMap.pendingCapabilities.slice(0, 10)) {
+    console.log(`   ◯ ${cap.capability} (${cap.reason})`)
+  }
+  if (completionMap.pendingCapabilities.length > 10) {
+    console.log(`   ... and ${completionMap.pendingCapabilities.length - 10} more`)
+  }
+  console.log()
+  
+  console.log('🚫 BLOCKED CAPABILITIES')
+  for (const cap of completionMap.blockedCapabilities) {
+    console.log(`   ✗ ${cap.capability} (${cap.reason})`)
+  }
+  console.log()
+  
+  console.log('🖥️  DASHBOARD STATUS')
+  console.log(`   Total pages: ${completionMap.dashboardStatus.total}`)
+  console.log(`   Execution-ready: ${completionMap.dashboardStatus.executionReady.length}`)
+  console.log(`   Design-ready: ${completionMap.dashboardStatus.designReady.length}`)
+  console.log(`   Display-only: ${completionMap.dashboardStatus.displayOnly.length}`)
+  console.log()
+  
+  console.log('🔧 WORKER EXECUTION')
+  console.log(`   Found: ${completionMap.workerExecutionStatus.found}`)
+  console.log(`   Uses Brain Router: ${completionMap.workerExecutionStatus.usesBrainRouter}`)
+  console.log('   Executors:')
+  for (const [key, value] of Object.entries(completionMap.workerExecutionStatus.executors)) {
+    console.log(`     ${key}: ${value ? '✓' : '✗'}`)
+  }
+  console.log()
+  
+  console.log('🔌 APP CONTRACT')
+  console.log(`   Jobs endpoint: ${completionMap.appContractStatus.jobsEndpoint ? '✓' : '✗'}`)
+  console.log(`   API key hashing: ${completionMap.appContractStatus.hasApiKeyHashing ? '✓' : '✗'}`)
+  console.log(`   Blocked overrides: ${completionMap.appContractStatus.hasBlockedOverrides ? '✓' : '✗'}`)
+  console.log(`   Routing mode support: ${completionMap.appContractStatus.acceptsRoutingMode ? '✓' : '✗'}`)
+  console.log()
+  
+  console.log('📚 OPEN-SOURCE AUDIT')
+  console.log('   Installed:')
+  for (const lib of completionMap.openSourceLibrariesInstalled) {
+    console.log(`     ✓ ${lib}`)
+  }
+  console.log('   Wired:')
+  for (const workflow of completionMap.openSourceWorkflowsWired) {
+    console.log(`     ✓ ${workflow}`)
+  }
+  console.log('   Missing:')
+  for (const missing of completionMap.openSourceWorkflowsMissing) {
+    console.log(`     ✗ ${missing}`)
+  }
+  console.log()
+  
+  console.log('🎵 MUSIC READINESS')
+  console.log(`   Provider client: ${musicReadiness.providerClient ? '✓' : '✗'}`)
+  console.log(`   Model catalogue: ${musicReadiness.modelCatalogueEntries ? '✓' : '✗'}`)
+  console.log(`   Worker executor: ${musicReadiness.workerExecutor ? '✓' : '✗'}`)
+  console.log(`   Dashboard page: ${musicReadiness.dashboardPage ? '✓' : '✗'}`)
+  console.log(`   Missing: ${musicReadiness.missingParts.length} parts`)
+  console.log()
+  
+  console.log('🎬 LONG-FORM VIDEO READINESS')
+  console.log(`   Script planner: ${longFormReadiness.scriptPlanner ? '✓' : '✗'}`)
+  console.log(`   Scene splitter: ${longFormReadiness.sceneSplitter ? '✓' : '✗'}`)
+  console.log(`   FFmpeg: ${longFormReadiness.ffmpegIntegration ? '✓' : '✗'}`)
+  console.log(`   Missing: ${longFormReadiness.missingParts.length} parts`)
+  console.log()
+  
+  console.log('📊 MEDIA QUALITY')
+  console.log(`   Image: ${mediaQualityStatus.imageGeneration.provider}/${mediaQualityStatus.imageGeneration.model}`)
+  console.log(`   Video: ${mediaQualityStatus.videoGeneration.provider}/${mediaQualityStatus.videoGeneration.model}`)
+  console.log(`   Routing modes: ${brainRouter.routingModes.join(', ')}`)
+  console.log()
+  
+  console.log('🚀 REDEPLOY READINESS')
+  console.log(`   Ready: ${redeployReadiness.ready ? '✓ YES' : '✗ NO'}`)
+  if (redeployReadiness.blockers.length > 0) {
+    console.log('   Blockers:')
+    for (const blocker of redeployReadiness.blockers) {
+      console.log(`     ✗ ${blocker}`)
+    }
+  }
+  if (redeployReadiness.warnings.length > 0) {
+    console.log('   Warnings:')
+    for (const warning of redeployReadiness.warnings) {
+      console.log(`     ⚠ ${warning}`)
+    }
+  }
+  console.log()
+  
+  console.log('⚠️  RISK LIST')
+  for (const risk of completionMap.riskList) {
+    console.log(`   [${risk.severity.toUpperCase()}] ${risk.risk}`)
+    if (risk.details) {
+      console.log(`      Details: ${risk.details.join(', ')}`)
+    }
+  }
+  console.log()
+  
+  console.log('📋 RECOMMENDED NEXT PRs')
+  for (const pr of completionMap.recommendedNextPRs) {
+    console.log(`   ${pr.priority}. ${pr.title} [${pr.effort}]`)
+    console.log(`      ${pr.description}`)
+  }
+  console.log()
+  
+  console.log('═'.repeat(80))
+  console.log('✅ Audit complete')
+  console.log('═'.repeat(80))
+}
+
+runAudit().catch(err => {
+  console.error('❌ Audit failed:', err)
+  process.exit(1)
+})

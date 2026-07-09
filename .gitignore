@@ -82,6 +82,9 @@ workspace/uploads/*
 # Build caches
 .cache/
 
+# Generated audit files
+BUILD_COMPLETION_MAP.json
+
 memory/test_credentials.md
 
 # Mobile development
