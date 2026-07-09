@@ -403,10 +403,33 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
         {activeTab === 'preview' && (
           <div className="flex h-full min-h-[300px] items-center justify-center p-6">
             <div className="text-center">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]"><Eye className="h-6 w-6 opacity-20" /></div>
-              <p className="text-sm font-medium text-foreground">{PREVIEW_LABELS[mode] || 'Output preview will appear here'}</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Real previews appear only after backend jobs and artifacts are wired and proven.</p>
-              <Button disabled variant="outline" size="sm" className="mt-4 border-white/10 text-xs"><Lock className="mr-1 h-3 w-3" /> Backend proof required</Button>
+              {jobResult && jobResult.status === 'completed' ? (
+                <div className="space-y-3">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04]"><Eye className="h-6 w-6 text-emerald-300" /></div>
+                  <p className="text-sm font-medium text-foreground">Job completed</p>
+                  {jobResult.provider && <p className="text-xs text-muted-foreground">Provider: <span className="text-violet-300">{jobResult.provider}</span></p>}
+                  {jobResult.model && <p className="text-xs text-muted-foreground">Model: <span className="font-mono">{jobResult.model}</span></p>}
+                  {jobResult.output && <pre className="mt-2 overflow-auto max-h-40 text-[10px] bg-black/30 rounded p-2 text-left">{jobResult.output}</pre>}
+                  <StudioArtifactPreview jobResult={jobResult} />
+                  {jobResult.artifactId && (
+                    <div className="mt-2 flex items-center justify-center gap-2">
+                      <a href="/dashboard/artifacts" className="text-cyan-300 hover:underline text-xs">View in Artifacts</a>
+                    </div>
+                  )}
+                </div>
+              ) : jobResult && jobResult.status === 'failed' ? (
+                <div className="space-y-3">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-500/20 bg-rose-500/[0.04]"><Eye className="h-6 w-6 text-rose-300" /></div>
+                  <p className="text-sm font-medium text-foreground">Job failed</p>
+                  {jobResult.error && <p className="text-xs text-rose-300">{jobResult.error}</p>}
+                </div>
+              ) : (
+                <div>
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]"><Eye className="h-6 w-6 opacity-20" /></div>
+                  <p className="text-sm font-medium text-foreground">{PREVIEW_LABELS[mode] || 'Output preview will appear here'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground/70">Submit a job to see results here.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -428,7 +451,6 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                 <AccordionTrigger className="text-xs py-3">Selected controls</AccordionTrigger>
                 <AccordionContent>
                   <pre className="overflow-auto rounded-md bg-black/30 p-3 text-[10px] text-muted-foreground">{JSON.stringify(values, null, 2) || '{}'}</pre>
-                  <p className="mt-2 text-[10px] text-muted-foreground">Selected controls will be submitted with the Studio job only after backend submission is explicitly wired.</p>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="contract" className="rounded-lg border border-white/[0.06] px-4">
@@ -437,8 +459,8 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                   <div className="space-y-2 text-xs text-muted-foreground">
                     <div className="flex justify-between"><span>Dashboard key</span><span className="font-mono">{meta.capability}</span></div>
                     <div className="flex justify-between"><span>Backend key</span><span className="font-mono">{backend.backendCapability || backend.plannedBackendKey || 'planned'}</span></div>
-                    <div className="flex justify-between"><span>Route</span><span>{backend.missing ? 'capability_missing' : 'route_pending'}</span></div>
-                    <div className="flex justify-between"><span>Execution</span><span>{backendReady ? 'backend_ready' : 'not_dashboard_ready'}</span></div>
+                    <div className="flex justify-between"><span>Route</span><span className={backend.missing ? 'text-rose-300' : 'text-emerald-300'}>{backend.missing ? 'capability_missing' : 'wired'}</span></div>
+                    <div className="flex justify-between"><span>Execution</span><span className={backendReady ? 'text-emerald-300' : 'text-amber-300'}>{backendReady ? 'backend_ready' : 'not_dashboard_ready'}</span></div>
                     <div className="flex justify-between"><span>Output type</span><span>{meta.outputType}</span></div>
                     <div className="flex justify-between"><span>Artifact</span><span>{meta.artifactRequired ? 'required' : 'not required'}</span></div>
                     <div className="flex justify-between"><span>Proof source</span><span>backend-runtime-proof-status</span></div>

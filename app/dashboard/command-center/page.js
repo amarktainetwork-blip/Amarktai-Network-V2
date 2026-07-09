@@ -12,22 +12,22 @@ import {
   getHealthStatusLabel,
   getHealthStatusClasses,
 } from '@/lib/provider-settings-contract'
-import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, Server, ShieldCheck, Zap } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowRight, Boxes, Cpu, Database, FileClock, Server, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 
 const STATUS_GRID = [
   ['Dashboard UI status', 'ui_ready', Zap],
   ['API contract status', 'contract_ready', ShieldCheck],
   ['Runtime proof source', 'backend-runtime-proof-status', AlertTriangle],
-  ['Studio connection', 'UI not connected yet', Server],
+  ['Studio connection', 'wired', Server],
 ]
 
 const INFRA = ['MariaDB', 'Redis', 'Qdrant', 'Worker/BullMQ', 'Storage', 'Fastify API']
 
 const PENDING = [
-  ['Studio job submission', 'API job route exists; Studio UI not connected yet.'],
-  ['Artifact listing UI', 'Artifact file route exists; artifact listing/preview UI still pending.'],
+  ['Studio job submission', 'Wired through admin route. Studio can submit proven capabilities.'],
+  ['Artifact listing UI', 'Wired. Artifacts page shows real backend artifacts with preview/download.'],
   ['Unproven capabilities', 'Only backend-proven runtime capabilities are dashboard-ready.'],
-  ['Model catalog sync', 'Model sync is disabled until catalog routes are wired.'],
+  ['Model catalog sync', 'Model discovery works for all providers. Catalog refresh available.'],
 ]
 
 export default function CommandCenterPage() {
@@ -137,11 +137,15 @@ export default function CommandCenterPage() {
             </div>
             <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
               <span>Studio job submission</span>
-              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">UI not connected</Badge>
+              <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">Wired</Badge>
             </div>
             <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
               <span>Artifact listing UI</span>
-              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">Pending</Badge>
+              <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">Wired</Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span>Artifact preview/download</span>
+              <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">Wired</Badge>
             </div>
           </div>
         </Card>
@@ -151,6 +155,44 @@ export default function CommandCenterPage() {
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-cyan-300" /> Open-Source Tool Contracts</h3>
         <div className="flex flex-wrap gap-2">
           {OPEN_SOURCE_TOOLS.map((tool) => <Badge key={tool.id} variant="outline" className="border-white/10 text-[10px]">{tool.name}</Badge>)}
+        </div>
+      </Card>
+
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-300" /> Marketing-First Platform Roadmap</h3>
+        <div className="space-y-4 text-xs text-muted-foreground">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
+            <div className="font-semibold text-emerald-200 mb-2">Proven Capabilities (10)</div>
+            <div className="flex flex-wrap gap-1">
+              {['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation'].map((cap) => (
+                <Badge key={cap} variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">{cap}</Badge>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
+            <div className="font-semibold text-amber-200 mb-2">Marketing App MVP Dependencies (Not Yet Built)</div>
+            <div className="flex flex-wrap gap-1">
+              {['brand_scrape', 'brand_vault', 'campaign_planner', 'content_calendar', 'social_adapters', 'long_form_video', 'tts', 'subtitles', 'thumbnails', 'ffmpeg_stitching', 'approval_workflow', 'scheduling'].map((cap) => (
+                <Badge key={cap} variant="outline" className="border-amber-500/30 text-amber-300 text-[9px]">{cap}</Badge>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-4">
+            <div className="font-semibold text-violet-200 mb-2">Other App Dependencies (Not Yet Built)</div>
+            <div className="flex flex-wrap gap-1">
+              {['document_upload', 'ocr', 'music_generation', 'user_memory_import', 'consent_controls'].map((cap) => (
+                <Badge key={cap} variant="outline" className="border-violet-500/30 text-violet-300 text-[9px]">{cap}</Badge>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4">
+            <div className="font-semibold text-muted-foreground mb-2">On Hold</div>
+            <div className="flex flex-wrap gap-1">
+              {['adult_generation', 'voice_cloning', 'deepfake_detection'].map((cap) => (
+                <Badge key={cap} variant="outline" className="border-white/10 text-[9px]">{cap}</Badge>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
     </PageTransition>
