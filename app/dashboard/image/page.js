@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import { getRuntimeCapabilityProof, runtimeProofStatusClasses, runtimeProofStatusLabel } from '@/lib/runtime-proof-status'
-import { Image as ImageIcon, Send, Zap, ExternalLink, AlertTriangle, Download, Loader2, FlaskConical } from 'lucide-react'
+import { Image as ImageIcon, Send, Zap, AlertTriangle, Download, Loader2, Clock } from 'lucide-react'
 
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const QUALITY_MODES = ['Balanced', 'Premium', 'Fast', 'Budget']
+const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4']
 
 function artifactErrorMessage(status) {
   if (status === 401) return 'Unauthorized'
@@ -103,7 +105,7 @@ export default function ImageStudioPage() {
 
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Image Studio" subtitle="Generate images through the image_generation worker flow. Auto mode selects the best provider and model." />
+      <PageHeader title="Image Studio" subtitle="Generate images through the image_generation worker flow. Provider/model routing handled by platform." />
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <div className="space-y-4">
@@ -123,7 +125,7 @@ export default function ImageStudioPage() {
               <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[10px]">
                 <Zap className="mr-1 h-2.5 w-2.5" /> Auto mode
               </Badge>
-              <span className="text-[10px] text-muted-foreground">Runtime selects provider and model</span>
+              <span className="text-[10px] text-muted-foreground">Platform selects provider and model</span>
             </div>
             <Badge variant="outline" className={`text-[10px] ${runtimeProofStatusClasses(proof)}`}>
               {runtimeProofStatusLabel(proof)}
@@ -141,8 +143,7 @@ export default function ImageStudioPage() {
             </Button>
             {!backendReady && (
               <span className="text-[10px] text-muted-foreground">
-                Disabled until backend proof passes.{' '}
-                <Link href="/dashboard/studio" className="text-cyan-300 hover:underline">Open advanced Studio</Link>
+                Disabled until backend proof passes.
               </span>
             )}
           </div>
@@ -199,15 +200,91 @@ export default function ImageStudioPage() {
         )}
       </Card>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FlaskConical className="h-3 w-3" />
-        <Link href="/dashboard/studio" className="text-cyan-300 hover:underline">Open advanced Studio</Link>
-        <span>for full capability selection, options, and developer tools.</span>
-      </div>
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-amber-300" /> Planned Controls</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Quality Mode</label>
+            <div className="flex flex-wrap gap-2">
+              {QUALITY_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  disabled
+                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground/60">Routing backend pending. Quality mode will map to Balanced/Premium/Fast/Budget routing tiers.</p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Aspect Ratio</label>
+            <div className="flex flex-wrap gap-2">
+              {ASPECT_RATIOS.map((ratio) => (
+                <button
+                  key={ratio}
+                  disabled
+                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
+                >
+                  {ratio}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Style</label>
+              <Input disabled placeholder="e.g. photorealistic, anime, oil painting" className="bg-white/[0.04] text-sm" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Image Count</label>
+              <Input disabled type="number" min="1" max="4" placeholder="1" className="bg-white/[0.04] text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Negative Prompt</label>
+            <Input disabled placeholder="What to avoid in the generated image" className="bg-white/[0.04] text-sm" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Seed</label>
+              <Input disabled type="number" placeholder="Optional" className="bg-white/[0.04] text-sm" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Brand Mode</label>
+              <Input disabled placeholder="Pending" className="bg-white/[0.04] text-sm" />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-3 text-sm font-semibold">Pending Capabilities</h3>
+        <div className="space-y-2">
+          {[
+            { label: 'Image Edit / Inpaint', status: 'pending' },
+            { label: 'Upscale', status: 'pending' },
+            { label: 'Variations', status: 'pending' },
+          ].map((cap) => (
+            <div key={cap.label} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
+              <span className="text-xs">{cap.label}</span>
+              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+                <Clock className="mr-1 h-2.5 w-2.5" /> {cap.status}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
         <p className="text-[10px] text-muted-foreground">
-          Provider/model selection is handled by the backend runtime. No manual overrides are exposed in app-facing flows.
+          Provider/model selection is handled by the platform runtime. No manual overrides are exposed in app-facing flows.
+          External apps request capabilities only — they never call providers directly or store provider keys.
         </p>
       </div>
     </PageTransition>

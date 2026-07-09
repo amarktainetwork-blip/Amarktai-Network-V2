@@ -71,7 +71,7 @@ export default function DashboardLayout({ children }) {
               onClick={() => setAdvancedOpen(!advancedOpen)}
               className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition"
             >
-              Advanced
+              Platform Tools
               {advancedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
             </button>
             {advancedOpen && (
@@ -142,7 +142,7 @@ export default function DashboardLayout({ children }) {
                   onClick={() => setAdvancedOpen(!advancedOpen)}
                   className="flex w-full items-center justify-between rounded-md px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
                 >
-                  Advanced
+                  Platform Tools
                   {advancedOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 </button>
                 {advancedOpen && ADVANCED_NAV.map((item) => {

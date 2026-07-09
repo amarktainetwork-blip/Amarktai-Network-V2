@@ -488,7 +488,8 @@ export default function Studio() {
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/[0.06] bg-[hsl(240_14%_4%)] px-4">
         <div className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-400 to-violet-500 text-black"><Zap className="h-3 w-3" /></div>
-          <span className="text-xs font-semibold">AmarktAI Studio</span>
+          <span className="text-xs font-semibold">Developer Studio / Legacy</span>
+          <span className="text-[9px] text-muted-foreground">Execution tester</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           <span>Creator</span>

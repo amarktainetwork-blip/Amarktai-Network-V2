@@ -10,7 +10,10 @@ import { Button } from '@/components/ui/button'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import { getRuntimeCapabilityProof, runtimeProofStatusClasses, runtimeProofStatusLabel } from '@/lib/runtime-proof-status'
-import { Video, Zap, AlertTriangle, Clock, Film, Loader2, FlaskConical, Download, Send } from 'lucide-react'
+import { Video, Zap, AlertTriangle, Clock, Film, Loader2, Download, Send } from 'lucide-react'
+
+const QUALITY_MODES = ['Balanced', 'Premium', 'Fast', 'Budget']
+const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4']
 
 export default function VideoStudioPage() {
   const [mode, setMode] = useState('short')
@@ -58,7 +61,55 @@ export default function VideoStudioPage() {
 
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Video Studio" subtitle="Create short-form video content. Short video uses the proven video_generation worker flow." />
+      <PageHeader title="Video Studio" subtitle="Create video content. Short video uses the proven video_generation worker flow (GenX). Platform handles provider routing." />
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Short Video</span>
+            <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 text-[9px]">
+              <Film className="mr-1 h-2.5 w-2.5" /> Live
+            </Badge>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">GenX video_generation endpoint</p>
+        </Card>
+        <Card className="border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Image-to-Video</span>
+            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            </Badge>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">Backend endpoint not wired</p>
+        </Card>
+        <Card className="border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Long-Form Video</span>
+            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            </Badge>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">Storyboard, stitching, multi-scene</p>
+        </Card>
+        <Card className="border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Storyboard</span>
+            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            </Badge>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">Scene planning and outline</p>
+        </Card>
+        <Card className="border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Voiceover / Subtitles</span>
+            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            </Badge>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">TTS and subtitle overlay</p>
+        </Card>
+      </div>
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <div className="space-y-4">
@@ -109,7 +160,7 @@ export default function VideoStudioPage() {
                 <Badge variant="outline" className={`text-[10px] ${runtimeProofStatusClasses(shortProof)}`}>
                   {runtimeProofStatusLabel(shortProof)}
                 </Badge>
-                <span className="text-[10px] text-muted-foreground">Runtime selects provider and model</span>
+                <span className="text-[10px] text-muted-foreground">Platform selects provider and model</span>
               </div>
 
               <div className="flex items-center gap-3">
@@ -123,8 +174,7 @@ export default function VideoStudioPage() {
                 </Button>
                 {!shortReady && (
                   <span className="text-[10px] text-muted-foreground">
-                    Disabled until backend proof passes.{' '}
-                    <Link href="/dashboard/studio" className="text-cyan-300 hover:underline">Open advanced Studio</Link>
+                    Disabled until backend proof passes.
                   </span>
                 )}
               </div>
@@ -137,7 +187,7 @@ export default function VideoStudioPage() {
                 <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Long-form video generation (storyboard, stitching, multi-scene) is not yet wired to a backend endpoint. Use short video via the proven GenX flow, or open advanced Studio.
+                Long-form video generation (storyboard, stitching, multi-scene) is not yet wired to a backend endpoint.
               </p>
             </div>
           )}
@@ -194,10 +244,79 @@ export default function VideoStudioPage() {
         </Card>
       )}
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FlaskConical className="h-3 w-3" />
-        <Link href="/dashboard/studio" className="text-cyan-300 hover:underline">Open advanced Studio</Link>
-        <span>for full capability selection, options, and developer tools.</span>
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-amber-300" /> Planned Controls</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Quality Mode</label>
+            <div className="flex flex-wrap gap-2">
+              {QUALITY_MODES.map((m) => (
+                <button
+                  key={m}
+                  disabled
+                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground/60">Routing backend pending.</p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Aspect Ratio</label>
+            <div className="flex flex-wrap gap-2">
+              {ASPECT_RATIOS.map((r) => (
+                <button
+                  key={r}
+                  disabled
+                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Duration</label>
+              <Input disabled placeholder="e.g. 30s, 60s" className="bg-white/[0.04] text-sm" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Scene Count (Long-Form)</label>
+              <Input disabled type="number" placeholder="Pending" className="bg-white/[0.04] text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Storyboard Outline</label>
+            <Textarea disabled placeholder="Scene-by-scene outline for long-form video" className="min-h-[60px] bg-white/[0.04] text-sm" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Subtitles</label>
+              <Input disabled placeholder="Pending" className="bg-white/[0.04] text-sm" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium">Voiceover</label>
+              <Input disabled placeholder="Pending" className="bg-white/[0.04] text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium">Brand Mode</label>
+            <Input disabled placeholder="Pending" className="bg-white/[0.04] text-sm" />
+          </div>
+        </div>
+      </Card>
+
+      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+        <p className="text-[10px] text-muted-foreground">
+          Provider/model selection is handled by the platform runtime. No manual overrides are exposed in app-facing flows.
+          External apps request video capabilities only — they never call providers directly.
+        </p>
       </div>
     </PageTransition>
   )
