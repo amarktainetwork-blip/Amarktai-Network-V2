@@ -74,6 +74,22 @@ describe('dashboard creation workspace redesign', () => {
       expect(chat).toContain('Memory')
       expect(chat).toContain('Attached Tools')
     })
+
+    it('chat attached tools link to real pages', () => {
+      const chat = read('app/dashboard/chat/page.js')
+      expect(chat).toContain('/dashboard/image')
+      expect(chat).toContain('/dashboard/video')
+      expect(chat).toContain('/dashboard/music')
+      expect(chat).toContain('/dashboard/research')
+      expect(chat).toContain('/dashboard/library')
+    })
+
+    it('chat tool statuses are honest based on runtime proof', () => {
+      const chat = read('app/dashboard/chat/page.js')
+      expect(chat).toContain('imageReady')
+      expect(chat).toContain('videoReady')
+      expect(chat).toContain('pending')
+    })
   })
 
   describe('image studio page', () => {
@@ -81,10 +97,11 @@ describe('dashboard creation workspace redesign', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/dashboard/image/page.js'))).toBe(true)
     })
 
-    it('image page keeps existing image_generation job flow or links to it', () => {
+    it('image page uses real submit route /api/admin/studio/jobs', () => {
       const image = read('app/dashboard/image/page.js')
+      expect(image).toContain('submitJob')
       expect(image).toContain('image_generation')
-      expect(image).toContain('Studio')
+      expect(image).toContain('pollJob')
     })
 
     it('image page uses Auto mode as default', () => {
@@ -97,11 +114,36 @@ describe('dashboard creation workspace redesign', () => {
       expect(image).not.toContain('SelectProvider')
       expect(image).not.toContain('SelectModel')
     })
+
+    it('image page shows artifact preview when job completes', () => {
+      const image = read('app/dashboard/image/page.js')
+      expect(image).toContain('previewUrl')
+      expect(image).toContain('/api/admin/artifacts/')
+    })
+
+    it('image page shows provider/model returned by backend after execution', () => {
+      const image = read('app/dashboard/image/page.js')
+      expect(image).toContain('jobResult.provider')
+      expect(image).toContain('jobResult.model')
+    })
+
+    it('image page does not have fake unused prompt/result flow', () => {
+      const image = read('app/dashboard/image/page.js')
+      expect(image).not.toContain('Generate via Studio')
+      expect(image).not.toContain('Generated images will appear here')
+    })
   })
 
   describe('video studio page', () => {
     it('video page exists at /dashboard/video', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/dashboard/video/page.js'))).toBe(true)
+    })
+
+    it('video page submits real short video via /api/admin/studio/jobs', () => {
+      const video = read('app/dashboard/video/page.js')
+      expect(video).toContain('submitJob')
+      expect(video).toContain('video_generation')
+      expect(video).toContain('pollJob')
     })
 
     it('video page distinguishes short video vs long-form pending status', () => {
@@ -111,10 +153,16 @@ describe('dashboard creation workspace redesign', () => {
       expect(video).toContain('Backend Pending')
     })
 
-    it('video page shows short video as live', () => {
+    it('video page does not claim Live unless using real job flow', () => {
       const video = read('app/dashboard/video/page.js')
-      expect(video).toContain('Live')
-      expect(video).toContain('GenX')
+      expect(video).toContain('shortReady')
+      expect(video).toContain('runtimeProofStatusClasses')
+    })
+
+    it('video page does not expose provider/model selectors', () => {
+      const video = read('app/dashboard/video/page.js')
+      expect(video).not.toContain('SelectProvider')
+      expect(video).not.toContain('SelectModel')
     })
   })
 
@@ -152,6 +200,11 @@ describe('dashboard creation workspace redesign', () => {
       const library = read('app/dashboard/library/page.js')
       expect(library).toContain('/dashboard/artifacts')
       expect(library).toContain('Artifacts')
+    })
+
+    it('library page does not fake chats/music/research history', () => {
+      const library = read('app/dashboard/library/page.js')
+      expect(library).toContain('backend pending')
     })
   })
 

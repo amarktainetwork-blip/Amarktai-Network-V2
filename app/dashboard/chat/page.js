@@ -1,28 +1,36 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { MessageSquare, Send, Brain, Image as ImageIcon, Video, Music, Search, FileText, Paperclip, AlertTriangle } from 'lucide-react'
-
-const ATTACHED_TOOLS = [
-  { label: 'Research', icon: Search, status: 'backend_pending' },
-  { label: 'Image', icon: ImageIcon, status: 'wired' },
-  { label: 'Video', icon: Video, status: 'backend_pending' },
-  { label: 'Music', icon: Music, status: 'backend_pending' },
-  { label: 'Files', icon: FileText, status: 'backend_pending' },
-]
+import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
+import { getRuntimeCapabilityProof } from '@/lib/runtime-proof-status'
+import { MessageSquare, Send, Brain, Image as ImageIcon, Video, Music, Search, FileText, Paperclip, AlertTriangle, ExternalLink } from 'lucide-react'
 
 export default function ChatPage() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([])
   const scrollRef = useRef(null)
+  const { status: runtimeProofStatus } = useRuntimeProofStatus()
+  const imageProof = getRuntimeCapabilityProof(runtimeProofStatus, 'image_generation')
+  const videoProof = getRuntimeCapabilityProof(runtimeProofStatus, 'video_generation')
+  const imageReady = imageProof.readyForDashboardExecution === true
+  const videoReady = videoProof.readyForDashboardExecution === true
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages])
+
+  const attachedTools = [
+    { label: 'Image', icon: ImageIcon, status: imageReady ? 'live' : 'pending', href: '/dashboard/image' },
+    { label: 'Video', icon: Video, status: videoReady ? 'live' : 'pending', href: '/dashboard/video' },
+    { label: 'Music', icon: Music, status: 'pending', href: '/dashboard/music' },
+    { label: 'Research', icon: Search, status: 'pending', href: '/dashboard/research' },
+    { label: 'Files', icon: FileText, status: 'partial', href: '/dashboard/library' },
+  ]
 
   return (
     <PageTransition className="flex h-[calc(100vh-8rem)] flex-col gap-4">
@@ -97,15 +105,22 @@ export default function ChatPage() {
           <Card className="border-white/[0.07] bg-white/[0.02] p-4">
             <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold"><Paperclip className="h-3.5 w-3.5 text-cyan-300" /> Attached Tools</h3>
             <div className="space-y-2">
-              {ATTACHED_TOOLS.map((tool) => {
+              {attachedTools.map((tool) => {
                 const Icon = tool.icon
+                const statusLabel = tool.status === 'live' ? 'Live' : tool.status === 'partial' ? 'Partial' : 'Pending'
+                const statusClass = tool.status === 'live'
+                  ? 'border-emerald-500/30 text-emerald-300'
+                  : tool.status === 'partial'
+                    ? 'border-cyan-500/30 text-cyan-300'
+                    : 'border-amber-500/30 text-amber-400'
                 return (
-                  <div key={tool.label} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
+                  <Link key={tool.label} href={tool.href} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs transition hover:bg-white/[0.04]">
                     <span className="flex items-center gap-2"><Icon className="h-3 w-3 text-muted-foreground" />{tool.label}</span>
-                    <Badge variant="outline" className={tool.status === 'wired' ? 'border-emerald-500/30 text-emerald-300 text-[9px]' : 'border-amber-500/30 text-amber-400 text-[9px]'}>
-                      {tool.status === 'wired' ? 'Live' : 'Pending'}
-                    </Badge>
-                  </div>
+                    <span className="flex items-center gap-1">
+                      <Badge variant="outline" className={`${statusClass} text-[9px]`}>{statusLabel}</Badge>
+                      <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
+                    </span>
+                  </Link>
                 )
               })}
             </div>
