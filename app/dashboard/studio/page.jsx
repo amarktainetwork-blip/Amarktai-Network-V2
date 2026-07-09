@@ -68,10 +68,97 @@ const ASSETS_LABELS = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) =>
   item.artifactRequired ? `${item.label} assets and artifacts` : `${item.label} context`,
 ]))
 
+const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+
+function artifactErrorMessage(status) {
+  if (status === 401) return 'Unauthorized'
+  if (status === 404) return 'Artifact file not found'
+  if (status === 409) return 'Artifact is not ready'
+  if (status === 502) return 'Backend unavailable'
+  return 'Artifact preview unavailable'
+}
+
 function getModeProof(runtimeProofStatus, mode) {
   const meta = MODE_META[mode] ?? MODE_META.chat
   const backend = getBackendCapability(meta.capability)
   return getRuntimeCapabilityProof(runtimeProofStatus, backend.backendCapability || backend.plannedBackendKey || meta.capability)
+}
+
+function StudioArtifactPreview({ jobResult }) {
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewError, setPreviewError] = useState('')
+  const artifactId = jobResult?.artifactId
+
+  useEffect(() => {
+    if (!artifactId || jobResult?.status !== 'completed') {
+      setPreviewUrl('')
+      setPreviewError('')
+      return undefined
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
+    let objectUrl = ''
+    let cancelled = false
+
+    async function loadPreview() {
+      try {
+        let mimeType = jobResult.mimeType || ''
+        if (!mimeType) {
+          const detailResponse = await fetch(`/api/admin/artifacts/${artifactId}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          if (!detailResponse.ok) {
+            setPreviewError(artifactErrorMessage(detailResponse.status))
+            return
+          }
+          const detail = await detailResponse.json()
+          mimeType = detail?.mimeType || ''
+        }
+
+        if (!IMAGE_MIME_TYPES.has(mimeType)) {
+          setPreviewError('Preview available from Artifacts page')
+          return
+        }
+
+        const fileResponse = await fetch(`/api/admin/artifacts/${artifactId}/file`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!fileResponse.ok) {
+          setPreviewError(artifactErrorMessage(fileResponse.status))
+          return
+        }
+
+        const blob = await fileResponse.blob()
+        objectUrl = URL.createObjectURL(blob)
+        if (!cancelled) setPreviewUrl(objectUrl)
+      } catch {
+        if (!cancelled) setPreviewError('Backend unavailable')
+      }
+    }
+
+    setPreviewUrl('')
+    setPreviewError('')
+    loadPreview()
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [artifactId, jobResult?.mimeType, jobResult?.status])
+
+  if (!artifactId) return null
+
+  return (
+    <div className="mt-3 rounded-lg border border-white/[0.06] bg-black/20 p-2">
+      {previewUrl ? (
+        <img src={previewUrl} alt="Generated artifact preview" className="max-h-72 w-full rounded-md object-contain" />
+      ) : previewError ? (
+        <div className="text-[10px] text-amber-200">{previewError}</div>
+      ) : (
+        <div className="text-[10px] text-muted-foreground">Loading artifact preview...</div>
+      )}
+    </div>
+  )
 }
 
 function CapabilitySelector({ value, onChange, runtimeProofStatus }) {
@@ -296,6 +383,7 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
                 {jobResult.provider && <div className="mt-1">Provider: <span className="text-violet-300">{jobResult.provider}</span></div>}
                 {jobResult.model && <div>Model: <span className="font-mono text-[10px]">{jobResult.model}</span></div>}
                 {jobResult.output && <pre className="mt-2 overflow-auto max-h-40 text-[10px] bg-black/30 rounded p-2">{jobResult.output}</pre>}
+                <StudioArtifactPreview jobResult={jobResult} />
                 {jobResult.error && <div className="mt-1 text-rose-300">{jobResult.error}</div>}
                 {jobResult.artifactId && (
                   <div className="mt-2 flex items-center gap-2">

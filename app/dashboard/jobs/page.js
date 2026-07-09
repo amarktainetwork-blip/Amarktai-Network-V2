@@ -110,7 +110,7 @@ export default function JobsPage() {
               </div>
               <div className="rounded-md border border-white/[0.06] bg-black/20 p-3">
                 <div className="font-semibold mb-1">Artifact API</div>
-                <div>Artifact file route exists at /api/v1/artifacts/:id/file.</div>
+                <div>Dashboard artifact preview/download uses authorized /api/admin/artifacts/:id/file proxy.</div>
               </div>
             </div>
           </AccordionContent>
