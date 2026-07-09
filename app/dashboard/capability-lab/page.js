@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CAPABILITY_ROUTING_MAP, APPROVED_PROVIDERS, ROUTING_TRUTH } from '@/lib/capability-routing-map'
+import { CAPABILITY_ROUTING_MAP, APPROVED_PROVIDERS, ROUTING_TRUTH, BRAIN_ROUTER_V1, MODEL_CATALOGUE_SUMMARY } from '@/lib/capability-routing-map'
 import {
   MessageSquare, Image as ImageIcon, Video, Music, Mic, Search, Palette, Plug, Activity, ShieldAlert,
   Zap, AlertTriangle, CheckCircle2, Clock, Lock,
@@ -192,6 +192,84 @@ export default function CapabilityLabPage() {
           {APPROVED_PROVIDERS.map((p) => (
             <Badge key={p} variant="outline" className="border-white/10 text-[9px]">{p}</Badge>
           ))}
+        </div>
+      </Card>
+
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-3 text-sm font-semibold">Brain Router v1</h3>
+        <div className="space-y-3 text-[10px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border-emerald-500/30 text-[9px] text-emerald-300">
+              <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Active
+            </Badge>
+            <span className="text-muted-foreground/60">Module: {BRAIN_ROUTER_V1.module}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+              <span className="text-muted-foreground/60">Catalogue models: </span>
+              <span className="text-violet-300">{BRAIN_ROUTER_V1.modelCatalogueTotal}</span>
+            </div>
+            <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+              <span className="text-muted-foreground/60">Executable: </span>
+              <span className="text-emerald-300">{BRAIN_ROUTER_V1.executableModels}</span>
+            </div>
+            <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+              <span className="text-muted-foreground/60">Planned: </span>
+              <span className="text-amber-400">{BRAIN_ROUTER_V1.plannedModels}</span>
+            </div>
+            <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+              <span className="text-muted-foreground/60">Blocked: </span>
+              <span className="text-rose-300">{BRAIN_ROUTER_V1.blockedModels}</span>
+            </div>
+          </div>
+          <div>
+            <span className="text-muted-foreground/60">Routing modes: </span>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {BRAIN_ROUTER_V1.routingModes.map((mode) => (
+                <Badge key={mode} variant="outline" className="border-cyan-500/20 text-[9px] text-cyan-300">{mode}</Badge>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="text-muted-foreground/60">Executable paths today:</span>
+            <div className="mt-1 space-y-1">
+              {Object.entries(BRAIN_ROUTER_V1.executablePaths).map(([cap, path]) => (
+                <div key={cap} className="rounded-md border border-white/[0.06] bg-black/20 p-1.5">
+                  <span className="text-muted-foreground/60">{cap}: </span>
+                  <span className={path === 'pending' ? 'text-amber-400' : 'text-violet-300'}>{path}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="text-muted-foreground/60">Model catalogue breakdown:</span>
+            <div className="mt-1 grid gap-1 sm:grid-cols-3">
+              <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] p-2">
+                <div className="mb-1 text-[9px] font-semibold text-emerald-300">Executable ({MODEL_CATALOGUE_SUMMARY.executable.length})</div>
+                {MODEL_CATALOGUE_SUMMARY.executable.map((m) => (
+                  <div key={`${m.provider}-${m.modelId}`} className="text-[9px] text-muted-foreground">
+                    <span className="text-violet-300">{m.provider}</span> / {m.modelId}
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-2">
+                <div className="mb-1 text-[9px] font-semibold text-amber-300">Planned ({MODEL_CATALOGUE_SUMMARY.planned.length})</div>
+                {MODEL_CATALOGUE_SUMMARY.planned.map((m) => (
+                  <div key={`${m.provider}-${m.modelId}`} className="text-[9px] text-muted-foreground">
+                    <span className="text-violet-300">{m.provider}</span> / {m.modelId}
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-md border border-rose-500/20 bg-rose-500/[0.04] p-2">
+                <div className="mb-1 text-[9px] font-semibold text-rose-300">Blocked ({MODEL_CATALOGUE_SUMMARY.blocked.length})</div>
+                {MODEL_CATALOGUE_SUMMARY.blocked.map((m) => (
+                  <div key={`${m.provider}-${m.modelId}`} className="text-[9px] text-muted-foreground">
+                    <span className="text-violet-300">{m.provider}</span> / {m.modelId} — {m.reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
 

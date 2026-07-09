@@ -139,6 +139,38 @@ export {
   type RoutingOptions,
 } from './provider-routing.js'
 
+// Model catalogue
+export {
+  MODEL_STATUSES,
+  QUALITY_TIERS,
+  MODEL_LATENCY_TIERS,
+  MODEL_COST_TIERS,
+  MODEL_CATALOGUE,
+  getModelsByProvider,
+  getModelsByCapability,
+  getExecutableModels,
+  getPlannedModels,
+  getBlockedModels,
+  getModelRecord,
+  type ModelStatus,
+  type QualityTier,
+  type ModelLatencyTier,
+  type ModelCostTier,
+  type ModelRecord,
+} from './model-catalog.js'
+
+// Brain Router v1
+export {
+  ROUTING_MODES,
+  routeBrain,
+  type RoutingMode,
+  type BrainRouterProviderState,
+  type BrainRouterRequest,
+  type BrainRouterDecision,
+  type RejectedCandidate,
+  type FallbackEntry,
+} from './brain-router.js'
+
 // Provider credential security
 export {
   getProviderKeyEncryptionSecret,
