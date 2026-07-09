@@ -150,6 +150,42 @@ describe('Build Completion Audit', () => {
     expect(longFormPR).toBeDefined()
   })
 
+  it('audit console output does not print stale "3 executable capabilities"', () => {
+    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    expect(output).not.toContain('Total executable: 3')
+    expect(output).not.toMatch(/Total executable:\s*3\s*\n/)
+  })
+
+  it('audit console output does not print simple "Redeploy ready: YES"', () => {
+    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    expect(output).not.toContain('Redeploy ready: YES')
+    expect(output).not.toContain('Redeploy Ready: YES')
+    expect(output).toContain('Safe to redeploy foundation:')
+    expect(output).toContain('Product ready:')
+    expect(output).toContain('App ready:')
+  })
+
+  it('audit console output shows correct executable capability count', () => {
+    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    expect(output).toContain('Total executable: 10')
+    expect(output).toContain('Via text router (Groq/DeepInfra): 8')
+    expect(output).toContain('Via media worker (Together/GenX): 2')
+  })
+
+  it('audit console output shows partial_execution for image and video', () => {
+    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    expect(output).toContain('Partial execution: 2')
+    expect(output).toMatch(/◐ image/)
+    expect(output).toMatch(/◐ video/)
+  })
+
+  it('audit console output shows design_ready_pending_backend for music and research', () => {
+    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    expect(output).toContain('Design-ready (pending backend): 2')
+    expect(output).toMatch(/○ music/)
+    expect(output).toMatch(/○ research/)
+  })
+
   it('audit output has all required sections', () => {
     const requiredSections = [
       'generatedAt',
@@ -157,6 +193,9 @@ describe('Build Completion Audit', () => {
       'providerTruth',
       'modelCatalogueSummary',
       'executableCapabilities',
+      'executableViaTextRouter',
+      'executableViaMediaWorker',
+      'catalogueOnlyCapabilities',
       'pendingCapabilities',
       'blockedCapabilities',
       'dashboardStatus',
@@ -164,6 +203,7 @@ describe('Build Completion Audit', () => {
       'appContractStatus',
       'openSourceLibrariesInstalled',
       'openSourceWorkflowsWired',
+      'openSourceWorkflowsPartial',
       'openSourceWorkflowsMissing',
       'mediaQualityStatus',
       'musicReadiness',
