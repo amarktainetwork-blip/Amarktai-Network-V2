@@ -134,9 +134,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       })
     }
 
-    // Create execution payloads
-    const payloads = createSceneExecutionPayloads(plan, routingMode)
+    // Create execution state first to get a single executionId
     const executionState = createLongFormExecutionState(plan, routingMode)
+
+    // Create execution payloads using the same executionId
+    const payloads = createSceneExecutionPayloads(plan, routingMode, executionState.executionId)
 
     // Store execution state
     executionStates.set(executionState.executionId, executionState)
@@ -245,36 +247,96 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
 
   /**
    * Get execution status (Phase 2)
+   * 
+   * If in-memory state is missing (e.g., after API restart), attempts to
+   * reconstruct from DB job records using metadataJson.longFormExecutionId.
    */
   app.get('/api/admin/long-form-video/executions/:id', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
     const { id } = request.params as { id: string }
-    const state = executionStates.get(id)
+    let state = executionStates.get(id)
 
+    // If in-memory state is missing, attempt to reconstruct from DB
     if (!state) {
-      return reply.status(404).send({
-        error: true,
-        message: 'Execution not found'
-      })
-    }
+      try {
+        // Find all jobs with this executionId in metadata
+        const jobs = await prisma.job.findMany({
+          where: {
+            capability: 'video_generation',
+            metadataJson: { contains: id },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
 
-    // Update state from DB jobs
-    for (const scene of state.scenes) {
-      if (scene.jobId) {
-        try {
-          const job = await prisma.job.findUnique({ where: { id: scene.jobId } })
-          if (job) {
-            scene.status = job.status as 'queued' | 'processing' | 'completed' | 'failed'
-            scene.artifactId = job.artifactId || undefined
-            scene.provider = job.provider || undefined
-            scene.model = job.model || undefined
-            scene.error = job.error || undefined
-            scene.startedAt = job.startedAt?.toISOString()
-            scene.completedAt = job.completedAt?.toISOString()
+        if (jobs.length === 0) {
+          return reply.status(404).send({
+            error: true,
+            message: 'Execution not found. In-memory state may have been lost after API restart.',
+            note: 'Execution state is currently stored in-memory. Persistent storage will be added in a future phase.'
+          })
+        }
+
+        // Reconstruct execution state from jobs
+        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
+        state = {
+          executionId: id,
+          planId: firstJobMetadata.planId || 'unknown',
+          routingMode: firstJobMetadata.routingMode || 'balanced',
+          totalScenes: jobs.length,
+          scenes: jobs.map((job) => {
+            const metadata = JSON.parse(job.metadataJson)
+            return {
+              sceneNumber: metadata.sceneNumber,
+              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
+              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
+              jobId: job.id,
+              artifactId: job.artifactId || undefined,
+              provider: job.provider || undefined,
+              model: job.model || undefined,
+              error: job.error || undefined,
+              startedAt: job.startedAt?.toISOString(),
+              completedAt: job.completedAt?.toISOString(),
+            }
+          }),
+          progress: 0,
+          finalAssemblyReady: false,
+          missingDependencies: [
+            'ffmpeg/stitching',
+            'final_assembly_pipeline',
+            'persistent_execution_tracking'
+          ],
+          createdAt: jobs[0].createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+
+        // Cache reconstructed state in memory
+        executionStates.set(id, state)
+      } catch (error) {
+        return reply.status(500).send({
+          error: true,
+          message: 'Failed to reconstruct execution state from DB',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    } else {
+      // Update state from DB jobs if in-memory state exists
+      for (const scene of state.scenes) {
+        if (scene.jobId) {
+          try {
+            const job = await prisma.job.findUnique({ where: { id: scene.jobId } })
+            if (job) {
+              scene.status = job.status as 'queued' | 'processing' | 'completed' | 'failed'
+              scene.artifactId = job.artifactId || undefined
+              scene.provider = job.provider || undefined
+              scene.model = job.model || undefined
+              scene.error = job.error || undefined
+              scene.startedAt = job.startedAt?.toISOString()
+              scene.completedAt = job.completedAt?.toISOString()
+            }
+          } catch {
+            // Ignore DB errors for status check
           }
-        } catch {
-          // Ignore DB errors for status check
         }
       }
     }
@@ -288,6 +350,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       execution: state,
       finalAssemblyReady: false,
       message: 'Per-scene execution in progress. Final assembly remains blocked.',
+      note: 'Execution state is stored in-memory. Persistent storage will be added in a future phase.',
       nextSteps: state.progress === 100
         ? [
             'All scenes completed. Ready for Phase 4: scene stitching',
@@ -316,8 +379,14 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         ...LONG_FORM_VIDEO_STATUS,
         perSceneExecutionReady: true, // Phase 2
         sceneExecutionPipelineReady: true,
+        persistentExecutionTracking: false, // In-memory only for now
       },
       message: 'Long-form video Phase 2: per-scene execution ready. Final assembly pending.',
+      limitations: {
+        executionStateStorage: 'In-memory only (lost on API restart)',
+        executionStateRecovery: 'Can reconstruct from DB job metadata when possible',
+        persistentStorage: 'Will be added in a future phase'
+      },
       phases: {
         phase1: 'Orchestration foundation - READY',
         phase2: 'Per-scene execution - READY',

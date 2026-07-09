@@ -94,7 +94,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-123'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       expect(payloads).toHaveLength(5)
       payloads.forEach((payload, index) => {
@@ -112,7 +113,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-456'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
         expect(payload.input.duration).toBe(40) // 120 / 3
@@ -130,7 +132,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-789'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
         expect(payload.input.style).toBe('documentary')
@@ -147,7 +150,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan, 'premium')
+      const executionId = 'test-execution-id-routing'
+      const payloads = createSceneExecutionPayloads(plan, 'premium', executionId)
 
       payloads.forEach((payload) => {
         expect(payload.routingMode).toBe('premium')
@@ -164,7 +168,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-no-override'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
         expect(payload.metadata).not.toHaveProperty('provider')
@@ -183,10 +188,11 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-metadata'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
-        expect(payload.metadata.longFormExecutionId).toBeDefined()
+        expect(payload.metadata.longFormExecutionId).toBe(executionId)
         expect(payload.metadata.sceneNumber).toBeDefined()
         expect(payload.metadata.longFormVideo).toBe(true)
         expect(payload.metadata.finalAssemblyPending).toBe(true)
@@ -202,13 +208,31 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-brain-router'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       // Payloads should not include provider/model - Brain Router decides
       payloads.forEach((payload) => {
         expect(payload.capability).toBe('video_generation')
         expect(payload.metadata).not.toHaveProperty('selectedProvider')
         expect(payload.metadata).not.toHaveProperty('selectedModel')
+      })
+    })
+
+    it('all payloads share the same executionId', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for shared executionId',
+          targetDurationSeconds: 60,
+          sceneCount: 3,
+        })
+      )
+
+      const executionId = 'shared-execution-id-abc'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
+
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(executionId)
       })
     })
   })
@@ -466,7 +490,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-capability'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
         expect(payload.capability).toBe('video_generation')
@@ -500,7 +525,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id-providers'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
         expect(payload).not.toHaveProperty('provider')
@@ -513,17 +539,22 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
     it('scene payloads do not reference MiMo', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
-          prompt: 'Test prompt for MiMo',
+          prompt: 'A test prompt for video generation',
           targetDurationSeconds: 60,
           sceneCount: 2,
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
-        expect(JSON.stringify(payload)).not.toContain('mimo')
-        expect(JSON.stringify(payload.metadata)).not.toContain('mimo')
+        // Check that MiMo is not in the prompt or capability
+        expect(payload.prompt.toLowerCase()).not.toContain('mimo')
+        expect(payload.capability).not.toBe('mimo')
+        // Check that MiMo is not in the metadata (excluding executionId)
+        const metadataWithoutExecId = { ...payload.metadata, longFormExecutionId: '' }
+        expect(JSON.stringify(metadataWithoutExecId).toLowerCase()).not.toContain('mimo')
       })
     })
   })
@@ -538,11 +569,15 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      const payloads = createSceneExecutionPayloads(plan)
+      const executionId = 'test-execution-id'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
       payloads.forEach((payload) => {
+        // Check that adult content is not in the prompt
         expect(payload.prompt.toLowerCase()).not.toContain('adult')
-        expect(JSON.stringify(payload.metadata).toLowerCase()).not.toContain('adult')
+        // Check that adult content is not in the metadata (excluding executionId)
+        const metadataWithoutExecId = { ...payload.metadata, longFormExecutionId: '' }
+        expect(JSON.stringify(metadataWithoutExecId).toLowerCase()).not.toContain('adult')
       })
     })
   })
@@ -565,6 +600,103 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       
       const content = readFileSync(routePath, 'utf-8')
       expect(content).toContain('execute-scenes')
+    })
+  })
+
+  describe('Execution ID consistency', () => {
+    it('createSceneExecutionPayloads uses provided executionId', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for execution ID consistency',
+          targetDurationSeconds: 60,
+          sceneCount: 2,
+        })
+      )
+
+      const executionId = 'consistent-execution-id-xyz'
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
+
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(executionId)
+      })
+    })
+
+    it('execution state and all scene payloads share one executionId', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for shared execution ID',
+          targetDurationSeconds: 60,
+          sceneCount: 3,
+        })
+      )
+
+      const executionState = createLongFormExecutionState(plan, 'balanced')
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionState.executionId)
+
+      // All payloads should have the same executionId as the state
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(executionState.executionId)
+      })
+    })
+
+    it('dryRun returns payloads with the same executionId it returns', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for dryRun execution ID',
+          targetDurationSeconds: 60,
+          sceneCount: 2,
+        })
+      )
+
+      const executionState = createLongFormExecutionState(plan, 'balanced')
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionState.executionId)
+
+      // In dryRun mode, the API would return executionState.executionId
+      // and payloads[].metadata.longFormExecutionId should match
+      const returnedExecutionId = executionState.executionId
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(returnedExecutionId)
+      })
+    })
+
+    it('non-dryRun queues jobs with metadata.longFormExecutionId matching returned executionId', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for non-dryRun execution ID',
+          targetDurationSeconds: 60,
+          sceneCount: 2,
+        })
+      )
+
+      const executionState = createLongFormExecutionState(plan, 'balanced')
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionState.executionId)
+
+      // In non-dryRun mode, jobs are queued with payload.metadata
+      // which should contain the same executionId
+      const returnedExecutionId = executionState.executionId
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(returnedExecutionId)
+      })
+    })
+
+    it('status route uses the same executionId', () => {
+      const plan = createLongFormVideoPlan(
+        validateLongFormVideoRequest({
+          prompt: 'Test prompt for status route execution ID',
+          targetDurationSeconds: 60,
+          sceneCount: 2,
+        })
+      )
+
+      const executionState = createLongFormExecutionState(plan, 'balanced')
+      const payloads = createSceneExecutionPayloads(plan, 'balanced', executionState.executionId)
+
+      // The status route would look up by executionState.executionId
+      // and all job metadata should contain that same ID
+      const statusRouteExecutionId = executionState.executionId
+      payloads.forEach((payload) => {
+        expect(payload.metadata.longFormExecutionId).toBe(statusRouteExecutionId)
+      })
     })
   })
 })

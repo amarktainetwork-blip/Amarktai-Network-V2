@@ -99,10 +99,9 @@ export function buildSceneVideoPrompt(
 
 export function createSceneExecutionPayloads(
   plan: LongFormVideoPlan,
-  routingMode: string = 'balanced'
+  routingMode: string = 'balanced',
+  executionId: string
 ): SceneExecutionPayload[] {
-  const executionId = randomUUID()
-
   return plan.storyboard.scenes.map((scene) => {
     const prompt = buildSceneVideoPrompt(scene, plan)
 
