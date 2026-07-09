@@ -147,25 +147,61 @@ async function checkDashboardPages() {
           content?.includes('submitJob') ||
           content?.includes('pollJob')
         
-        // Classify based on page type and execution capability
+        // Determine execution-ready and pending capabilities for this page
+        let executionReadyCapabilities = []
+        let pendingCapabilities = []
         let status = 'display-only'
-        if (isDisabled) {
-          status = 'design-ready'
-        } else if (hasExecution) {
-          // Check if it's a known executable capability page
-          if (['chat', 'image', 'video'].includes(page)) {
-            status = 'execution-ready'
-          } else if (['music', 'research', 'long-form'].includes(page)) {
-            status = 'design-ready' // Has UI but backend not ready
+        let reason = ''
+        
+        // Check execution FIRST, then check disabled state
+        if (hasExecution) {
+          // Page has real execution paths
+          if (page === 'image') {
+            executionReadyCapabilities = ['image_generation']
+            pendingCapabilities = ['image_edit', 'upscale', 'variations', 'premium_image_routing']
+            status = 'partial_execution'
+            reason = 'Image generation is executable; future controls are pending.'
+          } else if (page === 'video') {
+            executionReadyCapabilities = ['video_generation']
+            pendingCapabilities = ['image_to_video', 'long_form_video', 'storyboard', 'voiceover', 'subtitles']
+            status = 'partial_execution'
+            reason = 'Short video generation is executable; long-form and advanced video controls are pending.'
+          } else if (page === 'chat') {
+            // Chat has text router capabilities but may not have full backend persistence
+            executionReadyCapabilities = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
+            pendingCapabilities = []
+            status = 'partial_execution'
+            reason = 'Text capabilities executable via router; backend memory/persistence may be pending.'
           } else {
+            // Generic execution-ready page
             status = 'execution-ready'
+            reason = 'Page has backend integration.'
+          }
+        } else if (isDisabled) {
+          // Page has disabled controls but no execution
+          if (['music', 'research', 'long-form'].includes(page)) {
+            status = 'design_ready_pending_backend'
+            if (page === 'music') {
+              pendingCapabilities = ['music_generation']
+            } else if (page === 'research') {
+              pendingCapabilities = ['research', 'rag_search', 'rag_ingest', 'brand_scrape']
+            } else if (page === 'long-form') {
+              pendingCapabilities = ['long_form_video']
+            }
+            reason = 'UI design-ready; backend not wired.'
+          } else {
+            status = 'design-ready'
+            reason = 'Page contains disabled/pending controls.'
           }
         }
         
         pageStatus[page] = {
           exists: true,
           status: status,
-          hasBackendIntegration: !!hasExecution
+          executionReadyCapabilities: executionReadyCapabilities,
+          pendingCapabilities: pendingCapabilities,
+          hasBackendIntegration: !!hasExecution,
+          reason: reason
         }
       } else {
         pageStatus[page] = { exists: false, status: 'missing' }
@@ -354,20 +390,37 @@ async function runAudit() {
     }
   }
   
-  // Classify dashboard pages
-  const executionPages = []
+  // Classify dashboard pages with new status categories
+  const executionReadyPages = []
+  const partialExecutionPages = []
   const designReadyPages = []
+  const designReadyPendingBackendPages = []
   const displayOnlyPages = []
+  const pageDetails = []
   
   if (dashboardPages.found) {
-    for (const [page, status] of Object.entries(dashboardPages.pages)) {
-      if (status.status === 'execution-ready') {
-        executionPages.push(page)
-      } else if (status.status === 'design-ready') {
+    for (const [page, pageInfo] of Object.entries(dashboardPages.pages)) {
+      if (pageInfo.status === 'execution-ready') {
+        executionReadyPages.push(page)
+      } else if (pageInfo.status === 'partial_execution') {
+        partialExecutionPages.push(page)
+      } else if (pageInfo.status === 'design-ready') {
         designReadyPages.push(page)
-      } else if (status.status === 'display-only') {
+      } else if (pageInfo.status === 'design_ready_pending_backend') {
+        designReadyPendingBackendPages.push(page)
+      } else if (pageInfo.status === 'display-only') {
         displayOnlyPages.push(page)
       }
+      
+      // Add detailed page info
+      pageDetails.push({
+        route: `/dashboard/${page}`,
+        status: pageInfo.status,
+        executionReadyCapabilities: pageInfo.executionReadyCapabilities || [],
+        pendingCapabilities: pageInfo.pendingCapabilities || [],
+        hasBackendIntegration: pageInfo.hasBackendIntegration || false,
+        reason: pageInfo.reason || ''
+      })
     }
   }
   
@@ -659,9 +712,12 @@ async function runAudit() {
     
     dashboardStatus: {
       total: Object.keys(dashboardPages.pages || {}).length,
-      executionReady: executionPages,
-      designReady: designReadyPages,
-      displayOnly: displayOnlyPages
+      executionReadyPages: executionReadyPages,
+      partialExecutionPages: partialExecutionPages,
+      designReadyPages: designReadyPages,
+      designReadyPendingBackendPages: designReadyPendingBackendPages,
+      displayOnlyPages: displayOnlyPages,
+      pageDetails: pageDetails
     },
     
     workerExecutionStatus: {
@@ -757,9 +813,36 @@ async function runAudit() {
   
   console.log('🖥️  DASHBOARD STATUS')
   console.log(`   Total pages: ${completionMap.dashboardStatus.total}`)
-  console.log(`   Execution-ready: ${completionMap.dashboardStatus.executionReady.length}`)
-  console.log(`   Design-ready: ${completionMap.dashboardStatus.designReady.length}`)
-  console.log(`   Display-only: ${completionMap.dashboardStatus.displayOnly.length}`)
+  console.log(`   Execution-ready: ${completionMap.dashboardStatus.executionReadyPages.length}`)
+  for (const page of completionMap.dashboardStatus.executionReadyPages) {
+    console.log(`     ✓ ${page}`)
+  }
+  console.log(`   Partial execution: ${completionMap.dashboardStatus.partialExecutionPages.length}`)
+  for (const page of completionMap.dashboardStatus.partialExecutionPages) {
+    const detail = completionMap.dashboardStatus.pageDetails.find(p => p.route === `/dashboard/${page}`)
+    console.log(`     ◐ ${page}`)
+    if (detail) {
+      if (detail.executionReadyCapabilities.length > 0) {
+        console.log(`       Ready: ${detail.executionReadyCapabilities.join(', ')}`)
+      }
+      if (detail.pendingCapabilities.length > 0) {
+        console.log(`       Pending: ${detail.pendingCapabilities.join(', ')}`)
+      }
+    }
+  }
+  console.log(`   Design-ready: ${completionMap.dashboardStatus.designReadyPages.length}`)
+  for (const page of completionMap.dashboardStatus.designReadyPages) {
+    console.log(`     ○ ${page}`)
+  }
+  console.log(`   Design-ready (pending backend): ${completionMap.dashboardStatus.designReadyPendingBackendPages.length}`)
+  for (const page of completionMap.dashboardStatus.designReadyPendingBackendPages) {
+    const detail = completionMap.dashboardStatus.pageDetails.find(p => p.route === `/dashboard/${page}`)
+    console.log(`     ○ ${page}`)
+    if (detail && detail.pendingCapabilities.length > 0) {
+      console.log(`       Pending: ${detail.pendingCapabilities.join(', ')}`)
+    }
+  }
+  console.log(`   Display-only: ${completionMap.dashboardStatus.displayOnlyPages.length}`)
   console.log()
   
   console.log('🔧 WORKER EXECUTION')

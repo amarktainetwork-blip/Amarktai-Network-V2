@@ -195,9 +195,64 @@ describe('Build Completion Audit', () => {
   it('audit detects dashboard status', () => {
     expect(auditOutput.dashboardStatus).toBeDefined()
     expect(auditOutput.dashboardStatus.total).toBeDefined()
-    expect(auditOutput.dashboardStatus.executionReady).toBeDefined()
-    expect(auditOutput.dashboardStatus.designReady).toBeDefined()
-    expect(auditOutput.dashboardStatus.displayOnly).toBeDefined()
+    expect(auditOutput.dashboardStatus.executionReadyPages).toBeDefined()
+    expect(auditOutput.dashboardStatus.partialExecutionPages).toBeDefined()
+    expect(auditOutput.dashboardStatus.designReadyPages).toBeDefined()
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toBeDefined()
+    expect(auditOutput.dashboardStatus.displayOnlyPages).toBeDefined()
+    expect(auditOutput.dashboardStatus.pageDetails).toBeDefined()
+  })
+
+  it('image page is partial_execution with image_generation ready', () => {
+    expect(auditOutput.dashboardStatus.partialExecutionPages).toContain('image')
+    const imageDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/image')
+    expect(imageDetail).toBeDefined()
+    expect(imageDetail.status).toBe('partial_execution')
+    expect(imageDetail.executionReadyCapabilities).toContain('image_generation')
+    expect(imageDetail.pendingCapabilities).toContain('image_edit')
+    expect(imageDetail.pendingCapabilities).toContain('upscale')
+    expect(imageDetail.pendingCapabilities).toContain('variations')
+  })
+
+  it('video page is partial_execution with video_generation ready', () => {
+    expect(auditOutput.dashboardStatus.partialExecutionPages).toContain('video')
+    const videoDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/video')
+    expect(videoDetail).toBeDefined()
+    expect(videoDetail.status).toBe('partial_execution')
+    expect(videoDetail.executionReadyCapabilities).toContain('video_generation')
+    expect(videoDetail.pendingCapabilities).toContain('long_form_video')
+  })
+
+  it('image/video are not downgraded to design-ready just because they contain disabled future controls', () => {
+    // Image and video should be in partialExecutionPages, not designReadyPages
+    expect(auditOutput.dashboardStatus.designReadyPages).not.toContain('image')
+    expect(auditOutput.dashboardStatus.designReadyPages).not.toContain('video')
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).not.toContain('image')
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).not.toContain('video')
+  })
+
+  it('music remains design_ready_pending_backend', () => {
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('music')
+    const musicDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/music')
+    expect(musicDetail).toBeDefined()
+    expect(musicDetail.status).toBe('design_ready_pending_backend')
+    expect(musicDetail.executionReadyCapabilities).toEqual([])
+    expect(musicDetail.pendingCapabilities).toContain('music_generation')
+  })
+
+  it('research remains design_ready_pending_backend', () => {
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('research')
+    const researchDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/research')
+    expect(researchDetail).toBeDefined()
+    expect(researchDetail.status).toBe('design_ready_pending_backend')
+    expect(researchDetail.executionReadyCapabilities).toEqual([])
+    expect(researchDetail.pendingCapabilities.length).toBeGreaterThan(0)
+  })
+
+  it('dashboardStatus includes partialExecutionPages', () => {
+    expect(auditOutput.dashboardStatus.partialExecutionPages).toBeDefined()
+    expect(Array.isArray(auditOutput.dashboardStatus.partialExecutionPages)).toBe(true)
+    expect(auditOutput.dashboardStatus.partialExecutionPages.length).toBeGreaterThan(0)
   })
 
   it('audit detects redeploy readiness', () => {
