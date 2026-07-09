@@ -202,7 +202,11 @@ describe('Build Completion Audit', () => {
 
   it('audit detects redeploy readiness', () => {
     expect(auditOutput.redeployReadiness).toBeDefined()
-    expect(auditOutput.redeployReadiness.ready).toBeDefined()
+    expect(auditOutput.redeployReadiness.safe_to_redeploy_foundation).toBeDefined()
+    expect(auditOutput.redeployReadiness.product_ready).toBeDefined()
+    expect(auditOutput.redeployReadiness.app_ready).toBeDefined()
+    expect(auditOutput.redeployReadiness.music_ready).toBeDefined()
+    expect(auditOutput.redeployReadiness.long_form_ready).toBeDefined()
     expect(auditOutput.redeployReadiness.blockers).toBeDefined()
     expect(auditOutput.redeployReadiness.warnings).toBeDefined()
   })

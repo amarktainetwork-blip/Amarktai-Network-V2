@@ -72,7 +72,8 @@ async function extractModelCatalogue() {
   if (!content) return { found: false, models: [] }
   
   const models = []
-  const modelRegex = /{\s*provider:\s*'([^']+)',\s*modelId:\s*'([^']+)',\s*displayName:\s*'([^']+)',\s*capabilities:\s*\[([^\]]+)\],\s*status:\s*'([^']+)',\s*executable:\s*(true|false)/g
+  // Match each model object in the MODEL_CATALOGUE array
+  const modelRegex = /{\s*provider:\s*'([^']+)',\s*modelId:\s*'([^']+)',\s*displayName:\s*'([^']+)',\s*capabilities:\s*\[([^\]]+)\],[\s\S]*?status:\s*'([^']+)',[\s\S]*?executable:\s*(true|false)/g
   
   let match
   while ((match = modelRegex.exec(content)) !== null) {
@@ -120,7 +121,7 @@ async function checkWorkerExecution() {
   }
 }
 
-// Check dashboard pages
+// Check dashboard pages with multiple execution patterns
 async function checkDashboardPages() {
   const dashboardDir = path.join(ROOT, 'app', 'dashboard')
   try {
@@ -135,11 +136,35 @@ async function checkDashboardPages() {
       if (exists) {
         const content = await safeRead(`app/dashboard/${page}/page.js`)
         const isDisabled = content?.includes('disabled') || content?.includes('Backend Pending') || content?.includes('On Hold')
-        const hasExecution = content?.includes('executeWithProvider') || content?.includes('/api/v1/jobs')
+        
+        // Check for multiple execution patterns
+        const hasExecution = 
+          content?.includes('executeWithProvider') || 
+          content?.includes('/api/v1/jobs') ||
+          content?.includes('/api/admin/studio/jobs') ||
+          content?.includes('/api/admin/jobs') ||
+          content?.includes('useStudioStore') ||
+          content?.includes('submitJob') ||
+          content?.includes('pollJob')
+        
+        // Classify based on page type and execution capability
+        let status = 'display-only'
+        if (isDisabled) {
+          status = 'design-ready'
+        } else if (hasExecution) {
+          // Check if it's a known executable capability page
+          if (['chat', 'image', 'video'].includes(page)) {
+            status = 'execution-ready'
+          } else if (['music', 'research', 'long-form'].includes(page)) {
+            status = 'design-ready' // Has UI but backend not ready
+          } else {
+            status = 'execution-ready'
+          }
+        }
         
         pageStatus[page] = {
           exists: true,
-          status: isDisabled ? 'design-ready' : (hasExecution ? 'execution-ready' : 'display-only'),
+          status: status,
           hasBackendIntegration: !!hasExecution
         }
       } else {
@@ -249,19 +274,61 @@ async function runAudit() {
     checkRoutingMap()
   ])
   
-  // Classify capabilities
+  // Classify capabilities with separate status groups
   const executableCapabilities = []
+  const executableViaTextRouter = []
+  const executableViaMediaWorker = []
+  const catalogueOnlyCapabilities = []
+  const dashboardReadyCapabilities = []
   const pendingCapabilities = []
   const blockedCapabilities = []
   
+  // Text capabilities supported by Groq/DeepInfra text executor
+  const textRouterCapabilities = [
+    'chat', 'reasoning', 'code', 'summarization', 
+    'translation', 'classification', 'extraction', 'structured_output'
+  ]
+  
+  // Media capabilities supported by Together/GenX
+  const mediaWorkerCapabilities = ['image_generation', 'video_generation']
+  
   if (capabilities.found) {
     for (const cap of capabilities.capabilities) {
+      // Check if capability has executable models in catalogue
+      const hasExecutableModel = modelCatalogue.models.some(
+        m => m.capabilities.includes(cap) && m.status === 'available' && m.executable
+      )
+      
+      // Check if worker has executor for this capability
+      const hasWorkerExecutor = 
+        (textRouterCapabilities.includes(cap) && workerExecution.executors.groqText) ||
+        (cap === 'image_generation' && workerExecution.executors.togetherImage) ||
+        (cap === 'video_generation' && workerExecution.executors.genxVideo)
+      
       if (cap.startsWith('adult_')) {
         blockedCapabilities.push({ capability: cap, reason: 'adult_permission_required' })
       } else if (['music_generation', 'long_form_video'].includes(cap)) {
         pendingCapabilities.push({ capability: cap, reason: 'backend_not_wired' })
-      } else if (['chat', 'image_generation', 'video_generation'].includes(cap)) {
+      } else if (textRouterCapabilities.includes(cap) && hasExecutableModel && hasWorkerExecutor) {
+        // Text capabilities executable via Groq/DeepInfra
+        executableViaTextRouter.push({ 
+          capability: cap, 
+          status: 'live_via_text_router',
+          providers: ['groq', 'deepinfra']
+        })
         executableCapabilities.push({ capability: cap, status: 'live' })
+      } else if (mediaWorkerCapabilities.includes(cap) && hasExecutableModel && hasWorkerExecutor) {
+        // Media capabilities executable via Together/GenX
+        executableViaMediaWorker.push({ 
+          capability: cap, 
+          status: 'live_via_media_worker',
+          providers: cap === 'image_generation' ? ['together'] : ['genx']
+        })
+        executableCapabilities.push({ capability: cap, status: 'live' })
+      } else if (hasExecutableModel) {
+        // Has model but no worker executor
+        catalogueOnlyCapabilities.push({ capability: cap, reason: 'no_worker_executor' })
+        pendingCapabilities.push({ capability: cap, reason: 'no_worker_executor' })
       } else if (['tts', 'stt', 'embeddings', 'research'].includes(cap)) {
         pendingCapabilities.push({ capability: cap, reason: 'partial_implementation' })
       } else {
@@ -304,9 +371,10 @@ async function runAudit() {
     }
   }
   
-  // Open-source audit
+  // Open-source audit with honest wired vs installed distinction
   const openSourceInstalled = []
   const openSourceWired = []
+  const openSourcePartial = []
   const openSourceMissing = []
   
   if (installedLibs.found) {
@@ -323,15 +391,26 @@ async function runAudit() {
     if (libs.sharp) openSourceInstalled.push('sharp')
     if (libs.canvas) openSourceInstalled.push('canvas')
     
-    // Check what's actually wired
+    // Check what's actually wired (has real workflow implementation)
     if (libs.bullmq && libs.ioredis && workerExecution.usesBrainRouter) {
       openSourceWired.push('bullmq-queue')
     }
     if (libs.prisma) {
       openSourceWired.push('prisma-db')
     }
-    if (libs.qdrant && routingMap.hasRoutingTruth) {
+    
+    // Qdrant/RAG - check for actual workflow, not just package installation
+    // Need: rag_ingest/rag_search routes, worker executor, qdrant upsert/search
+    const hasRagRoutes = await fileExists('apps/api/src/routes/rag.ts') || 
+                         await fileExists('apps/api/src/routes/rag-ingest.ts') ||
+                         await fileExists('apps/api/src/routes/rag-search.ts')
+    const hasRagWorker = workerExecution.found && 
+                        (workerExecution.executors.ragIngest || workerExecution.executors.ragSearch)
+    
+    if (libs.qdrant && (hasRagRoutes || hasRagWorker)) {
       openSourceWired.push('qdrant-vector-search')
+    } else if (libs.qdrant) {
+      openSourcePartial.push('qdrant-client-installed-but-rag-not-wired')
     }
     
     // Check what's missing
@@ -358,28 +437,36 @@ async function runAudit() {
     ]
   }
   
-  // Long-form video readiness
+  // Long-form video readiness with complete missing parts list
   const longFormReadiness = {
     scriptPlanner: false,
     sceneSplitter: false,
     sceneJobCreation: false,
+    promptEnhancement: false,
     perSceneGeneration: false,
     voiceover: false,
     subtitles: false,
     musicBed: false,
     sceneStitching: false,
     ffmpegIntegration: installedLibs.libraries.ffmpeg || false,
+    artifactPersistence: false,
+    progressTracking: false,
+    partialFailureHandling: false,
     dashboardSceneStatus: false,
     missingParts: [
       'script_storyboard_planner',
       'scene_splitter',
       'scene_job_creation',
+      'prompt_enhancement',
       'per_scene_video_generation',
       'voiceover_integration',
       'subtitles_integration',
       'music_bed_integration',
       'scene_stitching',
       'ffmpeg_integration',
+      'artifact_persistence',
+      'progress_tracking',
+      'partial_failure_handling',
       'dashboard_scene_status'
     ]
   }
@@ -401,44 +488,84 @@ async function runAudit() {
     marketingAppReadiness.missingParts.push('brand_scrape_workflow')
   }
   
-  // Media quality status
+  // Media quality status with clearer findings
+  const imageModel = modelCatalogue.models.find(m => m.provider === 'together' && m.capabilities.includes('image_generation'))
+  const videoModel = modelCatalogue.models.find(m => m.provider === 'genx' && m.capabilities.includes('video_generation'))
+  
   const mediaQualityStatus = {
     imageGeneration: {
       provider: 'together',
-      model: modelCatalogue.models.find(m => m.provider === 'together' && m.capabilities.includes('image_generation'))?.modelId || 'unknown',
+      model: imageModel?.modelId || 'unknown',
+      executable: !!imageModel?.executable,
       routingModesSupported: brainRouter.routingModes.length > 0,
       premiumRouting: brainRouter.routingModes.includes('premium'),
-      issue: 'model_choice_or_prompt_payload'
+      premiumExecutable: false, // No premium image model wired yet
+      findings: [
+        'image currently Together executable only',
+        'premium image not executable until GenX image or another premium model is actually wired',
+        'routing modes exist but premium mode only affects selection if executable alternative models exist'
+      ]
     },
     videoGeneration: {
       provider: 'genx',
-      model: modelCatalogue.models.find(m => m.provider === 'genx' && m.capabilities.includes('video_generation'))?.modelId || 'unknown',
+      model: videoModel?.modelId || 'unknown',
+      executable: !!videoModel?.executable,
       routingModesSupported: brainRouter.routingModes.length > 0,
       premiumRouting: brainRouter.routingModes.includes('premium'),
-      issue: 'model_choice_or_duration_handling'
+      premiumExecutable: false, // No premium video model wired yet
+      findings: [
+        'video currently GenX seedance-v1-fast only',
+        'video quality issue likely needs model selection/prompt payload/duration/aspect ratio/provider model discovery audit',
+        'routing modes exist but premium mode only affects selection if executable alternative models exist'
+      ]
     }
   }
   
-  // Redeploy readiness
+  // Redeploy readiness with nuanced reporting
   const redeployReadiness = {
-    ready: true,
+    safe_to_redeploy_foundation: true,
+    product_ready: false,
+    app_ready: false,
+    music_ready: false,
+    long_form_ready: false,
     blockers: [],
     warnings: []
   }
   
+  // Check foundation blockers
   if (!brainRouter.integratedInWorker) {
     redeployReadiness.blockers.push('brain_router_not_integrated_in_worker')
-    redeployReadiness.ready = false
+    redeployReadiness.safe_to_redeploy_foundation = false
   }
   
   if (!appContract.hasApiKeyHashing) {
     redeployReadiness.blockers.push('app_api_key_hashing_missing')
-    redeployReadiness.ready = false
+    redeployReadiness.safe_to_redeploy_foundation = false
   }
   
   if (!appContract.hasBlockedOverrides) {
     redeployReadiness.blockers.push('blocked_overrides_missing')
-    redeployReadiness.ready = false
+    redeployReadiness.safe_to_redeploy_foundation = false
+  }
+  
+  // Product readiness (requires executable capabilities beyond foundation)
+  if (executableCapabilities.length === 0) {
+    redeployReadiness.warnings.push('no_executable_capabilities')
+  }
+  
+  // App readiness (requires app contract + executable capabilities)
+  if (!appContract.jobsEndpoint || executableCapabilities.length === 0) {
+    redeployReadiness.warnings.push('app_contract_or_capabilities_missing')
+  }
+  
+  // Music readiness
+  if (!musicReadiness.workerExecutor) {
+    redeployReadiness.warnings.push('music_backend_not_ready')
+  }
+  
+  // Long-form readiness
+  if (longFormReadiness.missingParts.length > 0) {
+    redeployReadiness.warnings.push(`long_form_missing_${longFormReadiness.missingParts.length}_parts`)
   }
   
   if (providers.providers.length !== 5) {
@@ -498,7 +625,7 @@ async function runAudit() {
     }
   ]
   
-  // Build completion map
+  // Build completion map with all status groups
   const completionMap = {
     generatedAt: new Date().toISOString(),
     repo: 'https://github.com/amarktainetwork-blip/Amarktai-Network-V2.git',
@@ -521,7 +648,12 @@ async function runAudit() {
       blockedModels: blockedModels.map(m => `${m.provider}/${m.modelId}`)
     },
     
+    // Separate status groups for capabilities
     executableCapabilities: executableCapabilities,
+    executableViaTextRouter: executableViaTextRouter,
+    executableViaMediaWorker: executableViaMediaWorker,
+    catalogueOnlyCapabilities: catalogueOnlyCapabilities,
+    dashboardReadyCapabilities: dashboardReadyCapabilities,
     pendingCapabilities: pendingCapabilities,
     blockedCapabilities: blockedCapabilities,
     
@@ -549,6 +681,7 @@ async function runAudit() {
     
     openSourceLibrariesInstalled: openSourceInstalled,
     openSourceWorkflowsWired: openSourceWired,
+    openSourceWorkflowsPartial: openSourcePartial,
     openSourceWorkflowsMissing: openSourceMissing,
     
     mediaQualityStatus: mediaQualityStatus,
@@ -588,10 +721,24 @@ async function runAudit() {
   console.log()
   
   console.log('⚡ EXECUTABLE CAPABILITIES')
-  for (const cap of completionMap.executableCapabilities) {
-    console.log(`   ✓ ${cap.capability} (${cap.status})`)
+  console.log(`   Total executable: ${executableCapabilities.length}`)
+  console.log(`   Via text router (Groq/DeepInfra): ${executableViaTextRouter.length}`)
+  for (const cap of executableViaTextRouter) {
+    console.log(`     ✓ ${cap.capability} (${cap.status})`)
+  }
+  console.log(`   Via media worker (Together/GenX): ${executableViaMediaWorker.length}`)
+  for (const cap of executableViaMediaWorker) {
+    console.log(`     ✓ ${cap.capability} (${cap.status})`)
   }
   console.log()
+  
+  if (catalogueOnlyCapabilities.length > 0) {
+    console.log('📚 CATALOGUE ONLY (no worker executor)')
+    for (const cap of catalogueOnlyCapabilities) {
+      console.log(`   ◯ ${cap.capability} (${cap.reason})`)
+    }
+    console.log()
+  }
   
   console.log('⏳ PENDING CAPABILITIES')
   for (const cap of completionMap.pendingCapabilities.slice(0, 10)) {
@@ -640,6 +787,12 @@ async function runAudit() {
   for (const workflow of completionMap.openSourceWorkflowsWired) {
     console.log(`     ✓ ${workflow}`)
   }
+  if (completionMap.openSourceWorkflowsPartial && completionMap.openSourceWorkflowsPartial.length > 0) {
+    console.log('   Partial (installed but not fully wired):')
+    for (const partial of completionMap.openSourceWorkflowsPartial) {
+      console.log(`     ◯ ${partial}`)
+    }
+  }
   console.log('   Missing:')
   for (const missing of completionMap.openSourceWorkflowsMissing) {
     console.log(`     ✗ ${missing}`)
@@ -657,18 +810,43 @@ async function runAudit() {
   console.log('🎬 LONG-FORM VIDEO READINESS')
   console.log(`   Script planner: ${longFormReadiness.scriptPlanner ? '✓' : '✗'}`)
   console.log(`   Scene splitter: ${longFormReadiness.sceneSplitter ? '✓' : '✗'}`)
+  console.log(`   Scene job creation: ${longFormReadiness.sceneJobCreation ? '✓' : '✗'}`)
+  console.log(`   Prompt enhancement: ${longFormReadiness.promptEnhancement ? '✓' : '✗'}`)
+  console.log(`   Per-scene generation: ${longFormReadiness.perSceneGeneration ? '✓' : '✗'}`)
+  console.log(`   Voiceover: ${longFormReadiness.voiceover ? '✓' : '✗'}`)
+  console.log(`   Subtitles: ${longFormReadiness.subtitles ? '✓' : '✗'}`)
+  console.log(`   Music bed: ${longFormReadiness.musicBed ? '✓' : '✗'}`)
+  console.log(`   Scene stitching: ${longFormReadiness.sceneStitching ? '✓' : '✗'}`)
   console.log(`   FFmpeg: ${longFormReadiness.ffmpegIntegration ? '✓' : '✗'}`)
+  console.log(`   Artifact persistence: ${longFormReadiness.artifactPersistence ? '✓' : '✗'}`)
+  console.log(`   Progress tracking: ${longFormReadiness.progressTracking ? '✓' : '✗'}`)
+  console.log(`   Partial failure handling: ${longFormReadiness.partialFailureHandling ? '✓' : '✗'}`)
+  console.log(`   Dashboard scene status: ${longFormReadiness.dashboardSceneStatus ? '✓' : '✗'}`)
   console.log(`   Missing: ${longFormReadiness.missingParts.length} parts`)
   console.log()
   
   console.log('📊 MEDIA QUALITY')
   console.log(`   Image: ${mediaQualityStatus.imageGeneration.provider}/${mediaQualityStatus.imageGeneration.model}`)
+  console.log(`     Executable: ${mediaQualityStatus.imageGeneration.executable ? '✓' : '✗'}`)
+  console.log(`     Premium executable: ${mediaQualityStatus.imageGeneration.premiumExecutable ? '✓' : '✗'}`)
+  for (const finding of mediaQualityStatus.imageGeneration.findings) {
+    console.log(`     • ${finding}`)
+  }
   console.log(`   Video: ${mediaQualityStatus.videoGeneration.provider}/${mediaQualityStatus.videoGeneration.model}`)
+  console.log(`     Executable: ${mediaQualityStatus.videoGeneration.executable ? '✓' : '✗'}`)
+  console.log(`     Premium executable: ${mediaQualityStatus.videoGeneration.premiumExecutable ? '✓' : '✗'}`)
+  for (const finding of mediaQualityStatus.videoGeneration.findings) {
+    console.log(`     • ${finding}`)
+  }
   console.log(`   Routing modes: ${brainRouter.routingModes.join(', ')}`)
   console.log()
   
   console.log('🚀 REDEPLOY READINESS')
-  console.log(`   Ready: ${redeployReadiness.ready ? '✓ YES' : '✗ NO'}`)
+  console.log(`   Safe to redeploy foundation: ${redeployReadiness.safe_to_redeploy_foundation ? '✓ YES' : '✗ NO'}`)
+  console.log(`   Product ready: ${redeployReadiness.product_ready ? '✓ YES' : '✗ NO'}`)
+  console.log(`   App ready: ${redeployReadiness.app_ready ? '✓ YES' : '✗ NO'}`)
+  console.log(`   Music ready: ${redeployReadiness.music_ready ? '✓ YES' : '✗ NO'}`)
+  console.log(`   Long-form ready: ${redeployReadiness.long_form_ready ? '✓ YES' : '✗ NO'}`)
   if (redeployReadiness.blockers.length > 0) {
     console.log('   Blockers:')
     for (const blocker of redeployReadiness.blockers) {
