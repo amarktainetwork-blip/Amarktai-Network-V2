@@ -23,6 +23,29 @@ describe('admin-jobs route contract', () => {
     expect(content).not.toContain('token')
   })
 
+  it('admin jobs route exposes failed status and error in list/detail shapes', () => {
+    const filePath = path.join(ROOT, 'apps/api/src/routes/admin-jobs.ts')
+    const content = fs.readFileSync(filePath, 'utf8')
+    expect(content).toContain('status: job.status')
+    expect(content).toContain('error: job.error || null')
+  })
+
+  it('admin jobs route can requeue with full WorkerJobData payload', () => {
+    const filePath = path.join(ROOT, 'apps/api/src/routes/admin-jobs.ts')
+    const content = fs.readFileSync(filePath, 'utf8')
+    expect(content).toContain("app.post('/api/admin/jobs/:id/requeue'")
+    expect(content).toContain('QUEUE_NAMES.JOBS')
+    expect(content).toContain('jobId: job.id')
+    expect(content).toContain('appSlug: job.appSlug')
+    expect(content).toContain('capability: job.capability')
+    expect(content).toContain('prompt: job.prompt')
+    expect(content).toContain('input: safeParseJsonObject(job.inputJson)')
+    expect(content).toContain('metadata: safeParseJsonObject(job.metadataJson)')
+    expect(content).toContain('traceId')
+    expect(content).toContain('error: null')
+    expect(content).toContain("status: 'queued'")
+  })
+
   it('server registers admin-jobs route', () => {
     const serverPath = path.join(ROOT, 'apps/api/src/server.ts')
     const content = fs.readFileSync(serverPath, 'utf8')
