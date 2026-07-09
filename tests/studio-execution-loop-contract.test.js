@@ -217,6 +217,29 @@ describe('studio execution loop contract', () => {
     expect(content).not.toContain("localStorage.getItem('admin_token')")
   })
 
+  it('Artifacts page uses authorized admin file proxy instead of direct api/v1 links', () => {
+    const pagePath = path.join(ROOT, 'app/dashboard/artifacts/page.js')
+    const content = fs.readFileSync(pagePath, 'utf8')
+    expect(content).toContain("fetch(`/api/admin/artifacts/${artifact.id}/file`")
+    expect(content).toContain('URL.createObjectURL(blob)')
+    expect(content).toContain('URL.revokeObjectURL')
+    expect(content).toContain('downloadArtifact')
+    expect(content).toContain('IMAGE_MIME_TYPES')
+    expect(content).not.toContain('/api/v1/artifacts/${')
+  })
+
+  it('Studio fetches artifact detail and file through authorized admin proxy for image preview', () => {
+    const pagePath = path.join(ROOT, 'app/dashboard/studio/page.jsx')
+    const content = fs.readFileSync(pagePath, 'utf8')
+    expect(content).toContain('function StudioArtifactPreview')
+    expect(content).toContain("localStorage.getItem('amarktai_token')")
+    expect(content).toContain('fetch(`/api/admin/artifacts/${artifactId}`')
+    expect(content).toContain('fetch(`/api/admin/artifacts/${artifactId}/file`')
+    expect(content).toContain('URL.createObjectURL(blob)')
+    expect(content).toContain('URL.revokeObjectURL')
+    expect(content).toContain('Artifact preview unavailable')
+  })
+
   it('provider list remains exactly 5', () => {
     const providers = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
     expect(providers).toHaveLength(5)

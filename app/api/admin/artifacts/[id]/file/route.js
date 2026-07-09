@@ -1,0 +1,38 @@
+import { NextResponse } from 'next/server'
+
+const API_BASE = process.env.API_URL ?? 'http://api:3001'
+
+export async function GET(request, { params }) {
+  const authorization = request.headers.get('authorization')
+  const { id } = params
+
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/artifacts/${id}/file`, {
+      method: 'GET',
+      headers: authorization ? { Authorization: authorization } : {},
+      signal: AbortSignal.timeout(20000),
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const data = await response.json().catch(() => ({ error: true, message: 'Artifact file request failed.' }))
+      return NextResponse.json(data, { status: response.status })
+    }
+
+    const headers = new Headers()
+    for (const header of ['content-type', 'content-disposition', 'cache-control']) {
+      const value = response.headers.get(header)
+      if (value) headers.set(header, value)
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      headers,
+    })
+  } catch {
+    return NextResponse.json(
+      { error: true, message: 'Backend unavailable. Artifact file could not be loaded.' },
+      { status: 502 },
+    )
+  }
+}

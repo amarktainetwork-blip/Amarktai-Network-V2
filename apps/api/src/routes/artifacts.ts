@@ -31,7 +31,14 @@ export async function artifactRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(409).send({ error: true, message: 'Artifact is not ready' })
     }
 
-    const file = await getArtifactFile(id)
+    let file: Awaited<ReturnType<typeof getArtifactFile>>
+    try {
+      file = await getArtifactFile(id)
+    } catch (err) {
+      app.log.warn({ err, artifactId: id }, 'Artifact file lookup failed')
+      return reply.status(404).send({ error: true, message: 'Artifact file not found' })
+    }
+
     if (!file) {
       return reply.status(404).send({ error: true, message: 'Artifact file not found' })
     }
