@@ -5,6 +5,14 @@
  * and budget limit schemas are declared here.
  */
 
+import { createHash } from 'node:crypto'
+
+// ── App API Key Hashing ──────────────────────────────────────────────────────
+
+export function hashAppApiKey(rawKey: string): string {
+  return createHash('sha256').update(rawKey).digest('hex')
+}
+
 // ── Auth Token Format ─────────────────────────────────────────────────────────
 
 export const BEARER_TOKEN_PATTERN = /^Bearer\s+(.+)$/

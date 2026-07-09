@@ -21,6 +21,8 @@ export interface ProviderCandidate {
   supported: boolean
   gated: boolean
   configured: boolean
+  disabled: boolean
+  runtimeRestricted: boolean
   reason: string
 }
 
@@ -34,9 +36,14 @@ export interface ProviderRouteDecision {
   blockReason: string | null
 }
 
+export interface ProviderState {
+  disabled?: boolean
+  runtimeRestricted?: boolean
+}
+
 export interface RoutingOptions {
-  /** Reserved for future internally gated lanes. */
   allowGated?: boolean
+  providerStates?: Partial<Record<ProviderKey, ProviderState>>
 }
 
 // ── Provider → Capability Support Map ──────────────────────────────────────────
@@ -83,22 +90,49 @@ export function routeProvider(
   capability: CapabilityKey,
   options: RoutingOptions = {}
 ): ProviderRouteDecision {
-  const { allowGated = false } = options
+  const { allowGated = false, providerStates } = options
   const category = getCapabilityCategory(capability)
 
-  // Build candidate list
   const candidates: ProviderCandidate[] = PROVIDER_KEYS.map((provider) => {
     const isGated = false
     const supportsCategory = PROVIDER_CATEGORY_SUPPORT[provider]?.includes(category) ?? false
     const configured = isProviderConfigured(provider)
+    const state = providerStates?.[provider]
+    const isDisabled = state?.disabled ?? false
+    const isRuntimeRestricted = state?.runtimeRestricted ?? false
 
-    // Reserved gated-lane support
+    if (isDisabled) {
+      return {
+        provider,
+        supported: supportsCategory,
+        gated: false,
+        configured,
+        disabled: true,
+        runtimeRestricted: false,
+        reason: `Provider '${provider}' is disabled`,
+      }
+    }
+
+    if (isRuntimeRestricted) {
+      return {
+        provider,
+        supported: supportsCategory,
+        gated: false,
+        configured,
+        disabled: false,
+        runtimeRestricted: true,
+        reason: `Provider '${provider}' is runtime-restricted`,
+      }
+    }
+
     if (isGated && !allowGated) {
       return {
         provider,
         supported: supportsCategory,
         gated: true,
         configured,
+        disabled: false,
+        runtimeRestricted: false,
         reason: 'DeepInfra is gated. Explicit gate flag required.',
       }
     }
@@ -109,19 +143,22 @@ export function routeProvider(
         supported: supportsCategory,
         gated: true,
         configured,
+        disabled: false,
+        runtimeRestricted: false,
         reason: configured
           ? 'DeepInfra gated lane — config present, not execution-ready'
           : 'DeepInfra gated lane — config missing',
       }
     }
 
-    // Normal providers
     if (!supportsCategory) {
       return {
         provider,
         supported: false,
         gated: false,
         configured,
+        disabled: false,
+        runtimeRestricted: false,
         reason: `Provider does not support category '${category}'`,
       }
     }
@@ -132,6 +169,8 @@ export function routeProvider(
         supported: true,
         gated: false,
         configured: false,
+        disabled: false,
+        runtimeRestricted: false,
         reason: 'Config missing — env var not set',
       }
     }
@@ -141,14 +180,14 @@ export function routeProvider(
       supported: true,
       gated: false,
       configured: true,
+      disabled: false,
+      runtimeRestricted: false,
       reason: 'Config present — not execution-ready',
     }
   })
 
-  // Select best candidate
-  // Priority: configured + supported + non-gated > configured + supported + gated > blocked
   const eligible = candidates.filter(
-    (c) => c.supported && c.configured && !c.gated
+    (c) => c.supported && c.configured && !c.gated && !c.disabled && !c.runtimeRestricted
   )
 
   let selectedProvider: ProviderKey | null = null

@@ -12,7 +12,7 @@ import {
   type CapabilityKey,
   type ProviderKey,
 } from '@amarktai/core'
-import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey } from '@amarktai/db'
+import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
 // Temporary proof gate for live-capable paths. This is not final Brain routing:
@@ -56,6 +56,20 @@ function canExecuteImplementedProvider(
     }
   }
 
+  if (candidate.disabled) {
+    return {
+      allowed: false,
+      reason: `${provider} is disabled`,
+    }
+  }
+
+  if (candidate.runtimeRestricted) {
+    return {
+      allowed: false,
+      reason: `${provider} is runtime-restricted`,
+    }
+  }
+
   return { allowed: true, reason: null }
 }
 
@@ -74,6 +88,16 @@ function redactProviderSecrets(message: string, extraKeys: string[] = []): strin
     }
   }
   return safe
+}
+
+async function isProviderDisabledInDb(provider: ProviderKey): Promise<boolean> {
+  try {
+    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
+    if (!record) return false
+    return record.healthStatus === 'disabled' || !record.enabled
+  } catch {
+    return false
+  }
 }
 
 function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
@@ -229,6 +253,14 @@ async function executeTextCapabilityWithFallback(payload: WorkerJobData): Promis
     if (!(err instanceof ProviderConfigError)) throw err
   }
 
+  if (await isProviderDisabledInDb('deepinfra')) {
+    return {
+      success: false,
+      status: 'failed',
+      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
+    }
+  }
+
   try {
     return await executeDeepInfraTextCapability(payload)
   } catch (err) {
@@ -248,6 +280,14 @@ async function executeChatWithFallback(payload: WorkerJobData): Promise<Processo
     return await executeGroqChat(payload)
   } catch (err) {
     if (!(err instanceof ProviderConfigError)) throw err
+  }
+
+  if (await isProviderDisabledInDb('deepinfra')) {
+    return {
+      success: false,
+      status: 'failed',
+      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
+    }
   }
 
   try {

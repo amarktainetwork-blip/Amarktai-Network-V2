@@ -71,6 +71,7 @@ export {
 export {
   BEARER_TOKEN_PATTERN,
   parseBearerToken,
+  hashAppApiKey,
   APP_CONNECTION_STATUSES,
   type AppAuthResult,
   type AppConnectionStatus,

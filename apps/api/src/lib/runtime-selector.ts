@@ -120,6 +120,18 @@ export async function selectRuntimeModel(
       continue
     }
 
+    // Reject disabled providers by health status
+    if (health.healthStatus === 'disabled') {
+      rejected.push({ provider: model.provider, model: model.modelId, reason: 'provider_health_disabled' })
+      continue
+    }
+
+    // Reject runtime-restricted providers
+    if (health.healthStatus === 'runtime_restricted') {
+      rejected.push({ provider: model.provider, model: model.modelId, reason: 'provider_runtime_restricted' })
+      continue
+    }
+
     // Reject MiMo
     if (model.provider === 'mimo') {
       rejected.push({ provider: model.provider, model: model.modelId, reason: 'mimo_coding_tool_only' })

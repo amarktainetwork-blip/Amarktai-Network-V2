@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@amarktai/db'
-import { parseBearerToken } from '@amarktai/core'
+import { parseBearerToken, hashAppApiKey } from '@amarktai/core'
 
 export type AuthContext =
   | { kind: 'admin'; subject: string }
@@ -36,8 +36,9 @@ async function authenticateAdminJwt(app: FastifyInstance, token: string): Promis
 }
 
 async function authenticateAppApiKey(token: string): Promise<AuthContext | null> {
+  const hashedToken = hashAppApiKey(token)
   const apiKey = await prisma.appApiKey.findUnique({
-    where: { key: token },
+    where: { key: hashedToken },
     include: {
       appConnection: {
         select: {

@@ -15,6 +15,7 @@ import {
   CreateJobRequestSchema,
   hasBlockedOverrides,
   parseBearerToken,
+  hashAppApiKey,
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
   TOKEN_COST_MULTIPLIER,
@@ -44,9 +45,10 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
     return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
   }
 
-  // Look up the AppApiKey record
+  const hashedToken = hashAppApiKey(token)
+
   const apiKey = await prisma.appApiKey.findUnique({
-    where: { key: token },
+    where: { key: hashedToken },
     include: {
       appConnection: {
         select: {
