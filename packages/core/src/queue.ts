@@ -27,6 +27,7 @@ export const JobPayloadSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
   traceId: z.string().default(''),
   callbackUrl: z.string().url().optional(),
+  routingMode: z.string().default('balanced'),
 })
 
 export type JobPayload = z.infer<typeof JobPayloadSchema>

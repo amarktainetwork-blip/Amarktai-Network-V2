@@ -474,7 +474,7 @@ describe('Worker integration with routing', () => {
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate[0].data.error).not.toContain('genx adapter')
-    expect(failedUpdate[0].data.error).not.toContain('GenX API')
+    expect(failedUpdate[0].data.error).not.toContain('genxGenerateVideo')
   })
 
   it('worker does not call Groq', async () => {
@@ -486,7 +486,7 @@ describe('Worker integration with routing', () => {
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate[0].data.error).not.toContain('groq adapter')
-    expect(failedUpdate[0].data.error).not.toContain('Groq API')
+    expect(failedUpdate[0].data.error).not.toContain('groqChat')
   })
 
   it('worker does not call Together', async () => {

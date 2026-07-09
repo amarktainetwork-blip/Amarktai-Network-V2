@@ -9,8 +9,13 @@
 
 import {
   routeProvider,
+  routeBrain,
+  extractRoutingMode,
   type CapabilityKey,
   type ProviderKey,
+  type RoutingMode,
+  type BrainRouterDecision,
+  type BrainRouterProviderState,
 } from '@amarktai/core'
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
@@ -98,6 +103,33 @@ async function isProviderDisabledInDb(provider: ProviderKey): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+async function isProviderRuntimeRestrictedInDb(provider: ProviderKey): Promise<boolean> {
+  try {
+    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
+    if (!record) return false
+    return record.healthStatus === 'runtime_restricted'
+  } catch {
+    return false
+  }
+}
+
+async function buildProviderStates(): Promise<Partial<Record<ProviderKey, BrainRouterProviderState>>> {
+  const providers: ProviderKey[] = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+  const states: Partial<Record<ProviderKey, BrainRouterProviderState>> = {}
+
+  for (const provider of providers) {
+    const [disabled, runtimeRestricted] = await Promise.all([
+      isProviderDisabledInDb(provider),
+      isProviderRuntimeRestrictedInDb(provider),
+    ])
+    if (disabled || runtimeRestricted) {
+      states[provider] = { disabled, runtimeRestricted }
+    }
+  }
+
+  return states
 }
 
 function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
@@ -485,62 +517,108 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
   }
 }
 
-export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
-  const capability = payload.capability as CapabilityKey
-  const implementedProvider = getImplementedProvider(capability)
+async function resolveBrainRouterDecision(payload: WorkerJobData): Promise<{
+  decision: BrainRouterDecision
+  routingMode: RoutingMode
+}> {
+  const routingMode = extractRoutingMode(payload.metadata) as RoutingMode
+  const providerStates = await buildProviderStates()
 
-  if (!implementedProvider) {
-    const decision = routeProvider(capability)
-    const providerInfo = decision.selectedProvider
-      ? `Selected provider: ${decision.selectedProvider}`
-      : `No provider selected: ${decision.blockReason ?? 'unknown'}`
-    const candidates = decision.candidates
-      .filter((c) => c.supported)
-      .map((c) => `${c.provider}(${c.configured ? 'configured' : 'missing-config'})`)
-      .join(', ')
+  const decision = routeBrain({
+    capability: payload.capability as CapabilityKey,
+    routingMode,
+    providerStates,
+    appSlug: payload.appSlug,
+  })
 
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented for '${payload.capability}'. ${providerInfo}. Candidates: ${candidates || 'none'}. executionAllowed: false`,
-    }
+  return { decision, routingMode }
+}
+
+function canExecuteProviderForCapability(
+  capability: CapabilityKey,
+  provider: ProviderKey,
+): boolean {
+  if (provider === 'groq') {
+    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
+    return textCaps.includes(capability)
   }
-
-  const gate = canExecuteImplementedProvider(capability, implementedProvider)
-  if (!gate.allowed) {
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented or blocked for '${payload.capability}'. ${gate.reason}. Candidates: ${formatSupportedCandidates(capability)}. executionAllowed: false`,
-    }
+  if (provider === 'deepinfra') {
+    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
+    return textCaps.includes(capability)
   }
+  if (provider === 'together') {
+    return capability === 'image_generation'
+  }
+  if (provider === 'genx') {
+    return capability === 'video_generation'
+  }
+  return false
+}
 
+function attachBrainRouterMetadata(result: ProcessorResult, decision: BrainRouterDecision, routingMode: RoutingMode): ProcessorResult {
+  return {
+    ...result,
+    metadata: {
+      ...result.metadata,
+      brainRouter: {
+        routingMode,
+        selectedProvider: decision.selectedProvider,
+        selectedModel: decision.selectedModel,
+        executionAllowed: decision.executionAllowed,
+        truth: decision.truth,
+        fallbackChain: decision.fallbackChain,
+      },
+    },
+  }
+}
+
+async function executeWithSelectedProvider(
+  payload: WorkerJobData,
+  capability: CapabilityKey,
+  provider: ProviderKey,
+  decision: BrainRouterDecision,
+  routingMode: RoutingMode,
+): Promise<ProcessorResult> {
   try {
-    // Groq chat (original)
-    if (implementedProvider === 'groq' && capability === 'chat') {
-      return await executeChatWithFallback(payload)
+    if (provider === 'groq' && capability === 'chat') {
+      const result = await executeChatWithFallback(payload)
+      return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    // Groq primary text capabilities with DeepInfra as backend-owned fallback.
-    if (implementedProvider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      return await executeTextCapabilityWithFallback(payload)
+    if (provider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
+      const result = await executeTextCapabilityWithFallback(payload)
+      return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    // Together image
-    if (implementedProvider === 'together' && capability === 'image_generation') {
-      return await executeTogetherImage(payload)
+    if (provider === 'deepinfra' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
+      if (await isProviderDisabledInDb('deepinfra')) {
+        return {
+          success: false,
+          status: 'failed',
+          error: `DeepInfra is disabled. Cannot use as fallback for '${capability}'. Truth: ${decision.truth}`,
+          metadata: { brainRouter: { routingMode, selectedProvider: 'deepinfra', executionAllowed: false, truth: decision.truth } },
+        }
+      }
+      const result = await executeDeepInfraTextCapability(payload)
+      return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    // GenX video
-    if (implementedProvider === 'genx' && capability === 'video_generation') {
-      return await executeGenxVideo(payload)
+    if (provider === 'together' && capability === 'image_generation') {
+      const result = await executeTogetherImage(payload)
+      return attachBrainRouterMetadata(result, decision, routingMode)
+    }
+
+    if (provider === 'genx' && capability === 'video_generation') {
+      const result = await executeGenxVideo(payload)
+      return attachBrainRouterMetadata(result, decision, routingMode)
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) {
       return {
         success: false,
         status: 'failed',
-        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(capability)}. executionAllowed: false`,
+        error: `Provider execution blocked for '${capability}'. ${err.message}. Truth: ${decision.truth}`,
+        metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
       }
     }
     throw err
@@ -549,6 +627,56 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
   return {
     success: false,
     status: 'failed',
-    error: `Provider execution not implemented for '${payload.capability}'. executionAllowed: false`,
+    error: `Provider execution not implemented for '${capability}' with provider '${provider}'. Truth: ${decision.truth}`,
+    metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
   }
+}
+
+export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
+  const capability = payload.capability as CapabilityKey
+
+  const { decision, routingMode } = await resolveBrainRouterDecision(payload)
+
+  if (!decision.executionAllowed) {
+    return {
+      success: false,
+      status: 'failed',
+      error: `Brain Router blocked execution for '${capability}' in '${routingMode}' mode. ${decision.blockReason ?? ''}. Truth: ${decision.truth}`,
+      metadata: {
+        brainRouter: {
+          routingMode,
+          executionAllowed: false,
+          blockReason: decision.blockReason,
+          truth: decision.truth,
+        },
+      },
+    }
+  }
+
+  const selectedProvider = decision.selectedProvider!
+
+  if (!canExecuteProviderForCapability(capability, selectedProvider)) {
+    const fallback = decision.fallbackChain.find((f) => canExecuteProviderForCapability(capability, f.provider as ProviderKey))
+    if (fallback) {
+      return await executeWithSelectedProvider(payload, capability, fallback.provider as ProviderKey, decision, routingMode)
+    }
+
+    return {
+      success: false,
+      status: 'failed',
+      error: `Brain Router selected ${selectedProvider}/${decision.selectedModel} but no executor is implemented for '${capability}'. Truth: ${decision.truth}`,
+      metadata: {
+        brainRouter: {
+          routingMode,
+          selectedProvider,
+          selectedModel: decision.selectedModel,
+          executionAllowed: true,
+          executorImplemented: false,
+          truth: decision.truth,
+        },
+      },
+    }
+  }
+
+  return await executeWithSelectedProvider(payload, capability, selectedProvider, decision, routingMode)
 }

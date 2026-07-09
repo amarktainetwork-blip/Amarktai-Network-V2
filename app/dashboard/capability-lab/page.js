@@ -200,9 +200,15 @@ export default function CapabilityLabPage() {
         <div className="space-y-3 text-[10px]">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="border-emerald-500/30 text-[9px] text-emerald-300">
-              <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Active
+              <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Active — Integrated in Worker
             </Badge>
             <span className="text-muted-foreground/60">Module: {BRAIN_ROUTER_V1.module}</span>
+          </div>
+          <div className="rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] p-2">
+            <span className="text-cyan-300 font-semibold">Worker integration: </span>
+            <span className="text-muted-foreground">
+              Worker calls routeBrain() before every execution. Provider/model are selected internally — apps cannot override.
+            </span>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
@@ -229,6 +235,9 @@ export default function CapabilityLabPage() {
                 <Badge key={mode} variant="outline" className="border-cyan-500/20 text-[9px] text-cyan-300">{mode}</Badge>
               ))}
             </div>
+            <p className="mt-1 text-[9px] text-muted-foreground/60">
+              Apps may request routingMode as a preference. Provider/model override remains blocked.
+            </p>
           </div>
           <div>
             <span className="text-muted-foreground/60">Executable paths today:</span>

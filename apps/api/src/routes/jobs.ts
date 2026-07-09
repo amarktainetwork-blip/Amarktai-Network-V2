@@ -19,6 +19,7 @@ import {
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
   TOKEN_COST_MULTIPLIER,
+  isValidRoutingMode,
   type JobPayload,
   type CreateJobResponse,
   type JobStatusResponse,
@@ -209,6 +210,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // 9. Push to BullMQ queue
+    const routingMode = isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced'
     const payload: JobPayload = {
       jobId: job.id,
       appSlug: auth.app!.slug,
@@ -218,6 +220,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       metadata,
       traceId,
       callbackUrl,
+      routingMode,
     }
 
     try {
