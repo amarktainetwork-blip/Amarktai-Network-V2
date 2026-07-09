@@ -13,6 +13,13 @@ import {
   isValidRoutingMode,
   type JobPayload,
 } from '@amarktai/core'
+import {
+  checkFfmpegAvailable,
+  resolveSceneArtifacts,
+  validateSceneArtifactsForAssembly,
+  createAssemblyPlan,
+  assembleLongFormVideo,
+} from '../lib/long-form-assembly.js'
 
 // In-memory execution state store (Phase 2 - will be replaced with DB in Phase 3)
 const executionStates = new Map<string, ReturnType<typeof createLongFormExecutionState>>()
@@ -366,12 +373,319 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   })
 
   /**
+   * Assemble final long-form video (Phase 3)
+   * 
+   * Stitches completed scene artifacts into a single final video.
+   * Requires ffmpeg to be available on the system.
+   */
+  app.post('/api/admin/long-form-video/assemble/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { executionId } = request.params as { executionId: string }
+    const body = request.body as Record<string, unknown>
+    const dryRun = body.dryRun === true
+    const outputTitle = body.outputTitle as string | undefined
+
+    try {
+      // Get or reconstruct execution state
+      let state = executionStates.get(executionId)
+      
+      if (!state) {
+        // Attempt to reconstruct from DB
+        const jobs = await prisma.job.findMany({
+          where: {
+            capability: 'video_generation',
+            metadataJson: { contains: executionId },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (jobs.length === 0) {
+          return reply.status(404).send({
+            error: true,
+            message: 'Execution not found',
+          })
+        }
+
+        // Reconstruct state
+        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
+        state = {
+          executionId,
+          planId: firstJobMetadata.planId || 'unknown',
+          routingMode: firstJobMetadata.routingMode || 'balanced',
+          totalScenes: jobs.length,
+          scenes: jobs.map((job) => {
+            const metadata = JSON.parse(job.metadataJson)
+            return {
+              sceneNumber: metadata.sceneNumber,
+              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
+              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
+              jobId: job.id,
+              artifactId: job.artifactId || undefined,
+              provider: job.provider || undefined,
+              model: job.model || undefined,
+            }
+          }),
+          progress: 0,
+          finalAssemblyReady: false,
+          missingDependencies: [],
+          createdAt: jobs[0].createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      }
+
+      // Check if all scenes are completed
+      const completedScenes = state.scenes.filter(s => s.status === 'completed')
+      if (completedScenes.length !== state.totalScenes) {
+        return reply.status(409).send({
+          error: true,
+          message: 'Cannot assemble: not all scenes are completed',
+          completedScenes: completedScenes.length,
+          totalScenes: state.totalScenes,
+          missingScenes: state.scenes
+            .filter(s => s.status !== 'completed')
+            .map(s => s.sceneNumber),
+        })
+      }
+
+      // Resolve scene artifacts
+      const sceneArtifacts = await resolveSceneArtifacts(executionId)
+      
+      if (sceneArtifacts.length !== state.totalScenes) {
+        return reply.status(409).send({
+          error: true,
+          message: 'Cannot assemble: missing scene artifacts',
+          expectedArtifacts: state.totalScenes,
+          foundArtifacts: sceneArtifacts.length,
+        })
+      }
+
+      // Validate scene artifacts
+      const validation = validateSceneArtifactsForAssembly(sceneArtifacts, state.totalScenes)
+      if (!validation.valid) {
+        return reply.status(422).send({
+          error: true,
+          message: 'Scene artifacts validation failed',
+          errors: validation.errors,
+          warnings: validation.warnings,
+        })
+      }
+
+      // Check ffmpeg availability
+      const ffmpeg = await checkFfmpegAvailable()
+      if (!ffmpeg.available) {
+        return reply.status(422).send({
+          error: true,
+          message: 'Cannot assemble: ffmpeg is not available',
+          ffmpegError: ffmpeg.error,
+          note: 'Install ffmpeg on the system to enable video assembly',
+        })
+      }
+
+      // Create assembly plan
+      const plan = await createAssemblyPlan(executionId, state.totalScenes)
+
+      if (dryRun) {
+        return reply.status(200).send({
+          success: true,
+          dryRun: true,
+          plan,
+          message: 'Assembly plan created. Remove dryRun flag to execute assembly.',
+          canAssemble: plan.canAssemble,
+          blockedReason: plan.blockedReason,
+        })
+      }
+
+      // Execute assembly
+      const result = await assembleLongFormVideo({
+        executionId,
+        sceneArtifacts,
+        outputTitle,
+        aspectRatio: plan.aspectRatio,
+      })
+
+      if (!result.success) {
+        return reply.status(500).send({
+          error: true,
+          message: 'Assembly failed',
+          error: result.error,
+          assemblyMode: result.assemblyMode,
+        })
+      }
+
+      // Update execution state
+      state.finalAssemblyReady = true
+      executionStates.set(executionId, state)
+
+      return reply.status(200).send({
+        success: true,
+        executionId,
+        artifactId: result.artifactId,
+        artifactUrl: result.artifactUrl,
+        storagePath: result.storagePath,
+        mimeType: result.mimeType,
+        fileSizeBytes: result.fileSizeBytes,
+        assemblyMode: result.assemblyMode,
+        voiceoverIncluded: result.voiceoverIncluded,
+        subtitlesIncluded: result.subtitlesIncluded,
+        musicBedIncluded: result.musicBedIncluded,
+        message: 'Long-form video assembled successfully',
+        note: 'Video-only assembly complete. Voiceover/subtitles/music bed not included.',
+      })
+    } catch (error) {
+      return reply.status(500).send({
+        error: true,
+        message: 'Assembly failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  /**
+   * Get assembly status (Phase 3)
+   * 
+   * Returns whether assembly is possible and what dependencies are missing.
+   */
+  app.get('/api/admin/long-form-video/assembly/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { executionId } = request.params as { executionId: string }
+
+    try {
+      // Get or reconstruct execution state
+      let state = executionStates.get(executionId)
+      
+      if (!state) {
+        // Attempt to reconstruct from DB
+        const jobs = await prisma.job.findMany({
+          where: {
+            capability: 'video_generation',
+            metadataJson: { contains: executionId },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (jobs.length === 0) {
+          return reply.status(404).send({
+            error: true,
+            message: 'Execution not found',
+          })
+        }
+
+        // Reconstruct state
+        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
+        state = {
+          executionId,
+          planId: firstJobMetadata.planId || 'unknown',
+          routingMode: firstJobMetadata.routingMode || 'balanced',
+          totalScenes: jobs.length,
+          scenes: jobs.map((job) => {
+            const metadata = JSON.parse(job.metadataJson)
+            return {
+              sceneNumber: metadata.sceneNumber,
+              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
+              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
+              jobId: job.id,
+              artifactId: job.artifactId || undefined,
+              provider: job.provider || undefined,
+              model: job.model || undefined,
+            }
+          }),
+          progress: 0,
+          finalAssemblyReady: false,
+          missingDependencies: [],
+          createdAt: jobs[0].createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      }
+
+      // Check scene completion
+      const completedScenes = state.scenes.filter(s => s.status === 'completed')
+      const allScenesComplete = completedScenes.length === state.totalScenes
+
+      // Resolve scene artifacts
+      const sceneArtifacts = await resolveSceneArtifacts(executionId)
+
+      // Validate scene artifacts
+      const validation = validateSceneArtifactsForAssembly(sceneArtifacts, state.totalScenes)
+
+      // Check ffmpeg availability
+      const ffmpeg = await checkFfmpegAvailable()
+
+      // Determine if assembly is possible
+      const canAssemble = allScenesComplete && validation.valid && ffmpeg.available
+
+      const missingDependencies: string[] = []
+      if (!allScenesComplete) {
+        missingDependencies.push('scene_completion')
+      }
+      if (!validation.valid) {
+        missingDependencies.push('scene_artifact_validation')
+      }
+      if (!ffmpeg.available) {
+        missingDependencies.push('ffmpeg')
+      }
+
+      // Check if final artifact already exists
+      const finalArtifact = await prisma.artifact.findFirst({
+        where: {
+          appSlug: 'dashboard-long-form',
+          type: 'video',
+          subType: 'long_form_video',
+          metadata: { contains: executionId },
+        },
+      })
+
+      return reply.status(200).send({
+        success: true,
+        executionId,
+        canAssemble,
+        missingDependencies,
+        scenes: {
+          total: state.totalScenes,
+          completed: completedScenes.length,
+          artifacts: sceneArtifacts.length,
+          validation: {
+            valid: validation.valid,
+            errors: validation.errors,
+            warnings: validation.warnings,
+          },
+        },
+        ffmpeg: {
+          available: ffmpeg.available,
+          version: ffmpeg.version,
+          path: ffmpeg.path,
+          error: ffmpeg.error,
+        },
+        finalArtifact: finalArtifact
+          ? {
+              id: finalArtifact.id,
+              url: finalArtifact.storageUrl,
+              mimeType: finalArtifact.mimeType,
+              fileSizeBytes: finalArtifact.fileSizeBytes,
+            }
+          : null,
+        message: canAssemble
+          ? 'Ready for assembly'
+          : 'Assembly blocked',
+      })
+    } catch (error) {
+      return reply.status(500).send({
+        error: true,
+        message: 'Failed to get assembly status',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  /**
    * Get long-form video capability status
    */
   app.get('/api/admin/long-form-video/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
     const { LONG_FORM_VIDEO_STATUS } = await import('@amarktai/core')
+    const ffmpeg = await checkFfmpegAvailable()
 
     return reply.status(200).send({
       success: true,
@@ -379,20 +693,36 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         ...LONG_FORM_VIDEO_STATUS,
         perSceneExecutionReady: true, // Phase 2
         sceneExecutionPipelineReady: true,
+        sceneStitchingReady: ffmpeg.available, // Phase 3
+        finalAssemblyReady: ffmpeg.available,
         persistentExecutionTracking: false, // In-memory only for now
       },
-      message: 'Long-form video Phase 2: per-scene execution ready. Final assembly pending.',
+      ffmpeg: {
+        available: ffmpeg.available,
+        version: ffmpeg.version,
+        path: ffmpeg.path,
+        error: ffmpeg.error,
+      },
+      message: ffmpeg.available
+        ? 'Long-form video Phase 3: video-only assembly ready. Voiceover/subtitles/music bed pending.'
+        : 'Long-form video Phase 2: per-scene execution ready. Assembly blocked (ffmpeg missing).',
       limitations: {
         executionStateStorage: 'In-memory only (lost on API restart)',
         executionStateRecovery: 'Can reconstruct from DB job metadata when possible',
-        persistentStorage: 'Will be added in a future phase'
+        persistentStorage: 'Will be added in a future phase',
+        assemblyMode: 'video_only',
+        voiceoverIncluded: false,
+        subtitlesIncluded: false,
+        musicBedIncluded: false,
       },
       phases: {
         phase1: 'Orchestration foundation - READY',
         phase2: 'Per-scene execution - READY',
-        phase3: 'Voiceover/subtitles/music bed - PENDING',
-        phase4: 'Scene stitching with ffmpeg - PENDING',
-        phase5: 'Final assembly - PENDING'
+        phase3: ffmpeg.available
+          ? 'Scene stitching with ffmpeg - READY (video-only)'
+          : 'Scene stitching with ffmpeg - BLOCKED (ffmpeg not available)',
+        phase4: 'Voiceover/subtitles/music bed - PENDING',
+        phase5: 'Full multimedia assembly - PENDING'
       }
     })
   })

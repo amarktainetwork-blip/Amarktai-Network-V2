@@ -234,12 +234,12 @@ export default function VideoStudioPage() {
 
       {mode === 'long' && (
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Video Phase 2</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Video Phase 3</h3>
           <div className="space-y-3">
             <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-cyan-200">Per-Scene Execution Ready</p>
+              <p className="text-xs font-semibold text-cyan-200">Video-Only Assembly Ready</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Scene execution pipeline is ready. Each scene generates via existing video_generation capability.
+                Scene execution and final video stitching are ready. Requires ffmpeg on the system.
               </p>
             </div>
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
@@ -250,21 +250,22 @@ export default function VideoStudioPage() {
                 <li>Scene job queuing and tracking</li>
                 <li>Brain Router provider/model selection</li>
                 <li>Enhanced cinematic prompts per scene</li>
+                <li>Scene stitching with ffmpeg (video-only)</li>
+                <li>Final artifact assembly and persistence</li>
               </ul>
             </div>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-amber-200">Final Assembly Pending</p>
+              <p className="text-xs font-semibold text-amber-200">Multimedia Assembly Pending</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Individual scene clips are generated, but final stitching/assembly is not yet implemented.
+                Video-only long-form is ready. Voiceover, subtitles, and music bed are not yet implemented.
               </p>
               <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-                <p className="font-semibold text-amber-300">Missing for Final Assembly:</p>
+                <p className="font-semibold text-amber-300">Not Yet Implemented:</p>
                 <ul className="list-disc list-inside space-y-0.5">
-                  <li>Scene stitching with ffmpeg (Phase 4)</li>
-                  <li>Final artifact assembly (Phase 5)</li>
-                  <li>Voiceover backend (Phase 3, if enabled)</li>
-                  <li>Subtitle backend (Phase 3, if enabled)</li>
-                  <li>Music bed backend (Phase 3, if enabled)</li>
+                  <li>Voiceover backend (if enabled)</li>
+                  <li>Subtitle backend (if enabled)</li>
+                  <li>Music bed backend (if enabled)</li>
+                  <li>Full multimedia assembly</li>
                 </ul>
               </div>
             </div>
@@ -276,6 +277,8 @@ export default function VideoStudioPage() {
                 <li>POST /api/admin/long-form-video/plan</li>
                 <li>POST /api/admin/long-form-video/execute-scenes</li>
                 <li>GET /api/admin/long-form-video/executions/:id</li>
+                <li>POST /api/admin/long-form-video/assemble/:executionId</li>
+                <li>GET /api/admin/long-form-video/assembly/:executionId</li>
                 <li>GET /api/admin/long-form-video/status</li>
               </ul>
             </div>
