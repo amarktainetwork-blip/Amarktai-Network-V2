@@ -6,20 +6,52 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, AlertTriangle, FileText, Send } from 'lucide-react'
+import { Search, AlertTriangle, FileText, Send, Clock, Globe, Building2, Users, BookOpen } from 'lucide-react'
+
+const RESEARCH_TYPES = [
+  { label: 'Web Research', icon: Globe, status: 'pending' },
+  { label: 'Brand Research', icon: Building2, status: 'pending' },
+  { label: 'Competitor Research', icon: Users, status: 'pending' },
+  { label: 'Document Research', icon: BookOpen, status: 'pending' },
+]
 
 export default function ResearchPage() {
   const [question, setQuestion] = useState('')
 
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Research" subtitle="Ask research questions and get sourced answers. Backend research endpoint is pending." />
+      <PageHeader title="Research" subtitle="Research synthesis with source and citation expectations. Backend research endpoint is pending." />
+
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
+          <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Research backend (web search, source aggregation, citation) is not yet wired. No research results are being generated.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {RESEARCH_TYPES.map(({ label, icon: Icon, status }) => (
+          <Card key={label} className="border-white/[0.07] bg-white/[0.02] p-4">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-xs font-medium">
+                <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {label}
+              </span>
+              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
+                <Clock className="mr-1 h-2.5 w-2.5" /> {status}
+              </Badge>
+            </div>
+          </Card>
+        ))}
+      </div>
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium">Research question</label>
+            <label className="mb-1.5 block text-xs font-medium">Research Question</label>
             <Textarea
+              disabled
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="What do you want to research?"
@@ -38,9 +70,9 @@ export default function ResearchPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-cyan-300" /> Sources / Citations</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4 text-cyan-300" /> Citations / Sources</h3>
           <div className="flex items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 p-6">
-            <p className="text-xs text-muted-foreground">Sources will appear here</p>
+            <p className="text-xs text-muted-foreground">Citations will appear here</p>
           </div>
         </Card>
 
@@ -52,7 +84,7 @@ export default function ResearchPage() {
         </Card>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button disabled variant="outline" className="border-white/10 text-xs">
           <Send className="mr-1.5 h-3 w-3" /> Send to Chat
         </Button>
@@ -61,12 +93,9 @@ export default function ResearchPage() {
         </Button>
       </div>
 
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
-          <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending
-        </div>
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Research backend (web search, source aggregation, citation) is not yet wired. No research results are being generated.
+      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+        <p className="text-[10px] text-muted-foreground">
+          Research capabilities will be consumed by external apps via app API keys. Platform handles provider routing, artifacts, and budgets.
         </p>
       </div>
     </PageTransition>

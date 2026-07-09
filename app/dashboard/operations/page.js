@@ -2,7 +2,7 @@
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Activity, AlertTriangle, Database, HardDrive, Server, Zap, TrendingUp, Users, Clock, DollarSign } from 'lucide-react'
+import { Activity, AlertTriangle, Database, HardDrive, Server, Zap, TrendingUp, Users, Clock, DollarSign, Cpu, Wifi } from 'lucide-react'
 
 const INFRA_METRICS = [
   { label: 'API Health', icon: Server, status: 'not_wired', blocker: 'Health endpoint exists but live polling not implemented' },
@@ -17,14 +17,21 @@ const INFRA_METRICS = [
 
 const CAPACITY_METRICS = [
   { label: 'Active Users', icon: Users, status: 'metric_pending' },
+  { label: 'Logged-In Users', icon: Users, status: 'metric_pending' },
   { label: 'Jobs Queued', icon: Clock, status: 'metric_pending' },
   { label: 'Jobs Running', icon: Activity, status: 'metric_pending' },
+  { label: 'Failed Jobs', icon: AlertTriangle, status: 'metric_pending' },
   { label: 'Average Wait Time', icon: Clock, status: 'metric_pending' },
   { label: 'P95 Wait Time', icon: Clock, status: 'metric_pending' },
+  { label: 'Worker Concurrency', icon: Cpu, status: 'metric_pending' },
   { label: 'Provider Spend', icon: DollarSign, status: 'metric_pending' },
   { label: 'App Spend', icon: DollarSign, status: 'metric_pending' },
   { label: 'Revenue', icon: TrendingUp, status: 'metric_pending' },
   { label: 'Margin', icon: TrendingUp, status: 'metric_pending' },
+  { label: 'Storage', icon: HardDrive, status: 'metric_pending' },
+  { label: 'DB Health', icon: Database, status: 'metric_pending' },
+  { label: 'Redis Health', icon: Wifi, status: 'metric_pending' },
+  { label: 'Qdrant Health', icon: Wifi, status: 'metric_pending' },
   { label: 'Upgrade Warning', icon: AlertTriangle, status: 'metric_pending' },
 ]
 
@@ -37,7 +44,7 @@ export default function OperationsPage() {
     <PageTransition className="space-y-6">
       <PageHeader
         title="Operations"
-        subtitle="Admin monitoring and control area. Honest state only — no fake metrics."
+        subtitle="Platform admin monitoring and control area. Honest state only — no fake metrics. This is where we will know when to upgrade."
       />
 
       <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
@@ -101,6 +108,12 @@ export default function OperationsPage() {
             </Card>
           ))}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+        <p className="text-[10px] text-muted-foreground">
+          Operations metrics are for platform admin visibility. External apps do not access these metrics directly — they request capabilities and receive artifacts.
+        </p>
       </div>
     </PageTransition>
   )
