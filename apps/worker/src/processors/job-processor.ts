@@ -14,6 +14,7 @@
  * - Handles thrown errors safely
  */
 
+import { randomUUID } from 'node:crypto'
 import { prisma } from '@amarktai/db'
 import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
 
@@ -45,6 +46,8 @@ export interface ProcessorDeps {
   executeCapability?: (payload: WorkerJobData) => Promise<ProcessorResult>
 }
 
+type PartialWorkerJobData = Partial<WorkerJobData> & { jobId?: string }
+
 // ── Canonical queue name (must match API ingestion) ────────────────────────────
 
 export const WORKER_QUEUE_NAME = QUEUE_NAMES.JOBS
@@ -61,6 +64,66 @@ export function validatePayload(payload: WorkerJobData): string | null {
   return null
 }
 
+function safeParseJsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function makeTraceId(): string {
+  return `trace_${randomUUID()}`
+}
+
+async function markJobFailed(jobId: string, error: string): Promise<void> {
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      status: 'failed',
+      error,
+      completedAt: new Date(),
+    },
+  }).catch(() => {
+    // Preserve the original worker error for BullMQ if the status write fails.
+  })
+}
+
+async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
+  payload: WorkerJobData
+  dbJob: Awaited<ReturnType<typeof prisma.job.findUnique>> | null
+}> {
+  const needsHydration = !!rawPayload.jobId
+    && (!rawPayload.appSlug || !rawPayload.capability || !rawPayload.prompt?.trim() || !rawPayload.traceId)
+
+  if (!needsHydration) {
+    return { payload: rawPayload as WorkerJobData, dbJob: null }
+  }
+
+  const dbJob = await prisma.job.findUnique({ where: { id: rawPayload.jobId! } })
+  if (!dbJob) {
+    return { payload: rawPayload as WorkerJobData, dbJob: null }
+  }
+
+  return {
+    payload: {
+      jobId: rawPayload.jobId!,
+      appSlug: rawPayload.appSlug || dbJob.appSlug,
+      capability: rawPayload.capability || dbJob.capability,
+      prompt: rawPayload.prompt?.trim() ? rawPayload.prompt : dbJob.prompt,
+      input: rawPayload.input ?? safeParseJsonObject(dbJob.inputJson),
+      metadata: rawPayload.metadata ?? safeParseJsonObject(dbJob.metadataJson),
+      traceId: rawPayload.traceId || makeTraceId(),
+      callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
+    },
+    dbJob,
+  }
+}
+
 // ── Default execution — delegates to provider executor ────────────────────────
 // Delegates to the provider executor, which currently supports Groq chat,
 // Together image generation, and GenX video generation.
@@ -75,32 +138,49 @@ async function defaultExecuteCapability(payload: WorkerJobData): Promise<Process
 export function createJobProcessor(deps: ProcessorDeps = {}) {
   const executeCapability = deps.executeCapability ?? defaultExecuteCapability
 
-  return async function processJob(payload: WorkerJobData): Promise<ProcessorResult> {
-    // 1. Validate payload
+  return async function processJob(rawPayload: WorkerJobData): Promise<ProcessorResult> {
+    const rawJobId = (rawPayload as PartialWorkerJobData).jobId
+    const hydrated = await hydratePayload(rawPayload as PartialWorkerJobData)
+    const payload = hydrated.payload
+
+    console.info('[worker] received queue job', {
+      queueName: WORKER_QUEUE_NAME,
+      dbJobId: payload.jobId || rawJobId || null,
+      appSlug: payload.appSlug || null,
+      capability: payload.capability || null,
+    })
+
+    // 1. Validate payload after legacy payload hydration
     const validationError = validatePayload(payload)
     if (validationError) {
+      if (rawJobId) await markJobFailed(rawJobId, validationError)
       throw new Error(validationError)
     }
 
     const { jobId, appSlug, capability } = payload
 
     // 2. Load DB Job row
-    const job = await prisma.job.findUnique({ where: { id: jobId } })
+    const job = hydrated.dbJob ?? await prisma.job.findUnique({ where: { id: jobId } })
     if (!job) {
       throw new Error(`Job not found: ${jobId}`)
     }
 
     // 3. Verify ownership — appSlug must match
     if (job.appSlug !== appSlug) {
-      throw new Error(`Job appSlug mismatch: expected '${job.appSlug}', got '${appSlug}'`)
+      const error = `Job appSlug mismatch: expected '${job.appSlug}', got '${appSlug}'`
+      await markJobFailed(jobId, error)
+      throw new Error(error)
     }
 
     // 4. Verify capability must match
     if (job.capability !== capability) {
-      throw new Error(`Job capability mismatch: expected '${job.capability}', got '${capability}'`)
+      const error = `Job capability mismatch: expected '${job.capability}', got '${capability}'`
+      await markJobFailed(jobId, error)
+      throw new Error(error)
     }
 
     // 5. Update status to processing
+    console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, from: job.status, to: 'processing' })
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -145,6 +225,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           where: { id: jobId },
           data: completedData,
         })
+        console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'completed' })
         return result
       }
 
@@ -162,6 +243,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           completedAt: new Date(),
         },
       })
+      console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
 
       // Throw so BullMQ records the queue job as failed too
       throw new Error(errorMsg)

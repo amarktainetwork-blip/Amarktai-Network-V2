@@ -153,6 +153,15 @@ describe('studio execution loop contract', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
     expect(content).toContain('q.add')
+    expect(content).toContain('QUEUE_NAMES.JOBS')
+    expect(content).toContain('jobId: job.id')
+    expect(content).toContain('appSlug')
+    expect(content).toContain('capability')
+    expect(content).toContain('prompt: safePrompt')
+    expect(content).toContain('input: inputObj')
+    expect(content).toContain('metadata')
+    expect(content).toContain('traceId')
+    expect(content).not.toContain("q.add('process-job', { jobId: job.id }")
   })
 
   it('server registers admin-studio route', () => {

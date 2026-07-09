@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { QUEUE_NAMES } from '@amarktai/core'
@@ -89,13 +90,17 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Create job
+    const appSlug = 'dashboard-studio'
+    const traceId = `trace_${randomUUID()}`
+    const safePrompt = prompt.substring(0, 10000)
     const job = await prisma.job.create({
       data: {
-        appSlug: 'dashboard-studio',
+        appSlug,
         capability: capability as never,
-        prompt: prompt.substring(0, 10000),
+        prompt: safePrompt,
         inputJson: JSON.stringify(inputObj),
         metadataJson: JSON.stringify(metadata),
+        traceId,
         status: 'queued',
       },
     })
@@ -103,7 +108,17 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     // Enqueue in BullMQ
     try {
       const q = getQueue()
-      await q.add('process-job', { jobId: job.id }, { jobId: job.id })
+      const payload = {
+        jobId: job.id,
+        appSlug,
+        capability,
+        prompt: safePrompt,
+        input: inputObj,
+        metadata,
+        traceId,
+      }
+      app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability, traceId }, 'Enqueuing Studio job')
+      await q.add('process-job', payload, { jobId: job.id })
     } catch {
       await prisma.job.update({
         where: { id: job.id },

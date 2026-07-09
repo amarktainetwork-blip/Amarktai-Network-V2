@@ -166,40 +166,94 @@ describe('Job processor — validation rejects before DB', () => {
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for missing appSlug without touching DB', async () => {
+  it('hydrates old minimal payloads from the DB row before validation', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: true,
+      status: 'completed',
+      output: 'hydrated ok',
+    })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({
+      appSlug: 'dashboard-studio',
+      capability: 'image_generation',
+      prompt: 'Studio image prompt',
+      inputJson: '{"prompt":"Studio image prompt","width":1024}',
+      metadataJson: '{"source":"studio"}',
+      callbackUrl: null,
+    }))
+
+    await processor({ jobId: 'job-uuid-001' })
+
+    expect(mockExecute).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: 'job-uuid-001',
+      appSlug: 'dashboard-studio',
+      capability: 'image_generation',
+      prompt: 'Studio image prompt',
+      input: { prompt: 'Studio image prompt', width: 1024 },
+      metadata: { source: 'studio' },
+      traceId: expect.stringMatching(/^trace_/),
+    }))
+  })
+
+  it('malformed payload with jobId updates DB job to failed', async () => {
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.findUnique.mockResolvedValue(null)
+
     await expect(processJob(makePayload({ appSlug: '' }))).rejects.toThrow('appSlug')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.findUnique).toHaveBeenCalledWith({ where: { id: 'job-uuid-001' } })
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({
+        status: 'failed',
+        error: 'Missing required field: appSlug',
+        completedAt: expect.any(Date),
+      }),
+    }))
   })
 
-  it('throws for missing capability without touching DB', async () => {
+  it('missing capability with jobId updates DB job to failed when hydration cannot fix it', async () => {
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.findUnique.mockResolvedValue(null)
+
     await expect(processJob(makePayload({ capability: '' }))).rejects.toThrow('capability')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({ status: 'failed', error: 'Missing required field: capability' }),
+    }))
   })
 
-  it('throws for missing prompt without touching DB', async () => {
+  it('missing prompt with jobId updates DB job to failed when hydration cannot fix it', async () => {
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.findUnique.mockResolvedValue(null)
+
     await expect(processJob(makePayload({ prompt: '' }))).rejects.toThrow('prompt')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({ status: 'failed', error: 'Missing required field: prompt' }),
+    }))
   })
 
-  it('throws for empty prompt without touching DB', async () => {
-    await expect(processJob(makePayload({ prompt: '   ' }))).rejects.toThrow('prompt')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+  it('missing traceId with jobId is hydrated instead of failing when the DB row is valid', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ success: true, status: 'completed' })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
+
+    await processor(makePayload({ traceId: '' }))
+
+    expect(mockExecute).toHaveBeenCalledWith(expect.objectContaining({
+      traceId: expect.stringMatching(/^trace_/),
+    }))
   })
 
-  it('throws for missing traceId without touching DB', async () => {
-    await expect(processJob(makePayload({ traceId: '' }))).rejects.toThrow('traceId')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
-  })
-
-  it('throws for invalid capability without touching DB', async () => {
+  it('invalid capability with jobId updates DB job to failed', async () => {
+    prismaMock.job.update.mockResolvedValue({})
     await expect(processJob(makePayload({ capability: 'fake_capability' }))).rejects.toThrow('Invalid capability')
-    expect(prismaMock.job.findUnique).not.toHaveBeenCalled()
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({ status: 'failed', error: 'Invalid capability: fake_capability' }),
+    }))
   })
 })
 
@@ -218,18 +272,26 @@ describe('Job processor — DB ownership rejects without mutation', () => {
     expect(prismaMock.job.update).not.toHaveBeenCalled()
   })
 
-  it('throws for appSlug mismatch without updating to processing or failed', async () => {
+  it('throws for appSlug mismatch and marks DB job failed', async () => {
+    prismaMock.job.update.mockResolvedValue({})
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ appSlug: 'other-app' }))
 
     await expect(processJob(makePayload())).rejects.toThrow('appSlug mismatch')
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({ status: 'failed', error: expect.stringContaining('appSlug mismatch') }),
+    }))
   })
 
-  it('throws for capability mismatch without updating to processing or failed', async () => {
+  it('throws for capability mismatch and marks DB job failed', async () => {
+    prismaMock.job.update.mockResolvedValue({})
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'image_generation' }))
 
     await expect(processJob(makePayload())).rejects.toThrow('capability mismatch')
-    expect(prismaMock.job.update).not.toHaveBeenCalled()
+    expect(prismaMock.job.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'job-uuid-001' },
+      data: expect.objectContaining({ status: 'failed', error: expect.stringContaining('capability mismatch') }),
+    }))
   })
 })
 
