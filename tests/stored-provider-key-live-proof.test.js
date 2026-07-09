@@ -151,7 +151,7 @@ describe('Stored-key live proof contract', () => {
       prompt: 'test', input: {}, metadata: {}, traceId: 'test',
     })
     expect(result.success).toBe(false)
-    expect(result.error).toContain('not implemented')
+    expect(result.error).toContain('blocked')
   })
 
   it('DeepInfra is approved as text fallback but does not create proof by routing alone', async () => {

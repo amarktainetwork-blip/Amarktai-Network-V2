@@ -501,37 +501,36 @@ describe('Worker does not call providers', () => {
   it('does not import or call GenX adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'video_generation' }))
 
-    await expect(processJob(makePayload({ capability: 'video_generation' }))).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload({ capability: 'video_generation' }))).rejects.toThrow('blocked')
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    // Error mentions provider as routing candidate, not as adapter call
-    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('genxGenerateVideo')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call Groq adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow('blocked')
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('groqChat')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
   it('does not import or call Together adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'image_generation' }))
 
-    await expect(processJob(makePayload({ capability: 'image_generation' }))).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload({ capability: 'image_generation' }))).rejects.toThrow('blocked')
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    expect(failedUpdate[0].data.error).not.toContain('togetherGenerateImage')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 

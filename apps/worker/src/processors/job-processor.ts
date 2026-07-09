@@ -29,6 +29,7 @@ export interface WorkerJobData {
   metadata?: Record<string, unknown>
   traceId: string
   callbackUrl?: string
+  routingMode?: string
 }
 
 export interface ProcessorResult {
@@ -119,6 +120,7 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
       metadata: rawPayload.metadata ?? safeParseJsonObject(dbJob.metadataJson),
       traceId: rawPayload.traceId || makeTraceId(),
       callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
+      routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
     },
     dbJob,
   }

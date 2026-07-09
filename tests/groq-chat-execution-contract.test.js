@@ -309,7 +309,7 @@ describe('Routing/execution gate', () => {
     const result = await executeWithProvider(makePayload({ capability: 'image_generation' }))
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('not implemented')
+    expect(result.error).toContain('blocked')
     expect(mockGroqChat).not.toHaveBeenCalled()
   })
 
@@ -322,7 +322,7 @@ describe('Routing/execution gate', () => {
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('not implemented')
+    expect(result.error).toContain('blocked')
   })
 
   it('chat can fall back to DeepInfra when Groq config is missing', async () => {

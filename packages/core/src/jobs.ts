@@ -72,7 +72,23 @@ export const BLOCKED_OVERRIDE_FIELDS = [
   'model',
   'providerKey',
   'modelId',
+  'selectedProvider',
+  'selectedModel',
 ] as const
+
+export const SAFE_ROUTING_FIELDS = ['routingMode'] as const
+
+export const VALID_ROUTING_MODES = ['balanced', 'premium', 'fast', 'budget', 'experimental'] as const
+
+export function isValidRoutingMode(value: unknown): boolean {
+  return typeof value === 'string' && (VALID_ROUTING_MODES as readonly string[]).includes(value)
+}
+
+export function extractRoutingMode(input: Record<string, unknown> | undefined): string {
+  const fromInput = input?.routingMode
+  if (isValidRoutingMode(fromInput)) return fromInput as string
+  return 'balanced'
+}
 
 export function hasBlockedOverrides(input: Record<string, unknown>): string | null {
   for (const field of BLOCKED_OVERRIDE_FIELDS) {

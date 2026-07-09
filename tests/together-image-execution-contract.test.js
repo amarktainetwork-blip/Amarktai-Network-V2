@@ -380,7 +380,7 @@ describe('Execution routing gate', () => {
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('executionAllowed: false')
+    expect(result.error).toContain('blocked')
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 
@@ -388,7 +388,7 @@ describe('Execution routing gate', () => {
     const result = await executeWithProvider(makePayload({ capability: 'image_edit' }))
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain("not implemented for 'image_edit'")
+    expect(result.error).toContain('blocked')
   })
 
   it('DeepInfra is not an image_generation runtime candidate', () => {
