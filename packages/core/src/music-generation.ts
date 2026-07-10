@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { MODEL_CATALOGUE } from './model-catalog.js'
+import { DISCOVERED_PROVIDER_MODELS, MODEL_CATALOGUE } from './model-catalog.js'
 import { ROUTING_MODES, type RoutingMode } from './brain-router.js'
 
 export const MUSIC_STYLES = [
@@ -71,6 +71,18 @@ export interface MusicCapabilityStatus {
   musicGenerationReady: boolean
   executionBlocked: boolean
   blockedReason: string
+  discoveredMusicModels: number
+  genxMusicModels: string[]
+  togetherMusicModels: string[]
+  deepinfraMusicModels: string[]
+  groqMusicModels: string[]
+  genxMusicCapabilityKnown: boolean
+  lyriaClipDiscovered: boolean
+  lyriaProDiscovered: boolean
+  musicProviderCapabilityKnown: boolean
+  musicExecutorReady: boolean
+  endpointShapeKnown: boolean
+  executableNow: boolean
   approvedProviderAudit: Array<{
     provider: 'genx' | 'groq' | 'together' | 'mimo' | 'deepinfra'
     musicClient: boolean
@@ -178,7 +190,12 @@ export function normalizeMusicPrompt(prompt: string): MusicPromptNormalization {
 
 export function getMusicCapabilityStatus(): MusicCapabilityStatus {
   const modelCatalogueEntryExists = MODEL_CATALOGUE.some((model) => model.capabilities.includes('music_generation'))
-  const missingProviderClient = 'No approved provider music generation client or endpoint is documented/configured in this repo.'
+  const musicModels = DISCOVERED_PROVIDER_MODELS.filter((model) => model.inferredCapabilities.includes('music_generation'))
+  const genxMusicModels = musicModels.filter((model) => model.provider === 'genx')
+  const genxMusicCapabilityKnown = genxMusicModels.length > 0
+  const missingProviderClient = genxMusicCapabilityKnown
+    ? 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.'
+    : 'Music provider capability is not yet known from approved provider docs or live discovery.'
 
   return {
     foundationReady: true,
@@ -195,6 +212,18 @@ export function getMusicCapabilityStatus(): MusicCapabilityStatus {
     musicGenerationReady: false,
     executionBlocked: true,
     blockedReason: missingProviderClient,
+    discoveredMusicModels: musicModels.length,
+    genxMusicModels: genxMusicModels.map((model) => model.modelId),
+    togetherMusicModels: musicModels.filter((model) => model.provider === 'together').map((model) => model.modelId),
+    deepinfraMusicModels: musicModels.filter((model) => model.provider === 'deepinfra').map((model) => model.modelId),
+    groqMusicModels: musicModels.filter((model) => model.provider === 'groq').map((model) => model.modelId),
+    genxMusicCapabilityKnown,
+    lyriaClipDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-clip-preview'),
+    lyriaProDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-pro-preview'),
+    musicProviderCapabilityKnown: musicModels.length > 0,
+    musicExecutorReady: musicModels.some((model) => model.workerExecutorExists && model.providerClientExists && model.artifactPersistenceExists),
+    endpointShapeKnown: musicModels.some((model) => model.endpointShapeKnown),
+    executableNow: musicModels.some((model) => model.executableNow),
     approvedProviderAudit: [
       { provider: 'genx', musicClient: false, executable: false, note: 'GenX video client exists; no repo music client or documented music endpoint.' },
       { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },

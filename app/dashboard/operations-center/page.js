@@ -15,6 +15,7 @@ const OPS_METRICS = [
   { label: 'Storage/Disk', icon: HardDrive, status: 'not_wired', blocker: 'No storage metric endpoint exists yet' },
   { label: 'Queue Health', icon: Activity, status: 'not_wired', blocker: 'BullMQ queue exists but no dashboard metric endpoint' },
   { label: 'Provider Health', icon: AlertTriangle, status: 'not_wired', blocker: 'Provider health test exists but not polled as live metric' },
+  { label: 'Model Discovery', icon: Database, status: 'catalogue_truth', blocker: 'Discovery counts are exposed separately from executable runtime readiness' },
 ]
 
 export default function OperationsCenterPage() {

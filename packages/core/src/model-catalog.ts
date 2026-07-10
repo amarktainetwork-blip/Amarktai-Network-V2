@@ -1,5 +1,7 @@
 import type { ProviderKey } from './providers.js'
 import type { CapabilityKey } from './capabilities.js'
+import type { ModelDiscoverySource, ProviderDiscoveredModel } from './provider-model-discovery.js'
+import generatedProviderModels from './generated/provider-model-catalogue.generated.json'
 
 export const MODEL_STATUSES = ['available', 'disabled', 'planned', 'blocked'] as const
 export type ModelStatus = (typeof MODEL_STATUSES)[number]
@@ -17,6 +19,21 @@ export interface ModelRecord {
   provider: ProviderKey
   modelId: string
   displayName: string
+  executionProvider?: ProviderKey
+  upstreamProvider?: string
+  discoverySource?: ModelDiscoverySource
+  docsKnown?: boolean
+  liveDiscovered?: boolean
+  category?: string
+  providerCategory?: string
+  modalitiesIn?: string[]
+  modalitiesOut?: string[]
+  transportProfile?: string
+  endpointFamily?: string
+  authRequired?: boolean
+  providerCapabilityKnown?: boolean
+  policyRestrictedByApp?: boolean
+  policyBlockedReason?: string
   capabilities: CapabilityKey[]
   status: ModelStatus
   qualityTier: QualityTier
@@ -27,9 +44,25 @@ export interface ModelRecord {
   supportsBatch: boolean
   executable: boolean
   notes: string
+  source?: ModelDiscoverySource
+  endpointShapeKnown?: boolean
+  requestShapeKnown?: boolean
+  responseShapeKnown?: boolean
+  artifactOutputKnown?: boolean
+  artifactPersistenceExists?: boolean
+  providerClientExists?: boolean
+  workerExecutorExists?: boolean
+  toolCallingSupported?: boolean
+  functionCallingSupported?: boolean
+  webhookSupported?: boolean
+  discoveredModel?: boolean
+  executableNow?: boolean
+  executableBlockers?: string[]
+  catalogueOnlyReason?: string
+  blockedReason?: string
 }
 
-export const MODEL_CATALOGUE: readonly ModelRecord[] = [
+export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
   {
     provider: 'groq',
     modelId: 'llama-3.3-70b-versatile',
@@ -209,7 +242,74 @@ export const MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsBatch: false,
     executable: false,
     notes: 'Music generation foundation only. No approved provider music endpoint/client is documented or configured in this repo.',
+    source: 'manual_planned',
+    endpointShapeKnown: false,
+    requestShapeKnown: false,
+    responseShapeKnown: false,
+    providerClientExists: false,
+    workerExecutorExists: false,
+    blockedReason: 'provider_client_missing, worker_executor_missing',
   },
+] as const
+
+export const DISCOVERED_PROVIDER_MODELS = generatedProviderModels as ProviderDiscoveredModel[]
+
+function discoveredModelToRecord(model: ProviderDiscoveredModel): ModelRecord {
+  return {
+    provider: model.provider,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    capabilities: model.inferredCapabilities,
+    status: model.policyRestrictedByApp ? 'blocked' : model.executableNow ? 'available' : 'planned',
+    qualityTier: 'balanced',
+    latencyTier: 'medium',
+    costTier: 'medium',
+    supportsArtifacts: model.artifactOutput,
+    supportsStreaming: model.streamingSupported,
+    supportsBatch: model.batchSupported,
+    executable: model.executableNow,
+    notes: `Discovered model from ${model.endpointSource}. ${model.blockedReason || 'Executable readiness satisfied.'}`,
+    source: model.source,
+    executionProvider: model.executionProvider,
+    upstreamProvider: model.upstreamProvider,
+    discoverySource: model.discoverySource,
+    docsKnown: model.docsKnown,
+    liveDiscovered: model.liveDiscovered,
+    category: model.category,
+    providerCategory: model.providerCategory,
+    modalitiesIn: model.modalitiesIn,
+    modalitiesOut: model.modalitiesOut,
+    transportProfile: model.transportProfile,
+    endpointFamily: model.endpointFamily,
+    authRequired: model.authRequired,
+    providerCapabilityKnown: model.providerCapabilityKnown,
+    policyRestrictedByApp: model.policyRestrictedByApp,
+    policyBlockedReason: model.policyBlockedReason,
+    endpointShapeKnown: model.endpointShapeKnown,
+    requestShapeKnown: model.requestShapeKnown,
+    responseShapeKnown: model.responseShapeKnown,
+    artifactOutputKnown: model.artifactOutputKnown,
+    artifactPersistenceExists: model.artifactPersistenceExists,
+    providerClientExists: model.providerClientExists,
+    workerExecutorExists: model.workerExecutorExists,
+    toolCallingSupported: model.toolCallingSupported,
+    functionCallingSupported: model.functionCallingSupported,
+    webhookSupported: model.webhookSupported,
+    discoveredModel: true,
+    executableNow: model.executableNow,
+    executableBlockers: model.executableBlockers,
+    catalogueOnlyReason: model.catalogueOnlyReason,
+    blockedReason: model.blockedReason,
+  }
+}
+
+const discoveredModelRecords = DISCOVERED_PROVIDER_MODELS
+  .filter((model) => !STATIC_MODEL_CATALOGUE.some((staticModel) => staticModel.provider === model.provider && staticModel.modelId === model.modelId))
+  .map(discoveredModelToRecord)
+
+export const MODEL_CATALOGUE: readonly ModelRecord[] = [
+  ...STATIC_MODEL_CATALOGUE,
+  ...discoveredModelRecords,
 ] as const
 
 export function getModelsByProvider(provider: ProviderKey): ModelRecord[] {
