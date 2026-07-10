@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { randomUUID } from 'node:crypto'
+import { Queue } from 'bullmq'
+import { prisma } from '@amarktai/db'
 import {
   BLOCKED_OVERRIDE_FIELDS,
+  QUEUE_NAMES,
   createMusicGenerationPlan,
   getMusicCapabilityStatus,
   validateMusicGenerationRequest,
@@ -52,6 +56,15 @@ function parseMusicRequest(body: Record<string, unknown>) {
 }
 
 export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
+  let queue: Queue | null = null
+  function getQueue(): Queue {
+    if (!queue) {
+      if (!app.redis) throw new Error('Redis is required for job queue')
+      queue = new Queue(QUEUE_NAMES.JOBS, { connection: app.redis as never })
+    }
+    return queue
+  }
+
   app.get('/api/admin/music/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
@@ -113,18 +126,79 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const plan = createMusicGenerationPlan(musicRequest)
       const status = getMusicCapabilityStatus()
 
-      return reply.status(409).send({
-        error: true,
-        success: false,
-        executionBlocked: true,
-        message: status.blockedReason,
-        plan,
-        status,
-        missingDependencies: [
-          'approved_provider_music_client',
-          'music_worker_executor',
-          'music_artifact_execution_path',
-        ],
+      // Creation gate: preserve explicit development/test gating.
+      // Music may be queued only when implementation gates are present.
+      // Because live proof is still missing, block unless explicitly allowed.
+      if (!status.musicGenerationReady) {
+        return reply.status(409).send({
+          error: true,
+          success: false,
+          executionBlocked: true,
+          message: status.blockedReason,
+          plan,
+          status,
+          missingDependencies: [
+            'approved_provider_music_client',
+            'music_worker_executor',
+            'music_artifact_execution_path',
+          ],
+        })
+      }
+
+      // Create canonical Job
+      const appSlug = 'admin-music'
+      const traceId = `trace_${randomUUID()}`
+      const safePrompt = musicRequest.prompt.substring(0, 10000)
+      const inputObj = {
+        prompt: safePrompt,
+        genre: musicRequest.genre,
+        mood: musicRequest.mood,
+        durationSeconds: musicRequest.durationSeconds,
+        instrumentalOnly: musicRequest.instrumentalOnly,
+        style: musicRequest.style,
+        outputFormat: musicRequest.outputFormat,
+      }
+
+      const job = await prisma.job.create({
+        data: {
+          appSlug,
+          capability: 'music_generation',
+          prompt: safePrompt,
+          inputJson: JSON.stringify(inputObj),
+          metadataJson: JSON.stringify({ routingMode: musicRequest.routingMode }),
+          traceId,
+          status: 'queued',
+        },
+      })
+
+      // Enqueue in BullMQ
+      try {
+        const q = getQueue()
+        const payload = {
+          jobId: job.id,
+          appSlug,
+          capability: 'music_generation',
+          prompt: safePrompt,
+          input: inputObj,
+          metadata: { routingMode: musicRequest.routingMode },
+          traceId,
+        }
+        app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability: 'music_generation', traceId }, 'Enqueuing music generation job')
+        await q.add('process-job', payload, { jobId: job.id })
+      } catch {
+        await prisma.job.update({
+          where: { id: job.id },
+          data: { status: 'failed', error: 'Failed to enqueue job' },
+        })
+        return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
+      }
+
+      return reply.status(202).send({
+        jobId: job.id,
+        status: job.status,
+        capability: job.capability,
+        traceId,
+        createdAt: job.createdAt?.toISOString(),
       })
     } catch (error) {
       return reply.status(400).send({

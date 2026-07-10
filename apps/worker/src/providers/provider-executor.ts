@@ -130,6 +130,66 @@ async function persistJobMetadata(
   })
 }
 
+const STALE_CLAIM_MS = 10 * 60 * 1000 // 10 minutes
+
+async function claimMusicExecution(
+  jobId: string,
+): Promise<{ claimed: boolean; alreadySubmitted: boolean; error?: string }> {
+  const now = new Date()
+
+  // Atomic claim: set providerClaimAt only if it is currently NULL.
+  // updateMany with WHERE on the column itself is atomic in MySQL/InnoDB.
+  const result = await prisma.job.updateMany({
+    where: {
+      id: jobId,
+      providerClaimAt: null,
+    },
+    data: {
+      providerClaimAt: now,
+    },
+  })
+
+  if (result.count === 1) {
+    return { claimed: true, alreadySubmitted: false }
+  }
+
+  // Claim was not NULL — check if existing claim is stale or if remote ID exists
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { providerClaimAt: true, metadataJson: true },
+  })
+
+  if (!job) {
+    return { claimed: false, alreadySubmitted: false, error: 'Job not found' }
+  }
+
+  const meta = safeParseJsonObject(job.metadataJson)
+  if (typeof meta.genxProviderJobId === 'string' && meta.genxProviderJobId) {
+    return { claimed: false, alreadySubmitted: true }
+  }
+
+  // Stale claim recovery: if claim is older than threshold, reclaim
+  if (job.providerClaimAt) {
+    const claimAge = now.getTime() - job.providerClaimAt.getTime()
+    if (claimAge > STALE_CLAIM_MS) {
+      const reclaim = await prisma.job.updateMany({
+        where: {
+          id: jobId,
+          providerClaimAt: job.providerClaimAt,
+        },
+        data: {
+          providerClaimAt: now,
+        },
+      })
+      if (reclaim.count === 1) {
+        return { claimed: true, alreadySubmitted: false }
+      }
+    }
+  }
+
+  return { claimed: false, alreadySubmitted: false, error: 'Execution already claimed by another worker' }
+}
+
 async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
   let apiKey = ''
 
@@ -424,21 +484,6 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
       providerAvailableModels,
     })
 
-    const requestParams = {
-      prompt: payload.prompt,
-      apiKey,
-      baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: providerStatus.defaultModel || undefined,
-      providerFallbackModel: providerStatus.fallbackModel || undefined,
-      providerAvailableModels,
-      duration: readNumber(payload.input, 'duration'),
-      instrumental: readBool(payload.input, 'instrumental'),
-      genre: readString(payload.input, 'genre'),
-      mood: readString(payload.input, 'mood'),
-      tempo: readString(payload.input, 'tempo'),
-      negativePrompt: readString(payload.input, 'negativePrompt'),
-    }
-
     // ── 1. Check for existing completed artifact (idempotency) ────────────
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'music_generation')
     if (existingArtifact) {
@@ -460,15 +505,46 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
       }
     }
 
-    // ── 2. Check for persisted remote provider job ID (resume) ─────────────
+    // ── 2. Atomic execution claim ─────────────────────────────────────────
+    const claim = await claimMusicExecution(payload.jobId)
+    if (!claim.claimed) {
+      // Whether already submitted or just claimed by another worker,
+      // check metadata for a persisted remote job ID to resume from.
+      const resumeMeta = safeParseJsonObject(
+        (await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }))?.metadataJson,
+      )
+      const resumeRemoteId = typeof resumeMeta.genxProviderJobId === 'string' ? resumeMeta.genxProviderJobId : ''
+      if (resumeRemoteId) {
+        return await pollAndDownloadMusic(resumeRemoteId, apiKey, providerStatus, model, payload, providerAvailableModels)
+      }
+      return {
+        success: false,
+        status: 'failed',
+        error: claim.error || 'Execution already claimed by another worker',
+        provider: 'genx',
+        model,
+      }
+    }
+
+    // ── 3. Check for persisted remote provider job ID (resume) ─────────────
     const jobMeta = safeParseJsonObject(
       (await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }))?.metadataJson,
     )
     let remoteJobId = typeof jobMeta.genxProviderJobId === 'string' ? jobMeta.genxProviderJobId : ''
 
-    // ── 3. Submit once if no remote job exists ─────────────────────────────
+    // ── 4. Submit once if no remote job exists ─────────────────────────────
     if (!remoteJobId) {
-      const submitResult = await genxSubmitMusic(requestParams)
+      // Only send proven fields to GenX: prompt + model.
+      // Unproven fields (duration, instrumental, genre, mood, tempo, negativePrompt)
+      // are kept in internal job input but NOT sent to the provider.
+      const submitResult = await genxSubmitMusic({
+        prompt: payload.prompt,
+        apiKey,
+        baseUrl: providerStatus.baseUrl || undefined,
+        providerDefaultModel: providerStatus.defaultModel || undefined,
+        providerFallbackModel: providerStatus.fallbackModel || undefined,
+        providerAvailableModels,
+      })
       if (!submitResult.jobId) {
         return {
           success: false,
@@ -488,7 +564,6 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
           genxSubmittedAt: new Date().toISOString(),
         })
       } catch {
-        // If persistence fails, log and fail safely — do not resubmit
         console.error('[worker] Failed to persist GenX music provider job ID', {
           jobId: payload.jobId,
           remoteJobId,
@@ -503,157 +578,7 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
       }
     }
 
-    // ── 4. Poll until terminal state ───────────────────────────────────────
-    let attempts = 0
-    let transientPollFailures = 0
-    const MAX_TRANSIENT_RETRIES = 5
-
-    while (attempts < GENX_MUSIC_POLL_MAX_ATTEMPTS) {
-      await sleep(GENX_MUSIC_POLL_INTERVAL_MS)
-      attempts++
-
-      let pollResult
-      try {
-        pollResult = await genxPollMusic(remoteJobId, { apiKey, baseUrl: providerStatus.baseUrl || undefined, pollAttempt: attempts })
-        transientPollFailures = 0
-      } catch (err) {
-        const isTransient = err instanceof Error && /httpStatus=(500|502|503|504)/.test(err.message)
-        if (isTransient) {
-          transientPollFailures++
-          if (transientPollFailures <= MAX_TRANSIENT_RETRIES) continue
-        }
-        throw err
-      }
-
-      if (pollResult.status === 'failed') {
-        return {
-          success: false,
-          status: 'failed',
-          error: `GenX music generation failed: providerStatus=failed; providerJobId=${remoteJobId}; model=${model}; pollAttempt=${attempts}; ${pollResult.error ?? 'unknown error'}`,
-          provider: 'genx',
-          model,
-        }
-      }
-
-      if (pollResult.status === 'completed') {
-        // ── 5. Download result ───────────────────────────────────────────
-        const downloadUrls = [
-          pollResult.resultUrl,
-          `${providerStatus.baseUrl || ''}/api/v1/jobs/${remoteJobId}/result`,
-          `${providerStatus.baseUrl || ''}/api/v1/jobs/${remoteJobId}/file`,
-        ].filter((u): u is string => !!u)
-
-        let lastDownloadError: unknown
-        for (const downloadUrl of downloadUrls) {
-          try {
-            const musicResult = await genxDownloadMusic(downloadUrl, {
-              apiKey,
-              baseUrl: providerStatus.baseUrl || undefined,
-              model,
-              providerAvailableModels,
-            })
-
-            if (!musicResult.audioBuffer || musicResult.audioBuffer.length === 0) {
-              return {
-                success: false,
-                status: 'failed',
-                error: 'GenX returned empty audio data',
-                provider: 'genx',
-                model,
-              }
-            }
-
-            if (!isValidMimeForType('music', musicResult.mimeType)) {
-              return {
-                success: false,
-                status: 'failed',
-                error: `GenX returned unsupported MIME type '${musicResult.mimeType}' for music artifact`,
-                provider: 'genx',
-                model,
-              }
-            }
-
-            // ── 6. Save artifact ─────────────────────────────────────────
-            const artifact = await saveArtifact({
-              input: {
-                appSlug: payload.appSlug,
-                type: 'music',
-                subType: 'music_generation',
-                title: `music_generation output for ${payload.appSlug}`,
-                description: 'GenX music_generation artifact',
-                provider: 'genx',
-                model: musicResult.model || model,
-                traceId: payload.traceId,
-                mimeType: musicResult.mimeType,
-                metadata: {
-                  capability: 'music_generation',
-                  provider: 'genx',
-                  model: musicResult.model || model,
-                  duration: musicResult.duration,
-                  providerJobId: remoteJobId,
-                },
-              },
-              data: musicResult.audioBuffer,
-              explicitMimeType: musicResult.mimeType,
-            })
-
-            // ── 7. Persist completion metadata ───────────────────────────
-            await persistJobMetadata(payload.jobId, {
-              genxArtifactId: artifact.id,
-              genxCompletedAt: new Date().toISOString(),
-            })
-
-            const output = {
-              artifactId: artifact.id,
-              artifactUrl: artifact.storageUrl,
-              mimeType: artifact.mimeType,
-              fileSizeBytes: artifact.fileSizeBytes,
-              duration: musicResult.duration,
-              providerJobId: remoteJobId,
-              selectedModel: musicResult.model || model,
-            }
-
-            return {
-              success: true,
-              status: 'completed',
-              provider: 'genx',
-              model: musicResult.model || model,
-              artifactId: artifact.id,
-              output: JSON.stringify(output),
-              metadata: output,
-            }
-          } catch (err) {
-            lastDownloadError = err
-          }
-        }
-
-        if (lastDownloadError instanceof Error) {
-          return {
-            success: false,
-            status: 'failed',
-            error: `GenX music download failed for providerJobId=${remoteJobId}; model=${model}; ${lastDownloadError.message}`,
-            provider: 'genx',
-            model,
-          }
-        }
-
-        return {
-          success: false,
-          status: 'failed',
-          error: `GenX music download failed for providerJobId=${remoteJobId}; model=${model}`,
-          provider: 'genx',
-          model,
-        }
-      }
-    }
-
-    return {
-      success: false,
-      status: 'failed',
-      error: `GenX music generation timed out after ${GENX_MUSIC_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${remoteJobId}; model=${model}`,
-      provider: 'genx',
-      model,
-    }
+    return await pollAndDownloadMusic(remoteJobId, apiKey, providerStatus, model, payload, providerAvailableModels)
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown GenX music error'
@@ -664,6 +589,176 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
       provider: 'genx',
       model,
     }
+  }
+}
+
+async function pollAndDownloadMusic(
+  remoteJobId: string,
+  apiKey: string,
+  providerStatus: { baseUrl: string; defaultModel: string; fallbackModel: string; healthMessage: string },
+  model: string,
+  payload: WorkerJobData,
+  providerAvailableModels: string[],
+): Promise<ProcessorResult> {
+  const {
+    genxPollMusic,
+    genxDownloadMusic,
+    GENX_MUSIC_POLL_INTERVAL_MS,
+    GENX_MUSIC_POLL_MAX_ATTEMPTS,
+  } = await import('@amarktai/providers')
+  const { saveArtifact } = await import('@amarktai/artifacts')
+  const { isValidMimeForType } = await import('@amarktai/core')
+
+  // ── Poll until terminal state ─────────────────────────────────────────
+  let attempts = 0
+  let transientPollFailures = 0
+  const MAX_TRANSIENT_RETRIES = 5
+
+  while (attempts < GENX_MUSIC_POLL_MAX_ATTEMPTS) {
+    await sleep(GENX_MUSIC_POLL_INTERVAL_MS)
+    attempts++
+
+    let pollResult
+    try {
+      pollResult = await genxPollMusic(remoteJobId, { apiKey, baseUrl: providerStatus.baseUrl || undefined, pollAttempt: attempts })
+      transientPollFailures = 0
+    } catch (err) {
+      const isTransient = err instanceof Error && /httpStatus=(500|502|503|504)/.test(err.message)
+      if (isTransient) {
+        transientPollFailures++
+        if (transientPollFailures <= MAX_TRANSIENT_RETRIES) continue
+      }
+      throw err
+    }
+
+    if (pollResult.status === 'failed') {
+      return {
+        success: false,
+        status: 'failed',
+        error: `GenX music generation failed: providerStatus=failed; providerJobId=${remoteJobId}; model=${model}; pollAttempt=${attempts}; ${pollResult.error ?? 'unknown error'}`,
+        provider: 'genx',
+        model,
+      }
+    }
+
+    if (pollResult.status === 'completed') {
+      // ── Download result ─────────────────────────────────────────────
+      const downloadUrls = [
+        pollResult.resultUrl,
+        `${providerStatus.baseUrl || ''}/api/v1/jobs/${remoteJobId}/result`,
+        `${providerStatus.baseUrl || ''}/api/v1/jobs/${remoteJobId}/file`,
+      ].filter((u): u is string => !!u)
+
+      let lastDownloadError: unknown
+      for (const downloadUrl of downloadUrls) {
+        try {
+          const musicResult = await genxDownloadMusic(downloadUrl, {
+            apiKey,
+            baseUrl: providerStatus.baseUrl || undefined,
+            model,
+            providerAvailableModels,
+          })
+
+          if (!musicResult.audioBuffer || musicResult.audioBuffer.length === 0) {
+            return {
+              success: false,
+              status: 'failed',
+              error: 'GenX returned empty audio data',
+              provider: 'genx',
+              model,
+            }
+          }
+
+          if (!isValidMimeForType('music', musicResult.mimeType)) {
+            return {
+              success: false,
+              status: 'failed',
+              error: `GenX returned unsupported MIME type '${musicResult.mimeType}' for music artifact`,
+              provider: 'genx',
+              model,
+            }
+          }
+
+          // ── Save artifact ───────────────────────────────────────────
+          const artifact = await saveArtifact({
+            input: {
+              appSlug: payload.appSlug,
+              type: 'music',
+              subType: 'music_generation',
+              title: `music_generation output for ${payload.appSlug}`,
+              description: 'GenX music_generation artifact',
+              provider: 'genx',
+              model: musicResult.model || model,
+              traceId: payload.traceId,
+              mimeType: musicResult.mimeType,
+              metadata: {
+                capability: 'music_generation',
+                provider: 'genx',
+                model: musicResult.model || model,
+                duration: musicResult.duration,
+                providerJobId: remoteJobId,
+              },
+            },
+            data: musicResult.audioBuffer,
+            explicitMimeType: musicResult.mimeType,
+          })
+
+          // ── Persist completion metadata ─────────────────────────────
+          await persistJobMetadata(payload.jobId, {
+            genxArtifactId: artifact.id,
+            genxCompletedAt: new Date().toISOString(),
+          })
+
+          const output = {
+            artifactId: artifact.id,
+            artifactUrl: artifact.storageUrl,
+            mimeType: artifact.mimeType,
+            fileSizeBytes: artifact.fileSizeBytes,
+            duration: musicResult.duration,
+            providerJobId: remoteJobId,
+            selectedModel: musicResult.model || model,
+          }
+
+          return {
+            success: true,
+            status: 'completed',
+            provider: 'genx',
+            model: musicResult.model || model,
+            artifactId: artifact.id,
+            output: JSON.stringify(output),
+            metadata: output,
+          }
+        } catch (err) {
+          lastDownloadError = err
+        }
+      }
+
+      if (lastDownloadError instanceof Error) {
+        return {
+          success: false,
+          status: 'failed',
+          error: `GenX music download failed for providerJobId=${remoteJobId}; model=${model}; ${lastDownloadError.message}`,
+          provider: 'genx',
+          model,
+        }
+      }
+
+      return {
+        success: false,
+        status: 'failed',
+        error: `GenX music download failed for providerJobId=${remoteJobId}; model=${model}`,
+        provider: 'genx',
+        model,
+      }
+    }
+  }
+
+  return {
+    success: false,
+    status: 'failed',
+    error: `GenX music generation timed out after ${GENX_MUSIC_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${remoteJobId}; model=${model}`,
+    provider: 'genx',
+    model,
   }
 }
 

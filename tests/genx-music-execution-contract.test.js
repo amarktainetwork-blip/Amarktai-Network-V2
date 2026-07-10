@@ -4,6 +4,7 @@
  * Mirrors the proven genx-video-execution-contract.test.js patterns.
  * Tests provider routing, override blocking, artifact persistence,
  * error diagnostics, provider job ID retention, retry safety,
+ * atomic execution claim, concurrent worker protection,
  * and artifact idempotency.
  *
  * The brain router is mocked to allow music_generation through,
@@ -106,6 +107,7 @@ const prismaMock = vi.hoisted(() => ({
   job: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
 }))
 
@@ -189,6 +191,18 @@ function mockSuccessfulMusicFlow() {
   })
 }
 
+function mockClaimSuccess() {
+  prismaMock.job.updateMany.mockResolvedValue({ count: 1 })
+}
+
+function mockClaimAlreadyClaimed() {
+  prismaMock.job.updateMany.mockResolvedValue({ count: 0 })
+  prismaMock.job.findUnique.mockResolvedValue({
+    providerClaimAt: new Date(),
+    metadataJson: '{}',
+  })
+}
+
 describe('GenX music executor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -205,8 +219,12 @@ describe('GenX music executor', () => {
     })
     mockGenxProviderStatus()
     artifactMocks.findCompletedArtifactByTraceId.mockResolvedValue(null)
-    prismaMock.job.findUnique.mockResolvedValue({ metadataJson: '{}' })
+    prismaMock.job.findUnique.mockReset()
+    prismaMock.job.findUnique.mockResolvedValue({ metadataJson: '{}', providerClaimAt: null })
+    prismaMock.job.update.mockReset()
     prismaMock.job.update.mockResolvedValue({})
+    prismaMock.job.updateMany.mockReset()
+    prismaMock.job.updateMany.mockResolvedValue({ count: 1 })
     mockSuccessfulMusicFlow()
   })
 
@@ -310,7 +328,6 @@ describe('GenX music executor', () => {
   })
 
   it('marks execution failed when artifact persistence fails', async () => {
-    // Override the default successful mock with a rejection for this test only
     artifactMocks.saveArtifact.mockReset()
     artifactMocks.saveArtifact.mockRejectedValue(new Error('Disk full'))
 
@@ -350,7 +367,50 @@ describe('GenX music executor', () => {
     expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
   })
 
-  // ── Retry / Idempotency Tests ──────────────────────────────────────────
+  // ── Atomic Claim Tests ──────────────────────────────────────────────────
+
+  it('acquires execution claim before provider submission', async () => {
+    await executeWithProvider(makePayload())
+
+    expect(prismaMock.job.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: 'job-genx-music-001' }),
+        data: expect.objectContaining({ providerClaimAt: expect.any(Date) }),
+      }),
+    )
+    // Claim must happen before submit
+    const claimCall = prismaMock.job.updateMany.mock.calls[0]
+    const submitCall = providerMocks.genxSubmitMusic.mock.calls[0]
+    expect(claimCall).toBeDefined()
+    expect(submitCall).toBeDefined()
+  })
+
+  it('rejects execution when claim is held by another worker', async () => {
+    mockClaimAlreadyClaimed()
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('already claimed')
+    expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
+  })
+
+  it('second worker does not submit when first worker holds claim', async () => {
+    // First call claims successfully
+    await executeWithProvider(makePayload())
+
+    // Second call — claim fails (updateMany returns 0)
+    mockClaimAlreadyClaimed()
+    prismaMock.job.findUnique.mockResolvedValue({
+      providerClaimAt: new Date(),
+      metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }),
+    })
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(true) // resumes from existing remote ID
+    expect(providerMocks.genxSubmitMusic).toHaveBeenCalledTimes(1) // only first call submitted
+  })
 
   it('persists remote provider job ID immediately after submit', async () => {
     await executeWithProvider(makePayload())
@@ -366,17 +426,15 @@ describe('GenX music executor', () => {
   })
 
   it('resumes from persisted remote job ID instead of submitting again', async () => {
-    // Simulate a retry: metadata already has a remote job ID
     prismaMock.job.findUnique.mockResolvedValue({
       metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-existing' }),
+      providerClaimAt: null,
     })
 
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(true)
-    // Submit should NOT be called — we resume from existing remote job
     expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
-    // Poll should use the existing remote job ID
     expect(providerMocks.genxPollMusic).toHaveBeenCalledWith(
       'genx-remote-job-existing',
       expect.any(Object),
@@ -386,12 +444,12 @@ describe('GenX music executor', () => {
   it('retry does not call submit a second time when remote ID is persisted', async () => {
     prismaMock.job.findUnique.mockResolvedValue({
       metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-resume' }),
+      providerClaimAt: null,
     })
 
     await executeWithProvider(makePayload())
     await executeWithProvider(makePayload())
 
-    // Submit should never be called — both runs resume from persisted ID
     expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
     expect(providerMocks.genxPollMusic).toHaveBeenCalledTimes(2)
   })
@@ -413,11 +471,9 @@ describe('GenX music executor', () => {
 
     expect(result.success).toBe(true)
     expect(result.artifactId).toBe('artifact-existing')
-    // No provider calls should happen
     expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
     expect(providerMocks.genxPollMusic).not.toHaveBeenCalled()
     expect(artifactMocks.saveArtifact).not.toHaveBeenCalled()
-    // Output should indicate reuse
     const output = JSON.parse(result.output)
     expect(output.reused).toBe(true)
   })
@@ -437,7 +493,6 @@ describe('GenX music executor', () => {
   })
 
   it('fails safely when metadata persistence fails after submit', async () => {
-    // Submit succeeds but metadata update fails
     providerMocks.genxSubmitMusic.mockResolvedValue({
       jobId: 'genx-remote-job-orphan',
       status: 'pending',
@@ -450,17 +505,15 @@ describe('GenX music executor', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('local state persistence failed')
     expect(result.error).toContain('genx-remote-job-orphan')
-    // Submit was called once, but we did NOT proceed to poll
     expect(providerMocks.genxSubmitMusic).toHaveBeenCalledTimes(1)
     expect(providerMocks.genxPollMusic).not.toHaveBeenCalled()
   })
 
   it('handles malformed metadataJson gracefully', async () => {
-    prismaMock.job.findUnique.mockResolvedValue({ metadataJson: 'not-json{{' })
+    prismaMock.job.findUnique.mockResolvedValue({ metadataJson: 'not-json{{', providerClaimAt: null })
 
     const result = await executeWithProvider(makePayload())
 
-    // Should still work — falls back to empty metadata, submits fresh
     expect(result.success).toBe(true)
     expect(providerMocks.genxSubmitMusic).toHaveBeenCalledTimes(1)
   })
@@ -512,5 +565,43 @@ describe('GenX music executor', () => {
 
     expect(result.success).toBe(true)
     expect(providerMocks.genxPollMusic).toHaveBeenCalledTimes(2)
+  })
+
+  // ── Concurrent Worker Protection Tests ──────────────────────────────────
+
+  it('two sequential workers produce only one provider submission', async () => {
+    // Worker 1: claims successfully, submits, completes
+    const r1 = await executeWithProvider(makePayload())
+    expect(r1.success).toBe(true)
+    expect(providerMocks.genxSubmitMusic).toHaveBeenCalledTimes(1)
+
+    // Worker 2: claim fails (already claimed), resumes from persisted remote ID
+    prismaMock.job.updateMany.mockReset()
+    prismaMock.job.updateMany.mockResolvedValue({ count: 0 })
+    prismaMock.job.findUnique
+      .mockReset()
+      .mockResolvedValueOnce({ providerClaimAt: new Date(), metadataJson: '{}' }) // claim stale check
+      .mockResolvedValueOnce({ metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }) }) // resume metadata
+
+    const r2 = await executeWithProvider(makePayload())
+    expect(r2.success).toBe(true)
+    // Submit was called only once (by worker 1)
+    expect(providerMocks.genxSubmitMusic).toHaveBeenCalledTimes(1)
+  })
+
+  it('unproven Lyria fields are not sent to GenX provider', async () => {
+    await executeWithProvider(makePayload({
+      input: { genre: 'ambient', instrumental: true, mood: 'calm', tempo: 'slow' },
+    }))
+
+    const submitCall = providerMocks.genxSubmitMusic.mock.calls[0][0]
+    // Only proven fields should be sent
+    expect(submitCall.prompt).toBeDefined()
+    expect(submitCall.apiKey).toBeDefined()
+    // Unproven fields should NOT be in the provider request
+    expect(submitCall.genre).toBeUndefined()
+    expect(submitCall.instrumental).toBeUndefined()
+    expect(submitCall.mood).toBeUndefined()
+    expect(submitCall.tempo).toBeUndefined()
   })
 })

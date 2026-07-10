@@ -167,7 +167,7 @@ describe('Music generation backend foundation', () => {
     expect(executor).not.toContain('music_artifact_execution_path')
   })
 
-  it('registers admin music routes without queueing or saving artifacts', () => {
+  it('registers admin music routes with queue-based job creation', () => {
     const routePath = `${ROOT}/apps/api/src/routes/admin-music.ts`
     expect(existsSync(routePath)).toBe(true)
     const routeSource = readFileSync(routePath, 'utf-8')
@@ -176,7 +176,10 @@ describe('Music generation backend foundation', () => {
     expect(routeSource).toContain('/api/admin/music/generate')
     expect(routeSource).toContain('reply.status(409)')
     expect(routeSource).not.toContain('saveArtifact')
-    expect(routeSource).not.toContain('Queue')
+    // Route now queues jobs via BullMQ instead of blocking with 409
+    expect(routeSource).toContain('Queue')
+    expect(routeSource).toContain('prisma.job.create')
+    expect(routeSource).toContain('202')
   })
 })
 
