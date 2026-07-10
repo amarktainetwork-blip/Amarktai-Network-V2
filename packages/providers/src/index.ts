@@ -56,6 +56,26 @@ export {
   type GenxLongPollCallbacks,
 } from './genx-client.js'
 
+// GenX — music generation with submit/poll/download
+export {
+  DEFAULT_GENX_MUSIC_MODEL,
+  GENX_ROUTER_MUSIC_MODEL_PREFERENCE,
+  genxSubmitMusic,
+  genxPollMusic,
+  genxDownloadMusic,
+  genxGenerateMusic,
+  resolveGenxMusicModel,
+  GENX_MUSIC_POLL_INTERVAL_MS,
+  GENX_MUSIC_POLL_MAX_ATTEMPTS,
+  GENX_MUSIC_POLL_TRANSIENT_MAX_RETRIES,
+  GenxMusicHttpError,
+  type GenxMusicRequest,
+  type GenxMusicSubmitResponse,
+  type GenxMusicPollResponse,
+  type GenxMusicResult,
+  type GenxMusicLongPollCallbacks,
+} from './genx-music-client.js'
+
 // Qdrant — vector database for RAG
 export {
   ensureCollection,

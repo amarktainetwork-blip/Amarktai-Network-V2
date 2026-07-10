@@ -1820,6 +1820,7 @@ model Job {
   output          String?   @db.LongText
   error           String?   @db.LongText
   callbackUrl     String?   @map("callback_url")
+  providerClaimAt DateTime? @map("provider_claim_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   startedAt       DateTime? @map("started_at")
   completedAt     DateTime? @map("completed_at")

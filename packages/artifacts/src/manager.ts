@@ -101,6 +101,26 @@ export async function getArtifactRecord(artifactId: string): Promise<ArtifactRec
   return prisma.artifact.findUnique({ where: { id: artifactId } })
 }
 
+/**
+ * Find an existing completed artifact by traceId and subType.
+ * Used for idempotency: if a worker retries after the artifact was already
+ * saved, this returns the existing record instead of creating a duplicate.
+ */
+export async function findCompletedArtifactByTraceId(
+  traceId: string,
+  subType: string,
+): Promise<ArtifactRecord | null> {
+  if (!traceId || !subType) return null
+  return prisma.artifact.findFirst({
+    where: {
+      traceId,
+      subType,
+      status: 'completed',
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
 export async function getArtifactFile(artifactId: string): Promise<{
   buffer: Buffer
   mimeType: string

@@ -1,10 +1,38 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { randomUUID } from 'node:crypto'
+import { Queue } from 'bullmq'
+import { getProviderCredentialStatus, prisma } from '@amarktai/db'
 import {
   BLOCKED_OVERRIDE_FIELDS,
+  QUEUE_NAMES,
   createMusicGenerationPlan,
   getMusicCapabilityStatus,
   validateMusicGenerationRequest,
 } from '@amarktai/core'
+
+async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
+  const [providerStatus, lastProof] = await Promise.all([
+    getProviderCredentialStatus('genx').catch(() => null),
+    prisma.job.findFirst({
+      where: {
+        capability: 'music_generation',
+        status: 'completed',
+        provider: 'genx',
+        artifactId: { not: null },
+      },
+      orderBy: { completedAt: 'desc' },
+      select: { completedAt: true },
+    }).catch(() => null),
+  ])
+
+  return getMusicCapabilityStatus({
+    configured: providerStatus?.configured === true && providerStatus.runtimeEnabled !== false,
+    infrastructureReady: Boolean(app.redis),
+    policyAllowed: true,
+    liveProven: Boolean(lastProof?.completedAt),
+    lastProofAt: lastProof?.completedAt?.toISOString() ?? null,
+  })
+}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -52,10 +80,19 @@ function parseMusicRequest(body: Record<string, unknown>) {
 }
 
 export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
+  let queue: Queue | null = null
+  function getQueue(): Queue {
+    if (!queue) {
+      if (!app.redis) throw new Error('Redis is required for job queue')
+      queue = new Queue(QUEUE_NAMES.JOBS, { connection: app.redis as never })
+    }
+    return queue
+  }
+
   app.get('/api/admin/music/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
-    const status = getMusicCapabilityStatus()
+    const status = await getAdminMusicCapabilityStatus(app)
     return reply.send({
       success: true,
       status,
@@ -77,15 +114,22 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const musicRequest = parseMusicRequest(body)
-      const plan = createMusicGenerationPlan(musicRequest)
-      const status = getMusicCapabilityStatus()
+      const rawPlan = createMusicGenerationPlan(musicRequest)
+      const status = await getAdminMusicCapabilityStatus(app)
+      const plan = {
+        ...rawPlan,
+        executionReady: status.executableNow && rawPlan.executionReady,
+        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason,
+      }
 
       return reply.send({
         success: true,
         plan,
         status,
-        executionReady: status.musicGenerationReady && plan.executionReady,
-        message: 'Music generation plan created. Execution remains blocked until an approved provider music client is wired.',
+        executionReady: status.executableNow && plan.executionReady,
+        message: status.executableNow
+          ? 'Music generation plan created. Ready to execute.'
+          : `Music generation plan created. ${status.blockedReason}`,
       })
     } catch (error) {
       return reply.status(400).send({
@@ -110,21 +154,86 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const musicRequest = parseMusicRequest(body)
-      const plan = createMusicGenerationPlan(musicRequest)
-      const status = getMusicCapabilityStatus()
+      const rawPlan = createMusicGenerationPlan(musicRequest)
+      const status = await getAdminMusicCapabilityStatus(app)
+      const plan = {
+        ...rawPlan,
+        executionReady: status.executableNow && rawPlan.executionReady,
+        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason,
+      }
 
-      return reply.status(409).send({
-        error: true,
-        success: false,
-        executionBlocked: true,
-        message: status.blockedReason,
-        plan,
-        status,
-        missingDependencies: [
-          'approved_provider_music_client',
-          'music_worker_executor',
-          'music_artifact_execution_path',
-        ],
+      // Creation gate: preserve explicit development/test gating.
+      // Music may be queued only when implementation gates are present.
+      // liveProven=true is NOT required to run the first proof.
+      if (!status.executableNow) {
+        return reply.status(409).send({
+          error: true,
+          success: false,
+          executionBlocked: true,
+          message: status.blockedReason,
+          plan,
+          status,
+          missingDependencies: status.blockedReason
+            .replace('Music execution blocked: ', '')
+            .replace(/\.$/, '')
+            .split(', '),
+        })
+      }
+
+      // Create canonical Job
+      const appSlug = 'admin-music'
+      const traceId = `trace_${randomUUID()}`
+      const safePrompt = musicRequest.prompt.substring(0, 10000)
+      const inputObj = {
+        prompt: safePrompt,
+        genre: musicRequest.genre,
+        mood: musicRequest.mood,
+        durationSeconds: musicRequest.durationSeconds,
+        instrumentalOnly: musicRequest.instrumentalOnly,
+        style: musicRequest.style,
+        outputFormat: musicRequest.outputFormat,
+      }
+
+      const job = await prisma.job.create({
+        data: {
+          appSlug,
+          capability: 'music_generation',
+          prompt: safePrompt,
+          inputJson: JSON.stringify(inputObj),
+          metadataJson: JSON.stringify({ routingMode: musicRequest.routingMode }),
+          traceId,
+          status: 'queued',
+        },
+      })
+
+      // Enqueue in BullMQ
+      try {
+        const q = getQueue()
+        const payload = {
+          jobId: job.id,
+          appSlug,
+          capability: 'music_generation',
+          prompt: safePrompt,
+          input: inputObj,
+          metadata: { routingMode: musicRequest.routingMode },
+          traceId,
+        }
+        app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability: 'music_generation', traceId }, 'Enqueuing music generation job')
+        await q.add('process-job', payload, { jobId: job.id })
+      } catch {
+        await prisma.job.update({
+          where: { id: job.id },
+          data: { status: 'failed', error: 'Failed to enqueue job' },
+        })
+        return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
+      }
+
+      return reply.status(202).send({
+        jobId: job.id,
+        status: job.status,
+        capability: job.capability,
+        traceId,
+        createdAt: job.createdAt?.toISOString(),
       })
     } catch (error) {
       return reply.status(400).send({

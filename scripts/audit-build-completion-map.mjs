@@ -116,7 +116,7 @@ async function checkWorkerExecution() {
       deepinfraText: content.includes('executeDeepInfraTextCapability'),
       togetherImage: content.includes('executeTogetherImage'),
       genxVideo: content.includes('executeGenxVideo'),
-      musicWorker: content.includes('executeMusicGeneration')
+      musicWorker: content.includes('executeGenxMusic')
     },
     usesBrainRouter: content.includes('routeBrain')
   }
@@ -155,7 +155,11 @@ async function checkDashboardPages() {
         let reason = ''
         
         // Check execution FIRST, then check disabled state
-        if (hasExecution) {
+        if (page === 'music') {
+          pendingCapabilities = ['music_generation']
+          status = 'design_ready_pending_backend'
+          reason = 'Music UI uses the real route/status flow, but execution remains configuration/infrastructure gated.'
+        } else if (hasExecution) {
           // Page has real execution paths
           if (page === 'image') {
             executionReadyCapabilities = ['image_generation']
@@ -266,7 +270,7 @@ async function checkProviderClients() {
       genx: content.includes('genxGenerateVideo') || content.includes('genx'),
       deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
       mimo: content.includes('mimo') || false,
-      music: content.includes('GenerateMusic') || content.includes('MusicGeneration')
+      music: content.includes('genxSubmitMusic') || content.includes('genxGenerateMusic')
     }
   }
 }
@@ -492,16 +496,26 @@ async function runAudit() {
     : []
   const genxMusicModels = discoveredMusicModels.filter(model => model.provider === 'genx')
   const musicEndpointShapeKnown = discoveredMusicModels.some(model => model.endpointShapeKnown === true)
-  const musicExecutableNow = discoveredMusicModels.some(model => model.executableNow === true)
   const genxMusicCapabilityKnown = genxMusicModels.length > 0
   const lyriaClipDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-clip-preview')
   const lyriaProDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-pro-preview')
-  const musicGenerationReady = musicProviderClientExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
-  const musicBlockedReason = musicGenerationReady
-    ? ''
-    : genxMusicCapabilityKnown
-      ? 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.'
-      : 'Music provider capability is not yet known from approved provider docs or live discovery.'
+  const musicImplementationReady = musicProviderClientExists && musicRouteExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
+  const musicConfigured = false
+  const musicPolicyAllowed = true
+  const musicInfrastructureReady = false
+  const musicLiveProven = false
+  const musicExecutableNow = musicImplementationReady && musicConfigured && musicPolicyAllowed && musicInfrastructureReady
+  const musicBlockedReasons = [
+    !musicProviderClientExists ? 'provider_client_missing' : null,
+    !musicWorkerExecutorExists ? 'worker_executor_missing' : null,
+    !musicRouteExists ? 'route_missing' : null,
+    !musicArtifactPersistenceReady ? 'artifact_path_missing' : null,
+    !musicConfigured ? 'genx_api_key_not_configured' : null,
+    !musicInfrastructureReady ? 'infrastructure_not_verified_by_audit' : null,
+  ].filter(Boolean)
+  const musicBlockedReason = musicExecutableNow
+    ? 'Music execution is ready for first live proof; live proof is still pending.'
+    : `Music execution blocked: ${musicBlockedReasons.join(', ')}.`
 
   const providerDiscoveryReadiness = {
     discoveryFrameworkReady: await fileExists('scripts/discover-provider-models.mjs') && await fileExists('packages/core/src/provider-model-discovery.ts'),
@@ -539,16 +553,30 @@ async function runAudit() {
     schemaReady: musicSchemaReady,
     plannerReady: musicSchemaReady,
     providerClientExists: musicProviderClientExists,
+    clientImplemented: musicProviderClientExists,
     modelCatalogueEntryExists: musicModelCatalogueEntryExists,
     workerExecutorExists: musicWorkerExecutorExists,
+    executorRegistered: musicWorkerExecutorExists,
     artifactPersistenceReady: musicArtifactPersistenceReady,
+    artifactPathImplemented: musicArtifactPersistenceReady,
+    queuePathImplemented: musicRouteExists,
+    routeImplemented: musicRouteExists,
+    implementationReady: musicImplementationReady,
+    catalogueKnown: genxMusicCapabilityKnown,
+    configured: musicConfigured,
+    policyAllowed: musicPolicyAllowed,
+    infrastructureReady: musicInfrastructureReady,
+    executableNow: musicExecutableNow,
+    liveProven: musicLiveProven,
+    lastProofAt: null,
+    blockedReasons: musicBlockedReasons,
     dashboardReady: musicDashboardReady,
     adminRoutesReady: musicRouteExists,
     instrumentalReady: musicSchemaReady,
     vocalsReady: false,
     lyricsReady: false,
-    musicGenerationReady,
-    executionBlocked: !musicGenerationReady,
+    musicGenerationReady: musicExecutableNow,
+    executionBlocked: !musicExecutableNow,
     blockedReason: musicBlockedReason,
     discoveredMusicModels: discoveredMusicModels.length,
     genxMusicCapabilityKnown,
@@ -564,7 +592,7 @@ async function runAudit() {
     endpointShapeKnown: musicEndpointShapeKnown,
     executableNow: musicExecutableNow,
     providerCapabilityAudit: [
-      { provider: 'genx', musicClient: false, executable: false, note: 'GenX video client exists; no repo music client or documented music endpoint.' },
+      { provider: 'genx', musicClient: musicProviderClientExists, executable: musicExecutableNow, note: 'GenX music client exists; execution still requires configuration/infrastructure gates.' },
       { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },
       { provider: 'together', musicClient: false, executable: false, note: 'Together image client exists; no music generation client.' },
       { provider: 'mimo', musicClient: false, executable: false, note: 'MiMo remains coding_tools_only and is never runtime-selected.' },

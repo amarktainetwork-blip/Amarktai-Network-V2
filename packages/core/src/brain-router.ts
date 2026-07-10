@@ -8,6 +8,9 @@ export type RoutingMode = (typeof ROUTING_MODES)[number]
 export interface BrainRouterProviderState {
   disabled?: boolean
   runtimeRestricted?: boolean
+  configured?: boolean
+  infrastructureReady?: boolean
+  policyAllowed?: boolean
 }
 
 export interface BrainRouterRequest {
@@ -161,6 +164,27 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     if (state?.runtimeRestricted) {
       addRejection(rejected, model, `Provider '${provider}' is runtime_restricted`)
       continue
+    }
+
+    if (capability === 'music_generation') {
+      if (state?.configured !== true) {
+        const reason = `Provider '${provider}' is not configured for music_generation`
+        addRejection(rejected, model, reason)
+        catalogueOnlyCandidates.push(model)
+        continue
+      }
+      if (state.infrastructureReady === false) {
+        const reason = `Provider '${provider}' music_generation infrastructure is not ready`
+        addRejection(rejected, model, reason)
+        catalogueOnlyCandidates.push(model)
+        continue
+      }
+      if (state.policyAllowed === false) {
+        const reason = `Provider '${provider}' policy blocks music_generation`
+        addRejection(rejected, model, reason)
+        catalogueOnlyCandidates.push(model)
+        continue
+      }
     }
 
     if (model.qualityTier === 'experimental' && !allowExperimental && routingMode !== 'experimental') {

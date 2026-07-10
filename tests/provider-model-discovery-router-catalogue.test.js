@@ -429,11 +429,16 @@ describe('provider model discovery and router catalogue rebuild', () => {
 
     const music = routeBrain({ capability: 'music_generation', routingMode: 'balanced' })
     expect(music.executionAllowed).toBe(false)
+    expect(music.selectedProvider).toBeNull()
     expect(music.catalogueOnlyCandidates.some((model) => model.capabilities.includes('music_generation'))).toBe(true)
-    expect(music.missingExecutorCandidates.some((candidate) => candidate.modelId.includes('music'))).toBe(true)
-    expect(music.providerClientMissingCandidates.some((candidate) => candidate.modelId.includes('music'))).toBe(true)
-    expect(music.missingArtifactPathCandidates.length).toBeGreaterThan(0)
-    expect(music.selectedProvider).not.toBe('mimo')
+
+    const configuredMusic = routeBrain({
+      capability: 'music_generation',
+      routingMode: 'balanced',
+      providerStates: { genx: { configured: true, infrastructureReady: true, policyAllowed: true } },
+    })
+    expect(configuredMusic.executionAllowed).toBe(true)
+    expect(configuredMusic.selectedProvider).toBe('genx')
   })
 
   it('capability readiness keeps model discovery separate from execution readiness', () => {
@@ -443,17 +448,16 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(music.executableNow).toBe(false)
   })
 
-  it('musicGenerationReady remains false unless client, worker, and artifact path are wired', () => {
+  it('musicGenerationReady is true when client, worker, and artifact path are wired', () => {
     const status = getMusicCapabilityStatus()
     expect(status.discoveredMusicModels).toBeGreaterThan(0)
     expect(status.genxMusicCapabilityKnown).toBe(true)
     expect(status.lyriaClipDiscovered).toBe(true)
     expect(status.lyriaProDiscovered).toBe(true)
-    expect(status.musicGenerationReady).toBe(false)
-    expect(status.executableNow).toBe(false)
-    expect(status.providerClientExists).toBe(false)
-    expect(status.workerExecutorExists).toBe(false)
-    expect(status.blockedReason).toContain('GenX music capability is known')
+    expect(status.musicGenerationReady).toBe(true)
+    expect(status.executableNow).toBe(true)
+    expect(status.providerClientExists).toBe(true)
+    expect(status.workerExecutorExists).toBe(true)
   })
 
   it('admin API and dashboard expose discovery counts and blockers', () => {

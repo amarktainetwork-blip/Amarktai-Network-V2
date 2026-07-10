@@ -309,8 +309,8 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
     })
   })
 
-  describe('No music wiring started', () => {
-    it('music_generation remains pending', async () => {
+  describe('Music is wired but configuration gated for generation', () => {
+    it('music_generation is blocked by default without runtime GenX configuration', async () => {
       const { routeBrain } = await import('../packages/core/src/index.ts')
       
       const decision = routeBrain({
@@ -319,12 +319,12 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       })
       
       expect(decision.executionAllowed).toBe(false)
+      expect(decision.blockReason).toContain('not configured')
     })
 
-    it('music bed not included in assembly', async () => {
+    it('music bed not yet included in assembly', async () => {
       const assembly = await import('../apps/api/src/lib/long-form-assembly.ts')
       
-      // Test the structure
       const mockResult = {
         success: false,
         assemblyMode: 'video_only',

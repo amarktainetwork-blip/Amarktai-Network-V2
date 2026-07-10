@@ -230,7 +230,7 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
       expect(content).toContain('fullMultimediaReady: false')
     })
 
-    it('music_generation capability is not executable', async () => {
+    it('music_generation is implemented but still configuration gated by default', async () => {
       const { routeBrain } = await import('../packages/core/src/index.ts')
       
       const decision = routeBrain({
@@ -239,27 +239,28 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
       })
       
       expect(decision.executionAllowed).toBe(false)
+      expect(decision.selectedProvider).toBeNull()
+      expect(decision.blockReason).toContain('not configured')
     })
   })
 
-  describe('music_generation remains pending', () => {
-    it('music provider client is not implemented', async () => {
+  describe('music_generation is now implemented', () => {
+    it('music provider client is implemented', async () => {
       const { MODEL_CATALOGUE } = await import('../packages/core/src/index.ts')
       
       const musicModels = MODEL_CATALOGUE.filter(m => 
         m.capabilities.includes('music_generation') && m.executable
       )
       
-      expect(musicModels.length).toBe(0)
+      expect(musicModels.length).toBeGreaterThanOrEqual(2)
     })
 
-    it('music worker executor does not exist', () => {
+    it('music worker executor exists', () => {
       const workerExecutorPath = path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts')
       const content = fs.readFileSync(workerExecutorPath, 'utf-8')
       
-      // Should not have music-specific executor
-      expect(content).not.toContain('executeMusicGeneration')
-      expect(content).not.toContain('musicGeneration')
+      expect(content).toContain('executeGenxMusic')
+      expect(content).toContain('music_generation')
     })
   })
 

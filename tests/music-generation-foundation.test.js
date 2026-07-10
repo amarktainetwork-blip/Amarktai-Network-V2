@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
 import Fastify from 'fastify'
 import { readFileSync, existsSync } from 'fs'
 import {
@@ -13,8 +13,17 @@ import {
 import { adminMusicRoutes } from '../apps/api/src/routes/admin-music.ts'
 
 const ROOT = process.cwd()
+const ORIGINAL_ENV = { ...process.env }
 
 describe('Music generation backend foundation', () => {
+  beforeEach(() => {
+    delete process.env.GENX_API_KEY
+  })
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV }
+  })
+
   it('validates instrumental music requests without provider execution fields', () => {
     const parsed = validateMusicGenerationRequest({
       prompt: 'Original cinematic instrumental underscore for a product reveal',
@@ -76,7 +85,7 @@ describe('Music generation backend foundation', () => {
 
     expect(plan.capability).toBe('music_generation')
     expect(plan.executionReady).toBe(false)
-    expect(plan.blockedReason).toContain('GenX music capability is known')
+    expect(plan.blockedReason).toContain('genx_api_key_not_configured')
     expect(plan.lyricsStatus).toBe('not_requested')
     expect(plan.vocalsStatus).toBe('not_requested')
   })
@@ -99,60 +108,114 @@ describe('Music generation backend foundation', () => {
     expect(plan.lyricsStatus).toBe('pending_provider_support')
   })
 
-  it('reports honest capability status for foundation-only music', () => {
-    const status = getMusicCapabilityStatus()
+  it('reports implementation ready but not configured/executable/live-proven without GenX config', () => {
+    const status = getMusicCapabilityStatus({ configured: false, infrastructureReady: true })
     expect(status.foundationReady).toBe(true)
     expect(status.schemaReady).toBe(true)
     expect(status.plannerReady).toBe(true)
-    expect(status.providerClientExists).toBe(false)
-    expect(status.workerExecutorExists).toBe(false)
+    expect(status.providerClientExists).toBe(true)
+    expect(status.clientImplemented).toBe(true)
+    expect(status.workerExecutorExists).toBe(true)
+    expect(status.executorRegistered).toBe(true)
+    expect(status.queuePathImplemented).toBe(true)
+    expect(status.routeImplemented).toBe(true)
     expect(status.artifactPersistenceReady).toBe(true)
+    expect(status.artifactPathImplemented).toBe(true)
+    expect(status.implementationReady).toBe(true)
+    expect(status.catalogueKnown).toBe(true)
     expect(status.dashboardReady).toBe(true)
     expect(status.instrumentalReady).toBe(true)
     expect(status.vocalsReady).toBe(false)
     expect(status.lyricsReady).toBe(false)
+    expect(status.configured).toBe(false)
+    expect(status.policyAllowed).toBe(true)
+    expect(status.infrastructureReady).toBe(true)
+    expect(status.executableNow).toBe(false)
     expect(status.musicGenerationReady).toBe(false)
     expect(status.executionBlocked).toBe(true)
-    expect(status.blockedReason).toContain('GenX music capability is known')
+    expect(status.blockedReasons).toContain('genx_api_key_not_configured')
+    expect(status.blockedReason).toContain('genx_api_key_not_configured')
     expect(status.genxMusicCapabilityKnown).toBe(true)
     expect(status.lyriaClipDiscovered).toBe(true)
     expect(status.lyriaProDiscovered).toBe(true)
-    expect(status.musicExecutorReady).toBe(false)
+    expect(status.liveProven).toBe(false)
+    expect(status.lastProofAt).toBeNull()
     expect(status.approvedProviderAudit).toHaveLength(5)
     expect(status.approvedProviderAudit.find((entry) => entry.provider === 'mimo')?.note).toContain('coding_tools_only')
+  })
+
+  it('allows first live proof when implementation/configuration/infrastructure gates pass without requiring liveProven', () => {
+    const status = getMusicCapabilityStatus({
+      configured: true,
+      infrastructureReady: true,
+      policyAllowed: true,
+      liveProven: false,
+    })
+    expect(status.implementationReady).toBe(true)
+    expect(status.configured).toBe(true)
+    expect(status.executableNow).toBe(true)
+    expect(status.liveProven).toBe(false)
+    expect(status.executionBlocked).toBe(false)
+    expect(status.blockedReasons).toEqual([])
+    expect(status.blockedReason).toContain('ready for first live proof')
+  })
+
+  it('marks liveProven true only when proof evidence is supplied', () => {
+    const status = getMusicCapabilityStatus({
+      configured: true,
+      infrastructureReady: true,
+      liveProven: true,
+      lastProofAt: '2026-07-10T00:00:00.000Z',
+    })
+    expect(status.executableNow).toBe(true)
+    expect(status.liveProven).toBe(true)
+    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')
   })
 
   it('keeps the approved provider list unchanged', () => {
     expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
   })
 
-  it('adds docs-known music catalogue entries without making them executable', () => {
+  it('has music catalogue entries without making catalogue presence sufficient for execution', () => {
     const musicModels = MODEL_CATALOGUE.filter((model) => model.capabilities.includes('music_generation'))
     expect(musicModels.length).toBeGreaterThanOrEqual(2)
-    expect(musicModels.every((model) => model.executable === false)).toBe(true)
-    expect(musicModels).toContainEqual(expect.objectContaining({
+    const staticLyria = musicModels.filter((m) => m.provider === 'genx' && m.modelId.startsWith('lyria-'))
+    expect(staticLyria.length).toBeGreaterThanOrEqual(2)
+    expect(staticLyria.every((model) => model.executable === true)).toBe(true)
+    expect(staticLyria.every((model) => model.providerClientExists === true)).toBe(true)
+    expect(staticLyria.every((model) => model.workerExecutorExists === true)).toBe(true)
+    expect(staticLyria.every((model) => model.executableNow !== true)).toBe(true)
+    expect(staticLyria).toContainEqual(expect.objectContaining({
       provider: 'genx',
       modelId: 'lyria-3-clip-preview',
-      status: 'planned',
-      executable: false,
+      status: 'available',
       supportsArtifacts: true,
-      providerClientExists: false,
-      workerExecutorExists: false,
     }))
-    expect(musicModels).toContainEqual(expect.objectContaining({
+    expect(staticLyria).toContainEqual(expect.objectContaining({
       provider: 'genx',
       modelId: 'lyria-3-pro-preview',
-      executable: false,
     }))
   })
 
-  it('Brain Router blocks music generation because no executable model exists', () => {
+  it('Brain Router blocks music_generation without runtime GenX configuration', () => {
     const decision = routeBrain({ capability: 'music_generation', routingMode: 'balanced' })
     expect(decision.executionAllowed).toBe(false)
     expect(decision.selectedProvider).toBeNull()
     expect(decision.selectedModel).toBeNull()
-    expect(decision.blockReason).toContain("No executable model found for capability 'music_generation'")
-    expect(decision.truth).toContain('Brain Router v1 blocked')
+    expect(decision.blockReason).toContain('music_generation')
+    expect(decision.blockReason).toContain('not configured')
+  })
+
+  it('Brain Router routes music_generation to GenX only with mocked healthy configured runtime state', () => {
+    const decision = routeBrain({
+      capability: 'music_generation',
+      routingMode: 'balanced',
+      providerStates: { genx: { configured: true, infrastructureReady: true, policyAllowed: true } },
+    })
+    expect(decision.executionAllowed).toBe(true)
+    expect(decision.selectedProvider).toBe('genx')
+    expect(decision.selectedModel).toMatch(/lyria/)
+    expect(decision.selectedProvider).not.toBe('mimo')
   })
 
   it('keeps adult capabilities on hold', () => {
@@ -167,7 +230,7 @@ describe('Music generation backend foundation', () => {
     expect(executor).not.toContain('music_artifact_execution_path')
   })
 
-  it('registers admin music routes without queueing or saving artifacts', () => {
+  it('registers admin music routes with queue-based job creation', () => {
     const routePath = `${ROOT}/apps/api/src/routes/admin-music.ts`
     expect(existsSync(routePath)).toBe(true)
     const routeSource = readFileSync(routePath, 'utf-8')
@@ -176,7 +239,10 @@ describe('Music generation backend foundation', () => {
     expect(routeSource).toContain('/api/admin/music/generate')
     expect(routeSource).toContain('reply.status(409)')
     expect(routeSource).not.toContain('saveArtifact')
-    expect(routeSource).not.toContain('Queue')
+    // Route now queues jobs via BullMQ instead of blocking with 409
+    expect(routeSource).toContain('Queue')
+    expect(routeSource).toContain('prisma.job.create')
+    expect(routeSource).toContain('202')
   })
 })
 
@@ -203,7 +269,7 @@ describe('Admin music API contract', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  it('returns music foundation status to admins', async () => {
+  it('returns music capability status to admins', async () => {
     const response = await app.inject({
       method: 'GET',
       url: '/api/admin/music/status',
@@ -214,10 +280,14 @@ describe('Admin music API contract', () => {
     const body = response.json()
     expect(body.success).toBe(true)
     expect(body.status.foundationReady).toBe(true)
+    expect(body.status.implementationReady).toBe(true)
+    expect(body.status.configured).toBe(false)
+    expect(body.status.executableNow).toBe(false)
+    expect(body.status.liveProven).toBe(false)
     expect(body.status.executionBlocked).toBe(true)
   })
 
-  it('creates plans without executing jobs', async () => {
+  it('creates plans with dynamic execution readiness', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/admin/music/plan',
@@ -237,7 +307,7 @@ describe('Admin music API contract', () => {
     expect(body.plan.executionReady).toBe(false)
   })
 
-  it('blocks generate with 409 and does not claim completion', async () => {
+  it('blocks generate with 409 when configuration/infrastructure gates are missing', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/admin/music/generate',
@@ -254,12 +324,8 @@ describe('Admin music API contract', () => {
     const body = response.json()
     expect(body.success).toBe(false)
     expect(body.executionBlocked).toBe(true)
-    expect(body.message).toContain('GenX music capability is known')
-    expect(body.missingDependencies).toEqual([
-      'approved_provider_music_client',
-      'music_worker_executor',
-      'music_artifact_execution_path',
-    ])
+    expect(body.message).toContain('genx_api_key_not_configured')
+    expect(body.missingDependencies).toEqual(expect.arrayContaining(['genx_api_key_not_configured']))
     expect(body).not.toHaveProperty('artifactId')
   })
 

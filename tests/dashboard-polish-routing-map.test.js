@@ -81,46 +81,36 @@ describe('dashboard polish and routing map contract', () => {
     })
   })
 
-  describe('Music page contains all planned controls but clearly disabled/pending', () => {
-    it('Music page file exists and contains all planned controls', () => {
+  describe('Music page uses the canonical route/status/artifact flow', () => {
+    it('Music page file exists and exposes truthful gated controls', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/music/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Create Full Song')
-      expect(content).toContain('Instrumental')
-      expect(content).toContain('Vocals')
-      expect(content).toContain('Lyrics')
-      expect(content).toContain('Remix')
-      expect(content).toContain('Extend')
-      expect(content).toContain('Variation')
-      expect(content).toContain('Drums')
-      expect(content).toContain('Bass')
-      expect(content).toContain('Electric Guitar')
-      expect(content).toContain('Acoustic Guitar')
-      expect(content).toContain('Piano')
-      expect(content).toContain('Strings')
-      expect(content).toContain('Rap Verse')
-      expect(content).toContain('Chorus')
-      expect(content).toContain('Remove Vocals')
-      expect(content).toContain('Isolate Stems')
-      expect(content).toContain('Mood')
-      expect(content).toContain('BPM')
-      expect(content).toContain('Duration')
-      expect(content).toContain('Reference Track Upload')
-      expect(content).toContain('Export Formats')
+      expect(content).toContain('Music Studio')
+      expect(content).toContain('/api/admin/music/status')
+      expect(content).toContain('/api/admin/music/generate')
+      expect(content).toContain('/api/admin/jobs/${jobId}')
+      expect(content).toContain('/api/admin/artifacts/${data.artifactId}/file')
+      expect(content).toContain('Implementation')
+      expect(content).toContain('Configured')
+      expect(content).toContain('Executable Now')
+      expect(content).toContain('Live Proven')
+      expect(content).toContain('Instrumental Only')
+      expect(content).not.toContain('selectedProvider')
+      expect(content).not.toContain('selectedModel')
     })
 
-    it('Music page shows backend pending status', () => {
+    it('Music page shows active generation controls or blocked status', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/music/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Music generation backend is not yet wired')
-      expect(content).toContain('Controls are design-ready but disabled')
+      expect(content).toContain('Music Studio')
+      expect(content).toContain('canExecute')
     })
 
-    it('Music page has genre chips up to 5', () => {
+    it('Music page has generation form controls', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/music/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('up to 5')
-      expect(content).toContain('selectedGenres.length < 5')
+      expect(content).toContain('instrumental')
+      expect(content).toContain('handleGenerate')
     })
 
     it('Music page controls are disabled', () => {

@@ -171,11 +171,10 @@ describe('dashboard creation workspace redesign', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/dashboard/music/page.js'))).toBe(true)
     })
 
-    it('music page does not fake audio generation', () => {
+    it('music page uses real generation API', () => {
       const music = read('app/dashboard/music/page.js')
-      expect(music).toContain('Backend Pending')
-      expect(music).toContain('not yet wired')
-      expect(music).toContain('No audio is being generated')
+      expect(music).toContain('/api/admin/music/generate')
+      expect(music).toContain('handleGenerate')
     })
   })
 

@@ -61,13 +61,27 @@ export interface MusicCapabilityStatus {
   schemaReady: boolean
   plannerReady: boolean
   providerClientExists: boolean
+  clientImplemented: boolean
   modelCatalogueEntryExists: boolean
   workerExecutorExists: boolean
+  executorRegistered: boolean
   artifactPersistenceReady: boolean
+  artifactPathImplemented: boolean
+  queuePathImplemented: boolean
+  routeImplemented: boolean
+  implementationReady: boolean
+  catalogueKnown: boolean
   dashboardReady: boolean
   instrumentalReady: boolean
   vocalsReady: boolean
   lyricsReady: boolean
+  configured: boolean
+  policyAllowed: boolean
+  infrastructureReady: boolean
+  executableNow: boolean
+  liveProven: boolean
+  lastProofAt: string | null
+  blockedReasons: string[]
   musicGenerationReady: boolean
   executionBlocked: boolean
   blockedReason: string
@@ -82,7 +96,6 @@ export interface MusicCapabilityStatus {
   musicProviderCapabilityKnown: boolean
   musicExecutorReady: boolean
   endpointShapeKnown: boolean
-  executableNow: boolean
   approvedProviderAudit: Array<{
     provider: 'genx' | 'groq' | 'together' | 'mimo' | 'deepinfra'
     musicClient: boolean
@@ -90,6 +103,24 @@ export interface MusicCapabilityStatus {
     note: string
   }>
 }
+
+export interface MusicCapabilityRuntimeState {
+  configured?: boolean
+  policyAllowed?: boolean
+  infrastructureReady?: boolean
+  liveProven?: boolean
+  lastProofAt?: string | null
+}
+
+const MUSIC_IMPLEMENTATION_TRUTH = {
+  providerClientExists: true,
+  workerExecutorExists: true,
+  queuePathImplemented: true,
+  routeImplemented: true,
+  artifactPersistenceReady: true,
+  statusEndpointImplemented: true,
+  authorisedArtifactDeliveryImplemented: true,
+} as const
 
 export interface MusicGenerationPlan {
   capability: 'music_generation'
@@ -188,30 +219,76 @@ export function normalizeMusicPrompt(prompt: string): MusicPromptNormalization {
   }
 }
 
-export function getMusicCapabilityStatus(): MusicCapabilityStatus {
+export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = {}): MusicCapabilityStatus {
   const modelCatalogueEntryExists = MODEL_CATALOGUE.some((model) => model.capabilities.includes('music_generation'))
   const musicModels = DISCOVERED_PROVIDER_MODELS.filter((model) => model.inferredCapabilities.includes('music_generation'))
   const genxMusicModels = musicModels.filter((model) => model.provider === 'genx')
   const genxMusicCapabilityKnown = genxMusicModels.length > 0
-  const missingProviderClient = genxMusicCapabilityKnown
-    ? 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.'
-    : 'Music provider capability is not yet known from approved provider docs or live discovery.'
+
+  const providerClientExists = MUSIC_IMPLEMENTATION_TRUTH.providerClientExists
+  const workerExecutorExists = MUSIC_IMPLEMENTATION_TRUTH.workerExecutorExists
+  const queuePathImplemented = MUSIC_IMPLEMENTATION_TRUTH.queuePathImplemented
+  const routeImplemented = MUSIC_IMPLEMENTATION_TRUTH.routeImplemented
+  const artifactPersistenceReady = MUSIC_IMPLEMENTATION_TRUTH.artifactPersistenceReady
+  const implementationReady = providerClientExists
+    && workerExecutorExists
+    && queuePathImplemented
+    && routeImplemented
+    && artifactPersistenceReady
+    && MUSIC_IMPLEMENTATION_TRUTH.statusEndpointImplemented
+    && MUSIC_IMPLEMENTATION_TRUTH.authorisedArtifactDeliveryImplemented
+  const configured = runtime.configured ?? Boolean(process.env.GENX_API_KEY)
+  const policyAllowed = runtime.policyAllowed ?? true
+  const infrastructureReady = runtime.infrastructureReady ?? true
+  const liveProven = runtime.liveProven ?? false
+  const lastProofAt = runtime.lastProofAt ?? null
+  const executableNow = implementationReady && configured && policyAllowed && infrastructureReady
+  const musicGenerationReady = executableNow
+
+  const blockedReasons: string[] = []
+  if (!providerClientExists) blockedReasons.push('provider_client_missing')
+  if (!workerExecutorExists) blockedReasons.push('worker_executor_missing')
+  if (!queuePathImplemented) blockedReasons.push('queue_path_missing')
+  if (!routeImplemented) blockedReasons.push('route_missing')
+  if (!artifactPersistenceReady) blockedReasons.push('artifact_path_missing')
+  if (!infrastructureReady) blockedReasons.push('infrastructure_not_ready')
+  if (!configured) blockedReasons.push('genx_api_key_not_configured')
+  if (!policyAllowed) blockedReasons.push('policy_not_allowed')
+  const blockedReason = blockedReasons.length > 0
+    ? `Music execution blocked: ${blockedReasons.join(', ')}.`
+    : liveProven
+      ? 'Music execution is ready and live proof exists.'
+      : 'Music execution is ready for first live proof; live proof is still pending.'
 
   return {
     foundationReady: true,
     schemaReady: true,
     plannerReady: true,
-    providerClientExists: false,
+    providerClientExists,
+    clientImplemented: providerClientExists,
     modelCatalogueEntryExists,
-    workerExecutorExists: false,
-    artifactPersistenceReady: true,
+    workerExecutorExists,
+    executorRegistered: workerExecutorExists,
+    artifactPersistenceReady,
+    artifactPathImplemented: artifactPersistenceReady,
+    queuePathImplemented,
+    routeImplemented,
+    implementationReady,
+    catalogueKnown: genxMusicCapabilityKnown,
     dashboardReady: true,
     instrumentalReady: true,
     vocalsReady: false,
     lyricsReady: false,
-    musicGenerationReady: false,
-    executionBlocked: true,
-    blockedReason: missingProviderClient,
+    configured,
+    policyAllowed,
+    infrastructureReady,
+    executableNow,
+    liveProven,
+    lastProofAt,
+    blockedReasons,
+    musicGenerationReady,
+    executionBlocked: !executableNow,
+    blockedReason,
     discoveredMusicModels: musicModels.length,
     genxMusicModels: genxMusicModels.map((model) => model.modelId),
     togetherMusicModels: musicModels.filter((model) => model.provider === 'together').map((model) => model.modelId),
@@ -223,9 +300,8 @@ export function getMusicCapabilityStatus(): MusicCapabilityStatus {
     musicProviderCapabilityKnown: musicModels.length > 0,
     musicExecutorReady: musicModels.some((model) => model.workerExecutorExists && model.providerClientExists && model.artifactPersistenceExists),
     endpointShapeKnown: musicModels.some((model) => model.endpointShapeKnown),
-    executableNow: musicModels.some((model) => model.executableNow),
     approvedProviderAudit: [
-      { provider: 'genx', musicClient: false, executable: false, note: 'GenX video client exists; no repo music client or documented music endpoint.' },
+      { provider: 'genx', musicClient: providerClientExists, executable: executableNow, note: providerClientExists ? 'GenX music client implemented with submit/poll/download. Runtime execution still requires configuration and queue/infrastructure gates.' : 'GenX music client not yet implemented.' },
       { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },
       { provider: 'together', musicClient: false, executable: false, note: 'Together image client exists; no music generation client.' },
       { provider: 'mimo', musicClient: false, executable: false, note: 'MiMo remains coding_tools_only and is never runtime-selected.' },
@@ -262,7 +338,7 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
     routingMode: input.routingMode,
     safetyLevel: input.safetyLevel,
     outputFormat: input.outputFormat,
-    executionReady: status.musicGenerationReady && !normalized.blocked,
+    executionReady: status.executableNow && !normalized.blocked,
     blockedReason: normalized.blocked ? normalized.blockedReason ?? status.blockedReason : status.blockedReason,
     warnings,
   }
