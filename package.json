@@ -22,6 +22,8 @@
     "prisma:validate": "node scripts/prisma-validate.mjs",
     "proof": "npx tsx scripts/run-core-proof.ts",
     "proof:router-app-contract": "node scripts/proof-router-app-contract.mjs",
+    "proof:long-form-runtime": "node scripts/proof-long-form-runtime.mjs",
+    "proof:long-form-runtime:strict": "node scripts/proof-long-form-runtime.mjs --strict-runtime",
     "audit:completion": "node scripts/audit-build-completion-map.mjs",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
