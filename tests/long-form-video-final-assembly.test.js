@@ -290,7 +290,8 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
     it('fullMultimediaReady remains false', async () => {
       // Run audit and check the result
       try {
-        const result = execSync('node scripts/audit-build-completion-map.mjs', {
+        const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+        const result = execSync(`${npx} tsx scripts/audit-build-completion-map.mjs`, {
           cwd: ROOT,
           encoding: 'utf-8',
           timeout: 10000,

@@ -297,10 +297,6 @@ export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel,
   }
 }
 
-function buildDiscoveryBlockedReason(input: Pick<ProviderDiscoveredModel, 'endpointShapeKnown' | 'requestShapeKnown' | 'responseShapeKnown' | 'providerClientExists' | 'workerExecutorExists'>): string {
-  return buildDiscoveryBlockers(input).join(', ')
-}
-
 function buildDiscoveryBlockers(input: Pick<ProviderDiscoveredModel, 'endpointShapeKnown' | 'requestShapeKnown' | 'responseShapeKnown' | 'providerClientExists' | 'workerExecutorExists'> & {
   artifactOutput?: boolean
   artifactPersistenceExists?: boolean

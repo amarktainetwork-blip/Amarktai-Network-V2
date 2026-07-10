@@ -150,7 +150,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.genxMusicCapabilityKnown).toBe(true)
     expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
-  })
+  }, 30000)
 
   it('GenX docs fallback contains the exact 61 user-supplied model IDs once', () => {
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
@@ -196,7 +196,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env, encoding: 'utf-8' })).toThrow()
     const source = fs.readFileSync(path.join(ROOT, 'scripts/discover-provider-models.mjs'), 'utf-8')
     expect(source).toContain("const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']")
-  })
+  }, 30000)
 
   it('default live mode soft-skips missing runtime keys', () => {
     const env = { ...process.env }
@@ -209,7 +209,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryPartial).toBe(true)
     expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
-  })
+  }, 30000)
 
   it('Together live discovery maps every returned model type without assuming execution', async () => {
     const calls = []

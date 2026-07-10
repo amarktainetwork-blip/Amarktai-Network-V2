@@ -6,18 +6,20 @@ import { join } from 'path'
 const ROOT = process.cwd()
 const AUDIT_SCRIPT = join(ROOT, 'scripts/audit-build-completion-map.mjs')
 const AUDIT_OUTPUT = join(ROOT, 'BUILD_COMPLETION_MAP.json')
+const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+const AUDIT_COMMAND = `${NPX} tsx ${AUDIT_SCRIPT}`
 
 describe('Build Completion Audit', () => {
   let auditOutput
 
   beforeAll(() => {
     // Run the audit script
-    execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, stdio: 'pipe' })
+    execSync(AUDIT_COMMAND, { cwd: ROOT, stdio: 'pipe' })
     
     // Read the output
     const content = readFileSync(AUDIT_OUTPUT, 'utf-8')
     auditOutput = JSON.parse(content)
-  })
+  }, 30000)
 
   it('audit script exists', () => {
     expect(existsSync(AUDIT_SCRIPT)).toBe(true)
@@ -26,13 +28,13 @@ describe('Build Completion Audit', () => {
   it('audit script runs without provider keys', () => {
     // Script should run successfully without any env vars
     expect(() => {
-      execSync(`node ${AUDIT_SCRIPT}`, { 
+      execSync(AUDIT_COMMAND, {
         cwd: ROOT, 
         stdio: 'pipe',
         env: { ...process.env, GROQ_API_KEY: '', TOGETHER_API_KEY: '', GENX_API_KEY: '' }
       })
     }).not.toThrow()
-  })
+  }, 30000)
 
   it('audit script writes BUILD_COMPLETION_MAP.json', () => {
     expect(existsSync(AUDIT_OUTPUT)).toBe(true)
@@ -151,13 +153,13 @@ describe('Build Completion Audit', () => {
   })
 
   it('audit console output does not print stale "3 executable capabilities"', () => {
-    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    const output = execSync(AUDIT_COMMAND, { cwd: ROOT, encoding: 'utf-8' })
     expect(output).not.toContain('Total executable: 3')
     expect(output).not.toMatch(/Total executable:\s*3\s*\n/)
   })
 
   it('audit console output does not print simple "Redeploy ready: YES"', () => {
-    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    const output = execSync(AUDIT_COMMAND, { cwd: ROOT, encoding: 'utf-8' })
     expect(output).not.toContain('Redeploy ready: YES')
     expect(output).not.toContain('Redeploy Ready: YES')
     expect(output).toContain('Safe to redeploy foundation:')
@@ -166,21 +168,21 @@ describe('Build Completion Audit', () => {
   })
 
   it('audit console output shows correct executable capability count', () => {
-    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    const output = execSync(AUDIT_COMMAND, { cwd: ROOT, encoding: 'utf-8' })
     expect(output).toContain('Total executable: 10')
     expect(output).toContain('Via text router (Groq/DeepInfra): 8')
     expect(output).toContain('Via media worker (Together/GenX): 2')
   })
 
   it('audit console output shows partial_execution for image and video', () => {
-    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    const output = execSync(AUDIT_COMMAND, { cwd: ROOT, encoding: 'utf-8' })
     expect(output).toContain('Partial execution: 2')
     expect(output).toMatch(/◐ image/)
     expect(output).toMatch(/◐ video/)
   })
 
   it('audit console output shows design_ready_pending_backend for music and research', () => {
-    const output = execSync(`node ${AUDIT_SCRIPT}`, { cwd: ROOT, encoding: 'utf-8' })
+    const output = execSync(AUDIT_COMMAND, { cwd: ROOT, encoding: 'utf-8' })
     expect(output).toContain('Design-ready (pending backend): 2')
     expect(output).toMatch(/○ music/)
     expect(output).toMatch(/○ research/)

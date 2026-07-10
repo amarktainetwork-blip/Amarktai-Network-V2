@@ -20,6 +20,7 @@ import {
   createAssemblyPlan,
   assembleLongFormVideo,
 } from '../lib/long-form-assembly.js'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 // In-memory execution state store (Phase 2 - will be replaced with DB in Phase 3)
 const executionStates = new Map<string, LongFormExecutionState>()
@@ -686,11 +687,14 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
 
     const { LONG_FORM_VIDEO_STATUS } = await import('@amarktai/core')
     const ffmpeg = await checkFfmpegAvailable()
+    const truth = await buildAdminRuntimeTruth(app)
+    const canonical = truth.capabilities.find((capability) => capability.capability === 'long_form_video')
 
     return reply.status(200).send({
       success: true,
       status: {
         ...LONG_FORM_VIDEO_STATUS,
+        canonicalTruth: canonical,
         phase1PlannerReady: true,
         phase2SceneExecutionReady: true,
         ffmpegAvailable: ffmpeg.available,

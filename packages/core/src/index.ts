@@ -182,6 +182,7 @@ export {
   type CapabilityExecutionReadiness,
   type ModelDiscoverySource,
   type ProviderDiscoveryMode,
+  type TransportProfile,
 } from './provider-model-discovery.js'
 
 // Brain Router v1
@@ -195,6 +196,24 @@ export {
   type RejectedCandidate,
   type FallbackEntry,
 } from './brain-router.js'
+
+// Canonical runtime truth
+export {
+  RUNTIME_EXECUTION_PROVIDERS,
+  CODING_ONLY_PROVIDERS,
+  CAPABILITY_RUNTIME_CLASSIFICATIONS,
+  getProviderRuntimeTruth,
+  getCapabilityRuntimeTruth,
+  getRuntimeTruth,
+  type RuntimeExecutionProvider,
+  type CapabilityRuntimeClassification,
+  type ProviderRuntimeStateInput,
+  type CapabilityRuntimeStateInput,
+  type RuntimeTruthInput,
+  type ProviderRuntimeTruth,
+  type CapabilityRuntimeTruth,
+  type RuntimeTruth,
+} from './runtime-truth.js'
 
 // Provider credential security
 export {

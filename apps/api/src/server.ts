@@ -17,6 +17,7 @@ import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
 import { authRoutes } from './routes/auth.js'
 import { adminProviderRoutes } from './routes/admin-providers.js'
+import { adminTruthRoutes } from './routes/admin-truth.js'
 import { adminRuntimeProofRoutes } from './routes/admin-runtime-proofs.js'
 import { adminJobRoutes } from './routes/admin-jobs.js'
 import { adminArtifactRoutes } from './routes/admin-artifacts.js'
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   await app.register(healthRoutes)
   await app.register(authRoutes)
   await app.register(adminProviderRoutes)
+  await app.register(adminTruthRoutes)
   await app.register(adminRuntimeProofRoutes)
   await app.register(adminJobRoutes)
   await app.register(adminArtifactRoutes)

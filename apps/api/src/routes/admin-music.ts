@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
-import { getProviderCredentialStatus, prisma } from '@amarktai/db'
+import { prisma } from '@amarktai/db'
 import {
   BLOCKED_OVERRIDE_FIELDS,
   QUEUE_NAMES,
@@ -9,29 +9,32 @@ import {
   getMusicCapabilityStatus,
   validateMusicGenerationRequest,
 } from '@amarktai/core'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
-  const [providerStatus, lastProof] = await Promise.all([
-    getProviderCredentialStatus('genx').catch(() => null),
-    prisma.job.findFirst({
-      where: {
-        capability: 'music_generation',
-        status: 'completed',
-        provider: 'genx',
-        artifactId: { not: null },
-      },
-      orderBy: { completedAt: 'desc' },
-      select: { completedAt: true },
-    }).catch(() => null),
-  ])
+  const truth = await buildAdminRuntimeTruth(app)
+  const canonical = truth.capabilities.find((capability) => capability.capability === 'music_generation')
 
-  return getMusicCapabilityStatus({
-    configured: providerStatus?.configured === true && providerStatus.runtimeEnabled !== false,
-    infrastructureReady: Boolean(app.redis),
-    policyAllowed: true,
-    liveProven: Boolean(lastProof?.completedAt),
-    lastProofAt: lastProof?.completedAt?.toISOString() ?? null,
+  const legacy = getMusicCapabilityStatus({
+    configured: canonical?.configured === true,
+    infrastructureReady: canonical?.infrastructureReady === true,
+    policyAllowed: canonical?.policyAllowed !== false,
+    liveProven: canonical?.liveProven === true,
+    lastProofAt: canonical?.lastProofAt ?? null,
   })
+
+  const actionableMusicBlockers = canonical?.blockedReasons?.filter((reason) => reason !== 'live_proof_missing') ?? []
+
+  return {
+    ...legacy,
+    ...canonical,
+    musicGenerationReady: canonical?.executableNow === true,
+    executionBlocked: canonical?.executableNow !== true,
+    blockedReason: actionableMusicBlockers.length > 0
+      ? `Music execution blocked: ${actionableMusicBlockers.join(', ')}.`
+      : legacy.blockedReason,
+    canonicalTruth: canonical,
+  }
 }
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
