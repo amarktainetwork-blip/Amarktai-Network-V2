@@ -93,6 +93,11 @@ COPY scripts/prisma-db-push-safe.mjs scripts/prisma-db-push-safe.mjs
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
 
+# Install ffmpeg for long-form video assembly
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/package.json apps/api/package.json
 

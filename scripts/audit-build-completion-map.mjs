@@ -510,14 +510,32 @@ async function runAudit() {
   longFormAssemblyModuleExists = await fileExists('apps/api/src/lib/long-form-assembly.ts')
   
   // Check for ffmpeg availability (system-level, not package.json)
-  let ffmpegAvailable = false
+  let ffmpegAvailableLocal = false
   try {
     const { execSync } = await import('child_process')
     execSync('ffmpeg -version', { stdio: 'ignore', timeout: 2000 })
-    ffmpegAvailable = true
+    ffmpegAvailableLocal = true
   } catch {
-    ffmpegAvailable = false
+    ffmpegAvailableLocal = false
   }
+  
+  // Check if ffmpeg is expected in runtime (Dockerfile installs it)
+  let ffmpegExpectedInRuntime = false
+  try {
+    const dockerfileContent = await safeRead('Dockerfile')
+    if (dockerfileContent) {
+      // Check if ffmpeg is installed in the api stage
+      const apiStageMatch = dockerfileContent.match(/FROM production-base AS api[\s\S]*?(?=FROM|$)/)
+      if (apiStageMatch) {
+        ffmpegExpectedInRuntime = apiStageMatch[0].includes('ffmpeg')
+      }
+    }
+  } catch {
+    ffmpegExpectedInRuntime = false
+  }
+  
+  // Use local availability for videoOnlyReady (actual execution capability)
+  const ffmpegAvailable = ffmpegAvailableLocal
   
   const longFormReadiness = {
     // Phase 1: Schema and planning
@@ -530,6 +548,8 @@ async function runAudit() {
     // Phase 3: Assembly pipeline
     assemblyModuleExists: longFormAssemblyModuleExists,
     assemblyRouteExists: longFormAssemblyRouteExists,
+    ffmpegAvailableLocal: ffmpegAvailableLocal,
+    ffmpegExpectedInRuntime: ffmpegExpectedInRuntime,
     ffmpegAvailable: ffmpegAvailable,
     artifactStorageReady: longFormAssemblyModuleExists, // Module handles storage
     
@@ -953,7 +973,8 @@ async function runAudit() {
   console.log('   Phase 3 - Assembly Pipeline:')
   console.log(`     Assembly module: ${longFormReadiness.assemblyModuleExists ? '✓' : '✗'}`)
   console.log(`     Assembly route: ${longFormReadiness.assemblyRouteExists ? '✓' : '✗'}`)
-  console.log(`     FFmpeg available: ${longFormReadiness.ffmpegAvailable ? '✓' : '✗'}`)
+  console.log(`     FFmpeg available (local): ${longFormReadiness.ffmpegAvailableLocal ? '✓' : '✗'}`)
+  console.log(`     FFmpeg expected (runtime): ${longFormReadiness.ffmpegExpectedInRuntime ? '✓' : '✗'}`)
   console.log(`     Artifact storage: ${longFormReadiness.artifactStorageReady ? '✓' : '✗'}`)
   console.log('   Readiness Status:')
   console.log(`     Pipeline ready: ${longFormReadiness.videoOnlyAssemblyPipelineReady ? '✓ YES' : '✗ NO'}`)
