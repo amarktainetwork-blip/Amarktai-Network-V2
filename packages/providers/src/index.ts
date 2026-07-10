@@ -73,3 +73,15 @@ export {
   type EmbeddingRequest,
   type EmbeddingResponse,
 } from './embeddings-client.js'
+
+// Provider model discovery — model-list/catalogue only, no generation calls.
+export {
+  runProviderModelDiscovery,
+  discoverDeepInfraProviderModels,
+  discoverGenXProviderModels,
+  discoverGroqProviderModels,
+  discoverMimoProviderModels,
+  discoverTogetherProviderModels,
+  type ProviderModelDiscoveryRunOptions,
+  type DiscoveryAdapterOptions,
+} from './model-discovery/index.js'

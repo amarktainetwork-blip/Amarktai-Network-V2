@@ -25,6 +25,8 @@
     "proof:long-form-runtime": "node scripts/proof-long-form-runtime.mjs",
     "proof:long-form-runtime:strict": "node scripts/proof-long-form-runtime.mjs --strict-runtime",
     "audit:completion": "node scripts/audit-build-completion-map.mjs",
+    "discover:models": "node scripts/discover-provider-models.mjs",
+    "discover:models:live": "node scripts/discover-provider-models.mjs --live",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",

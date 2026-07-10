@@ -37,6 +37,13 @@ export interface BrainRouterDecision {
   routingMode: RoutingMode
   executionAllowed: boolean
   candidateModels: ModelRecord[]
+  discoveredCandidates: ModelRecord[]
+  executableCandidates: ModelRecord[]
+  catalogueOnlyCandidates: ModelRecord[]
+  blockedCandidates: RejectedCandidate[]
+  missingExecutorCandidates: RejectedCandidate[]
+  providerClientMissingCandidates: RejectedCandidate[]
+  modelDiscoverySource: string[]
   rejectedCandidates: RejectedCandidate[]
   fallbackChain: FallbackEntry[]
   blockReason: string | null
@@ -88,6 +95,11 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
 
   const rejected: RejectedCandidate[] = []
   const eligible: ModelRecord[] = []
+  const discoveredCandidates: ModelRecord[] = []
+  const catalogueOnlyCandidates: ModelRecord[] = []
+  const blockedCandidates: RejectedCandidate[] = []
+  const missingExecutorCandidates: RejectedCandidate[] = []
+  const providerClientMissingCandidates: RejectedCandidate[] = []
 
   for (const model of MODEL_CATALOGUE) {
     const provider = model.provider
@@ -118,6 +130,10 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
       continue
     }
 
+    if (model.discoveredModel || model.source === 'live_discovered' || model.source === 'static_repo') {
+      discoveredCandidates.push(model)
+    }
+
     if (model.qualityTier === 'experimental' && !allowExperimental && routingMode !== 'experimental') {
       rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Experimental model blocked — allowExperimental false and routingMode is not experimental' })
       continue
@@ -125,10 +141,22 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
 
     if (model.status === 'blocked') {
       rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Model status is blocked' })
+      blockedCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Model status is blocked' })
       continue
     }
 
+    if (model.providerClientExists === false) {
+      providerClientMissingCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Provider client missing' })
+      catalogueOnlyCandidates.push(model)
+    }
+
+    if (model.workerExecutorExists === false) {
+      missingExecutorCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Worker executor missing' })
+      catalogueOnlyCandidates.push(model)
+    }
+
     if (!model.executable || model.status !== 'available') {
+      catalogueOnlyCandidates.push(model)
       rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: `Model is ${model.status} — not executable` })
       continue
     }
@@ -169,6 +197,7 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     .map((m) => ({ provider: m.provider, modelId: m.modelId, displayName: m.displayName }))
 
   const executionAllowed = selected !== null
+  const modelDiscoverySource = [...new Set(MODEL_CATALOGUE.map((model) => model.source ?? (model.executable ? 'static_verified' : model.status === 'blocked' ? 'blocked_policy' : 'manual_planned')))]
   let blockReason: string | null = null
   let truth = ''
 
@@ -189,6 +218,13 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     routingMode,
     executionAllowed,
     candidateModels: eligible,
+    discoveredCandidates,
+    executableCandidates: eligible,
+    catalogueOnlyCandidates: [...new Map(catalogueOnlyCandidates.map((model) => [`${model.provider}:${model.modelId}`, model])).values()],
+    blockedCandidates,
+    missingExecutorCandidates,
+    providerClientMissingCandidates,
+    modelDiscoverySource,
     rejectedCandidates: rejected,
     fallbackChain,
     blockReason,

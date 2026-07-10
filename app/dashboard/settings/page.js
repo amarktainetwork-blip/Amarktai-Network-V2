@@ -37,6 +37,10 @@ export default function SettingsPage() {
                   <div className="text-sm font-semibold mb-2">Provider routing</div>
                   <p className="text-xs text-muted-foreground">The backend runtime selects providers and models by capability, quality, speed, cost, policy, and availability.</p>
                 </div>
+                <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
+                  <div className="text-sm font-semibold mb-2">Model discovery truth</div>
+                  <p className="text-xs text-muted-foreground">Discovered provider models are catalogue awareness only. A model is executable only when endpoint shape, provider client, worker executor, policy, and proof are all satisfied.</p>
+                </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2 text-xs">
                     <span>Routing mode</span>

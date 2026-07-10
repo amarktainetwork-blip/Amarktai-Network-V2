@@ -1,0 +1,88 @@
+{
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "mode": "safe_static",
+  "approvedProviders": [
+    "genx",
+    "groq",
+    "together",
+    "mimo",
+    "deepinfra"
+  ],
+  "liveDiscoveryAttempted": false,
+  "liveDiscoverySkipped": true,
+  "liveResults": [],
+  "countsByProvider": {
+    "genx": 2,
+    "groq": 3,
+    "together": 2,
+    "mimo": 1,
+    "deepinfra": 1
+  },
+  "totals": {
+    "discovered": 9,
+    "executableNow": 5,
+    "catalogueOnly": 4,
+    "missingClient": 2,
+    "missingExecutor": 4
+  },
+  "capabilityCoverage": {
+    "video_generation": {
+      "total": 1,
+      "executable": 1,
+      "providers": [
+        "genx"
+      ]
+    },
+    "music_generation": {
+      "total": 1,
+      "executable": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "chat": {
+      "total": 4,
+      "executable": 3,
+      "providers": [
+        "groq",
+        "mimo",
+        "deepinfra"
+      ]
+    },
+    "stt": {
+      "total": 1,
+      "executable": 0,
+      "providers": [
+        "groq"
+      ]
+    },
+    "image_generation": {
+      "total": 1,
+      "executable": 1,
+      "providers": [
+        "together"
+      ]
+    },
+    "embeddings": {
+      "total": 1,
+      "executable": 0,
+      "providers": [
+        "together"
+      ]
+    }
+  },
+  "musicReadiness": {
+    "discoveredMusicModels": 1,
+    "genxMusicModels": [
+      "music-generation-provider-client-pending"
+    ],
+    "togetherMusicModels": [],
+    "deepinfraMusicModels": [],
+    "groqMusicModels": [],
+    "lyriaLikeModels": [],
+    "endpointShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "executableNow": false
+  }
+}

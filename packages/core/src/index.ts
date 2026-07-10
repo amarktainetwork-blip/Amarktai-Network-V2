@@ -150,6 +150,8 @@ export {
   MODEL_LATENCY_TIERS,
   MODEL_COST_TIERS,
   MODEL_CATALOGUE,
+  STATIC_MODEL_CATALOGUE,
+  DISCOVERED_PROVIDER_MODELS,
   getModelsByProvider,
   getModelsByCapability,
   getExecutableModels,
@@ -162,6 +164,25 @@ export {
   type ModelCostTier,
   type ModelRecord,
 } from './model-catalog.js'
+
+// Provider model discovery
+export {
+  MODEL_DISCOVERY_SOURCES,
+  PROVIDER_DISCOVERY_MODES,
+  STATIC_DISCOVERY_TIMESTAMP,
+  createDiscoveredModel,
+  inferCapabilitiesFromModelId,
+  modalitiesForCapabilities,
+  buildCapabilityReadiness,
+  isCapabilityKey,
+  isProviderKey,
+  type ProviderDiscoveredModel,
+  type ProviderDiscoveryResult,
+  type DiscoveredCapability,
+  type CapabilityExecutionReadiness,
+  type ModelDiscoverySource,
+  type ProviderDiscoveryMode,
+} from './provider-model-discovery.js'
 
 // Brain Router v1
 export {

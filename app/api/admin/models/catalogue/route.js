@@ -1,0 +1,16 @@
+import { NextResponse } from 'next/server'
+
+const API_BASE = process.env.API_URL ?? 'http://api:3001'
+
+export async function GET(request) {
+  const authorization = request.headers.get('authorization')
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/models/catalogue`, {
+      headers: authorization ? { Authorization: authorization } : {},
+      signal: AbortSignal.timeout(10000),
+    })
+    return NextResponse.json(await response.json(), { status: response.status })
+  } catch {
+    return NextResponse.json({ error: true, message: 'Backend unavailable. Model catalogue could not be loaded.' }, { status: 502 })
+  }
+}

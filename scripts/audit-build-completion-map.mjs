@@ -485,6 +485,12 @@ async function runAudit() {
   const musicWorkerExecutorExists = workerExecution.found && workerExecution.executors.musicWorker === true
   const musicProviderClientExists = providerClients.clients.music === true
   const musicArtifactPersistenceReady = await fileExists('packages/artifacts/src/manager.ts')
+  const discoveredCatalogue = JSON.parse(await safeRead('packages/core/src/generated/provider-model-catalogue.generated.json') || '[]')
+  const discoveredMusicModels = Array.isArray(discoveredCatalogue)
+    ? discoveredCatalogue.filter(model => Array.isArray(model.inferredCapabilities) && model.inferredCapabilities.includes('music_generation'))
+    : []
+  const musicEndpointShapeKnown = discoveredMusicModels.some(model => model.endpointShapeKnown === true)
+  const musicExecutableNow = discoveredMusicModels.some(model => model.executableNow === true)
   const musicGenerationReady = musicProviderClientExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
   const musicBlockedReason = musicGenerationReady
     ? ''
@@ -505,6 +511,13 @@ async function runAudit() {
     musicGenerationReady,
     executionBlocked: !musicGenerationReady,
     blockedReason: musicBlockedReason,
+    discoveredMusicModels: discoveredMusicModels.length,
+    genxMusicModels: discoveredMusicModels.filter(model => model.provider === 'genx').map(model => model.modelId),
+    togetherMusicModels: discoveredMusicModels.filter(model => model.provider === 'together').map(model => model.modelId),
+    deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
+    groqMusicModels: discoveredMusicModels.filter(model => model.provider === 'groq').map(model => model.modelId),
+    endpointShapeKnown: musicEndpointShapeKnown,
+    executableNow: musicExecutableNow,
     providerCapabilityAudit: [
       { provider: 'genx', musicClient: false, executable: false, note: 'GenX video client exists; no repo music client or documented music endpoint.' },
       { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },
@@ -1008,6 +1021,9 @@ async function runAudit() {
   console.log(`   Instrumental planning: ${musicReadiness.instrumentalReady ? '✓' : '✗'}`)
   console.log(`   Vocals: ${musicReadiness.vocalsReady ? '✓' : '✗'}`)
   console.log(`   Lyrics: ${musicReadiness.lyricsReady ? '✓' : '✗'}`)
+  console.log(`   Discovered music models: ${musicReadiness.discoveredMusicModels}`)
+  console.log(`   Music endpoint shape known: ${musicReadiness.endpointShapeKnown ? '✓' : '✗'}`)
+  console.log(`   Music executable now: ${musicReadiness.executableNow ? '✓ YES' : '✗ NO'}`)
   console.log(`   Music generation ready: ${musicReadiness.musicGenerationReady ? '✓ YES' : '✗ NO'}`)
   if (musicReadiness.blockedReason) {
     console.log(`   Blocked: ${musicReadiness.blockedReason}`)

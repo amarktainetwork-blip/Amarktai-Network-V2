@@ -1,0 +1,281 @@
+[
+  {
+    "provider": "genx",
+    "modelId": "seedance-v1-fast",
+    "displayName": "Seedance V1 Fast",
+    "rawProviderType": "video",
+    "modalities": [
+      "video"
+    ],
+    "inferredCapabilities": [
+      "video_generation"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": true,
+    "streamingSupported": false,
+    "batchSupported": false,
+    "endpointSource": "repo_static_genx_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "executableNow": true,
+    "blockedReason": "",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "genx",
+    "modelId": "music-generation-provider-client-pending",
+    "displayName": "Music Generation Provider Client Pending",
+    "rawProviderType": "music",
+    "modalities": [
+      "audio"
+    ],
+    "inferredCapabilities": [
+      "music_generation"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": true,
+    "streamingSupported": false,
+    "batchSupported": false,
+    "endpointSource": "manual_planned_music",
+    "endpointShapeKnown": false,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "executableNow": false,
+    "blockedReason": "endpoint_shape_unknown, request_shape_unknown, response_shape_unknown, provider_client_missing, worker_executor_missing",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "groq",
+    "modelId": "llama-3.3-70b-versatile",
+    "displayName": "Llama 3.3 70B Versatile",
+    "rawProviderType": "chat",
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": true,
+    "batchSupported": false,
+    "endpointSource": "repo_static_groq_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "executableNow": true,
+    "blockedReason": "",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "groq",
+    "modelId": "llama-3.1-8b-instant",
+    "displayName": "Llama 3.1 8B Instant",
+    "rawProviderType": "chat",
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": true,
+    "batchSupported": false,
+    "endpointSource": "repo_static_groq_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "executableNow": true,
+    "blockedReason": "",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "groq",
+    "modelId": "whisper-large-v3",
+    "displayName": "Whisper Large V3",
+    "rawProviderType": "stt",
+    "modalities": [
+      "audio"
+    ],
+    "inferredCapabilities": [
+      "stt"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": false,
+    "batchSupported": false,
+    "endpointSource": "repo_static_groq_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": false,
+    "executableNow": false,
+    "blockedReason": "worker_executor_missing",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "together",
+    "modelId": "black-forest-labs/FLUX.1-schnell",
+    "displayName": "FLUX.1 Schnell",
+    "rawProviderType": "image",
+    "modalities": [
+      "image"
+    ],
+    "inferredCapabilities": [
+      "image_generation"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": true,
+    "streamingSupported": false,
+    "batchSupported": true,
+    "endpointSource": "repo_static_together_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "executableNow": true,
+    "blockedReason": "",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "together",
+    "modelId": "togethercomputer/m2-bert-80M-32k-retrieval",
+    "displayName": "M2-BERT 80M 32K Retrieval",
+    "rawProviderType": "embedding",
+    "modalities": [
+      "retrieval"
+    ],
+    "inferredCapabilities": [
+      "embeddings"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": false,
+    "batchSupported": true,
+    "endpointSource": "repo_static_embeddings_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": false,
+    "executableNow": false,
+    "blockedReason": "worker_executor_missing",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "mimo",
+    "modelId": "mimo-v1",
+    "displayName": "MiMo V1",
+    "rawProviderType": "coding_tools_only",
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": false,
+    "batchSupported": false,
+    "endpointSource": "repo_policy_coding_tools_only",
+    "endpointShapeKnown": false,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "executableNow": false,
+    "blockedReason": "endpoint_shape_unknown, request_shape_unknown, response_shape_unknown, provider_client_missing, worker_executor_missing, coding_tools_only",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "displayName": "Meta Llama 3.1 8B Instruct",
+    "rawProviderType": "chat",
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "streamingSupported": true,
+    "batchSupported": true,
+    "endpointSource": "repo_static_deepinfra_client",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "executableNow": true,
+    "blockedReason": "",
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "static_repo",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {}
+  }
+]
