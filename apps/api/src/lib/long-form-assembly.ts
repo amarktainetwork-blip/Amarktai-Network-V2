@@ -7,7 +7,7 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import fs from 'fs/promises'
+import fs from 'fs'
 import path from 'path'
 import { prisma } from '@amarktai/db'
 import { saveArtifact, getArtifactFile } from '@amarktai/artifacts'
@@ -178,6 +178,27 @@ export function validateSceneArtifactsForAssembly(
   if (missingDurations.length > 0) {
     warnings.push(
       `Missing duration metadata for scenes: ${missingDurations.map(s => s.sceneNumber).join(', ')}`
+    )
+  }
+
+  // Check artifact file existence
+  const missingFiles: number[] = []
+  for (const scene of sceneArtifacts) {
+    if (!scene.storagePath) {
+      missingFiles.push(scene.sceneNumber)
+      continue
+    }
+    
+    // Check if file exists on filesystem
+    const fullPath = path.join(getStorageRoot(), scene.storagePath)
+    if (!fs.existsSync(fullPath)) {
+      missingFiles.push(scene.sceneNumber)
+    }
+  }
+
+  if (missingFiles.length > 0) {
+    errors.push(
+      `Artifact files missing on disk: scenes ${missingFiles.join(', ')}`
     )
   }
 

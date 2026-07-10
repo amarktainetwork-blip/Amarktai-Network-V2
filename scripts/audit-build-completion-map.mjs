@@ -520,29 +520,50 @@ async function runAudit() {
   }
   
   const longFormReadiness = {
+    // Phase 1: Schema and planning
+    schemaReady: longFormSchemaExists,
+    plannerReady: longFormPlannerExists,
+    
+    // Phase 2: Scene execution
+    sceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
+    
+    // Phase 3: Assembly pipeline
+    assemblyModuleExists: longFormAssemblyModuleExists,
+    assemblyRouteExists: longFormAssemblyRouteExists,
+    ffmpegAvailable: ffmpegAvailable,
+    artifactStorageReady: longFormAssemblyModuleExists, // Module handles storage
+    
+    // Pipeline readiness (components exist)
+    videoOnlyAssemblyPipelineReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists,
+    
+    // Actual readiness (can execute now)
+    videoOnlyReady: longFormSchemaExists && longFormPlannerExists && longFormExecutionExists && 
+                    longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
+    
+    // Multimedia readiness (always false for now)
+    fullMultimediaReady: false,
+    voiceoverReady: false,
+    subtitlesReady: false,
+    musicBedReady: false,
+    
+    // Legacy fields for backward compatibility
     orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,
     schemaExists: longFormSchemaExists,
     plannerExists: longFormPlannerExists,
     executionModuleExists: longFormExecutionExists,
-    assemblyModuleExists: longFormAssemblyModuleExists,
     planRouteExists: longFormPlanRouteExists,
     executeScenesRouteExists: longFormExecuteRouteExists,
-    assemblyRouteExists: longFormAssemblyRouteExists,
     perSceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
     sceneStitchingReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
     finalAssemblyReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
     scriptPlanner: longFormPlannerExists,
-    sceneSplitter: longFormPlannerExists, // Phase 1 includes scene splitting
+    sceneSplitter: longFormPlannerExists,
     sceneExecutionPayloadBuilder: longFormExecutionExists,
-    sceneJobCreation: longFormExecuteRouteExists, // Phase 2 queues jobs
-    promptEnhancement: longFormExecutionExists, // Phase 2 builds enhanced prompts
-    perSceneGeneration: longFormExecuteRouteExists, // Phase 2 can generate per-scene
-    ffmpegAvailable: ffmpegAvailable,
+    sceneJobCreation: longFormExecuteRouteExists,
+    promptEnhancement: longFormExecutionExists,
+    perSceneGeneration: longFormExecuteRouteExists,
     ffmpegIntegration: ffmpegAvailable,
     artifactPersistence: longFormAssemblyModuleExists,
-    videoOnlyReady: longFormSchemaExists && longFormPlannerExists && longFormExecutionExists && 
-                    longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
-    fullMultimediaReady: false, // Voiceover/subtitles/music bed not yet implemented
     voiceover: false,
     subtitles: false,
     musicBed: false,
@@ -924,23 +945,23 @@ async function runAudit() {
   console.log()
   
   console.log('🎬 LONG-FORM VIDEO READINESS')
-  console.log(`   Schema: ${longFormReadiness.schemaExists ? '✓' : '✗'}`)
-  console.log(`   Planner: ${longFormReadiness.plannerExists ? '✓' : '✗'}`)
-  console.log(`   Execution module: ${longFormReadiness.executionModuleExists ? '✓' : '✗'}`)
-  console.log(`   Assembly module: ${longFormReadiness.assemblyModuleExists ? '✓' : '✗'}`)
-  console.log(`   Plan route: ${longFormReadiness.planRouteExists ? '✓' : '✗'}`)
-  console.log(`   Execute-scenes route: ${longFormReadiness.executeScenesRouteExists ? '✓' : '✗'}`)
-  console.log(`   Assembly route: ${longFormReadiness.assemblyRouteExists ? '✓' : '✗'}`)
-  console.log(`   Per-scene execution: ${longFormReadiness.perSceneExecutionReady ? '✓' : '✗'}`)
-  console.log(`   Scene stitching: ${longFormReadiness.sceneStitchingReady ? '✓' : '✗'}`)
-  console.log(`   Final assembly: ${longFormReadiness.finalAssemblyReady ? '✓' : '✗'}`)
-  console.log(`   FFmpeg available: ${longFormReadiness.ffmpegAvailable ? '✓' : '✗'}`)
-  console.log(`   Artifact persistence: ${longFormReadiness.artifactPersistence ? '✓' : '✗'}`)
-  console.log(`   Voiceover: ${longFormReadiness.voiceover ? '✓' : '✗'}`)
-  console.log(`   Subtitles: ${longFormReadiness.subtitles ? '✓' : '✗'}`)
-  console.log(`   Music bed: ${longFormReadiness.musicBed ? '✓' : '✗'}`)
-  console.log(`   Video-only ready: ${longFormReadiness.videoOnlyReady ? '✓ YES' : '✗ NO'}`)
-  console.log(`   Full multimedia ready: ${longFormReadiness.fullMultimediaReady ? '✓ YES' : '✗ NO'}`)
+  console.log('   Phase 1 - Planning:')
+  console.log(`     Schema: ${longFormReadiness.schemaReady ? '✓' : '✗'}`)
+  console.log(`     Planner: ${longFormReadiness.plannerReady ? '✓' : '✗'}`)
+  console.log('   Phase 2 - Scene Execution:')
+  console.log(`     Execution module: ${longFormReadiness.sceneExecutionReady ? '✓' : '✗'}`)
+  console.log('   Phase 3 - Assembly Pipeline:')
+  console.log(`     Assembly module: ${longFormReadiness.assemblyModuleExists ? '✓' : '✗'}`)
+  console.log(`     Assembly route: ${longFormReadiness.assemblyRouteExists ? '✓' : '✗'}`)
+  console.log(`     FFmpeg available: ${longFormReadiness.ffmpegAvailable ? '✓' : '✗'}`)
+  console.log(`     Artifact storage: ${longFormReadiness.artifactStorageReady ? '✓' : '✗'}`)
+  console.log('   Readiness Status:')
+  console.log(`     Pipeline ready: ${longFormReadiness.videoOnlyAssemblyPipelineReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Video-only ready: ${longFormReadiness.videoOnlyReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Full multimedia ready: ${longFormReadiness.fullMultimediaReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Voiceover: ${longFormReadiness.voiceoverReady ? '✓' : '✗'}`)
+  console.log(`     Subtitles: ${longFormReadiness.subtitlesReady ? '✓' : '✗'}`)
+  console.log(`     Music bed: ${longFormReadiness.musicBedReady ? '✓' : '✗'}`)
   if (longFormReadiness.missingParts.length > 0) {
     console.log(`   Missing: ${longFormReadiness.missingParts.join(', ')}`)
   }

@@ -88,23 +88,27 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
     it('validateSceneArtifactsForAssembly validates scene count', async () => {
       const assembly = await import('../apps/api/src/lib/long-form-assembly.ts')
       
+      // Mock scenes with storagePath that will be checked
+      // Since files don't exist, validation should fail on file existence
       const scenes = [
-        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'path-1', mimeType: 'video/mp4' },
-        { sceneNumber: 2, jobId: 'job-2', artifactId: 'art-2', storagePath: 'path-2', mimeType: 'video/mp4' },
+        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'nonexistent-1', mimeType: 'video/mp4' },
+        { sceneNumber: 2, jobId: 'job-2', artifactId: 'art-2', storagePath: 'nonexistent-2', mimeType: 'video/mp4' },
       ]
       
       const validation = assembly.validateSceneArtifactsForAssembly(scenes, 2)
       
-      expect(validation.valid).toBe(true)
+      // Validation should fail because files don't exist on disk
+      expect(validation.valid).toBe(false)
       expect(validation.sceneCount).toBe(2)
       expect(validation.completedScenes).toBe(2)
+      expect(validation.errors.some(e => e.includes('missing on disk'))).toBe(true)
     })
 
     it('validateSceneArtifactsForAssembly detects missing scenes', async () => {
       const assembly = await import('../apps/api/src/lib/long-form-assembly.ts')
       
       const scenes = [
-        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'path-1', mimeType: 'video/mp4' },
+        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'nonexistent-1', mimeType: 'video/mp4' },
       ]
       
       const validation = assembly.validateSceneArtifactsForAssembly(scenes, 3)
@@ -118,8 +122,8 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       const assembly = await import('../apps/api/src/lib/long-form-assembly.ts')
       
       const scenes = [
-        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'path-1', mimeType: 'image/png' },
-        { sceneNumber: 2, jobId: 'job-2', artifactId: 'art-2', storagePath: 'path-2', mimeType: 'video/mp4' },
+        { sceneNumber: 1, jobId: 'job-1', artifactId: 'art-1', storagePath: 'nonexistent-1', mimeType: 'image/png' },
+        { sceneNumber: 2, jobId: 'job-2', artifactId: 'art-2', storagePath: 'nonexistent-2', mimeType: 'video/mp4' },
       ]
       
       const validation = assembly.validateSceneArtifactsForAssembly(scenes, 2)

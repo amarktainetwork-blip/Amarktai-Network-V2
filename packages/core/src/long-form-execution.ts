@@ -52,7 +52,12 @@ export interface LongFormExecutionState {
   totalScenes: number
   scenes: SceneExecutionState[]
   progress: number
-  finalAssemblyReady: false
+  finalAssemblyReady: boolean
+  finalAssemblyCompleted: boolean
+  finalArtifactId?: string
+  finalArtifactUrl?: string
+  finalAssemblyCompletedAt?: string
+  finalAssemblyMode?: 'video_only'
   missingDependencies: string[]
   createdAt: string
   updatedAt: string
@@ -151,6 +156,7 @@ export function createLongFormExecutionState(
     })),
     progress: 0,
     finalAssemblyReady: false,
+    finalAssemblyCompleted: false,
     missingDependencies: [
       'ffmpeg/stitching',
       'final_assembly_pipeline',

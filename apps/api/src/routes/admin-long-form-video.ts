@@ -473,19 +473,12 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
 
       // Check ffmpeg availability
       const ffmpeg = await checkFfmpegAvailable()
-      if (!ffmpeg.available) {
-        return reply.status(422).send({
-          error: true,
-          message: 'Cannot assemble: ffmpeg is not available',
-          ffmpegError: ffmpeg.error,
-          note: 'Install ffmpeg on the system to enable video assembly',
-        })
-      }
-
+      
       // Create assembly plan
       const plan = await createAssemblyPlan(executionId, state.totalScenes)
 
       if (dryRun) {
+        // Dry run returns 200 even if ffmpeg is missing
         return reply.status(200).send({
           success: true,
           dryRun: true,
@@ -493,6 +486,18 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           message: 'Assembly plan created. Remove dryRun flag to execute assembly.',
           canAssemble: plan.canAssemble,
           blockedReason: plan.blockedReason,
+          ffmpegAvailable: ffmpeg.available,
+          wouldCreateArtifact: false,
+        })
+      }
+
+      // Non-dryRun requires ffmpeg
+      if (!ffmpeg.available) {
+        return reply.status(422).send({
+          error: true,
+          message: 'Cannot assemble: ffmpeg is not available',
+          ffmpegError: ffmpeg.error,
+          note: 'Install ffmpeg on the system to enable video assembly',
         })
       }
 
@@ -508,13 +513,18 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         return reply.status(500).send({
           error: true,
           message: 'Assembly failed',
-          error: result.error,
+          details: result.error,
           assemblyMode: result.assemblyMode,
         })
       }
 
       // Update execution state
       state.finalAssemblyReady = true
+      state.finalAssemblyCompleted = true
+      state.finalArtifactId = result.artifactId
+      state.finalArtifactUrl = result.artifactUrl
+      state.finalAssemblyCompletedAt = new Date().toISOString()
+      state.finalAssemblyMode = 'video_only'
       executionStates.set(executionId, state)
 
       return reply.status(200).send({
@@ -691,10 +701,15 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       success: true,
       status: {
         ...LONG_FORM_VIDEO_STATUS,
-        perSceneExecutionReady: true, // Phase 2
-        sceneExecutionPipelineReady: true,
-        sceneStitchingReady: ffmpeg.available, // Phase 3
-        finalAssemblyReady: ffmpeg.available,
+        phase1PlannerReady: true,
+        phase2SceneExecutionReady: true,
+        ffmpegAvailable: ffmpeg.available,
+        finalAssemblyPipelineReady: true, // Module and routes exist
+        videoOnlyLongFormReady: ffmpeg.available, // Requires ffmpeg
+        fullMultimediaReady: false, // Voiceover/subtitles/music not implemented
+        voiceoverReady: false,
+        subtitlesReady: false,
+        musicBedReady: false,
         persistentExecutionTracking: false, // In-memory only for now
       },
       ffmpeg: {
