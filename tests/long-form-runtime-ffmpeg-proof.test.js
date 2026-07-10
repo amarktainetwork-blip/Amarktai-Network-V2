@@ -6,9 +6,13 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import {
+  check,
+  createProofState,
+  runProof,
+} from '../scripts/proof-long-form-runtime.mjs'
 
 const ROOT = process.cwd()
 
@@ -23,6 +27,123 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
       const packageJsonPath = path.join(ROOT, 'package.json')
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
       expect(packageJson.scripts['proof:long-form-runtime']).toBe('node scripts/proof-long-form-runtime.mjs')
+    })
+
+    it('package.json has optional strict runtime proof script', () => {
+      const packageJsonPath = path.join(ROOT, 'package.json')
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
+      expect(packageJson.scripts['proof:long-form-runtime:strict']).toBe('node scripts/proof-long-form-runtime.mjs --strict-runtime')
+    })
+  })
+
+  describe('Proof script async check harness', () => {
+    it('awaits async checks before passing them', async () => {
+      const state = createProofState(() => {})
+
+      await check(state, 'async pass', async () => {
+        await Promise.resolve()
+        return true
+      })
+
+      expect(state.passed).toBe(1)
+      expect(state.failed).toBe(0)
+    })
+
+    it('async check failure increments failed count', async () => {
+      const state = createProofState(() => {})
+
+      await check(state, 'async fail', async () => {
+        await Promise.resolve()
+        return false
+      })
+
+      expect(state.passed).toBe(0)
+      expect(state.failed).toBe(1)
+    })
+
+    it('does not pass Promise objects blindly', async () => {
+      const state = createProofState(() => {})
+      const pending = check(state, 'promise resolves false', () => Promise.resolve(false))
+
+      expect(state.passed).toBe(0)
+      expect(state.failed).toBe(0)
+
+      await pending
+
+      expect(state.passed).toBe(0)
+      expect(state.failed).toBe(1)
+    })
+
+    it('catches async rejections as failed checks', async () => {
+      const state = createProofState(() => {})
+
+      await check(state, 'async reject', async () => {
+        throw new Error('intentional async failure')
+      })
+
+      expect(state.passed).toBe(0)
+      expect(state.failed).toBe(1)
+      expect(state.results[0].error).toContain('intentional async failure')
+    })
+  })
+
+  describe('Proof script import and ffmpeg mode safety', () => {
+    it('does not dynamically import TypeScript source files', () => {
+      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
+      const content = fs.readFileSync(scriptPath, 'utf-8')
+
+      expect(content).not.toMatch(/import\([^)]*\.ts/)
+      expect(content).not.toContain("import('./apps/api/src/lib/long-form-assembly.ts')")
+      expect(content).not.toContain("import('./packages/core/src/config.ts')")
+    })
+
+    it('default proof passes when local ffmpeg is missing but Docker API stage installs ffmpeg', async () => {
+      const state = await runProof({
+        root: ROOT,
+        strictRuntime: false,
+        log: () => {},
+        runCommand: () => {
+          throw new Error('ffmpeg missing in local Windows shell')
+        },
+      })
+
+      expect(state.failed).toBe(0)
+      expect(state.warnings).toBeGreaterThanOrEqual(1)
+      expect(state.results.some((result) => result.status === 'warn' && result.name === 'local ffmpeg missing')).toBe(true)
+    })
+
+    it('strict runtime proof fails when ffmpeg is missing', async () => {
+      const state = await runProof({
+        root: ROOT,
+        strictRuntime: true,
+        log: () => {},
+        runCommand: () => {
+          throw new Error('ffmpeg missing in strict runtime')
+        },
+      })
+
+      expect(state.failed).toBeGreaterThan(0)
+      expect(state.results.some((result) => result.status === 'fail' && result.name.includes('strict runtime mode'))).toBe(true)
+    })
+
+    it('proof script does not require provider keys', () => {
+      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
+      const content = fs.readFileSync(scriptPath, 'utf-8')
+
+      expect(content).not.toContain('GROQ_API_KEY')
+      expect(content).not.toContain('TOGETHER_API_KEY')
+      expect(content).not.toContain('GENX_API_KEY')
+      expect(content).not.toContain('DEEPINFRA_API_KEY')
+    })
+
+    it('proof script does not make live provider calls', () => {
+      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
+      const content = fs.readFileSync(scriptPath, 'utf-8')
+
+      expect(content).not.toContain('https://api.together.xyz')
+      expect(content).not.toContain('https://api.groq.com')
+      expect(content).not.toContain('https://query.genx.sh')
+      expect(content).not.toContain('https://api.deepinfra.com')
     })
   })
 
