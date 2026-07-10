@@ -2,6 +2,7 @@ import {
   STATIC_DISCOVERY_TIMESTAMP,
   createDiscoveredModel,
   inferCapabilitiesFromModelId,
+  type CapabilityKey,
   type ProviderDiscoveredModel,
   type ProviderDiscoveryMode,
   type ProviderDiscoveryResult,
@@ -96,12 +97,13 @@ export function failedLiveResult(provider: ProviderKey, endpointSource: string, 
   }
 }
 
-export async function fetchModelList(url: string, apiKey: string): Promise<unknown[]> {
+export async function fetchModelList(url: string, apiKey?: string): Promise<unknown[]> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
   const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: 'application/json',
-    },
+    headers,
   })
   if (!response.ok) {
     throw new Error(`model list endpoint returned ${response.status}`)
@@ -138,6 +140,7 @@ export function modelFromProviderRecord(input: {
   modelId: string
   displayName?: string
   rawProviderType?: string
+  inferredCapabilities?: CapabilityKey[]
   endpointSource: string
   lastDiscoveredAt: string
   source: ModelDiscoverySource
@@ -170,9 +173,10 @@ export function modelFromProviderRecord(input: {
   outputPrice?: number | null
   streamingSupported?: boolean
   batchSupported?: boolean
+  publicEndpointDiscovered?: boolean
   rawMetadata?: Record<string, unknown>
 }): ProviderDiscoveredModel {
-  const inferredCapabilities = inferCapabilitiesFromModelId(input.modelId, input.rawProviderType)
+  const inferredCapabilities = input.inferredCapabilities ?? inferCapabilitiesFromModelId(input.modelId, input.rawProviderType)
   return createDiscoveredModel({
     provider: input.provider,
     modelId: input.modelId,
@@ -214,6 +218,7 @@ export function modelFromProviderRecord(input: {
     lastDiscoveredAt: input.lastDiscoveredAt,
     source: input.source,
     liveDiscoverySkipped: input.source !== 'live_endpoint' && input.source !== 'live_discovered',
+    publicEndpointDiscovered: input.publicEndpointDiscovered,
     rawMetadata: input.rawMetadata,
   })
 }

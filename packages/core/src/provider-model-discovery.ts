@@ -102,6 +102,7 @@ export interface ProviderDiscoveredModel {
   lastDiscoveredAt: string
   source: ModelDiscoverySource
   liveDiscoverySkipped?: boolean
+  publicEndpointDiscovered?: boolean
   rawMetadata?: Record<string, unknown>
 }
 
@@ -128,6 +129,11 @@ export interface ProviderDiscoveryResult {
   liveDiscoverySkipped: boolean
   liveDiscoverySkipReason?: string | null
   docsFallbackUsed?: boolean
+  docsFallbackRepresentative?: boolean
+  docsFallbackComplete?: boolean
+  publicDiscoveryAttempted?: boolean
+  publicDiscoverySucceeded?: boolean
+  publicEndpointUsed?: boolean
   providerUniverseKnown?: boolean
   providerUniversePartiallyKnown?: boolean
   publicDocsUniverseKnown?: boolean
@@ -135,6 +141,7 @@ export interface ProviderDiscoveryResult {
   endpointSource: string
   error: string | null
   returnedModelCount?: number
+  publicEndpointModelCount?: number
   staticFallbackCount?: number
   docsFallbackCount?: number
   effectiveCatalogueCount?: number

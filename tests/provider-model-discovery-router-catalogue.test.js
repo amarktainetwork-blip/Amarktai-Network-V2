@@ -13,7 +13,9 @@ import {
 import {
   discoverGenXProviderModels,
   discoverGroqProviderModels,
+  discoverDeepInfraProviderModels,
   discoverMimoProviderModels,
+  discoverTogetherProviderModels,
 } from '../packages/providers/src/index.ts'
 
 const ROOT = process.cwd()
@@ -132,11 +134,19 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.mode).toBe('safe_static')
     expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
     expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
-    expect(report.totalEffectiveCatalogueModels).toBe(93)
-    expect(report.totalDocsFallbackModels).toBe(93)
+    expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(93)
+    if (report.deepinfraPublicDiscoverySucceeded) {
+      expect(report.totalEffectiveCatalogueModels).toBeGreaterThan(93)
+      expect(report.totalPublicEndpointModels).toBeGreaterThan(0)
+      expect(report.providersUsingPublicEndpoint).toContain('deepinfra')
+    }
     expect(report.modelsExecutableNow).toBe(5)
-    expect(report.modelsKnownButBlocked).toBe(88)
+    expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
     expect(report.countsByProvider.genx).toBe(61)
+    expect(report.togetherDocsFallbackComplete).toBe(false)
+    expect(report.togetherProviderUniverseKnown).toBe(false)
+    expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
+    expect(report.deepinfraPublicDiscoveryAttempted).toBe(true)
     expect(report.genxMusicCapabilityKnown).toBe(true)
     expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
@@ -199,6 +209,105 @@ describe('provider model discovery and router catalogue rebuild', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryPartial).toBe(true)
     expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
+  })
+
+  it('Together live discovery maps every returned model type without assuming execution', async () => {
+    const calls = []
+    global.fetch = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), headers: init?.headers })
+      return {
+        ok: true,
+        json: async () => ([
+          { id: 'meta-llama/chat', type: 'chat', display_name: 'Chat', organization: 'together', context_length: 8192, pricing: { input: 1 } },
+          { id: 'together/language', type: 'language', display_name: 'Language' },
+          { id: 'together/code', type: 'code', display_name: 'Code' },
+          { id: 'black-forest-labs/FLUX.1-schnell', type: 'image', display_name: 'Flux Schnell' },
+          { id: 'together/embed', type: 'embedding', display_name: 'Embedding' },
+          { id: 'together/moderation', type: 'moderation', display_name: 'Moderation' },
+          { id: 'together/reranker', type: 'rerank', display_name: 'Rerank' },
+          { id: 'together/video', type: 'video', display_name: 'Video' },
+          { id: 'together/audio-speech', type: 'audio', display_name: 'Speech' },
+        ]),
+      }
+    })
+
+    const result = await discoverTogetherProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('https://api.together.ai/models')
+    expect(calls[0].headers.Authorization).toBe('Bearer test-key')
+    expect(result.models).toHaveLength(9)
+    expect(result.models.find((model) => model.modelId === 'meta-llama/chat').inferredCapabilities).toEqual(expect.arrayContaining(['chat', 'reasoning', 'summarization', 'classification', 'extraction']))
+    expect(result.models.find((model) => model.modelId === 'together/code').inferredCapabilities).toEqual(['code'])
+    expect(result.models.find((model) => model.modelId === 'black-forest-labs/FLUX.1-schnell').executableNow).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'together/video').executableNow).toBe(false)
+    expect(result.models.find((model) => model.modelId === 'together/audio-speech').inferredCapabilities).toEqual(['tts'])
+    expect(result.models.flatMap((model) => model.inferredCapabilities)).not.toContain('music_generation')
+    expect(JSON.stringify(result.models)).not.toContain('test-key')
+  })
+
+  it('Together static report represents video/audio docs support without full-universe claims', () => {
+    const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
+    const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
+    expect(report.togetherDocsFallbackComplete).toBe(false)
+    expect(report.togetherProviderUniverseKnown).toBe(false)
+    expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
+    expect(report.togetherCapabilitiesCovered).toEqual(expect.arrayContaining(['image_generation', 'embeddings', 'reranking', 'classification', 'stt', 'tts', 'video_generation']))
+    expect(catalogue).toContainEqual(expect.objectContaining({ provider: 'together', modelId: 'together-video-async', executableNow: false }))
+    expect(catalogue).toContainEqual(expect.objectContaining({ provider: 'together', modelId: 'together-tts-streaming', executableNow: false }))
+  })
+
+  it('DeepInfra safe discovery uses the public model list without requiring a key', async () => {
+    const calls = []
+    global.fetch = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), headers: init?.headers })
+      return {
+        ok: true,
+        json: async () => ([
+          { model_name: 'deepinfra/text', reported_type: 'text-generation', tags: ['llama'], max_tokens: 8192 },
+          { model_name: 'deepinfra/embed', reported_type: 'embeddings', tags: ['embedding'] },
+          { model_name: 'deepinfra/rerank', reported_type: 'rerank', tags: ['rerank'] },
+          { model_name: 'deepinfra/image', reported_type: 'text-to-image', tags: ['image-generation'] },
+          { model_name: 'deepinfra/voice', reported_type: 'text-to-speech', tags: ['tts'] },
+          { model_name: 'deepinfra/video', reported_type: 'text-to-video', tags: ['video-generation'] },
+          { model_name: 'deepinfra/music', reported_type: 'text-to-music', tags: ['musicgen'] },
+        ]),
+      }
+    })
+
+    const result = await discoverDeepInfraProviderModels({ now: '2026-01-01T00:00:00.000Z' })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('https://api.deepinfra.com/models/list')
+    expect(calls[0].headers.Authorization).toBeUndefined()
+    expect(result.publicDiscoveryAttempted).toBe(true)
+    expect(result.publicDiscoverySucceeded).toBe(true)
+    expect(result.apiKeyPresent).toBe(false)
+    expect(result.models.length).toBeGreaterThanOrEqual(7)
+    expect(result.models.find((model) => model.modelId === 'deepinfra/text').inferredCapabilities).toContain('chat')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/embed').inferredCapabilities).toContain('embeddings')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/rerank').inferredCapabilities).toContain('reranking')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/image').inferredCapabilities).toContain('image_generation')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/voice').inferredCapabilities).toContain('tts')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/video').inferredCapabilities).toContain('video_generation')
+    expect(result.models.find((model) => model.modelId === 'deepinfra/music').inferredCapabilities).toContain('music_generation')
+    expect(result.models.filter((model) => model.modelId.startsWith('deepinfra/')).every((model) => !model.executableNow)).toBe(true)
+  })
+
+  it('DeepInfra live mode succeeds through public discovery and fails honestly when the public endpoint fails', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ([{ model_name: 'deepinfra/text', reported_type: 'text-generation', tags: ['llama'] }]),
+    }))
+    const live = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
+    expect(live.liveDiscoveryAttempted).toBe(true)
+    expect(live.liveDiscoverySucceeded).toBe(true)
+    expect(live.apiKeyPresent).toBe(false)
+
+    global.fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }))
+    const failed = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
+    expect(failed.liveDiscoveryAttempted).toBe(true)
+    expect(failed.liveDiscoverySucceeded).toBe(false)
+    expect(failed.publicDiscoverySucceeded).toBe(false)
+    expect(failed.error).toContain('503')
   })
 
   it('Groq live discovery uses the models endpoint only when live/key are present', async () => {

@@ -353,7 +353,11 @@ describe('Build Completion Audit', () => {
       liveDiscoverySupported: true,
       fullProviderModelUniverseKnown: false,
     })
-    expect(auditOutput.providerDiscoveryReadiness.effectiveCatalogueModelCount).toBe(93)
+    expect(auditOutput.providerDiscoveryReadiness.effectiveCatalogueModelCount).toBeGreaterThanOrEqual(93)
+    expect(auditOutput.providerDiscoveryReadiness.publicEndpointModelCount).toBeGreaterThan(0)
+    expect(auditOutput.providerDiscoveryReadiness.providersUsingPublicEndpoint).toContain('deepinfra')
+    expect(auditOutput.providerDiscoveryReadiness.deepinfraPublicDiscoverySucceeded).toBe(true)
+    expect(auditOutput.providerDiscoveryReadiness.togetherProviderUniversePartiallyKnown).toBe(true)
     expect(auditOutput.mimoReadiness).toMatchObject({
       docsCapabilityKnown: true,
       policyRestrictedByApp: true,

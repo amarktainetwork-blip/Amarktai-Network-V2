@@ -123,6 +123,40 @@ function inferCapabilities(modelId, category = '') {
   return [...caps]
 }
 
+function inferCapabilitiesFromProviderRecord(provider, modelId, category = '', record = {}) {
+  const text = `${modelId} ${category} ${Array.isArray(record.tags) ? record.tags.join(' ') : ''} ${record.description ?? ''}`.toLowerCase()
+  const caps = new Set()
+
+  if (provider === 'together') {
+    if (category === 'chat' || category === 'language') ['chat', 'reasoning', 'summarization', 'classification', 'extraction'].forEach((cap) => caps.add(cap))
+    if (category === 'code') caps.add('code')
+    if (category === 'image') caps.add('image_generation')
+    if (category === 'embedding') caps.add('embeddings')
+    if (category === 'rerank') caps.add('reranking')
+    if (category === 'moderation') caps.add('classification')
+    if (category === 'video') caps.add('video_generation')
+    if (category === 'audio') caps.add(/music|text-to-music/.test(text) ? 'music_generation' : 'tts')
+  }
+
+  if (provider === 'deepinfra') {
+    if (/text-to-music|music-generation|musicgen/.test(text)) caps.add('music_generation')
+    if (/text-to-video|video-generation/.test(text)) caps.add('video_generation')
+    if (/text-to-image|image-generation/.test(text)) caps.add('image_generation')
+    if (/image-to-image|inpaint|upscal/.test(text)) caps.add('image_edit')
+    if (/text-to-speech|tts|speech-synthesis/.test(text)) caps.add('tts')
+    if (/automatic-speech-recognition|speech-to-text|asr|whisper/.test(text)) caps.add('stt')
+    if (/embedding/.test(text)) caps.add('embeddings')
+    if (/rerank/.test(text)) caps.add('reranking')
+    if (/ocr/.test(text)) caps.add('ocr')
+    if (/vision|multimodal|image/.test(text)) caps.add('multimodal')
+    if (/text-generation|chat|llama|qwen|mistral|deepseek|claude/.test(text)) caps.add('chat')
+    if (/reasoning/.test(text)) caps.add('reasoning')
+    if (/tools|structured-output|json/.test(text)) caps.add('structured_output')
+  }
+
+  return caps.size > 0 ? [...caps] : inferCapabilities(modelId, category)
+}
+
 function modalitiesForCapabilities(capabilities, direction) {
   const values = new Set()
   for (const capability of capabilities) {
@@ -211,6 +245,42 @@ function discovered(input) {
     catalogueOnlyReason: input.catalogueOnlyReason ?? (executableNow ? '' : blockers.join(', ')),
     blockedReason: input.blockedReason ?? (executableNow ? '' : blockers.join(', ')),
   }
+}
+
+function sanitizeModelMetadata(provider, record) {
+  if (!record || typeof record !== 'object') return {}
+  if (provider === 'together') {
+    return {
+      id: record.id ?? null,
+      object: record.object ?? null,
+      created: record.created ?? null,
+      type: record.type ?? null,
+      display_name: record.display_name ?? null,
+      organization: record.organization ?? null,
+      link: record.link ?? null,
+      license: record.license ?? null,
+      context_length: record.context_length ?? null,
+      pricing: record.pricing ?? null,
+    }
+  }
+  if (provider === 'deepinfra') {
+    return {
+      model_name: record.model_name ?? null,
+      type: record.type ?? null,
+      reported_type: record.reported_type ?? null,
+      description: record.description ?? null,
+      tags: Array.isArray(record.tags) ? record.tags : [],
+      pricing: record.pricing ?? null,
+      max_tokens: record.max_tokens ?? null,
+      deprecated: record.deprecated ?? null,
+      replaced_by: record.replaced_by ?? null,
+      quantization: record.quantization ?? null,
+      create_ts: record.create_ts ?? null,
+      private: record.private ?? null,
+      is_partner: record.is_partner ?? null,
+    }
+  }
+  return {}
 }
 
 function textModel(provider, modelId, displayName, overrides = {}) {
@@ -356,6 +426,7 @@ const TOGETHER_DOCS_MODELS = [
   discovered({ provider: 'together', modelId: 'black-forest-labs/FLUX.1-dev', displayName: 'FLUX.1 Dev', category: 'image', inferredCapabilities: ['image_generation'], transportProfile: 'native_inference_json', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, artifactPersistenceExists: true, endpointSource: 'Together official docs fallback /models' }),
   discovered({ provider: 'together', modelId: 'togethercomputer/m2-bert-80M-32k-retrieval', displayName: 'M2-BERT 80M 32K Retrieval', category: 'embedding', inferredCapabilities: ['embeddings'], transportProfile: 'native_inference_json', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, batchSupported: true, endpointSource: 'Together official docs fallback /models' }),
   discovered({ provider: 'together', modelId: 'BAAI/bge-reranker-base', displayName: 'BGE Reranker Base', category: 'rerank', inferredCapabilities: ['reranking'], transportProfile: 'native_inference_json', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: false, workerExecutorExists: false, endpointSource: 'Together official docs fallback /models' }),
+  discovered({ provider: 'together', modelId: 'together-moderation-docs-known', displayName: 'Together Moderation Docs Known', category: 'moderation', inferredCapabilities: ['classification'], transportProfile: 'native_inference_json', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: false, workerExecutorExists: false, endpointSource: 'Together official docs fallback moderation category' }),
   discovered({ provider: 'together', modelId: 'together-stt-realtime', displayName: 'Together STT Realtime', category: 'audio', inferredCapabilities: ['stt'], transportProfile: 'websocket_realtime_audio', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: false, workerExecutorExists: false, endpointSource: 'Together official docs fallback realtime STT' }),
   discovered({ provider: 'together', modelId: 'together-tts-streaming', displayName: 'Together TTS Streaming', category: 'audio', inferredCapabilities: ['tts'], transportProfile: 'http_audio_stream_sse', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: false, workerExecutorExists: false, endpointSource: 'Together official docs fallback TTS streaming' }),
   discovered({ provider: 'together', modelId: 'together-video-async', displayName: 'Together Video Async', category: 'video', inferredCapabilities: ['video_generation'], transportProfile: 'async_job_poll', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: false, workerExecutorExists: false, artifactPersistenceExists: false, endpointSource: 'Together official docs fallback video async' }),
@@ -414,40 +485,77 @@ async function fetchModelList(url, apiKey) {
 }
 
 function modelIdFromRecord(record) {
-  return String(record?.id ?? record?.model ?? record?.slug ?? record?.name ?? '').trim()
+  return String(record?.id ?? record?.model ?? record?.model_name ?? record?.slug ?? record?.name ?? '').trim()
 }
 
 function categoryFromRecord(record) {
-  return String(record?.category ?? record?.type ?? record?.task ?? record?.pipeline_tag ?? record?.display_type ?? record?.object ?? '').trim()
+  return String(record?.category ?? record?.type ?? record?.reported_type ?? record?.task ?? record?.pipeline_tag ?? record?.display_type ?? record?.object ?? '').trim()
 }
 
-function liveModel(provider, record) {
+function transportProfileForRecord(provider, category, capabilities) {
+  if (provider === 'together') {
+    if (category === 'audio' && capabilities.includes('stt')) return 'websocket_realtime_audio'
+    if (category === 'audio' && capabilities.includes('tts')) return 'http_audio_stream_sse'
+    if (category === 'video') return 'async_job_poll'
+    if (category === 'image') return 'native_inference_json'
+    return 'openai_chat_sse'
+  }
+  if (provider === 'deepinfra') {
+    if (capabilities.some((cap) => ['image_generation', 'image_edit', 'tts'].includes(cap))) return 'native_inference_binary'
+    if (capabilities.includes('video_generation')) return 'native_inference_async_webhook'
+    return 'native_inference_json'
+  }
+  return provider === 'genx'
+    ? (category === 'text' ? 'openai_chat_sse' : 'async_job_poll')
+    : 'openai_chat_sse'
+}
+
+function endpointModel(provider, record, options = {}) {
   const modelId = modelIdFromRecord(record)
   const category = categoryFromRecord(record)
-  const displayName = String(record?.display_name ?? record?.displayName ?? record?.name ?? modelId)
+  const displayName = String(record?.display_name ?? record?.displayName ?? record?.name ?? record?.model_name ?? modelId)
   const providerDocs = DOCS_FALLBACK_MODELS.find((model) => model.provider === provider && model.modelId === modelId)
+  const inferredCapabilities = inferCapabilitiesFromProviderRecord(provider, modelId, category, record)
+  const liveDiscovered = options.liveDiscovered === true
+  const publicEndpointDiscovered = options.publicEndpointDiscovered === true
   const base = providerDocs ?? discovered({
     provider,
     modelId,
     displayName,
     category,
-    discoverySource: 'live_endpoint',
-    docsKnown: false,
-    liveDiscovered: true,
+    inferredCapabilities,
+    discoverySource: liveDiscovered ? 'live_endpoint' : 'docs_fallback',
+    docsKnown: !liveDiscovered || publicEndpointDiscovered,
+    liveDiscovered,
     endpointSource: PROVIDER_TRUTH[provider].modelsEndpoint,
-    transportProfile: provider === 'genx' ? (category === 'text' ? 'openai_chat_sse' : 'async_job_poll') : provider === 'deepinfra' ? 'native_inference_json' : 'openai_chat_sse',
+    transportProfile: transportProfileForRecord(provider, category, inferredCapabilities),
     endpointShapeKnown: true,
   })
   return {
     ...base,
     displayName,
-    discoverySource: 'live_endpoint',
-    source: 'live_endpoint',
-    liveDiscovered: true,
-    liveDiscoverySkipped: false,
+    rawProviderType: category,
+    providerCategory: category,
+    category,
+    inferredCapabilities: providerDocs?.inferredCapabilities ?? inferredCapabilities,
+    discoverySource: liveDiscovered ? 'live_endpoint' : base.discoverySource,
+    source: liveDiscovered ? 'live_endpoint' : base.source,
+    docsKnown: publicEndpointDiscovered ? true : base.docsKnown,
+    liveDiscovered,
+    publicEndpointDiscovered,
+    liveDiscoverySkipped: !liveDiscovered,
     lastDiscoveredAt: now,
-    rawMetadata: {},
+    contextWindow: Number.isFinite(Number(record?.context_length ?? record?.max_tokens)) ? Number(record.context_length ?? record.max_tokens) : base.contextWindow,
+    rawMetadata: sanitizeModelMetadata(provider, record),
   }
+}
+
+function liveModel(provider, record) {
+  return endpointModel(provider, record, { liveDiscovered: true })
+}
+
+function publicEndpointModel(provider, record) {
+  return endpointModel(provider, record, { publicEndpointDiscovered: true })
 }
 
 function genxModelsEndpoint(baseUrl, category) {
@@ -485,6 +593,108 @@ async function liveDiscoverProvider(provider) {
       notes: ['MiMo is docs-known but policy-disabled for backend runtime. No MiMo endpoint is called.'],
     }
   }
+  if (provider === 'deepinfra') {
+    try {
+      const records = await fetchModelList(truth.modelsEndpoint)
+      const publicModels = records.map((record) => publicEndpointModel('deepinfra', record)).filter((model) => model.modelId)
+      const publicDiscoverySucceeded = publicModels.length > 0
+      const merged = publicDiscoverySucceeded
+        ? [...new Map([...publicModels, ...fallbackModels].map((model) => [`${model.provider}:${model.modelId}`, model])).values()]
+        : fallbackModels
+      return {
+        ...truth,
+        apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
+        mode: LIVE ? 'live_model_list' : 'safe_static',
+        source: publicDiscoverySucceeded ? 'docs_fallback' : 'docs_fallback',
+        models: merged,
+        totalDiscovered: merged.length,
+        liveDiscoveryAttempted: LIVE,
+        liveDiscoverySucceeded: publicDiscoverySucceeded,
+        liveDiscoverySkipped: false,
+        liveDiscoverySkipReason: null,
+        publicDiscoveryAttempted: true,
+        publicDiscoverySucceeded,
+        publicEndpointUsed: publicDiscoverySucceeded,
+        docsFallbackUsed: !publicDiscoverySucceeded,
+        providerUniverseKnown: publicDiscoverySucceeded,
+        providerUniversePartiallyKnown: !publicDiscoverySucceeded,
+        publicDocsUniverseKnown: publicDiscoverySucceeded,
+        authenticatedUniverseKnown: false,
+        endpointSource: truth.modelsEndpoint,
+        error: publicDiscoverySucceeded ? null : 'public model-list returned zero usable models',
+        returnedModelCount: publicModels.length,
+        publicEndpointModelCount: publicModels.length,
+        staticFallbackCount: fallbackModels.length,
+        docsFallbackCount: publicDiscoverySucceeded ? 0 : fallbackModels.length,
+        effectiveCatalogueCount: merged.length,
+        discoveredAt: now,
+        notes: publicDiscoverySucceeded
+          ? ['DeepInfra public model-list discovery succeeded. Models are catalogue truth only unless executor/client/readiness gates are satisfied.']
+          : ['DeepInfra public model-list returned no usable models; docs fallback remains partial truth.'],
+      }
+    } catch (error) {
+      if (STRICT) {
+        return {
+          ...truth,
+          apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
+          mode: LIVE ? 'live_model_list' : 'safe_static',
+          source: 'docs_fallback',
+          models: fallbackModels,
+          totalDiscovered: fallbackModels.length,
+          liveDiscoveryAttempted: LIVE,
+          liveDiscoverySucceeded: false,
+          liveDiscoverySkipped: false,
+          liveDiscoverySkipReason: null,
+          publicDiscoveryAttempted: true,
+          publicDiscoverySucceeded: false,
+          publicEndpointUsed: false,
+          docsFallbackUsed: true,
+          providerUniverseKnown: false,
+          providerUniversePartiallyKnown: true,
+          publicDocsUniverseKnown: true,
+          authenticatedUniverseKnown: false,
+          endpointSource: truth.modelsEndpoint,
+          error: sanitizeError(error),
+          returnedModelCount: 0,
+          publicEndpointModelCount: 0,
+          staticFallbackCount: fallbackModels.length,
+          docsFallbackCount: fallbackModels.length,
+          effectiveCatalogueCount: fallbackModels.length,
+          discoveredAt: now,
+          notes: ['DeepInfra public model-list discovery failed; strict mode should fail this provider.'],
+        }
+      }
+      return {
+        ...truth,
+        apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
+        mode: LIVE ? 'live_model_list' : 'safe_static',
+        source: 'docs_fallback',
+        models: fallbackModels,
+        totalDiscovered: fallbackModels.length,
+        liveDiscoveryAttempted: LIVE,
+        liveDiscoverySucceeded: false,
+        liveDiscoverySkipped: false,
+        liveDiscoverySkipReason: null,
+        publicDiscoveryAttempted: true,
+        publicDiscoverySucceeded: false,
+        publicEndpointUsed: false,
+        docsFallbackUsed: true,
+        providerUniverseKnown: false,
+        providerUniversePartiallyKnown: true,
+        publicDocsUniverseKnown: true,
+        authenticatedUniverseKnown: false,
+        endpointSource: truth.modelsEndpoint,
+        error: sanitizeError(error),
+        returnedModelCount: 0,
+        publicEndpointModelCount: 0,
+        staticFallbackCount: fallbackModels.length,
+        docsFallbackCount: fallbackModels.length,
+        effectiveCatalogueCount: fallbackModels.length,
+        discoveredAt: now,
+        notes: ['DeepInfra public model-list discovery failed safely; docs fallback remains partial truth.'],
+      }
+    }
+  }
   if (!LIVE) {
     return {
       ...truth,
@@ -498,6 +708,8 @@ async function liveDiscoverProvider(provider) {
       liveDiscoverySkipped: true,
       liveDiscoverySkipReason: 'safe_static_mode',
       docsFallbackUsed: true,
+      docsFallbackRepresentative: provider === 'together',
+      docsFallbackComplete: provider === 'genx',
       providerUniverseKnown: false,
       providerUniversePartiallyKnown: true,
       publicDocsUniverseKnown: true,
@@ -527,6 +739,8 @@ async function liveDiscoverProvider(provider) {
       liveDiscoverySkipped: true,
       liveDiscoverySkipReason: `${truth.apiKeyEnvName}_missing`,
       docsFallbackUsed: true,
+      docsFallbackRepresentative: provider === 'together',
+      docsFallbackComplete: provider === 'genx',
       providerUniverseKnown: false,
       providerUniversePartiallyKnown: true,
       publicDocsUniverseKnown: true,
@@ -646,6 +860,7 @@ const runtimeStatuses = providerDiscoveryStatus.filter((status) => RUNTIME_PROVI
 const providersWithFullUniverseKnown = runtimeStatuses.filter((status) => status.providerUniverseKnown).map((status) => status.provider)
 const providersPartiallyKnown = providerDiscoveryStatus.filter((status) => status.providerUniversePartiallyKnown).map((status) => status.provider)
 const providersUsingDocsFallback = providerDiscoveryStatus.filter((status) => status.docsFallbackUsed).map((status) => status.provider)
+const providersUsingPublicEndpoint = providerDiscoveryStatus.filter((status) => status.publicEndpointUsed).map((status) => status.provider)
 const providersSkipped = providerDiscoveryStatus.filter((status) => status.liveDiscoverySkipped).map((status) => status.provider)
 const providersFailed = providerDiscoveryStatus.filter((status) => status.error).map((status) => status.provider)
 const transportProfilesPresent = [...new Set(models.map((model) => model.transportProfile))].sort()
@@ -653,6 +868,16 @@ const policyRestrictedModels = models.filter((model) => model.policyRestrictedBy
 const executableModels = models.filter((model) => model.executableNow)
 const knownButBlockedModels = models.filter((model) => !model.executableNow)
 const musicExecutionReady = genxMusicModels.some((model) => model.executableNow)
+
+function capabilitiesCovered(provider) {
+  return [...new Set(models
+    .filter((model) => model.provider === provider)
+    .flatMap((model) => model.inferredCapabilities))]
+    .sort()
+}
+
+const togetherStatus = providerDiscoveryStatus.find((status) => status.provider === 'together')
+const deepinfraStatus = providerDiscoveryStatus.find((status) => status.provider === 'deepinfra')
 
 const genxMusicDiscovery = {
   genxMusicModelsDiscovered: genxMusicModels.map((model) => model.modelId),
@@ -681,11 +906,13 @@ const report = {
   providersWithFullUniverseKnown,
   providersPartiallyKnown,
   providersUsingDocsFallback,
+  providersUsingPublicEndpoint,
   providersSkipped,
   providersFailed,
   staticFallbackUsedByProvider: Object.fromEntries(providerDiscoveryStatus.map((status) => [status.provider, status.staticFallbackCount ?? 0])),
   totalLiveDiscoveredModels: models.filter((model) => model.liveDiscovered).length,
-  totalDocsFallbackModels: models.filter((model) => model.docsKnown).length,
+  totalDocsFallbackModels: models.filter((model) => model.docsKnown && !model.publicEndpointDiscovered).length,
+  totalPublicEndpointModels: models.filter((model) => model.publicEndpointDiscovered).length,
   totalEffectiveCatalogueModels: models.length,
   modelsExecutableNow: executableModels.length,
   modelsKnownButBlocked: knownButBlockedModels.length,
@@ -695,6 +922,22 @@ const report = {
   genxMusicExecutionReady: musicExecutionReady,
   mimoCapabilityKnown: models.some((model) => model.provider === 'mimo' && model.docsKnown),
   mimoPolicyRestricted: models.filter((model) => model.provider === 'mimo').every((model) => model.policyRestrictedByApp && !model.executableNow),
+  togetherStaticFallbackCount: togetherStatus?.staticFallbackCount ?? 0,
+  togetherDocsFallbackComplete: togetherStatus?.docsFallbackComplete === true,
+  togetherLiveDiscoveryAttempted: togetherStatus?.liveDiscoveryAttempted === true,
+  togetherLiveDiscoverySucceeded: togetherStatus?.liveDiscoverySucceeded === true,
+  togetherReturnedModelCount: togetherStatus?.returnedModelCount ?? 0,
+  togetherEffectiveCatalogueCount: togetherStatus?.effectiveCatalogueCount ?? 0,
+  togetherProviderUniverseKnown: togetherStatus?.providerUniverseKnown === true,
+  togetherProviderUniversePartiallyKnown: togetherStatus?.providerUniversePartiallyKnown === true,
+  togetherCapabilitiesCovered: capabilitiesCovered('together'),
+  deepinfraPublicDiscoveryAttempted: deepinfraStatus?.publicDiscoveryAttempted === true,
+  deepinfraPublicDiscoverySucceeded: deepinfraStatus?.publicDiscoverySucceeded === true,
+  deepinfraReturnedModelCount: deepinfraStatus?.returnedModelCount ?? 0,
+  deepinfraEffectiveCatalogueCount: deepinfraStatus?.effectiveCatalogueCount ?? 0,
+  deepinfraProviderUniverseKnown: deepinfraStatus?.providerUniverseKnown === true,
+  deepinfraProviderUniversePartiallyKnown: deepinfraStatus?.providerUniversePartiallyKnown === true,
+  deepinfraCapabilitiesCovered: capabilitiesCovered('deepinfra'),
   countsByProvider,
   totals: {
     discovered: models.length,

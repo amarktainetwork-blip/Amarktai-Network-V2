@@ -511,14 +511,18 @@ async function runAudit() {
     fullProviderModelUniverseKnown: discoveryReport.fullProviderModelUniverseKnown === true,
     staticFallbackModelCount: discoveryReport.totalDocsFallbackModels ?? discoveredCatalogue.filter(model => model.docsKnown === true).length,
     docsFallbackModelCount: discoveryReport.totalDocsFallbackModels ?? discoveredCatalogue.filter(model => model.docsKnown === true).length,
+    publicEndpointModelCount: discoveryReport.totalPublicEndpointModels ?? discoveredCatalogue.filter(model => model.publicEndpointDiscovered === true).length,
     liveDiscoveredModelCount: discoveryReport.totalLiveDiscoveredModels ?? discoveredCatalogue.filter(model => model.liveDiscovered === true).length,
     effectiveCatalogueModelCount: discoveryReport.totalEffectiveCatalogueModels ?? discoveredCatalogue.length,
     runtimeExecutableModelCount: discoveryReport.modelsExecutableNow ?? discoveredCatalogue.filter(model => model.executableNow === true).length,
     catalogueOnlyModelCount: discoveryReport.modelsKnownButBlocked ?? discoveredCatalogue.filter(model => model.executableNow !== true).length,
     policyRestrictedModelCount: discoveryReport.policyRestrictedModels ?? discoveredCatalogue.filter(model => model.policyRestrictedByApp === true).length,
     providersUsingDocsFallback: discoveryReport.providersUsingDocsFallback ?? [],
+    providersUsingPublicEndpoint: discoveryReport.providersUsingPublicEndpoint ?? [],
     providersSkipped: discoveryReport.providersSkipped ?? [],
     providersFailed: discoveryReport.providersFailed ?? [],
+    deepinfraPublicDiscoverySucceeded: discoveryReport.deepinfraPublicDiscoverySucceeded === true,
+    togetherProviderUniversePartiallyKnown: discoveryReport.togetherProviderUniversePartiallyKnown === true,
   }
 
   const mimoModels = Array.isArray(discoveredCatalogue) ? discoveredCatalogue.filter(model => model.provider === 'mimo') : []

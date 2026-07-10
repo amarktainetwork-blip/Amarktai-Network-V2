@@ -3,6 +3,20 @@ import { discoveryTimestamp, failedLiveResult, fetchModelList, liveResult, model
 
 const TOGETHER_MODELS_ENDPOINT = 'https://api.together.ai/models'
 
+function togetherCapabilities(modelId: string, rawType: string): Array<'chat' | 'reasoning' | 'summarization' | 'classification' | 'extraction' | 'code' | 'image_generation' | 'embeddings' | 'reranking' | 'video_generation' | 'tts' | 'stt' | 'music_generation'> {
+  const type = rawType.toLowerCase()
+  const text = `${modelId} ${type}`.toLowerCase()
+  if (type === 'chat' || type === 'language') return ['chat', 'reasoning', 'summarization', 'classification', 'extraction']
+  if (type === 'code') return ['code']
+  if (type === 'image') return ['image_generation']
+  if (type === 'embedding') return ['embeddings']
+  if (type === 'rerank') return ['reranking']
+  if (type === 'moderation') return ['classification']
+  if (type === 'video') return ['video_generation']
+  if (type === 'audio') return /music|text-to-music/.test(text) ? ['music_generation'] : ['tts']
+  return ['chat']
+}
+
 export async function discoverTogetherProviderModels(options: DiscoveryAdapterOptions = {}): Promise<ProviderDiscoveryResult> {
   const timestamp = discoveryTimestamp(options)
   const staticModels = [
@@ -21,20 +35,40 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
       .map((record) => {
         const rawType = stringField(record, ['type', 'object', 'display_type'])
         const modelId = stringField(record, ['id', 'model', 'name'])
-        const isImage = `${rawType} ${modelId}`.toLowerCase().includes('image') || modelId.toLowerCase().includes('flux')
+        const capabilities = togetherCapabilities(modelId, rawType)
+        const isExecutableImage = capabilities.includes('image_generation') && modelId === 'black-forest-labs/FLUX.1-schnell'
         return modelFromProviderRecord({
           provider: 'together',
           modelId,
           displayName: stringField(record, ['display_name', 'name', 'id'], modelId),
           rawProviderType: rawType,
+          inferredCapabilities: capabilities,
+          category: rawType,
+          providerCategory: rawType,
+          modalitiesIn: capabilities.includes('image_generation') ? ['text'] : undefined,
+          modalitiesOut: capabilities.includes('image_generation') ? ['image'] : undefined,
           endpointSource: TOGETHER_MODELS_ENDPOINT,
           lastDiscoveredAt: timestamp,
           source: 'live_endpoint',
           discoverySource: 'live_endpoint',
-          providerClientExists: isImage,
-          workerExecutorExists: isImage,
+          providerClientExists: isExecutableImage,
+          workerExecutorExists: isExecutableImage,
+          requestShapeKnown: isExecutableImage,
+          responseShapeKnown: isExecutableImage,
+          artifactPersistenceExists: isExecutableImage || !capabilities.some((capability) => ['image_generation', 'video_generation', 'tts', 'music_generation'].includes(capability)),
           contextWindow: numberField(record, ['context_length', 'contextWindow']),
-          rawMetadata: record,
+          rawMetadata: {
+            id: record.id,
+            object: record.object,
+            created: record.created,
+            type: record.type,
+            display_name: record.display_name,
+            organization: record.organization,
+            link: record.link,
+            license: record.license,
+            context_length: record.context_length,
+            pricing: record.pricing,
+          },
           batchSupported: true,
         })
       })
