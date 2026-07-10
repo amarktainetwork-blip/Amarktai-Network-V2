@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import type {
   LongFormVideoPlan,
   LongFormScene,
-  LongFormVideoRequest,
 } from './long-form-video.js'
 
 // ── Scene Execution Payload ────────────────────────────────────────────────────
@@ -180,9 +179,17 @@ export function updateSceneExecutionState(
   }
 
   const updatedScenes = [...state.scenes]
+  const existingScene = updatedScenes[sceneIndex]
+  if (!existingScene) {
+    throw new Error(`Scene ${sceneNumber} not found in execution state`)
+  }
+
   updatedScenes[sceneIndex] = {
-    ...updatedScenes[sceneIndex],
+    ...existingScene,
     ...update,
+    sceneNumber: update.sceneNumber ?? existingScene.sceneNumber,
+    sceneTitle: update.sceneTitle ?? existingScene.sceneTitle,
+    status: update.status ?? existingScene.status,
   }
 
   const progress = calculateLongFormProgress(updatedScenes)

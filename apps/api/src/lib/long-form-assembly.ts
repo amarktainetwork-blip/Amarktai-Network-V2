@@ -7,10 +7,11 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import fs from 'fs'
+import fs from 'fs/promises'
+import { existsSync } from 'fs'
 import path from 'path'
 import { prisma } from '@amarktai/db'
-import { saveArtifact, getArtifactFile } from '@amarktai/artifacts'
+import { saveArtifact } from '@amarktai/artifacts'
 import { getStorageRoot } from '@amarktai/core'
 
 const execAsync = promisify(exec)
@@ -191,7 +192,7 @@ export function validateSceneArtifactsForAssembly(
     
     // Check if file exists on filesystem
     const fullPath = path.join(getStorageRoot(), scene.storagePath)
-    if (!fs.existsSync(fullPath)) {
+    if (!existsSync(fullPath)) {
       missingFiles.push(scene.sceneNumber)
     }
   }
@@ -306,7 +307,6 @@ export async function assembleLongFormVideo(
 
     // Read output file
     const outputBuffer = await fs.readFile(outputFile)
-    const stat = await fs.stat(outputFile)
 
     // Save as artifact
     const artifact = await saveArtifact({

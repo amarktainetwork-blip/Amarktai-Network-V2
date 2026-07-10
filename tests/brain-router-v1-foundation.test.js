@@ -413,7 +413,7 @@ describe('Brain Router v1 foundation', () => {
 
     it('MODEL_CATALOGUE_SUMMARY counts match', () => {
       expect(MODEL_CATALOGUE_SUMMARY.executable.length).toBe(5)
-      expect(MODEL_CATALOGUE_SUMMARY.planned.length).toBe(5)
+      expect(MODEL_CATALOGUE_SUMMARY.planned.length).toBe(6)
       expect(MODEL_CATALOGUE_SUMMARY.blocked.length).toBe(1)
     })
 

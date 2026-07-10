@@ -226,3 +226,25 @@ export {
   type SceneExecutionState,
   type LongFormExecutionState,
 } from './long-form-execution.js'
+
+// Music generation foundation
+export {
+  MUSIC_STYLES,
+  MUSIC_DURATION_LIMITS,
+  MUSIC_OUTPUT_FORMATS,
+  MUSIC_SAFETY_LEVELS,
+  MusicGenerationRequestSchema,
+  validateMusicGenerationRequest,
+  normalizeMusicPrompt,
+  createMusicGenerationPlan,
+  getMusicCapabilityStatus,
+  type MusicStyle,
+  type MusicDuration,
+  type MusicOutputFormat,
+  type MusicSafetyLevel,
+  type MusicGenerationRequest,
+  type MusicPromptNormalization,
+  type MusicCapabilityStatus,
+  type MusicGenerationPlan,
+  type MusicGenerationResult,
+} from './music-generation.js'
