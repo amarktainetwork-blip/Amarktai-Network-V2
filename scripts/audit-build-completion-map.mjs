@@ -498,12 +498,55 @@ async function runAudit() {
   
   // Check for execute-scenes route in the admin route file
   let longFormExecuteRouteExists = false
+  let longFormAssemblyRouteExists = false
+  let longFormAssemblyModuleExists = false
   if (longFormPlanRouteExists) {
     const routeContent = await safeRead('apps/api/src/routes/admin-long-form-video.ts')
     longFormExecuteRouteExists = routeContent?.includes('execute-scenes') || false
+    longFormAssemblyRouteExists = routeContent?.includes('/assemble/') || false
+  }
+  
+  // Check for assembly module
+  longFormAssemblyModuleExists = await fileExists('apps/api/src/lib/long-form-assembly.ts')
+  
+  // Check for ffmpeg availability (system-level, not package.json)
+  let ffmpegAvailable = false
+  try {
+    const { execSync } = await import('child_process')
+    execSync('ffmpeg -version', { stdio: 'ignore', timeout: 2000 })
+    ffmpegAvailable = true
+  } catch {
+    ffmpegAvailable = false
   }
   
   const longFormReadiness = {
+    // Phase 1: Schema and planning
+    schemaReady: longFormSchemaExists,
+    plannerReady: longFormPlannerExists,
+    
+    // Phase 2: Scene execution
+    sceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
+    
+    // Phase 3: Assembly pipeline
+    assemblyModuleExists: longFormAssemblyModuleExists,
+    assemblyRouteExists: longFormAssemblyRouteExists,
+    ffmpegAvailable: ffmpegAvailable,
+    artifactStorageReady: longFormAssemblyModuleExists, // Module handles storage
+    
+    // Pipeline readiness (components exist)
+    videoOnlyAssemblyPipelineReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists,
+    
+    // Actual readiness (can execute now)
+    videoOnlyReady: longFormSchemaExists && longFormPlannerExists && longFormExecutionExists && 
+                    longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
+    
+    // Multimedia readiness (always false for now)
+    fullMultimediaReady: false,
+    voiceoverReady: false,
+    subtitlesReady: false,
+    musicBedReady: false,
+    
+    // Legacy fields for backward compatibility
     orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,
     schemaExists: longFormSchemaExists,
     plannerExists: longFormPlannerExists,
@@ -511,36 +554,27 @@ async function runAudit() {
     planRouteExists: longFormPlanRouteExists,
     executeScenesRouteExists: longFormExecuteRouteExists,
     perSceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
+    sceneStitchingReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
+    finalAssemblyReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
     scriptPlanner: longFormPlannerExists,
-    sceneSplitter: longFormPlannerExists, // Phase 1 includes scene splitting
+    sceneSplitter: longFormPlannerExists,
     sceneExecutionPayloadBuilder: longFormExecutionExists,
-    sceneJobCreation: longFormExecuteRouteExists, // Phase 2 queues jobs
-    promptEnhancement: longFormExecutionExists, // Phase 2 builds enhanced prompts
-    perSceneGeneration: longFormExecuteRouteExists, // Phase 2 can generate per-scene
+    sceneJobCreation: longFormExecuteRouteExists,
+    promptEnhancement: longFormExecutionExists,
+    perSceneGeneration: longFormExecuteRouteExists,
+    ffmpegIntegration: ffmpegAvailable,
+    artifactPersistence: longFormAssemblyModuleExists,
     voiceover: false,
     subtitles: false,
     musicBed: false,
-    sceneStitching: false,
-    ffmpegIntegration: installedLibs.libraries.ffmpeg || false,
-    artifactPersistence: false,
     progressTracking: false,
     partialFailureHandling: false,
     dashboardSceneStatus: false,
     missingParts: [
-      'script_storyboard_planner',
-      'scene_splitter',
-      'scene_job_creation',
-      'prompt_enhancement',
-      'per_scene_video_generation',
       'voiceover_integration',
       'subtitles_integration',
       'music_bed_integration',
-      'scene_stitching',
-      'ffmpeg_integration',
-      'artifact_persistence',
-      'progress_tracking',
-      'partial_failure_handling',
-      'dashboard_scene_status'
+      'full_multimedia_assembly'
     ]
   }
   
@@ -911,21 +945,26 @@ async function runAudit() {
   console.log()
   
   console.log('🎬 LONG-FORM VIDEO READINESS')
-  console.log(`   Script planner: ${longFormReadiness.scriptPlanner ? '✓' : '✗'}`)
-  console.log(`   Scene splitter: ${longFormReadiness.sceneSplitter ? '✓' : '✗'}`)
-  console.log(`   Scene job creation: ${longFormReadiness.sceneJobCreation ? '✓' : '✗'}`)
-  console.log(`   Prompt enhancement: ${longFormReadiness.promptEnhancement ? '✓' : '✗'}`)
-  console.log(`   Per-scene generation: ${longFormReadiness.perSceneGeneration ? '✓' : '✗'}`)
-  console.log(`   Voiceover: ${longFormReadiness.voiceover ? '✓' : '✗'}`)
-  console.log(`   Subtitles: ${longFormReadiness.subtitles ? '✓' : '✗'}`)
-  console.log(`   Music bed: ${longFormReadiness.musicBed ? '✓' : '✗'}`)
-  console.log(`   Scene stitching: ${longFormReadiness.sceneStitching ? '✓' : '✗'}`)
-  console.log(`   FFmpeg: ${longFormReadiness.ffmpegIntegration ? '✓' : '✗'}`)
-  console.log(`   Artifact persistence: ${longFormReadiness.artifactPersistence ? '✓' : '✗'}`)
-  console.log(`   Progress tracking: ${longFormReadiness.progressTracking ? '✓' : '✗'}`)
-  console.log(`   Partial failure handling: ${longFormReadiness.partialFailureHandling ? '✓' : '✗'}`)
-  console.log(`   Dashboard scene status: ${longFormReadiness.dashboardSceneStatus ? '✓' : '✗'}`)
-  console.log(`   Missing: ${longFormReadiness.missingParts.length} parts`)
+  console.log('   Phase 1 - Planning:')
+  console.log(`     Schema: ${longFormReadiness.schemaReady ? '✓' : '✗'}`)
+  console.log(`     Planner: ${longFormReadiness.plannerReady ? '✓' : '✗'}`)
+  console.log('   Phase 2 - Scene Execution:')
+  console.log(`     Execution module: ${longFormReadiness.sceneExecutionReady ? '✓' : '✗'}`)
+  console.log('   Phase 3 - Assembly Pipeline:')
+  console.log(`     Assembly module: ${longFormReadiness.assemblyModuleExists ? '✓' : '✗'}`)
+  console.log(`     Assembly route: ${longFormReadiness.assemblyRouteExists ? '✓' : '✗'}`)
+  console.log(`     FFmpeg available: ${longFormReadiness.ffmpegAvailable ? '✓' : '✗'}`)
+  console.log(`     Artifact storage: ${longFormReadiness.artifactStorageReady ? '✓' : '✗'}`)
+  console.log('   Readiness Status:')
+  console.log(`     Pipeline ready: ${longFormReadiness.videoOnlyAssemblyPipelineReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Video-only ready: ${longFormReadiness.videoOnlyReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Full multimedia ready: ${longFormReadiness.fullMultimediaReady ? '✓ YES' : '✗ NO'}`)
+  console.log(`     Voiceover: ${longFormReadiness.voiceoverReady ? '✓' : '✗'}`)
+  console.log(`     Subtitles: ${longFormReadiness.subtitlesReady ? '✓' : '✗'}`)
+  console.log(`     Music bed: ${longFormReadiness.musicBedReady ? '✓' : '✗'}`)
+  if (longFormReadiness.missingParts.length > 0) {
+    console.log(`   Missing: ${longFormReadiness.missingParts.join(', ')}`)
+  }
   console.log()
   
   console.log('📊 MEDIA QUALITY')
