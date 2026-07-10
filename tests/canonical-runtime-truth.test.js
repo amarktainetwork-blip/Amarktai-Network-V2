@@ -6,6 +6,7 @@ import {
   getProviderRuntimeTruth,
   PROVIDER_KEYS,
 } from '../packages/core/src/index.ts'
+import { selectCapabilityProofStates } from '../apps/api/src/lib/admin-runtime-truth.ts'
 
 function truth(overrides = {}) {
   return getRuntimeTruth({
@@ -23,6 +24,55 @@ function truth(overrides = {}) {
 
 function capability(runtimeTruth, key) {
   return runtimeTruth.capabilities.find((entry) => entry.capability === key)
+}
+
+const newerProofAt = new Date('2026-07-10T12:00:00.000Z')
+const olderProofAt = new Date('2026-07-09T12:00:00.000Z')
+
+function proofJob(overrides = {}) {
+  return {
+    id: 'job-image-valid',
+    appSlug: 'runtime-proof-app',
+    capability: 'image_generation',
+    status: 'completed',
+    completedAt: newerProofAt,
+    artifactId: 'artifact-image-valid',
+    provider: 'together',
+    model: 'black-forest-labs/FLUX.1-schnell',
+    output: JSON.stringify({
+      artifactId: 'artifact-image-valid',
+      artifactUrl: '/api/v1/artifacts/artifact-image-valid/file',
+      mimeType: 'image/png',
+    }),
+    traceId: 'trace-image-valid',
+    metadataJson: JSON.stringify({ routingMode: 'balanced' }),
+    ...overrides,
+  }
+}
+
+function proofArtifact(overrides = {}) {
+  return {
+    id: 'artifact-image-valid',
+    appSlug: 'runtime-proof-app',
+    type: 'image',
+    subType: 'image_generation',
+    status: 'completed',
+    provider: 'together',
+    model: 'black-forest-labs/FLUX.1-schnell',
+    traceId: 'trace-image-valid',
+    mimeType: 'image/png',
+    fileSizeBytes: 1024,
+    storagePath: 'runtime-proof-app/image/file.png',
+    storageUrl: '/api/v1/artifacts/artifact-image-valid/file',
+    metadata: JSON.stringify({
+      capability: 'image_generation',
+      provider: 'together',
+      model: 'black-forest-labs/FLUX.1-schnell',
+    }),
+    description: 'Together image_generation artifact',
+    errorMessage: '',
+    ...overrides,
+  }
 }
 
 describe('canonical runtime truth', () => {
@@ -138,14 +188,28 @@ describe('canonical runtime truth', () => {
     expect(image.blockedReasons).toContain('credentials_missing')
   })
 
-  it('long-form remains partial and does not claim full multimedia readiness', () => {
+  it('long-form remains partial with component-level accuracy', () => {
     const runtimeTruth = truth()
     const longForm = capability(runtimeTruth, 'long_form_video')
 
     expect(longForm.classification).toBe('PARTIAL')
     expect(longForm.liveProven).toBe(false)
     expect(longForm.executableNow).toBe(false)
+    expect(longForm.clientImplemented).toBe(false)
+    expect(longForm.executorRegistered).toBe(false)
+    expect(longForm.routeImplemented).toBe(true)
+    expect(longForm.queuePathImplemented).toBe(false)
+    expect(longForm.artifactPathImplemented).toBe(false)
     expect(longForm.blockedReasons).toContain('executor_missing')
+    expect(longForm.blockedReasons).toContain('provider_client_missing')
+    expect(longForm.blockedReasons).toContain('queue_path_missing')
+    expect(longForm.blockedReasons).toContain('artifact_support_missing')
+    expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
+    // Accurate component-level blockers
+    expect(longForm.blockedReasons).toContain('voiceover_missing')
+    expect(longForm.blockedReasons).toContain('subtitles_missing')
+    expect(longForm.blockedReasons).toContain('music_bed_missing')
+    expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
   })
 
   it('adult capabilities remain policy restricted', () => {
@@ -175,4 +239,122 @@ describe('canonical runtime truth', () => {
     expect(musicRoute).toContain('Provider/model override not allowed')
     expect(musicRoute).toContain('buildAdminRuntimeTruth')
   })
+
+  it('valid media proof requires a completed matching artifact trace', () => {
+    const proofs = selectCapabilityProofStates([proofJob()], [proofArtifact()])
+
+    expect(proofs.image_generation.liveProven).toBe(true)
+    expect(proofs.image_generation.lastProofAt).toEqual(newerProofAt)
+  })
+
+  it('rejects media proof when artifact is missing, failed, or not linked to the job trace', () => {
+    expect(selectCapabilityProofStates([proofJob()], [])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ status: 'failed' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ traceId: 'trace-other-job' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ appSlug: 'other-app' })])).toEqual({})
+  })
+
+  it('rejects media proof when artifact type, subtype, provider, model, or output id do not match', () => {
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ type: 'document', mimeType: 'application/json' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ subType: 'video_generation' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ provider: 'genx' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ model: 'other-model' })])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob({ output: JSON.stringify({ artifactId: 'other-artifact' }) })], [proofArtifact()])).toEqual({})
+  })
+
+  it('rejects placeholder media artifacts and failed jobs', () => {
+    expect(selectCapabilityProofStates([proofJob({ status: 'failed' })], [proofArtifact()])).toEqual({})
+    expect(selectCapabilityProofStates(
+      [proofJob()],
+      [proofArtifact({ metadata: JSON.stringify({ source: 'mock fixture' }) })],
+    )).toEqual({})
+    expect(selectCapabilityProofStates(
+      [proofJob({ output: 'Backend integration pending. Real previews will appear here.' })],
+      [proofArtifact()],
+    )).toEqual({})
+  })
+
+  it('uses the newest valid proof and skips newer invalid proof records', () => {
+    const newerInvalid = proofJob({ id: 'job-new-invalid', completedAt: newerProofAt, artifactId: null })
+    const olderValid = proofJob({
+      id: 'job-old-valid',
+      completedAt: olderProofAt,
+      artifactId: 'artifact-old-valid',
+      output: JSON.stringify({ artifactId: 'artifact-old-valid' }),
+      traceId: 'trace-old-valid',
+    })
+    const artifact = proofArtifact({
+      id: 'artifact-old-valid',
+      traceId: 'trace-old-valid',
+      storageUrl: '/api/v1/artifacts/artifact-old-valid/file',
+    })
+
+    const proofs = selectCapabilityProofStates([newerInvalid, olderValid], [artifact])
+    expect(proofs.image_generation.liveProven).toBe(true)
+    expect(proofs.image_generation.lastProofAt).toEqual(olderProofAt)
+  })
+
+  it('text proof requires runtime provider, model, trace, and non-placeholder output', () => {
+    const validText = proofJob({
+      id: 'job-chat-valid',
+      capability: 'chat',
+      provider: 'groq',
+      model: 'llama-3.3-70b-versatile',
+      artifactId: null,
+      output: 'Groq Brain runtime proof passed.',
+      traceId: 'trace-chat-valid',
+    })
+
+    const proofs = selectCapabilityProofStates([validText], [])
+    expect(proofs.chat.liveProven).toBe(true)
+    expect(proofs.chat.lastProofAt).toEqual(newerProofAt)
+  })
+
+  it('text proof rejects placeholders and missing trusted execution provenance', () => {
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: '', artifactId: null, output: 'real output' })], [])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual({})
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual({})
+  })
+
+  it('music proof requires a valid audio artifact path before liveProven is true', () => {
+    const job = proofJob({
+      capability: 'music_generation',
+      provider: 'genx',
+      model: 'lyria-3-clip-preview',
+      artifactId: 'artifact-music-valid',
+      output: JSON.stringify({ artifactId: 'artifact-music-valid', mimeType: 'audio/mpeg' }),
+      traceId: 'trace-music-valid',
+    })
+    const validArtifact = proofArtifact({
+      id: 'artifact-music-valid',
+      type: 'music',
+      subType: 'music_generation',
+      provider: 'genx',
+      model: 'lyria-3-clip-preview',
+      traceId: 'trace-music-valid',
+      mimeType: 'audio/mpeg',
+      storagePath: 'runtime-proof-app/music/file.mp3',
+      storageUrl: '/api/v1/artifacts/artifact-music-valid/file',
+    })
+
+    expect(selectCapabilityProofStates([job], [validArtifact]).music_generation.liveProven).toBe(true)
+    expect(selectCapabilityProofStates([job], [proofArtifact({ ...validArtifact, mimeType: 'application/json', type: 'document' })])).toEqual({})
+  })
+
+  it('music remains false without explicit live proof evidence', () => {
+    const runtimeTruth = truth({
+      providers: {
+        genx: { enabled: true, runtimeEnabled: true, configured: true, healthStatus: 'configured' },
+      },
+      capabilities: {
+        music_generation: { infrastructureReady: true },
+      },
+    })
+    const music = capability(runtimeTruth, 'music_generation')
+
+    expect(music.liveProven).toBe(false)
+    expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
+  })
+
 })

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const LIVE = process.argv.includes('--live')
 const STRICT = process.argv.includes('--strict')
+const TEST_MODE = process.env.AMARKTAI_DISCOVERY_TEST === '1'
 const STATIC_TIME = '1970-01-01T00:00:00.000Z'
 const now = LIVE ? new Date().toISOString() : STATIC_TIME
 
@@ -594,6 +595,37 @@ async function liveDiscoverProvider(provider) {
     }
   }
   if (provider === 'deepinfra') {
+    if (TEST_MODE) {
+      return {
+        ...truth,
+        apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
+        mode: LIVE ? 'live_model_list' : 'safe_static',
+        source: 'docs_fallback',
+        models: fallbackModels,
+        totalDiscovered: fallbackModels.length,
+        liveDiscoveryAttempted: LIVE,
+        liveDiscoverySucceeded: false,
+        liveDiscoverySkipped: !LIVE,
+        liveDiscoverySkipReason: LIVE ? 'test_mode_public_discovery_disabled' : 'safe_static_test_mode',
+        publicDiscoveryAttempted: false,
+        publicDiscoverySucceeded: false,
+        publicEndpointUsed: false,
+        docsFallbackUsed: true,
+        providerUniverseKnown: false,
+        providerUniversePartiallyKnown: true,
+        publicDocsUniverseKnown: true,
+        authenticatedUniverseKnown: false,
+        endpointSource: truth.modelsEndpoint,
+        error: null,
+        returnedModelCount: 0,
+        publicEndpointModelCount: 0,
+        staticFallbackCount: fallbackModels.length,
+        docsFallbackCount: fallbackModels.length,
+        effectiveCatalogueCount: fallbackModels.length,
+        discoveredAt: now,
+        notes: ['Test-mode safe discovery uses DeepInfra docs/static fallback only; no public provider call was made.'],
+      }
+    }
     try {
       const records = await fetchModelList(truth.modelsEndpoint)
       const publicModels = records.map((record) => publicEndpointModel('deepinfra', record)).filter((model) => model.modelId)

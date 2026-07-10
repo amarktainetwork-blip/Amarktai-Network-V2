@@ -174,7 +174,6 @@ const ARTIFACT_PATH_CAPABILITIES = new Set<CapabilityKey>([
   'image_generation',
   'video_generation',
   'music_generation',
-  'long_form_video',
 ])
 
 function toIso(value: string | Date | null | undefined): string | null {
@@ -313,7 +312,8 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
     const clientImplemented = TEXT_ROUTER_CAPABILITIES.has(capability)
       || MEDIA_WORKER_CAPABILITIES.has(capability)
       || eligibleByImplementation.some((model) => model.providerClientExists === true || model.executable === true)
-    const executorRegistered = TEXT_ROUTER_CAPABILITIES.has(capability) || MEDIA_WORKER_CAPABILITIES.has(capability)
+    const executorRegistered = TEXT_ROUTER_CAPABILITIES.has(capability)
+      || MEDIA_WORKER_CAPABILITIES.has(capability)
     const routeImplemented = runtime.routeImplemented ?? ROUTE_IMPLEMENTED_CAPABILITIES.has(capability)
     const queueRequired = QUEUE_CAPABILITIES.has(capability)
     const queuePathImplemented = runtime.queuePathImplemented ?? (!queueRequired || MEDIA_WORKER_CAPABILITIES.has(capability))
@@ -363,6 +363,11 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
     if (!policyAllowed) blockedReasons.push('provider_policy_restriction')
     if (executableNow && !liveProven) blockedReasons.push('live_proof_missing')
     if (PARTIAL_SOURCE_CAPABILITIES.has(capability) && !implementationReady) blockedReasons.push('partial_implementation')
+
+    // Orchestrated capabilities: add component-level missing reasons
+    if (capability === 'long_form_video') {
+      blockedReasons.push('voiceover_missing', 'subtitles_missing', 'music_bed_missing', 'full_multimedia_not_ready')
+    }
 
     const truthBase: Omit<CapabilityRuntimeTruth, 'classification'> = {
       capability,
