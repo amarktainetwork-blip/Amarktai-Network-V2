@@ -109,6 +109,9 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  usageMeter: {
+    upsert: vi.fn(),
+  },
 }))
 
 vi.mock('@amarktai/db', () => ({
@@ -225,6 +228,8 @@ describe('GenX music executor', () => {
     prismaMock.job.update.mockResolvedValue({})
     prismaMock.job.updateMany.mockReset()
     prismaMock.job.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.usageMeter.upsert.mockReset()
+    prismaMock.usageMeter.upsert.mockResolvedValue({})
     mockSuccessfulMusicFlow()
   })
 
@@ -309,6 +314,34 @@ describe('GenX music executor', () => {
 
     expect(result.metadata.providerJobId).toBe('genx-remote-job-001')
     expect(result.metadata.selectedModel).toBe('lyria-3-clip-preview')
+  })
+
+  it('records truthful usage without invented cost after successful artifact persistence', async () => {
+    await executeWithProvider(makePayload())
+
+    expect(prismaMock.usageMeter.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        usage_meter_unique: expect.objectContaining({
+          appSlug: 'runtime-proof-genx-music',
+          capability: 'music_generation',
+          provider: 'genx',
+          model: 'lyria-3-clip-preview',
+        }),
+      },
+      create: expect.objectContaining({
+        requestCount: 1,
+        successCount: 1,
+        artifactCount: 1,
+      }),
+      update: expect.objectContaining({
+        requestCount: { increment: 1 },
+        successCount: { increment: 1 },
+        artifactCount: { increment: 1 },
+      }),
+    }))
+    const call = prismaMock.usageMeter.upsert.mock.calls[0][0]
+    expect(call.create.costUsdCents).toBeUndefined()
+    expect(call.update.costUsdCents).toBeUndefined()
   })
 
   it('returns safe GenX failure diagnostics without leaking the API key', async () => {

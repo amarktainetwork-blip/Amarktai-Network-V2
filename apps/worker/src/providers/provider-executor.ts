@@ -67,8 +67,20 @@ async function buildProviderStates(): Promise<Partial<Record<ProviderKey, BrainR
       isProviderDisabledInDb(provider),
       isProviderRuntimeRestrictedInDb(provider),
     ])
-    if (disabled || runtimeRestricted) {
-      states[provider] = { disabled, runtimeRestricted }
+    let credentialStatus: Awaited<ReturnType<typeof getProviderCredentialStatus>> | null = null
+    try {
+      credentialStatus = await getProviderCredentialStatus(provider)
+    } catch {
+      credentialStatus = null
+    }
+    if (disabled || runtimeRestricted || provider === 'genx') {
+      states[provider] = {
+        disabled,
+        runtimeRestricted,
+        configured: credentialStatus?.configured === true && credentialStatus.runtimeEnabled !== false,
+        infrastructureReady: true,
+        policyAllowed: provider !== 'mimo',
+      }
     }
   }
 
@@ -188,6 +200,37 @@ async function claimMusicExecution(
   }
 
   return { claimed: false, alreadySubmitted: false, error: 'Execution already claimed by another worker' }
+}
+
+async function recordMusicUsage(appSlug: string, model: string, fileSizeBytes: number): Promise<void> {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  await prisma.usageMeter.upsert({
+    where: {
+      usage_meter_unique: {
+        appSlug,
+        date: today,
+        capability: 'music_generation',
+        provider: 'genx',
+        model,
+      },
+    },
+    update: {
+      requestCount: { increment: 1 },
+      successCount: { increment: 1 },
+      artifactCount: { increment: 1 },
+    },
+    create: {
+      appSlug,
+      date: today,
+      capability: 'music_generation',
+      provider: 'genx',
+      model,
+      requestCount: 1,
+      successCount: 1,
+      artifactCount: 1,
+    },
+  })
 }
 
 async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -708,6 +751,9 @@ async function pollAndDownloadMusic(
             genxArtifactId: artifact.id,
             genxCompletedAt: new Date().toISOString(),
           })
+
+          // ── Record usage ────────────────────────────────────────────
+          await recordMusicUsage(payload.appSlug, musicResult.model || model, artifact.fileSizeBytes).catch(() => {})
 
           const output = {
             artifactId: artifact.id,
