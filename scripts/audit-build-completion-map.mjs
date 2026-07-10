@@ -10,6 +10,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -878,6 +879,57 @@ async function runAudit() {
       effort: 'medium'
     }
   ]
+
+  const canonicalRuntimeTruth = getRuntimeTruth({
+    providers: {
+      genx: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      groq: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      together: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      deepinfra: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      mimo: {
+        enabled: false,
+        configured: false,
+        runtimeEnabled: false,
+        credentialUsagePolicy: 'coding_tools_only',
+        healthStatus: 'runtime_restricted',
+      },
+    },
+    capabilities: {
+      music_generation: {
+        configured: false,
+        infrastructureReady: false,
+        liveProven: false,
+      },
+      long_form_video: {
+        configured: false,
+        infrastructureReady: false,
+        liveProven: false,
+      },
+    },
+  })
+
+  const capabilityInventory = canonicalRuntimeTruth.capabilities.map(capability => ({
+    capability: capability.capability,
+    classification: capability.classification,
+    eligibleProviders: capability.eligibleProviders,
+    eligibleModelCount: capability.eligibleModels.length,
+    implementationGates: {
+      catalogueKnown: capability.catalogueKnown,
+      clientImplemented: capability.clientImplemented,
+      executorRegistered: capability.executorRegistered,
+      routeImplemented: capability.routeImplemented,
+      queuePathImplemented: capability.queuePathImplemented,
+      artifactPathImplemented: capability.artifactPathImplemented,
+      implementationReady: capability.implementationReady,
+    },
+    configured: capability.configured,
+    infrastructureReady: capability.infrastructureReady,
+    policyAllowed: capability.policyAllowed,
+    executableNow: capability.executableNow,
+    liveProven: capability.liveProven,
+    blockers: capability.blockedReasons,
+    remainingWork: capability.remainingWork,
+  }))
   
   // Build completion map with all status groups
   const completionMap = {
@@ -893,6 +945,21 @@ async function runAudit() {
     },
 
     providerDiscoveryReadiness: providerDiscoveryReadiness,
+    canonicalRuntimeTruth: {
+      providerPolicy: canonicalRuntimeTruth.providerPolicy,
+      providerTruth: canonicalRuntimeTruth.providers,
+      totalRegisteredCapabilities: canonicalRuntimeTruth.capabilities.length,
+      countsByClassification: canonicalRuntimeTruth.countsByClassification,
+      capabilityInventory,
+      liveProvenCapabilities: capabilityInventory.filter(capability => capability.classification === 'LIVE_PROVEN').map(capability => capability.capability),
+      executableNotLiveProvenCapabilities: capabilityInventory.filter(capability => capability.classification === 'EXECUTABLE_NOT_LIVE_PROVEN').map(capability => capability.capability),
+      implementedNotConfiguredCapabilities: capabilityInventory.filter(capability => capability.classification === 'IMPLEMENTED_NOT_CONFIGURED').map(capability => capability.capability),
+      partialCapabilities: capabilityInventory.filter(capability => capability.classification === 'PARTIAL'),
+      catalogueOnlyCapabilities: capabilityInventory.filter(capability => capability.classification === 'CATALOGUE_ONLY').map(capability => capability.capability),
+      policyRestrictedCapabilities: capabilityInventory.filter(capability => capability.classification === 'POLICY_RESTRICTED').map(capability => capability.capability),
+      blockedCapabilities: capabilityInventory.filter(capability => capability.classification === 'BLOCKED').map(capability => capability.capability),
+      missingCapabilities: capabilityInventory.filter(capability => capability.classification === 'MISSING').map(capability => capability.capability),
+    },
     
     modelCatalogueSummary: {
       total: modelCatalogue.models.length,

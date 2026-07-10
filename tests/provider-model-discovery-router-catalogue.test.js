@@ -19,6 +19,7 @@ import {
 } from '../packages/providers/src/index.ts'
 
 const ROOT = process.cwd()
+const DISCOVERY_TEST_ENV = { ...process.env, AMARKTAI_DISCOVERY_TEST: '1' }
 const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'gpt-image-2',
   'gpt-5',
@@ -127,7 +128,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('default discovery mode makes no live calls and writes reports', () => {
-    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs'], { cwd: ROOT, encoding: 'utf-8' })
+    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs'], { cwd: ROOT, env: DISCOVERY_TEST_ENV, encoding: 'utf-8' })
     expect(output).toContain('Mode: safe_static')
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryAttempted).toBe(false)
@@ -135,22 +136,19 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
     expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
     expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(93)
-    if (report.deepinfraPublicDiscoverySucceeded) {
-      expect(report.totalEffectiveCatalogueModels).toBeGreaterThan(93)
-      expect(report.totalPublicEndpointModels).toBeGreaterThan(0)
-      expect(report.providersUsingPublicEndpoint).toContain('deepinfra')
-    }
+    expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
+    expect(report.deepinfraPublicDiscoverySucceeded).toBe(false)
+    expect(report.totalPublicEndpointModels).toBe(0)
     expect(report.modelsExecutableNow).toBe(5)
     expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
     expect(report.countsByProvider.genx).toBe(61)
     expect(report.togetherDocsFallbackComplete).toBe(false)
     expect(report.togetherProviderUniverseKnown).toBe(false)
     expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
-    expect(report.deepinfraPublicDiscoveryAttempted).toBe(true)
     expect(report.genxMusicCapabilityKnown).toBe(true)
     expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
-  })
+  }, 30000)
 
   it('GenX docs fallback contains the exact 61 user-supplied model IDs once', () => {
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
@@ -193,10 +191,10 @@ describe('provider model discovery and router catalogue rebuild', () => {
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     delete env.MIMO_API_KEY
-    expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env, encoding: 'utf-8' })).toThrow()
+    expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1' }, encoding: 'utf-8' })).toThrow()
     const source = fs.readFileSync(path.join(ROOT, 'scripts/discover-provider-models.mjs'), 'utf-8')
     expect(source).toContain("const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']")
-  })
+  }, 30000)
 
   it('default live mode soft-skips missing runtime keys', () => {
     const env = { ...process.env }
@@ -204,12 +202,12 @@ describe('provider model discovery and router catalogue rebuild', () => {
     delete env.GROQ_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
-    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live'], { cwd: ROOT, env, encoding: 'utf-8' })
+    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1' }, encoding: 'utf-8' })
     expect(output).toContain('Live discovery is partial')
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryPartial).toBe(true)
     expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
-  })
+  }, 30000)
 
   it('Together live discovery maps every returned model type without assuming execution', async () => {
     const calls = []

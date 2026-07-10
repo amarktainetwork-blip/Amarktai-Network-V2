@@ -3,13 +3,13 @@ import {
   DISCOVERED_PROVIDER_MODELS,
   MODEL_CATALOGUE,
   PROVIDER_KEYS,
-  buildCapabilityReadiness,
   isProviderKey,
   type ModelRecord,
   type ProviderDiscoveredModel,
   type ProviderKey,
 } from '@amarktai/core'
 import { runProviderModelDiscovery } from '@amarktai/providers'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 const RUNTIME_EXECUTABLE_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra'] as const
 
@@ -158,10 +158,16 @@ function envApiKeys(): Partial<Record<ProviderKey, string>> {
 export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/models/discovery/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
+    const truth = await buildAdminRuntimeTruth(app)
     return reply.send({
       success: true,
       generatedLayer: discoverySummary(DISCOVERED_PROVIDER_MODELS),
       catalogue: summarizeModels(MODEL_CATALOGUE),
+      canonicalTruth: {
+        providerPolicy: truth.providerPolicy,
+        countsByClassification: truth.countsByClassification,
+        capabilities: truth.capabilities,
+      },
       distinction: 'Provider has model is not the same as AmarktAI can execute capability.',
     })
   })
@@ -204,18 +210,25 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
 
   app.get('/api/admin/models/catalogue', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
+    const truth = await buildAdminRuntimeTruth(app)
     return reply.send({
       success: true,
       summary: summarizeModels(MODEL_CATALOGUE),
       models: MODEL_CATALOGUE,
+      canonicalTruth: {
+        providers: truth.providers,
+        capabilities: truth.capabilities,
+      },
     })
   })
 
   app.get('/api/admin/models/capabilities', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
+    const truth = await buildAdminRuntimeTruth(app)
     return reply.send({
       success: true,
-      capabilities: buildCapabilityReadiness(DISCOVERED_PROVIDER_MODELS),
+      capabilities: truth.capabilities,
+      countsByClassification: truth.countsByClassification,
     })
   })
 
