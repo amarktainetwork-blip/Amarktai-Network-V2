@@ -14,6 +14,7 @@ export {
   getArtifactPublicUrl,
   getArtifactRecord,
   getArtifactFile,
+  findCompletedArtifactByTraceId,
   type SaveArtifactOptions,
   type SavedArtifact,
 } from './manager.js'
