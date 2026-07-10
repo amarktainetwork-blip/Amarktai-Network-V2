@@ -20,64 +20,6 @@ import {
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
-// Temporary proof gate for live-capable paths. This is not final Brain routing:
-// future selection must remain internal and dynamic across health, cost,
-// latency, quality, safety, budget, fallback, and subtask requirements.
-const EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {
-  chat: 'groq',
-  reasoning: 'groq',
-  code: 'groq',
-  summarization: 'groq',
-  translation: 'groq',
-  classification: 'groq',
-  extraction: 'groq',
-  structured_output: 'groq',
-  image_generation: 'together',
-  video_generation: 'genx',
-}
-
-function getImplementedProvider(capability: CapabilityKey): ProviderKey | null {
-  return EXECUTION_SUPPORT[capability] ?? null
-}
-
-function canExecuteImplementedProvider(
-  capability: CapabilityKey,
-  provider: ProviderKey,
-): { allowed: boolean; reason: string | null } {
-  const decision = routeProvider(capability)
-  const candidate = decision.candidates.find((item) => item.provider === provider)
-
-  if (!candidate?.supported) {
-    return {
-      allowed: false,
-      reason: `${provider} does not support capability '${capability}'`,
-    }
-  }
-
-  if (candidate.gated) {
-    return {
-      allowed: false,
-      reason: `${provider} is gated for capability '${capability}'`,
-    }
-  }
-
-  if (candidate.disabled) {
-    return {
-      allowed: false,
-      reason: `${provider} is disabled`,
-    }
-  }
-
-  if (candidate.runtimeRestricted) {
-    return {
-      allowed: false,
-      reason: `${provider} is runtime-restricted`,
-    }
-  }
-
-  return { allowed: true, reason: null }
-}
-
 function formatSupportedCandidates(capability: CapabilityKey): string {
   return routeProvider(capability).candidates
     .filter((candidate) => candidate.supported)

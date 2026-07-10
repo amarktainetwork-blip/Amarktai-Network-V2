@@ -115,7 +115,8 @@ async function checkWorkerExecution() {
       groqText: content.includes('executeGroqTextCapability'),
       deepinfraText: content.includes('executeDeepInfraTextCapability'),
       togetherImage: content.includes('executeTogetherImage'),
-      genxVideo: content.includes('executeGenxVideo')
+      genxVideo: content.includes('executeGenxVideo'),
+      musicWorker: content.includes('executeMusicGeneration')
     },
     usesBrainRouter: content.includes('routeBrain')
   }
@@ -264,7 +265,8 @@ async function checkProviderClients() {
       together: content.includes('togetherGenerateImage') || content.includes('together'),
       genx: content.includes('genxGenerateVideo') || content.includes('genx'),
       deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
-      mimo: content.includes('mimo') || false
+      mimo: content.includes('mimo') || false,
+      music: content.includes('GenerateMusic') || content.includes('MusicGeneration')
     }
   }
 }
@@ -476,18 +478,53 @@ async function runAudit() {
   }
   
   // Music readiness
+  const musicSchemaReady = await fileExists('packages/core/src/music-generation.ts')
+  const musicRouteExists = await fileExists('apps/api/src/routes/admin-music.ts')
+  const musicDashboardReady = dashboardPages.found && dashboardPages.pages['music']?.exists
+  const musicModelCatalogueEntryExists = modelCatalogue.models.some(m => m.capabilities.includes('music_generation'))
+  const musicWorkerExecutorExists = workerExecution.found && workerExecution.executors.musicWorker === true
+  const musicProviderClientExists = providerClients.clients.music === true
+  const musicArtifactPersistenceReady = await fileExists('packages/artifacts/src/manager.ts')
+  const musicGenerationReady = musicProviderClientExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
+  const musicBlockedReason = musicGenerationReady
+    ? ''
+    : 'No approved provider music generation client or endpoint is documented/configured in this repo.'
+
   const musicReadiness = {
-    providerClient: false,
-    modelCatalogueEntries: modelCatalogue.models.some(m => m.capabilities.includes('music_generation')),
-    workerExecutor: workerExecution.found && workerExecution.executors.musicWorker === true,
-    dashboardPage: dashboardPages.found && dashboardPages.pages['music']?.exists,
+    schemaReady: musicSchemaReady,
+    plannerReady: musicSchemaReady,
+    providerClientExists: musicProviderClientExists,
+    modelCatalogueEntryExists: musicModelCatalogueEntryExists,
+    workerExecutorExists: musicWorkerExecutorExists,
+    artifactPersistenceReady: musicArtifactPersistenceReady,
+    dashboardReady: musicDashboardReady,
+    adminRoutesReady: musicRouteExists,
+    instrumentalReady: musicSchemaReady,
+    vocalsReady: false,
+    lyricsReady: false,
+    musicGenerationReady,
+    executionBlocked: !musicGenerationReady,
+    blockedReason: musicBlockedReason,
+    providerCapabilityAudit: [
+      { provider: 'genx', musicClient: false, executable: false, note: 'GenX video client exists; no repo music client or documented music endpoint.' },
+      { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },
+      { provider: 'together', musicClient: false, executable: false, note: 'Together image client exists; no music generation client.' },
+      { provider: 'mimo', musicClient: false, executable: false, note: 'MiMo remains coding_tools_only and is never runtime-selected.' },
+      { provider: 'deepinfra', musicClient: false, executable: false, note: 'DeepInfra chat client exists; no music generation client.' }
+    ],
+    // Legacy keys retained for existing audit consumers.
+    providerClient: musicProviderClientExists,
+    modelCatalogueEntries: musicModelCatalogueEntryExists,
+    workerExecutor: musicWorkerExecutorExists,
+    dashboardPage: musicDashboardReady,
     missingParts: [
-      'music_provider_client',
-      'music_models_in_catalogue',
-      'music_worker_executor',
-      'music_artifact_persistence',
-      'music_dashboard_enablement'
-    ]
+      !musicSchemaReady ? 'music_schema' : null,
+      !musicProviderClientExists ? 'music_provider_client' : null,
+      !musicModelCatalogueEntryExists ? 'music_models_in_catalogue' : null,
+      !musicWorkerExecutorExists ? 'music_worker_executor' : null,
+      !musicArtifactPersistenceReady ? 'music_artifact_persistence' : null,
+      !musicDashboardReady ? 'music_dashboard_enablement' : null
+    ].filter(Boolean)
   }
   
   // Long-form video readiness with Phase 2 scene execution detection
@@ -653,7 +690,7 @@ async function runAudit() {
     safe_to_redeploy_foundation: true,
     product_ready: false,
     app_ready: false,
-    music_ready: false,
+    music_ready: musicReadiness.musicGenerationReady,
     long_form_ready: false,
     blockers: [],
     warnings: []
@@ -686,7 +723,7 @@ async function runAudit() {
   }
   
   // Music readiness
-  if (!musicReadiness.workerExecutor) {
+  if (!musicReadiness.musicGenerationReady) {
     redeployReadiness.warnings.push('music_backend_not_ready')
   }
   
@@ -706,8 +743,12 @@ async function runAudit() {
   // Risk list
   const riskList = []
   
-  if (musicReadiness.modelCatalogueEntries === false) {
+  if (musicReadiness.modelCatalogueEntryExists === false) {
     riskList.push({ risk: 'music_generation_not_in_catalogue', severity: 'medium' })
+  }
+
+  if (musicReadiness.providerClientExists === false) {
+    riskList.push({ risk: 'music_provider_client_missing', severity: 'medium', details: [musicReadiness.blockedReason] })
   }
   
   if (longFormReadiness.ffmpegIntegration === false) {
@@ -723,7 +764,7 @@ async function runAudit() {
     {
       priority: 1,
       title: 'feat: add music generation backend',
-      description: 'Wire music provider client, models in catalogue, worker executor, and dashboard enablement',
+      description: 'Wire an approved music provider client and worker executor after provider capability is verified',
       effort: 'large'
     },
     {
@@ -957,10 +998,20 @@ async function runAudit() {
   console.log()
   
   console.log('🎵 MUSIC READINESS')
-  console.log(`   Provider client: ${musicReadiness.providerClient ? '✓' : '✗'}`)
-  console.log(`   Model catalogue: ${musicReadiness.modelCatalogueEntries ? '✓' : '✗'}`)
-  console.log(`   Worker executor: ${musicReadiness.workerExecutor ? '✓' : '✗'}`)
-  console.log(`   Dashboard page: ${musicReadiness.dashboardPage ? '✓' : '✗'}`)
+  console.log(`   Schema: ${musicReadiness.schemaReady ? '✓' : '✗'}`)
+  console.log(`   Planner: ${musicReadiness.plannerReady ? '✓' : '✗'}`)
+  console.log(`   Provider client: ${musicReadiness.providerClientExists ? '✓' : '✗'}`)
+  console.log(`   Model catalogue: ${musicReadiness.modelCatalogueEntryExists ? '✓' : '✗'}`)
+  console.log(`   Worker executor: ${musicReadiness.workerExecutorExists ? '✓' : '✗'}`)
+  console.log(`   Artifact persistence: ${musicReadiness.artifactPersistenceReady ? '✓' : '✗'}`)
+  console.log(`   Dashboard page: ${musicReadiness.dashboardReady ? '✓' : '✗'}`)
+  console.log(`   Instrumental planning: ${musicReadiness.instrumentalReady ? '✓' : '✗'}`)
+  console.log(`   Vocals: ${musicReadiness.vocalsReady ? '✓' : '✗'}`)
+  console.log(`   Lyrics: ${musicReadiness.lyricsReady ? '✓' : '✗'}`)
+  console.log(`   Music generation ready: ${musicReadiness.musicGenerationReady ? '✓ YES' : '✗ NO'}`)
+  if (musicReadiness.blockedReason) {
+    console.log(`   Blocked: ${musicReadiness.blockedReason}`)
+  }
   console.log(`   Missing: ${musicReadiness.missingParts.length} parts`)
   console.log()
   

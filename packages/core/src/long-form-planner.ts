@@ -5,7 +5,6 @@ import {
   LongFormScene,
   LongFormRenderStep,
   LongFormVideoArtifactPlan,
-  LONG_FORM_VIDEO_STATUS
 } from './long-form-video.js'
 
 // ── Long-Form Video Planner ───────────────────────────────────────────────────
@@ -172,7 +171,7 @@ function generateCameraDirection(sceneNumber: number, isFirstScene: boolean, isL
   if (isLastScene) return 'wide_shot_closing'
   
   const directions = ['medium_shot', 'close_up', 'wide_shot', 'tracking_shot', 'static_shot']
-  return directions[sceneNumber % directions.length]
+  return directions[sceneNumber % directions.length] ?? 'static_shot'
 }
 
 function generateVoiceoverText(sceneNumber: number, prompt: string, tone: string): string {
@@ -183,7 +182,7 @@ function generateSubtitleText(sceneNumber: number, prompt: string): string {
   return `Scene ${sceneNumber}: ${prompt.substring(0, 50)}`
 }
 
-function generateMusicCue(sceneNumber: number, tone: string): string {
+function generateMusicCue(_sceneNumber: number, tone: string): string {
   const cues = {
     professional: 'corporate_ambient',
     casual: 'light_acoustic',

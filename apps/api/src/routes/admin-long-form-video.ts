@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import {
-  LongFormVideoRequestSchema,
   createLongFormVideoPlan,
   validateLongFormVideoRequest,
   createSceneExecutionPayloads,
@@ -12,6 +11,7 @@ import {
   DEFAULT_JOB_OPTIONS,
   isValidRoutingMode,
   type JobPayload,
+  type LongFormExecutionState,
 } from '@amarktai/core'
 import {
   checkFfmpegAvailable,
@@ -22,7 +22,71 @@ import {
 } from '../lib/long-form-assembly.js'
 
 // In-memory execution state store (Phase 2 - will be replaced with DB in Phase 3)
-const executionStates = new Map<string, ReturnType<typeof createLongFormExecutionState>>()
+const executionStates = new Map<string, LongFormExecutionState>()
+
+type ExecutionJob = Awaited<ReturnType<typeof prisma.job.findMany>>[number]
+
+function parseExecutionMetadata(metadataJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(metadataJson)
+    return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function readMetadataString(metadata: Record<string, unknown>, key: string, fallback: string): string {
+  const value = metadata[key]
+  return typeof value === 'string' && value.length > 0 ? value : fallback
+}
+
+function readMetadataNumber(metadata: Record<string, unknown>, key: string, fallback: number): number {
+  const value = metadata[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function toSceneStatus(status: string): 'queued' | 'processing' | 'completed' | 'failed' {
+  return status === 'queued' || status === 'processing' || status === 'completed' || status === 'failed'
+    ? status
+    : 'failed'
+}
+
+function buildExecutionStateFromJobs(executionId: string, jobs: ExecutionJob[], missingDependencies: string[]): LongFormExecutionState {
+  const firstJob = jobs[0]
+  if (!firstJob) {
+    throw new Error('Cannot reconstruct execution state without jobs')
+  }
+
+  const firstJobMetadata = parseExecutionMetadata(firstJob.metadataJson)
+  return {
+    executionId,
+    planId: readMetadataString(firstJobMetadata, 'planId', 'unknown'),
+    routingMode: readMetadataString(firstJobMetadata, 'routingMode', 'balanced'),
+    totalScenes: jobs.length,
+    scenes: jobs.map((job) => {
+      const metadata = parseExecutionMetadata(job.metadataJson)
+      const sceneNumber = readMetadataNumber(metadata, 'sceneNumber', 0)
+      return {
+        sceneNumber,
+        sceneTitle: readMetadataString(metadata, 'sceneTitle', `Scene ${sceneNumber}`),
+        status: toSceneStatus(job.status),
+        jobId: job.id,
+        artifactId: job.artifactId || undefined,
+        provider: job.provider || undefined,
+        model: job.model || undefined,
+        error: job.error || undefined,
+        startedAt: job.startedAt?.toISOString(),
+        completedAt: job.completedAt?.toISOString(),
+      }
+    }),
+    progress: 0,
+    finalAssemblyReady: false,
+    finalAssemblyCompleted: false,
+    missingDependencies,
+    createdAt: firstJob.createdAt.toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -219,9 +283,10 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         const sceneIndex = updatedState.scenes.findIndex(
           (s) => s.sceneNumber === payload.sceneNumber
         )
-        if (sceneIndex !== -1) {
-          updatedState.scenes[sceneIndex].jobId = job.id
-          updatedState.scenes[sceneIndex].status = 'queued'
+        const sceneState = sceneIndex === -1 ? undefined : updatedState.scenes[sceneIndex]
+        if (sceneState) {
+          sceneState.jobId = job.id
+          sceneState.status = 'queued'
         }
       }
 
@@ -284,38 +349,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           })
         }
 
-        // Reconstruct execution state from jobs
-        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
-        state = {
-          executionId: id,
-          planId: firstJobMetadata.planId || 'unknown',
-          routingMode: firstJobMetadata.routingMode || 'balanced',
-          totalScenes: jobs.length,
-          scenes: jobs.map((job) => {
-            const metadata = JSON.parse(job.metadataJson)
-            return {
-              sceneNumber: metadata.sceneNumber,
-              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
-              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
-              jobId: job.id,
-              artifactId: job.artifactId || undefined,
-              provider: job.provider || undefined,
-              model: job.model || undefined,
-              error: job.error || undefined,
-              startedAt: job.startedAt?.toISOString(),
-              completedAt: job.completedAt?.toISOString(),
-            }
-          }),
-          progress: 0,
-          finalAssemblyReady: false,
-          missingDependencies: [
-            'ffmpeg/stitching',
-            'final_assembly_pipeline',
-            'persistent_execution_tracking'
-          ],
-          createdAt: jobs[0].createdAt.toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
+        state = buildExecutionStateFromJobs(id, jobs, [
+          'ffmpeg/stitching',
+          'final_assembly_pipeline',
+          'persistent_execution_tracking'
+        ])
 
         // Cache reconstructed state in memory
         executionStates.set(id, state)
@@ -407,31 +445,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           })
         }
 
-        // Reconstruct state
-        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
-        state = {
-          executionId,
-          planId: firstJobMetadata.planId || 'unknown',
-          routingMode: firstJobMetadata.routingMode || 'balanced',
-          totalScenes: jobs.length,
-          scenes: jobs.map((job) => {
-            const metadata = JSON.parse(job.metadataJson)
-            return {
-              sceneNumber: metadata.sceneNumber,
-              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
-              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
-              jobId: job.id,
-              artifactId: job.artifactId || undefined,
-              provider: job.provider || undefined,
-              model: job.model || undefined,
-            }
-          }),
-          progress: 0,
-          finalAssemblyReady: false,
-          missingDependencies: [],
-          createdAt: jobs[0].createdAt.toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
+        state = buildExecutionStateFromJobs(executionId, jobs, [])
       }
 
       // Check if all scenes are completed
@@ -582,31 +596,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           })
         }
 
-        // Reconstruct state
-        const firstJobMetadata = JSON.parse(jobs[0].metadataJson)
-        state = {
-          executionId,
-          planId: firstJobMetadata.planId || 'unknown',
-          routingMode: firstJobMetadata.routingMode || 'balanced',
-          totalScenes: jobs.length,
-          scenes: jobs.map((job) => {
-            const metadata = JSON.parse(job.metadataJson)
-            return {
-              sceneNumber: metadata.sceneNumber,
-              sceneTitle: metadata.sceneTitle || `Scene ${metadata.sceneNumber}`,
-              status: job.status as 'queued' | 'processing' | 'completed' | 'failed',
-              jobId: job.id,
-              artifactId: job.artifactId || undefined,
-              provider: job.provider || undefined,
-              model: job.model || undefined,
-            }
-          }),
-          progress: 0,
-          finalAssemblyReady: false,
-          missingDependencies: [],
-          createdAt: jobs[0].createdAt.toISOString(),
-          updatedAt: new Date().toISOString(),
-        }
+        state = buildExecutionStateFromJobs(executionId, jobs, [])
       }
 
       // Check scene completion

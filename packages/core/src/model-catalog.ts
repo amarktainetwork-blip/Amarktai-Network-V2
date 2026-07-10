@@ -195,6 +195,21 @@ export const MODEL_CATALOGUE: readonly ModelRecord[] = [
     executable: false,
     notes: 'Long-form video. Pending storyboard and multi-scene assembly.',
   },
+  {
+    provider: 'genx',
+    modelId: 'music-generation-provider-client-pending',
+    displayName: 'Music Generation Provider Client Pending',
+    capabilities: ['music_generation'],
+    status: 'planned',
+    qualityTier: 'balanced',
+    latencyTier: 'high',
+    costTier: 'premium',
+    supportsArtifacts: true,
+    supportsStreaming: false,
+    supportsBatch: false,
+    executable: false,
+    notes: 'Music generation foundation only. No approved provider music endpoint/client is documented or configured in this repo.',
+  },
 ] as const
 
 export function getModelsByProvider(provider: ProviderKey): ModelRecord[] {

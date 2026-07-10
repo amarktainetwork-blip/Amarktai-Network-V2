@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Long-Form Runtime FFmpeg Proof Script
  *

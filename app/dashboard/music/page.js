@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,11 +16,30 @@ const INSTRUMENTS = [
 const SONG_PARTS = ['Rap Verse', 'Chorus']
 const EXPORT_FORMATS = ['MP3', 'WAV', 'FLAC']
 
+function statusLabel(value) {
+  return value ? 'Ready' : 'Blocked'
+}
+
+function statusClass(value) {
+  return value ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-300'
+}
+
 export default function MusicStudioPage() {
   const [prompt, setPrompt] = useState('')
   const [selectedGenres, setSelectedGenres] = useState([])
   const [instrumental, setInstrumental] = useState(false)
   const [lyrics, setLyrics] = useState('')
+  const [musicStatus, setMusicStatus] = useState(null)
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
+    fetch('/api/admin/music/status', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((response) => response.json())
+      .then((data) => setMusicStatus(data?.status ?? null))
+      .catch(() => setMusicStatus(null))
+  }, [])
 
   const toggleGenre = (g) => {
     if (selectedGenres.includes(g)) {
@@ -32,16 +51,55 @@ export default function MusicStudioPage() {
 
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Music Studio" subtitle="Create music from prompts. All controls are design-ready but disabled until music_generation is wired." />
+      <PageHeader title="Music Studio" subtitle="Plan music generation requests. Execution stays blocked until an approved provider music client is wired." />
 
       <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
         <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
-          <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending
+          <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending / Execution Blocked
         </div>
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Music generation backend is not yet wired. No audio is being generated. Controls are design-ready but disabled until music_generation is wired.
+          Music generation backend is not yet wired. Controls are design-ready but disabled. No audio is being generated.
+        </p>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {musicStatus?.blockedReason || 'No approved provider music generation client or endpoint is documented/configured in this repo.'}
         </p>
       </div>
+
+      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-cyan-300" /> Backend Truth</h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Planning</div>
+            <Badge variant="outline" className={`mt-2 text-[10px] ${statusClass(musicStatus?.plannerReady)}`}>{statusLabel(musicStatus?.plannerReady)}</Badge>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Execution</div>
+            <Badge variant="outline" className={`mt-2 text-[10px] ${statusClass(musicStatus?.musicGenerationReady)}`}>{statusLabel(musicStatus?.musicGenerationReady)}</Badge>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Provider Client</div>
+            <Badge variant="outline" className={`mt-2 text-[10px] ${statusClass(musicStatus?.providerClientExists)}`}>{statusLabel(musicStatus?.providerClientExists)}</Badge>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Worker Executor</div>
+            <Badge variant="outline" className={`mt-2 text-[10px] ${statusClass(musicStatus?.workerExecutorExists)}`}>{statusLabel(musicStatus?.workerExecutorExists)}</Badge>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Instrumental</div>
+            <div className="mt-1 text-xs text-emerald-300">{musicStatus?.instrumentalReady ? 'Planning ready' : 'Blocked'}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Vocals</div>
+            <div className="mt-1 text-xs text-amber-300">{musicStatus?.vocalsReady ? 'Ready' : 'Pending provider support'}</div>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="text-[10px] uppercase text-muted-foreground">Lyrics</div>
+            <div className="mt-1 text-xs text-amber-300">{musicStatus?.lyricsReady ? 'Ready' : 'Pending provider support'}</div>
+          </div>
+        </div>
+      </Card>
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Music className="h-4 w-4 text-cyan-300" /> Create</h3>
@@ -198,7 +256,7 @@ export default function MusicStudioPage() {
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Music className="h-4 w-4 text-cyan-300" /> Player / Output</h3>
         <div className="flex items-center justify-center rounded-lg border border-white/[0.06] bg-black/20 p-6">
-          <p className="text-xs text-muted-foreground">Generated audio will appear here</p>
+          <p className="text-xs text-muted-foreground">Execution blocked. Real audio artifacts will appear only after an approved provider music client, worker executor, and artifact save path are wired.</p>
         </div>
       </Card>
 
