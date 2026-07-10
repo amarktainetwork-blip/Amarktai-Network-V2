@@ -1,16 +1,16 @@
 import type { ProviderDiscoveryResult } from '@amarktai/core'
 import { discoveryTimestamp, failedLiveResult, fetchModelList, liveResult, modelFromProviderRecord, skippedResult, stringField, numberField, type DiscoveryAdapterOptions } from './common.js'
 
-const DEEPINFRA_MODELS_ENDPOINT = 'https://api.deepinfra.com/v1/openai/models'
+const DEEPINFRA_MODELS_ENDPOINT = 'https://api.deepinfra.com/models/list'
 
 export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterOptions = {}): Promise<ProviderDiscoveryResult> {
   const timestamp = discoveryTimestamp(options)
   const staticModels = [
-    modelFromProviderRecord({ provider: 'deepinfra', modelId: 'meta-llama/Meta-Llama-3.1-8B-Instruct', displayName: 'Meta Llama 3.1 8B Instruct', rawProviderType: 'chat', endpointSource: 'repo_static_deepinfra_client', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: true, workerExecutorExists: true, streamingSupported: true, batchSupported: true }),
+    modelFromProviderRecord({ provider: 'deepinfra', modelId: 'meta-llama/Meta-Llama-3.1-8B-Instruct', displayName: 'Meta Llama 3.1 8B Instruct', rawProviderType: 'chat', category: 'text', endpointSource: 'repo_static_deepinfra_client', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, streamingSupported: true, transportProfile: 'openai_chat_sse', batchSupported: true }),
   ]
 
   if (!options.live || !options.apiKey) {
-    return skippedResult('deepinfra', DEEPINFRA_MODELS_ENDPOINT, staticModels, ['DeepInfra live discovery uses its OpenAI-compatible models endpoint only when --live and DEEPINFRA_API_KEY are present.'])
+    return skippedResult('deepinfra', DEEPINFRA_MODELS_ENDPOINT, staticModels, ['DeepInfra safe discovery uses public/docs fallback. Live discovery uses public /models/list only; execution still requires known endpoint/request/response/client/executor readiness.'])
   }
 
   try {
@@ -28,7 +28,8 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
           rawProviderType: rawType,
           endpointSource: DEEPINFRA_MODELS_ENDPOINT,
           lastDiscoveredAt: timestamp,
-          source: 'live_discovered',
+          source: 'live_endpoint',
+          discoverySource: 'live_endpoint',
           providerClientExists: isChat,
           workerExecutorExists: isChat,
           contextWindow: numberField(record, ['max_model_len', 'context_window', 'context']),

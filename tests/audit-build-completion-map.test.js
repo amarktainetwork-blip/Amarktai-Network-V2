@@ -332,7 +332,11 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.musicReadiness.lyricsReady).toBe(false)
     expect(auditOutput.musicReadiness.musicGenerationReady).toBe(false)
     expect(auditOutput.musicReadiness.executionBlocked).toBe(true)
-    expect(auditOutput.musicReadiness.blockedReason).toContain('No approved provider music generation client')
+    expect(auditOutput.musicReadiness.blockedReason).toContain('GenX music capability is known')
+    expect(auditOutput.musicReadiness.genxMusicCapabilityKnown).toBe(true)
+    expect(auditOutput.musicReadiness.lyriaClipDiscovered).toBe(true)
+    expect(auditOutput.musicReadiness.lyriaProDiscovered).toBe(true)
+    expect(auditOutput.musicReadiness.musicExecutorReady).toBe(false)
     expect(auditOutput.musicReadiness.providerCapabilityAudit).toHaveLength(5)
     expect(auditOutput.musicReadiness.providerCapabilityAudit.find(p => p.provider === 'mimo')?.note).toContain('coding_tools_only')
     expect(auditOutput.musicReadiness.providerClient).toBeDefined()
@@ -340,6 +344,24 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.musicReadiness.workerExecutor).toBeDefined()
     expect(auditOutput.musicReadiness.dashboardPage).toBeDefined()
     expect(auditOutput.musicReadiness.missingParts).toBeDefined()
+  })
+
+  it('audit reports provider discovery and MiMo policy readiness', () => {
+    expect(auditOutput.providerDiscoveryReadiness).toMatchObject({
+      discoveryFrameworkReady: true,
+      docsFallbackReady: true,
+      liveDiscoverySupported: true,
+      fullProviderModelUniverseKnown: false,
+    })
+    expect(auditOutput.providerDiscoveryReadiness.effectiveCatalogueModelCount).toBeGreaterThanOrEqual(62)
+    expect(auditOutput.mimoReadiness).toMatchObject({
+      docsCapabilityKnown: true,
+      policyRestrictedByApp: true,
+      backendRuntimeAllowed: false,
+      workerRuntimeAllowed: false,
+      executableNow: false,
+      policyBlockedReason: 'coding_agent_only_not_backend_runtime',
+    })
   })
 
   it('audit detects long-form video readiness', () => {

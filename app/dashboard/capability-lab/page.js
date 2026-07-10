@@ -216,8 +216,8 @@ export default function CapabilityLabPage() {
         </p>
         <div className="grid gap-2 text-[10px] sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
-            <span className="text-muted-foreground/60">Discovered: </span>
-            <span className="text-violet-300">{modelDiscovery?.generatedLayer?.totalDiscovered ?? 'pending'}</span>
+            <span className="text-muted-foreground/60">Docs-known: </span>
+            <span className="text-violet-300">{modelDiscovery?.generatedLayer?.totalDocsFallbackModels ?? 'pending'}</span>
           </div>
           <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] p-2">
             <span className="text-muted-foreground/60">Executable: </span>
@@ -232,10 +232,49 @@ export default function CapabilityLabPage() {
             <span className="text-rose-300">{modelDiscovery?.catalogue?.blocked ?? MODEL_CATALOGUE_SUMMARY.blocked.length}</span>
           </div>
           <div className="rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] p-2">
-            <span className="text-muted-foreground/60">Music models: </span>
-            <span className="text-cyan-300">{modelDiscovery?.generatedLayer?.musicReadiness?.discoveredMusicModels ?? 'pending'}</span>
+            <span className="text-muted-foreground/60">Live-discovered: </span>
+            <span className="text-cyan-300">{modelDiscovery?.generatedLayer?.totalLiveDiscoveredModels ?? 'pending'}</span>
           </div>
         </div>
+        <div className="mt-3 grid gap-2 text-[10px] sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+            <span className="text-muted-foreground/60">Full universe known: </span>
+            <span className={modelDiscovery?.generatedLayer?.fullProviderModelUniverseKnown ? 'text-emerald-300' : 'text-amber-300'}>
+              {modelDiscovery?.generatedLayer?.fullProviderModelUniverseKnown ? 'yes' : 'no'}
+            </span>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+            <span className="text-muted-foreground/60">Policy restricted: </span>
+            <span className="text-rose-300">{modelDiscovery?.generatedLayer?.policyRestrictedModels ?? 'pending'}</span>
+          </div>
+          <div className="rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] p-2">
+            <span className="text-muted-foreground/60">GenX music known: </span>
+            <span className={modelDiscovery?.generatedLayer?.genxMusicCapabilityKnown ? 'text-cyan-300' : 'text-muted-foreground/40'}>
+              {modelDiscovery?.generatedLayer?.genxMusicCapabilityKnown ? 'yes' : 'pending'}
+            </span>
+          </div>
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/[0.04] p-2">
+            <span className="text-muted-foreground/60">GenX music executable: </span>
+            <span className={modelDiscovery?.generatedLayer?.genxMusicExecutionReady ? 'text-emerald-300' : 'text-amber-300'}>
+              {modelDiscovery?.generatedLayer?.genxMusicExecutionReady ? 'yes' : 'no'}
+            </span>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+            <span className="text-muted-foreground/60">MiMo capability known: </span>
+            <span className="text-violet-300">{modelDiscovery?.generatedLayer?.mimoCapabilityKnown ? 'yes' : 'pending'}</span>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/20 p-2">
+            <span className="text-muted-foreground/60">MiMo backend allowed: </span>
+            <span className="text-rose-300">no</span>
+          </div>
+          <div className="rounded-md border border-white/[0.06] bg-black/20 p-2 sm:col-span-2">
+            <span className="text-muted-foreground/60">MiMo reason: </span>
+            <span className="text-violet-300">coding-agent-only policy</span>
+          </div>
+        </div>
+        <p className="mt-3 rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] p-2 text-[10px] text-muted-foreground">
+          GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client + worker executor are wired.
+        </p>
         <div className="mt-3 grid gap-2 text-[10px] sm:grid-cols-2 lg:grid-cols-5">
           {APPROVED_PROVIDERS.map((provider) => (
             <div key={provider} className="rounded-md border border-white/[0.06] bg-black/20 p-2">

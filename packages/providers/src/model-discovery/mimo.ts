@@ -5,17 +5,22 @@ export async function discoverMimoProviderModels(options: DiscoveryAdapterOption
   const timestamp = discoveryTimestamp(options)
   const mimoModel = modelFromProviderRecord({
     provider: 'mimo',
-    modelId: 'mimo-v1',
-    displayName: 'MiMo V1',
+    modelId: 'mimo-v2.5-pro',
+    displayName: 'MiMo V2.5 Pro',
     rawProviderType: 'coding_tools_only',
-    endpointSource: 'repo_policy_coding_tools_only',
+    category: 'text',
+    endpointSource: 'MiMo official docs fallback only',
     lastDiscoveredAt: timestamp,
-    source: 'static_repo',
+    source: 'docs_fallback',
+    discoverySource: 'docs_fallback',
     providerClientExists: false,
     workerExecutorExists: false,
-    endpointShapeKnown: false,
-    requestShapeKnown: false,
-    responseShapeKnown: false,
+    endpointShapeKnown: true,
+    requestShapeKnown: true,
+    responseShapeKnown: true,
+    policyRestrictedByApp: true,
+    policyBlockedReason: 'coding_agent_only_not_backend_runtime',
+    transportProfile: 'docs_only_policy_restricted',
   })
   mimoModel.executableNow = false
   mimoModel.blockedReason = 'MiMo remains coding_tools_only and must not be runtime-selected.'

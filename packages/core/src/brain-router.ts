@@ -38,12 +38,21 @@ export interface BrainRouterDecision {
   executionAllowed: boolean
   candidateModels: ModelRecord[]
   discoveredCandidates: ModelRecord[]
+  docsFallbackCandidates: ModelRecord[]
+  liveDiscoveredCandidates: ModelRecord[]
   executableCandidates: ModelRecord[]
   catalogueOnlyCandidates: ModelRecord[]
   blockedCandidates: RejectedCandidate[]
+  policyRestrictedCandidates: RejectedCandidate[]
+  missingEndpointShapeCandidates: RejectedCandidate[]
+  missingRequestShapeCandidates: RejectedCandidate[]
+  missingResponseShapeCandidates: RejectedCandidate[]
+  missingArtifactPathCandidates: RejectedCandidate[]
   missingExecutorCandidates: RejectedCandidate[]
   providerClientMissingCandidates: RejectedCandidate[]
   modelDiscoverySource: string[]
+  transportProfileCandidates: string[]
+  upstreamProviderBreakdown: Record<string, number>
   rejectedCandidates: RejectedCandidate[]
   fallbackChain: FallbackEntry[]
   blockReason: string | null
@@ -81,8 +90,12 @@ function isProviderApproved(provider: string): provider is ProviderKey {
   return APPROVED_PROVIDER_SET.has(provider as ProviderKey)
 }
 
-function isMimoRuntime(provider: ProviderKey): boolean {
-  return provider === 'mimo'
+function uniqueModels(models: ModelRecord[]): ModelRecord[] {
+  return [...new Map(models.map((model) => [`${model.provider}:${model.modelId}`, model])).values()]
+}
+
+function addRejection(target: RejectedCandidate[], model: ModelRecord, reason: string): void {
+  target.push({ provider: model.provider, modelId: model.modelId, displayName: model.displayName, reason })
 }
 
 export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
@@ -96,8 +109,15 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
   const rejected: RejectedCandidate[] = []
   const eligible: ModelRecord[] = []
   const discoveredCandidates: ModelRecord[] = []
+  const docsFallbackCandidates: ModelRecord[] = []
+  const liveDiscoveredCandidates: ModelRecord[] = []
   const catalogueOnlyCandidates: ModelRecord[] = []
   const blockedCandidates: RejectedCandidate[] = []
+  const policyRestrictedCandidates: RejectedCandidate[] = []
+  const missingEndpointShapeCandidates: RejectedCandidate[] = []
+  const missingRequestShapeCandidates: RejectedCandidate[] = []
+  const missingResponseShapeCandidates: RejectedCandidate[] = []
+  const missingArtifactPathCandidates: RejectedCandidate[] = []
   const missingExecutorCandidates: RejectedCandidate[] = []
   const providerClientMissingCandidates: RejectedCandidate[] = []
 
@@ -105,59 +125,88 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     const provider = model.provider
 
     if (!isProviderApproved(provider)) {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Provider not in approved list' })
+      addRejection(rejected, model, 'Provider not in approved list')
       continue
     }
 
-    const state = providerStates?.[provider]
-    if (state?.disabled) {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: `Provider '${provider}' is disabled` })
-      continue
-    }
-
-    if (state?.runtimeRestricted) {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: `Provider '${provider}' is runtime_restricted` })
-      continue
-    }
-
-    if (isMimoRuntime(provider)) {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'MiMo is coding_tools_only — never selected for runtime' })
+    if (provider === 'mimo' || model.policyRestrictedByApp) {
+      const reason = model.policyBlockedReason ? `${model.policyBlockedReason} coding_tools_only` : 'coding_tools_only'
+      addRejection(rejected, model, reason)
+      addRejection(policyRestrictedCandidates, model, reason)
+      if (model.capabilities.includes(capability)) catalogueOnlyCandidates.push(model)
       continue
     }
 
     if (!model.capabilities.includes(capability)) {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: `Model does not support capability '${capability}'` })
+      addRejection(rejected, model, `Model does not support capability '${capability}'`)
       continue
     }
 
-    if (model.discoveredModel || model.source === 'live_discovered' || model.source === 'static_repo') {
+    if (model.discoveredModel || model.source === 'live_endpoint' || model.source === 'live_discovered' || model.source === 'docs_fallback' || model.source === 'static_repo') {
       discoveredCandidates.push(model)
+    }
+    if (model.docsKnown || model.source === 'docs_fallback' || model.discoverySource === 'docs_fallback') {
+      docsFallbackCandidates.push(model)
+    }
+    if (model.liveDiscovered || model.source === 'live_endpoint' || model.source === 'live_discovered') {
+      liveDiscoveredCandidates.push(model)
+    }
+
+    const state = providerStates?.[provider]
+    if (state?.disabled) {
+      addRejection(rejected, model, `Provider '${provider}' is disabled`)
+      continue
+    }
+
+    if (state?.runtimeRestricted) {
+      addRejection(rejected, model, `Provider '${provider}' is runtime_restricted`)
+      continue
     }
 
     if (model.qualityTier === 'experimental' && !allowExperimental && routingMode !== 'experimental') {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Experimental model blocked — allowExperimental false and routingMode is not experimental' })
+      addRejection(rejected, model, 'Experimental model blocked - allowExperimental false and routingMode is not experimental')
       continue
     }
 
     if (model.status === 'blocked') {
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Model status is blocked' })
-      blockedCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Model status is blocked' })
+      addRejection(rejected, model, 'Model status is blocked')
+      addRejection(blockedCandidates, model, 'Model status is blocked')
       continue
     }
 
+    if (model.endpointShapeKnown === false) {
+      addRejection(missingEndpointShapeCandidates, model, 'Endpoint shape missing')
+      catalogueOnlyCandidates.push(model)
+    }
+
+    if (model.requestShapeKnown === false) {
+      addRejection(missingRequestShapeCandidates, model, 'Request shape missing')
+      catalogueOnlyCandidates.push(model)
+    }
+
+    if (model.responseShapeKnown === false) {
+      addRejection(missingResponseShapeCandidates, model, 'Response shape missing')
+      catalogueOnlyCandidates.push(model)
+    }
+
+    if (model.supportsArtifacts && model.artifactPersistenceExists === false) {
+      addRejection(missingArtifactPathCandidates, model, 'Artifact persistence missing')
+      catalogueOnlyCandidates.push(model)
+    }
+
     if (model.providerClientExists === false) {
-      providerClientMissingCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Provider client missing' })
+      addRejection(providerClientMissingCandidates, model, 'Provider client missing')
       catalogueOnlyCandidates.push(model)
     }
 
     if (model.workerExecutorExists === false) {
-      missingExecutorCandidates.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: 'Worker executor missing' })
+      addRejection(missingExecutorCandidates, model, 'Worker executor missing')
       catalogueOnlyCandidates.push(model)
     }
 
-    if (!model.executable || model.status !== 'available') {
+    if (!model.executable || model.status !== 'available' || model.executableNow === false) {
       catalogueOnlyCandidates.push(model)
-      rejected.push({ provider, modelId: model.modelId, displayName: model.displayName, reason: `Model is ${model.status} — not executable` })
+      addRejection(rejected, model, `Model is ${model.status} - not executable`)
       continue
     }
 
@@ -197,7 +246,13 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     .map((m) => ({ provider: m.provider, modelId: m.modelId, displayName: m.displayName }))
 
   const executionAllowed = selected !== null
-  const modelDiscoverySource = [...new Set(MODEL_CATALOGUE.map((model) => model.source ?? (model.executable ? 'static_verified' : model.status === 'blocked' ? 'blocked_policy' : 'manual_planned')))]
+  const modelDiscoverySource = [...new Set(MODEL_CATALOGUE.map((model) => model.discoverySource ?? model.source ?? (model.executable ? 'static_verified' : model.status === 'blocked' ? 'blocked_policy' : 'manual_planned')))]
+  const transportProfileCandidates = [...new Set(discoveredCandidates.map((model) => model.transportProfile).filter((value): value is string => typeof value === 'string' && value.length > 0))]
+  const upstreamProviderBreakdown = discoveredCandidates.reduce<Record<string, number>>((acc, model) => {
+    const upstream = model.upstreamProvider ?? model.provider
+    acc[upstream] = (acc[upstream] ?? 0) + 1
+    return acc
+  }, {})
   let blockReason: string | null = null
   let truth = ''
 
@@ -218,13 +273,22 @@ export function routeBrain(request: BrainRouterRequest): BrainRouterDecision {
     routingMode,
     executionAllowed,
     candidateModels: eligible,
-    discoveredCandidates,
+    discoveredCandidates: uniqueModels(discoveredCandidates),
+    docsFallbackCandidates: uniqueModels(docsFallbackCandidates),
+    liveDiscoveredCandidates: uniqueModels(liveDiscoveredCandidates),
     executableCandidates: eligible,
-    catalogueOnlyCandidates: [...new Map(catalogueOnlyCandidates.map((model) => [`${model.provider}:${model.modelId}`, model])).values()],
+    catalogueOnlyCandidates: uniqueModels(catalogueOnlyCandidates),
     blockedCandidates,
+    policyRestrictedCandidates,
+    missingEndpointShapeCandidates,
+    missingRequestShapeCandidates,
+    missingResponseShapeCandidates,
+    missingArtifactPathCandidates,
     missingExecutorCandidates,
     providerClientMissingCandidates,
     modelDiscoverySource,
+    transportProfileCandidates,
+    upstreamProviderBreakdown,
     rejectedCandidates: rejected,
     fallbackChain,
     blockReason,

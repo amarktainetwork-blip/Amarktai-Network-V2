@@ -76,7 +76,7 @@ describe('Music generation backend foundation', () => {
 
     expect(plan.capability).toBe('music_generation')
     expect(plan.executionReady).toBe(false)
-    expect(plan.blockedReason).toContain('No approved provider music generation client')
+    expect(plan.blockedReason).toContain('GenX music capability is known')
     expect(plan.lyricsStatus).toBe('not_requested')
     expect(plan.vocalsStatus).toBe('not_requested')
   })
@@ -113,7 +113,11 @@ describe('Music generation backend foundation', () => {
     expect(status.lyricsReady).toBe(false)
     expect(status.musicGenerationReady).toBe(false)
     expect(status.executionBlocked).toBe(true)
-    expect(status.blockedReason).toContain('No approved provider music generation client')
+    expect(status.blockedReason).toContain('GenX music capability is known')
+    expect(status.genxMusicCapabilityKnown).toBe(true)
+    expect(status.lyriaClipDiscovered).toBe(true)
+    expect(status.lyriaProDiscovered).toBe(true)
+    expect(status.musicExecutorReady).toBe(false)
     expect(status.approvedProviderAudit).toHaveLength(5)
     expect(status.approvedProviderAudit.find((entry) => entry.provider === 'mimo')?.note).toContain('coding_tools_only')
   })
@@ -122,16 +126,24 @@ describe('Music generation backend foundation', () => {
     expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
   })
 
-  it('adds only a planned non-executable music catalogue entry', () => {
+  it('adds docs-known music catalogue entries without making them executable', () => {
     const musicModels = MODEL_CATALOGUE.filter((model) => model.capabilities.includes('music_generation'))
-    expect(musicModels).toHaveLength(1)
-    expect(musicModels[0]).toMatchObject({
+    expect(musicModels.length).toBeGreaterThanOrEqual(2)
+    expect(musicModels.every((model) => model.executable === false)).toBe(true)
+    expect(musicModels).toContainEqual(expect.objectContaining({
       provider: 'genx',
+      modelId: 'lyria-3-clip-preview',
       status: 'planned',
       executable: false,
       supportsArtifacts: true,
-    })
-    expect(musicModels[0].notes).toContain('foundation only')
+      providerClientExists: false,
+      workerExecutorExists: false,
+    }))
+    expect(musicModels).toContainEqual(expect.objectContaining({
+      provider: 'genx',
+      modelId: 'lyria-3-pro-preview',
+      executable: false,
+    }))
   })
 
   it('Brain Router blocks music generation because no executable model exists', () => {
@@ -242,7 +254,7 @@ describe('Admin music API contract', () => {
     const body = response.json()
     expect(body.success).toBe(false)
     expect(body.executionBlocked).toBe(true)
-    expect(body.message).toContain('No approved provider music generation client')
+    expect(body.message).toContain('GenX music capability is known')
     expect(body.missingDependencies).toEqual([
       'approved_provider_music_client',
       'music_worker_executor',

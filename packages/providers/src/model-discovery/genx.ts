@@ -18,10 +18,12 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
   const baseUrl = options.baseUrl || getGenxBaseUrl()
   const endpointSource = `${new URL('/api/v1/models', baseUrl).toString()}?category=*`
   const staticModels = [
-    modelFromProviderRecord({ provider: 'genx', modelId: 'seedance-v1-fast', displayName: 'Seedance V1 Fast', rawProviderType: 'video', endpointSource: 'repo_static_genx_client', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: true, workerExecutorExists: true }),
-    modelFromProviderRecord({ provider: 'genx', modelId: 'genx-image-v1', displayName: 'GenX Image V1', rawProviderType: 'image', endpointSource: 'manual_planned_genx_image', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: false, requestShapeKnown: false, responseShapeKnown: false }),
-    modelFromProviderRecord({ provider: 'genx', modelId: 'genx-longform-v1', displayName: 'GenX Long-Form V1', rawProviderType: 'long_form_video', endpointSource: 'manual_planned_long_form', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: false, requestShapeKnown: false, responseShapeKnown: false }),
-    modelFromProviderRecord({ provider: 'genx', modelId: 'music-generation-provider-client-pending', displayName: 'Music Generation Provider Client Pending', rawProviderType: 'music', endpointSource: 'manual_planned_music', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: false, requestShapeKnown: false, responseShapeKnown: false }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'bytedance', modelId: 'seedance-v1-fast', displayName: 'Seedance V1 Fast', rawProviderType: 'video', category: 'video', endpointSource: 'repo_static_genx_client', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'veo-3.1', displayName: 'Veo 3.1', rawProviderType: 'video', category: 'video', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'xai', modelId: 'grok-imagine-video', displayName: 'Grok Imagine Video', rawProviderType: 'video', category: 'video', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'genx', modelId: 'genx-image-v1', displayName: 'GenX Image V1', rawProviderType: 'image', category: 'image', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3 Clip Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll', catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-pro-preview', displayName: 'Lyria 3 Pro Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll', catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.' }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -53,12 +55,17 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
         rawProviderType: musicLike ? `music ${rawType}` : rawType,
         endpointSource,
         lastDiscoveredAt: timestamp,
-        source: 'live_discovered',
+        source: 'live_endpoint',
+        discoverySource: 'live_endpoint',
+        upstreamProvider: stringField(record, ['provider', 'upstreamProvider', 'upstream_provider'], 'genx'),
+        endpointFamily: '/api/v1/generate + /api/v1/jobs/:id',
         providerClientExists: videoLike && !musicLike,
         workerExecutorExists: videoLike && !musicLike,
         endpointShapeKnown: videoLike || musicLike,
         requestShapeKnown: videoLike && !musicLike,
         responseShapeKnown: videoLike && !musicLike,
+        artifactPersistenceExists: videoLike && !musicLike,
+        transportProfile: 'async_job_poll',
         rawMetadata: record,
       })
     })

@@ -19,6 +19,21 @@ export interface ModelRecord {
   provider: ProviderKey
   modelId: string
   displayName: string
+  executionProvider?: ProviderKey
+  upstreamProvider?: string
+  discoverySource?: ModelDiscoverySource
+  docsKnown?: boolean
+  liveDiscovered?: boolean
+  category?: string
+  providerCategory?: string
+  modalitiesIn?: string[]
+  modalitiesOut?: string[]
+  transportProfile?: string
+  endpointFamily?: string
+  authRequired?: boolean
+  providerCapabilityKnown?: boolean
+  policyRestrictedByApp?: boolean
+  policyBlockedReason?: string
   capabilities: CapabilityKey[]
   status: ModelStatus
   qualityTier: QualityTier
@@ -33,9 +48,17 @@ export interface ModelRecord {
   endpointShapeKnown?: boolean
   requestShapeKnown?: boolean
   responseShapeKnown?: boolean
+  artifactOutputKnown?: boolean
+  artifactPersistenceExists?: boolean
   providerClientExists?: boolean
   workerExecutorExists?: boolean
+  toolCallingSupported?: boolean
+  functionCallingSupported?: boolean
+  webhookSupported?: boolean
   discoveredModel?: boolean
+  executableNow?: boolean
+  executableBlockers?: string[]
+  catalogueOnlyReason?: string
   blockedReason?: string
 }
 
@@ -237,7 +260,7 @@ function discoveredModelToRecord(model: ProviderDiscoveredModel): ModelRecord {
     modelId: model.modelId,
     displayName: model.displayName,
     capabilities: model.inferredCapabilities,
-    status: model.executableNow ? 'available' : 'planned',
+    status: model.policyRestrictedByApp ? 'blocked' : model.executableNow ? 'available' : 'planned',
     qualityTier: 'balanced',
     latencyTier: 'medium',
     costTier: 'medium',
@@ -247,12 +270,35 @@ function discoveredModelToRecord(model: ProviderDiscoveredModel): ModelRecord {
     executable: model.executableNow,
     notes: `Discovered model from ${model.endpointSource}. ${model.blockedReason || 'Executable readiness satisfied.'}`,
     source: model.source,
+    executionProvider: model.executionProvider,
+    upstreamProvider: model.upstreamProvider,
+    discoverySource: model.discoverySource,
+    docsKnown: model.docsKnown,
+    liveDiscovered: model.liveDiscovered,
+    category: model.category,
+    providerCategory: model.providerCategory,
+    modalitiesIn: model.modalitiesIn,
+    modalitiesOut: model.modalitiesOut,
+    transportProfile: model.transportProfile,
+    endpointFamily: model.endpointFamily,
+    authRequired: model.authRequired,
+    providerCapabilityKnown: model.providerCapabilityKnown,
+    policyRestrictedByApp: model.policyRestrictedByApp,
+    policyBlockedReason: model.policyBlockedReason,
     endpointShapeKnown: model.endpointShapeKnown,
     requestShapeKnown: model.requestShapeKnown,
     responseShapeKnown: model.responseShapeKnown,
+    artifactOutputKnown: model.artifactOutputKnown,
+    artifactPersistenceExists: model.artifactPersistenceExists,
     providerClientExists: model.providerClientExists,
     workerExecutorExists: model.workerExecutorExists,
+    toolCallingSupported: model.toolCallingSupported,
+    functionCallingSupported: model.functionCallingSupported,
+    webhookSupported: model.webhookSupported,
     discoveredModel: true,
+    executableNow: model.executableNow,
+    executableBlockers: model.executableBlockers,
+    catalogueOnlyReason: model.catalogueOnlyReason,
     blockedReason: model.blockedReason,
   }
 }

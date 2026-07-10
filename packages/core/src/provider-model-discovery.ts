@@ -2,8 +2,11 @@ import { CAPABILITY_KEYS, type CapabilityKey } from './capabilities.js'
 import { PROVIDER_KEYS, type ProviderKey } from './providers.js'
 
 export const MODEL_DISCOVERY_SOURCES = [
-  'static_repo',
+  'live_endpoint',
+  'docs_fallback',
+  'manual_seed',
   'static_verified',
+  'static_repo',
   'live_discovered',
   'manual_planned',
   'blocked_policy',
@@ -13,6 +16,24 @@ export type ModelDiscoverySource = (typeof MODEL_DISCOVERY_SOURCES)[number]
 
 export const PROVIDER_DISCOVERY_MODES = ['safe_static', 'live_model_list'] as const
 export type ProviderDiscoveryMode = (typeof PROVIDER_DISCOVERY_MODES)[number]
+
+export const TRANSPORT_PROFILES = [
+  'openai_chat_sse',
+  'anthropic_messages_sse',
+  'openai_responses_sse',
+  'async_job_poll',
+  'async_job_webhook',
+  'openai_audio_speech_binary',
+  'openai_audio_transcription_multipart',
+  'http_audio_stream_sse',
+  'websocket_realtime_audio',
+  'native_inference_binary',
+  'native_inference_json',
+  'native_inference_async_webhook',
+  'docs_only_policy_restricted',
+] as const
+
+export type TransportProfile = (typeof TRANSPORT_PROFILES)[number]
 
 export interface DiscoveredCapability {
   capability: CapabilityKey
@@ -38,7 +59,16 @@ export interface ProviderDiscoveredModel {
   provider: ProviderKey
   modelId: string
   displayName: string
+  executionProvider: ProviderKey
+  upstreamProvider: string
+  discoverySource: ModelDiscoverySource
+  docsKnown: boolean
+  liveDiscovered: boolean
+  category: string
+  providerCategory: string
   rawProviderType: string
+  modalitiesIn: string[]
+  modalitiesOut: string[]
   modalities: string[]
   inferredCapabilities: CapabilityKey[]
   contextWindow: number | null
@@ -46,8 +76,19 @@ export interface ProviderDiscoveredModel {
   inputPrice: number | null
   outputPrice: number | null
   artifactOutput: boolean
+  artifactOutputKnown: boolean
+  artifactPersistenceExists: boolean
+  authRequired: boolean
+  providerCapabilityKnown: boolean
+  policyRestrictedByApp: boolean
+  policyBlockedReason: string
+  transportProfile: TransportProfile
+  endpointFamily: string
   streamingSupported: boolean
+  toolCallingSupported: boolean
+  functionCallingSupported: boolean
   batchSupported: boolean
+  webhookSupported: boolean
   endpointSource: string
   endpointShapeKnown: boolean
   requestShapeKnown: boolean
@@ -55,6 +96,8 @@ export interface ProviderDiscoveredModel {
   providerClientExists: boolean
   workerExecutorExists: boolean
   executableNow: boolean
+  executableBlockers: string[]
+  catalogueOnlyReason: string
   blockedReason: string
   lastDiscoveredAt: string
   source: ModelDiscoverySource
@@ -64,14 +107,41 @@ export interface ProviderDiscoveredModel {
 
 export interface ProviderDiscoveryResult {
   provider: ProviderKey
+  providerRole?: string
+  docsCapabilityKnown?: boolean
+  liveDiscoverySupported?: boolean
+  docsFallbackSupported?: boolean
+  apiKeyEnvName?: string | null
+  apiKeyRequiredForLiveDiscovery?: boolean
+  apiKeyPresent?: boolean
+  baseUrl?: string
+  alternateBaseUrls?: string[]
+  modelsEndpoint?: string
+  modelsEndpointRequiresAuth?: boolean
+  modelsEndpointScope?: string
   mode: ProviderDiscoveryMode
   source: ModelDiscoverySource
   models: ProviderDiscoveredModel[]
   totalDiscovered: number
   liveDiscoveryAttempted: boolean
+  liveDiscoverySucceeded?: boolean
   liveDiscoverySkipped: boolean
+  liveDiscoverySkipReason?: string | null
+  docsFallbackUsed?: boolean
+  providerUniverseKnown?: boolean
+  providerUniversePartiallyKnown?: boolean
+  publicDocsUniverseKnown?: boolean
+  authenticatedUniverseKnown?: boolean
   endpointSource: string
   error: string | null
+  returnedModelCount?: number
+  staticFallbackCount?: number
+  docsFallbackCount?: number
+  effectiveCatalogueCount?: number
+  runtimeExecutionAllowed?: boolean
+  policyRestrictedByApp?: boolean
+  policyExecutionDisabled?: boolean
+  policyBlockedReason?: string | null
   discoveredAt: string
   notes: string[]
 }
@@ -119,44 +189,125 @@ export function modalitiesForCapabilities(capabilities: CapabilityKey[]): string
   return [...modalities]
 }
 
-export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel, 'modalities' | 'artifactOutput' | 'executableNow' | 'blockedReason'> & {
+export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel,
+  | 'executionProvider'
+  | 'upstreamProvider'
+  | 'discoverySource'
+  | 'docsKnown'
+  | 'liveDiscovered'
+  | 'category'
+  | 'providerCategory'
+  | 'modalities'
+  | 'modalitiesIn'
+  | 'modalitiesOut'
+  | 'artifactOutput'
+  | 'artifactOutputKnown'
+  | 'artifactPersistenceExists'
+  | 'authRequired'
+  | 'providerCapabilityKnown'
+  | 'policyRestrictedByApp'
+  | 'policyBlockedReason'
+  | 'transportProfile'
+  | 'endpointFamily'
+  | 'toolCallingSupported'
+  | 'functionCallingSupported'
+  | 'webhookSupported'
+  | 'executableNow'
+  | 'executableBlockers'
+  | 'catalogueOnlyReason'
+  | 'blockedReason'> & {
+  executionProvider?: ProviderKey
+  upstreamProvider?: string
+  discoverySource?: ModelDiscoverySource
+  docsKnown?: boolean
+  liveDiscovered?: boolean
+  category?: string
+  providerCategory?: string
   modalities?: string[]
+  modalitiesIn?: string[]
+  modalitiesOut?: string[]
   artifactOutput?: boolean
+  artifactOutputKnown?: boolean
+  artifactPersistenceExists?: boolean
+  authRequired?: boolean
+  providerCapabilityKnown?: boolean
+  policyRestrictedByApp?: boolean
+  policyBlockedReason?: string
+  transportProfile?: TransportProfile
+  endpointFamily?: string
+  toolCallingSupported?: boolean
+  functionCallingSupported?: boolean
+  webhookSupported?: boolean
   executableNow?: boolean
+  executableBlockers?: string[]
+  catalogueOnlyReason?: string
   blockedReason?: string
 }): ProviderDiscoveredModel {
   const artifactOutput = input.artifactOutput ?? input.inferredCapabilities.some((capability) =>
     ['image_generation', 'image_edit', 'video_generation', 'image_to_video', 'long_form_video', 'avatar_generation', 'music_generation', 'tts'].includes(capability)
   )
-  const executableNow = input.executableNow ?? (
-    input.endpointShapeKnown
-    && input.requestShapeKnown
-    && input.responseShapeKnown
-    && input.providerClientExists
-    && input.workerExecutorExists
-  )
-  const blockedReason = input.blockedReason ?? (executableNow
-    ? ''
-    : buildDiscoveryBlockedReason(input)
-  )
+  const artifactPersistenceExists = input.artifactPersistenceExists ?? !artifactOutput
+  const policyRestrictedByApp = input.policyRestrictedByApp ?? input.provider === 'mimo'
+  const policyBlockedReason = input.policyBlockedReason ?? (input.provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : '')
+  const executableBlockers = input.executableBlockers ?? buildDiscoveryBlockers({
+    ...input,
+    artifactOutput,
+    artifactPersistenceExists,
+    policyRestrictedByApp,
+  })
+  const executableNow = input.executableNow ?? executableBlockers.length === 0
+  const blockedReason = input.blockedReason ?? (executableNow ? '' : executableBlockers.join(', '))
+  const defaultModalities = modalitiesForCapabilities(input.inferredCapabilities)
 
   return {
     ...input,
-    modalities: input.modalities ?? modalitiesForCapabilities(input.inferredCapabilities),
+    executionProvider: input.executionProvider ?? input.provider,
+    upstreamProvider: input.upstreamProvider ?? input.provider,
+    discoverySource: input.discoverySource ?? input.source,
+    docsKnown: input.docsKnown ?? input.source !== 'live_endpoint',
+    liveDiscovered: input.liveDiscovered ?? (input.source === 'live_endpoint' || input.source === 'live_discovered'),
+    category: input.category ?? input.rawProviderType,
+    providerCategory: input.providerCategory ?? input.rawProviderType,
+    modalitiesIn: input.modalitiesIn ?? defaultModalities,
+    modalitiesOut: input.modalitiesOut ?? defaultModalities,
+    modalities: input.modalities ?? defaultModalities,
     artifactOutput,
+    artifactOutputKnown: input.artifactOutputKnown ?? artifactOutput,
+    artifactPersistenceExists,
+    authRequired: input.authRequired ?? true,
+    providerCapabilityKnown: input.providerCapabilityKnown ?? true,
+    policyRestrictedByApp,
+    policyBlockedReason,
+    transportProfile: input.transportProfile ?? (input.provider === 'mimo' ? 'docs_only_policy_restricted' : 'native_inference_json'),
+    endpointFamily: input.endpointFamily ?? input.endpointSource,
+    toolCallingSupported: input.toolCallingSupported ?? false,
+    functionCallingSupported: input.functionCallingSupported ?? false,
+    webhookSupported: input.webhookSupported ?? false,
     executableNow,
+    executableBlockers,
+    catalogueOnlyReason: input.catalogueOnlyReason ?? (executableNow ? '' : blockedReason),
     blockedReason,
   }
 }
 
 function buildDiscoveryBlockedReason(input: Pick<ProviderDiscoveredModel, 'endpointShapeKnown' | 'requestShapeKnown' | 'responseShapeKnown' | 'providerClientExists' | 'workerExecutorExists'>): string {
+  return buildDiscoveryBlockers(input).join(', ')
+}
+
+function buildDiscoveryBlockers(input: Pick<ProviderDiscoveredModel, 'endpointShapeKnown' | 'requestShapeKnown' | 'responseShapeKnown' | 'providerClientExists' | 'workerExecutorExists'> & {
+  artifactOutput?: boolean
+  artifactPersistenceExists?: boolean
+  policyRestrictedByApp?: boolean
+}): string[] {
   const missing: string[] = []
   if (!input.endpointShapeKnown) missing.push('endpoint_shape_unknown')
   if (!input.requestShapeKnown) missing.push('request_shape_unknown')
   if (!input.responseShapeKnown) missing.push('response_shape_unknown')
   if (!input.providerClientExists) missing.push('provider_client_missing')
   if (!input.workerExecutorExists) missing.push('worker_executor_missing')
-  return missing.join(', ')
+  if (input.artifactOutput && input.artifactPersistenceExists === false) missing.push('artifact_persistence_missing')
+  if (input.policyRestrictedByApp) missing.push('policy_restricted_by_app')
+  return missing
 }
 
 export function buildCapabilityReadiness(models: ProviderDiscoveredModel[]): CapabilityExecutionReadiness[] {

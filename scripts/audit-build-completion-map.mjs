@@ -486,15 +486,50 @@ async function runAudit() {
   const musicProviderClientExists = providerClients.clients.music === true
   const musicArtifactPersistenceReady = await fileExists('packages/artifacts/src/manager.ts')
   const discoveredCatalogue = JSON.parse(await safeRead('packages/core/src/generated/provider-model-catalogue.generated.json') || '[]')
+  const discoveryReport = JSON.parse(await safeRead('BUILD_MODEL_DISCOVERY_REPORT.json') || '{}')
   const discoveredMusicModels = Array.isArray(discoveredCatalogue)
     ? discoveredCatalogue.filter(model => Array.isArray(model.inferredCapabilities) && model.inferredCapabilities.includes('music_generation'))
     : []
+  const genxMusicModels = discoveredMusicModels.filter(model => model.provider === 'genx')
   const musicEndpointShapeKnown = discoveredMusicModels.some(model => model.endpointShapeKnown === true)
   const musicExecutableNow = discoveredMusicModels.some(model => model.executableNow === true)
+  const genxMusicCapabilityKnown = genxMusicModels.length > 0
+  const lyriaClipDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-clip-preview')
+  const lyriaProDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-pro-preview')
   const musicGenerationReady = musicProviderClientExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
   const musicBlockedReason = musicGenerationReady
     ? ''
-    : 'No approved provider music generation client or endpoint is documented/configured in this repo.'
+    : genxMusicCapabilityKnown
+      ? 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.'
+      : 'Music provider capability is not yet known from approved provider docs or live discovery.'
+
+  const providerDiscoveryReadiness = {
+    discoveryFrameworkReady: await fileExists('scripts/discover-provider-models.mjs') && await fileExists('packages/core/src/provider-model-discovery.ts'),
+    docsFallbackReady: Array.isArray(discoveredCatalogue) && discoveredCatalogue.some(model => model.discoverySource === 'docs_fallback' || model.docsKnown === true),
+    liveDiscoverySupported: await fileExists('packages/providers/src/model-discovery/index.ts'),
+    liveDiscoveryComplete: discoveryReport.fullProviderModelUniverseKnown === true,
+    fullProviderModelUniverseKnown: discoveryReport.fullProviderModelUniverseKnown === true,
+    staticFallbackModelCount: discoveryReport.totalDocsFallbackModels ?? discoveredCatalogue.filter(model => model.docsKnown === true).length,
+    docsFallbackModelCount: discoveryReport.totalDocsFallbackModels ?? discoveredCatalogue.filter(model => model.docsKnown === true).length,
+    liveDiscoveredModelCount: discoveryReport.totalLiveDiscoveredModels ?? discoveredCatalogue.filter(model => model.liveDiscovered === true).length,
+    effectiveCatalogueModelCount: discoveryReport.totalEffectiveCatalogueModels ?? discoveredCatalogue.length,
+    runtimeExecutableModelCount: discoveryReport.modelsExecutableNow ?? discoveredCatalogue.filter(model => model.executableNow === true).length,
+    catalogueOnlyModelCount: discoveryReport.modelsKnownButBlocked ?? discoveredCatalogue.filter(model => model.executableNow !== true).length,
+    policyRestrictedModelCount: discoveryReport.policyRestrictedModels ?? discoveredCatalogue.filter(model => model.policyRestrictedByApp === true).length,
+    providersUsingDocsFallback: discoveryReport.providersUsingDocsFallback ?? [],
+    providersSkipped: discoveryReport.providersSkipped ?? [],
+    providersFailed: discoveryReport.providersFailed ?? [],
+  }
+
+  const mimoModels = Array.isArray(discoveredCatalogue) ? discoveredCatalogue.filter(model => model.provider === 'mimo') : []
+  const mimoReadiness = {
+    docsCapabilityKnown: mimoModels.some(model => model.docsKnown === true),
+    policyRestrictedByApp: mimoModels.every(model => model.policyRestrictedByApp === true),
+    backendRuntimeAllowed: false,
+    workerRuntimeAllowed: false,
+    executableNow: false,
+    policyBlockedReason: 'coding_agent_only_not_backend_runtime',
+  }
 
   const musicReadiness = {
     schemaReady: musicSchemaReady,
@@ -512,7 +547,13 @@ async function runAudit() {
     executionBlocked: !musicGenerationReady,
     blockedReason: musicBlockedReason,
     discoveredMusicModels: discoveredMusicModels.length,
-    genxMusicModels: discoveredMusicModels.filter(model => model.provider === 'genx').map(model => model.modelId),
+    genxMusicCapabilityKnown,
+    genxMusicModelsDiscovered: genxMusicModels.map(model => model.modelId),
+    genxMusicModels: genxMusicModels.map(model => model.modelId),
+    lyriaClipDiscovered,
+    lyriaProDiscovered,
+    musicProviderCapabilityKnown: discoveredMusicModels.length > 0,
+    musicExecutorReady: musicWorkerExecutorExists && musicProviderClientExists,
     togetherMusicModels: discoveredMusicModels.filter(model => model.provider === 'together').map(model => model.modelId),
     deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
     groqMusicModels: discoveredMusicModels.filter(model => model.provider === 'groq').map(model => model.modelId),
@@ -818,6 +859,8 @@ async function runAudit() {
       mimoPolicy: 'coding_tools_only',
       adultPolicy: 'on_hold'
     },
+
+    providerDiscoveryReadiness: providerDiscoveryReadiness,
     
     modelCatalogueSummary: {
       total: modelCatalogue.models.length,
@@ -871,6 +914,7 @@ async function runAudit() {
     mediaQualityStatus: mediaQualityStatus,
     
     musicReadiness: musicReadiness,
+    mimoReadiness: mimoReadiness,
     longFormVideoReadiness: longFormReadiness,
     marketingAppReadiness: marketingAppReadiness,
     

@@ -27,6 +27,7 @@
     "audit:completion": "node scripts/audit-build-completion-map.mjs",
     "discover:models": "node scripts/discover-provider-models.mjs",
     "discover:models:live": "node scripts/discover-provider-models.mjs --live",
+    "discover:models:live:strict": "node scripts/discover-provider-models.mjs --live --strict",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",

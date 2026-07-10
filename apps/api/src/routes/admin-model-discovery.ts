@@ -11,6 +11,8 @@ import {
 } from '@amarktai/core'
 import { runProviderModelDiscovery } from '@amarktai/providers'
 
+const RUNTIME_EXECUTABLE_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra'] as const
+
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
@@ -36,6 +38,10 @@ function summarizeModels(models: readonly ModelRecord[]) {
   const blocked = models.filter((model) => model.status === 'blocked')
   const missingClient = models.filter((model) => model.providerClientExists === false)
   const missingExecutor = models.filter((model) => model.workerExecutorExists === false)
+  const docsKnown = models.filter((model) => model.docsKnown)
+  const liveDiscovered = models.filter((model) => model.liveDiscovered)
+  const policyRestricted = models.filter((model) => model.policyRestrictedByApp)
+  const transportProfilesPresent = [...new Set(models.map((model) => model.transportProfile).filter(Boolean))]
   const countsByProvider = Object.fromEntries(PROVIDER_KEYS.map((provider) => [
     provider,
     models.filter((model) => model.provider === provider).length,
@@ -47,18 +53,84 @@ function summarizeModels(models: readonly ModelRecord[]) {
     blocked: blocked.length,
     missingClient: missingClient.length,
     missingExecutor: missingExecutor.length,
+    totalDocsFallbackModels: docsKnown.length,
+    totalLiveDiscoveredModels: liveDiscovered.length,
+    totalEffectiveCatalogueModels: models.length,
+    modelsExecutableNow: executable.length,
+    modelsKnownButBlocked: catalogueOnly.length,
+    policyRestrictedModels: policyRestricted.length,
+    transportProfilesPresent,
+    runtimeExecutableProviders: RUNTIME_EXECUTABLE_PROVIDERS,
     countsByProvider,
   }
 }
 
 function discoverySummary(models: ProviderDiscoveredModel[]) {
   const musicModels = models.filter((model) => model.inferredCapabilities.includes('music_generation'))
+  const genxMusicModels = musicModels.filter((model) => model.provider === 'genx')
+  const providerStatuses = PROVIDER_KEYS.map((provider) => {
+    const providerModels = models.filter((model) => model.provider === provider)
+    const liveDiscovered = providerModels.some((model) => model.liveDiscovered)
+    const docsFallbackUsed = providerModels.some((model) => model.docsKnown)
+    const policyRestricted = provider === 'mimo' || providerModels.every((model) => model.policyRestrictedByApp)
+    return {
+      provider,
+      docsCapabilityKnown: providerModels.some((model) => model.providerCapabilityKnown || model.docsKnown),
+      liveDiscoveryAttempted: liveDiscovered,
+      liveDiscoverySucceeded: liveDiscovered,
+      liveDiscoverySkipped: !liveDiscovered,
+      liveDiscoverySkipReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : liveDiscovered ? null : 'not_live_discovered_in_committed_catalogue',
+      docsFallbackUsed,
+      providerUniverseKnown: false,
+      providerUniversePartiallyKnown: docsFallbackUsed,
+      publicDocsUniverseKnown: docsFallbackUsed,
+      authenticatedUniverseKnown: false,
+      runtimeExecutionAllowed: RUNTIME_EXECUTABLE_PROVIDERS.includes(provider as (typeof RUNTIME_EXECUTABLE_PROVIDERS)[number]),
+      policyRestrictedByApp: policyRestricted,
+      policyExecutionDisabled: provider === 'mimo',
+      policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
+      effectiveCatalogueCount: providerModels.length,
+    }
+  })
+  const providersWithFullUniverseKnown = providerStatuses.filter((status) => status.providerUniverseKnown).map((status) => status.provider)
+  const providersPartiallyKnown = providerStatuses.filter((status) => status.providerUniversePartiallyKnown).map((status) => status.provider)
+  const providersUsingDocsFallback = providerStatuses.filter((status) => status.docsFallbackUsed).map((status) => status.provider)
   return {
     totalDiscovered: models.length,
+    totalLiveDiscoveredModels: models.filter((model) => model.liveDiscovered).length,
+    totalDocsFallbackModels: models.filter((model) => model.docsKnown).length,
+    totalEffectiveCatalogueModels: models.length,
+    modelsExecutableNow: models.filter((model) => model.executableNow).length,
+    modelsKnownButBlocked: models.filter((model) => !model.executableNow).length,
+    policyRestrictedModels: models.filter((model) => model.policyRestrictedByApp).length,
+    transportProfilesPresent: [...new Set(models.map((model) => model.transportProfile).filter(Boolean))],
+    providerDiscoveryStatus: providerStatuses,
+    providersWithFullUniverseKnown,
+    providersPartiallyKnown,
+    providersUsingDocsFallback,
+    providersSkipped: providerStatuses.filter((status) => status.liveDiscoverySkipped).map((status) => status.provider),
+    providersFailed: [],
+    fullProviderModelUniverseKnown: false,
+    liveDiscoveryPartial: true,
+    runtimeExecutableProviders: RUNTIME_EXECUTABLE_PROVIDERS,
+    genxMusicCapabilityKnown: genxMusicModels.length > 0,
+    genxMusicExecutionReady: genxMusicModels.some((model) => model.executableNow),
+    mimoCapabilityKnown: models.some((model) => model.provider === 'mimo' && model.docsKnown),
+    mimoPolicyRestricted: models.filter((model) => model.provider === 'mimo').every((model) => model.policyRestrictedByApp && !model.executableNow),
     countsByProvider: Object.fromEntries(PROVIDER_KEYS.map((provider) => [
       provider,
       models.filter((model) => model.provider === provider).length,
     ])),
+    genxMusicDiscovery: {
+      genxMusicModelsDiscovered: genxMusicModels.map((model) => model.modelId),
+      lyriaClipDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-clip-preview'),
+      lyriaProDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-pro-preview'),
+      lyriaExactMatches: genxMusicModels.filter((model) => /^lyria-3-(clip|pro)-preview$/.test(model.modelId)).map((model) => model.modelId),
+      genxMusicTransportProfile: [...new Set(genxMusicModels.map((model) => model.transportProfile))],
+      genxMusicEndpointFamily: [...new Set(genxMusicModels.map((model) => model.endpointFamily))],
+      genxMusicExecutorReady: genxMusicModels.some((model) => model.executableNow),
+      genxMusicBlockers: [...new Set(genxMusicModels.flatMap((model) => model.executableBlockers ?? []))],
+    },
     musicReadiness: {
       discoveredMusicModels: musicModels.length,
       genxMusicModels: musicModels.filter((model) => model.provider === 'genx').map((model) => model.modelId),
@@ -79,7 +151,6 @@ function envApiKeys(): Partial<Record<ProviderKey, string>> {
     genx: process.env.GENX_API_KEY,
     groq: process.env.GROQ_API_KEY,
     together: process.env.TOGETHER_API_KEY,
-    mimo: process.env.MIMO_API_KEY,
     deepinfra: process.env.DEEPINFRA_API_KEY,
   }
 }
@@ -99,15 +170,30 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
     if (!(await requireAdmin(app, request, reply))) return
     const body = request.body as Record<string, unknown> | undefined
     const live = body?.live === true
+    const strict = body?.strict === true
     const results = await runProviderModelDiscovery({
       live,
       apiKeys: live ? envApiKeys() : {},
       genxBaseUrl: process.env.GENX_BASE_URL,
     })
     const models = results.flatMap((result) => result.models)
+    const strictFailures = strict
+      ? results.filter((result) => RUNTIME_EXECUTABLE_PROVIDERS.includes(result.provider as (typeof RUNTIME_EXECUTABLE_PROVIDERS)[number]) && result.liveDiscoverySucceeded !== true)
+      : []
+    if (strictFailures.length > 0) {
+      return reply.status(424).send({
+        success: false,
+        live,
+        strict,
+        results,
+        summary: discoverySummary(models),
+        message: 'Strict live model discovery requires successful model-list discovery for genx, groq, together, and deepinfra. MiMo is excluded by coding-agent-only policy.',
+      })
+    }
     return reply.send({
       success: true,
       live,
+      strict,
       results,
       summary: discoverySummary(models),
       note: live

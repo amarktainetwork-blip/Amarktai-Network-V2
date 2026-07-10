@@ -1,13 +1,13 @@
 import type { ProviderDiscoveryResult } from '@amarktai/core'
 import { discoveryTimestamp, failedLiveResult, fetchModelList, liveResult, modelFromProviderRecord, skippedResult, stringField, numberField, type DiscoveryAdapterOptions } from './common.js'
 
-const TOGETHER_MODELS_ENDPOINT = 'https://api.together.xyz/v1/models'
+const TOGETHER_MODELS_ENDPOINT = 'https://api.together.ai/models'
 
 export async function discoverTogetherProviderModels(options: DiscoveryAdapterOptions = {}): Promise<ProviderDiscoveryResult> {
   const timestamp = discoveryTimestamp(options)
   const staticModels = [
-    modelFromProviderRecord({ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1 Schnell', rawProviderType: 'image', endpointSource: 'repo_static_together_client', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: true, workerExecutorExists: true, batchSupported: true }),
-    modelFromProviderRecord({ provider: 'together', modelId: 'togethercomputer/m2-bert-80M-32k-retrieval', displayName: 'M2-BERT 80M 32K Retrieval', rawProviderType: 'embedding', endpointSource: 'repo_static_embeddings_client', lastDiscoveredAt: timestamp, source: 'static_repo', providerClientExists: true, workerExecutorExists: false, batchSupported: true }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1 Schnell', rawProviderType: 'image', category: 'image', endpointSource: 'repo_static_together_client', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'native_inference_json', batchSupported: true }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'togethercomputer/m2-bert-80M-32k-retrieval', displayName: 'M2-BERT 80M 32K Retrieval', rawProviderType: 'embedding', category: 'embedding', endpointSource: 'Together official docs fallback /models', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: false, transportProfile: 'native_inference_json', batchSupported: true }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -29,7 +29,8 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
           rawProviderType: rawType,
           endpointSource: TOGETHER_MODELS_ENDPOINT,
           lastDiscoveredAt: timestamp,
-          source: 'live_discovered',
+          source: 'live_endpoint',
+          discoverySource: 'live_endpoint',
           providerClientExists: isImage,
           workerExecutorExists: isImage,
           contextWindow: numberField(record, ['context_length', 'contextWindow']),

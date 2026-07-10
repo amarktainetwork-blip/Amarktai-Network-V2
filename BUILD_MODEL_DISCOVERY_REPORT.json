@@ -1,6 +1,8 @@
 {
-  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "discoveryMode": "safe_static",
   "mode": "safe_static",
+  "strictMode": false,
+  "generatedAt": "1970-01-01T00:00:00.000Z",
   "approvedProviders": [
     "genx",
     "groq",
@@ -8,79 +10,540 @@
     "mimo",
     "deepinfra"
   ],
+  "runtimeExecutableProviders": [
+    "genx",
+    "groq",
+    "together",
+    "deepinfra"
+  ],
   "liveDiscoveryAttempted": false,
   "liveDiscoverySkipped": true,
-  "liveResults": [],
+  "providerDiscoveryStatus": [
+    {
+      "provider": "genx",
+      "providerRole": "runtime_execution_provider",
+      "docsCapabilityKnown": true,
+      "liveDiscoverySupported": true,
+      "docsFallbackSupported": true,
+      "apiKeyEnvName": "GENX_API_KEY",
+      "apiKeyRequiredForLiveDiscovery": true,
+      "baseUrl": "https://query.genx.sh",
+      "alternateBaseUrls": [
+        "https://query.genx.sh"
+      ],
+      "modelsEndpoint": "/api/v1/models",
+      "modelsEndpointRequiresAuth": true,
+      "modelsEndpointScope": "authenticated_full_catalogue",
+      "runtimeExecutionAllowed": true,
+      "policyRestrictedByApp": false,
+      "policyExecutionDisabled": false,
+      "policyBlockedReason": null,
+      "apiKeyPresent": true,
+      "mode": "safe_static",
+      "source": "docs_fallback",
+      "totalDiscovered": 47,
+      "liveDiscoveryAttempted": false,
+      "liveDiscoverySucceeded": false,
+      "liveDiscoverySkipped": true,
+      "liveDiscoverySkipReason": "safe_static_mode",
+      "docsFallbackUsed": true,
+      "providerUniverseKnown": false,
+      "providerUniversePartiallyKnown": true,
+      "publicDocsUniverseKnown": true,
+      "authenticatedUniverseKnown": false,
+      "endpointSource": "/api/v1/models",
+      "error": null,
+      "returnedModelCount": 0,
+      "staticFallbackCount": 47,
+      "docsFallbackCount": 47,
+      "effectiveCatalogueCount": 47,
+      "discoveredAt": "1970-01-01T00:00:00.000Z",
+      "notes": [
+        "Safe discovery uses docs/static fallback only; no authenticated provider calls were made."
+      ]
+    },
+    {
+      "provider": "groq",
+      "providerRole": "runtime_execution_provider",
+      "docsCapabilityKnown": true,
+      "liveDiscoverySupported": true,
+      "docsFallbackSupported": true,
+      "apiKeyEnvName": "GROQ_API_KEY",
+      "apiKeyRequiredForLiveDiscovery": true,
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "alternateBaseUrls": [],
+      "modelsEndpoint": "https://api.groq.com/openai/v1/models",
+      "modelsEndpointRequiresAuth": true,
+      "modelsEndpointScope": "authenticated_model_list",
+      "runtimeExecutionAllowed": true,
+      "policyRestrictedByApp": false,
+      "policyExecutionDisabled": false,
+      "policyBlockedReason": null,
+      "apiKeyPresent": false,
+      "mode": "safe_static",
+      "source": "docs_fallback",
+      "totalDiscovered": 7,
+      "liveDiscoveryAttempted": false,
+      "liveDiscoverySucceeded": false,
+      "liveDiscoverySkipped": true,
+      "liveDiscoverySkipReason": "safe_static_mode",
+      "docsFallbackUsed": true,
+      "providerUniverseKnown": false,
+      "providerUniversePartiallyKnown": true,
+      "publicDocsUniverseKnown": true,
+      "authenticatedUniverseKnown": false,
+      "endpointSource": "https://api.groq.com/openai/v1/models",
+      "error": null,
+      "returnedModelCount": 0,
+      "staticFallbackCount": 7,
+      "docsFallbackCount": 7,
+      "effectiveCatalogueCount": 7,
+      "discoveredAt": "1970-01-01T00:00:00.000Z",
+      "notes": [
+        "Safe discovery uses docs/static fallback only; no authenticated provider calls were made."
+      ]
+    },
+    {
+      "provider": "together",
+      "providerRole": "runtime_execution_provider",
+      "docsCapabilityKnown": true,
+      "liveDiscoverySupported": true,
+      "docsFallbackSupported": true,
+      "apiKeyEnvName": "TOGETHER_API_KEY",
+      "apiKeyRequiredForLiveDiscovery": true,
+      "baseUrl": "https://api.together.ai/v1",
+      "alternateBaseUrls": [],
+      "modelsEndpoint": "https://api.together.ai/models",
+      "modelsEndpointRequiresAuth": true,
+      "modelsEndpointScope": "authenticated_model_list",
+      "runtimeExecutionAllowed": true,
+      "policyRestrictedByApp": false,
+      "policyExecutionDisabled": false,
+      "policyBlockedReason": null,
+      "apiKeyPresent": false,
+      "mode": "safe_static",
+      "source": "docs_fallback",
+      "totalDiscovered": 9,
+      "liveDiscoveryAttempted": false,
+      "liveDiscoverySucceeded": false,
+      "liveDiscoverySkipped": true,
+      "liveDiscoverySkipReason": "safe_static_mode",
+      "docsFallbackUsed": true,
+      "providerUniverseKnown": false,
+      "providerUniversePartiallyKnown": true,
+      "publicDocsUniverseKnown": true,
+      "authenticatedUniverseKnown": false,
+      "endpointSource": "https://api.together.ai/models",
+      "error": null,
+      "returnedModelCount": 0,
+      "staticFallbackCount": 9,
+      "docsFallbackCount": 9,
+      "effectiveCatalogueCount": 9,
+      "discoveredAt": "1970-01-01T00:00:00.000Z",
+      "notes": [
+        "Safe discovery uses docs/static fallback only; no authenticated provider calls were made."
+      ]
+    },
+    {
+      "provider": "mimo",
+      "providerRole": "coding_agent_only",
+      "docsCapabilityKnown": true,
+      "liveDiscoverySupported": false,
+      "docsFallbackSupported": true,
+      "apiKeyEnvName": null,
+      "apiKeyRequiredForLiveDiscovery": false,
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "alternateBaseUrls": [
+        "cluster-specific token-plan base URLs"
+      ],
+      "modelsEndpoint": "docs_fallback_only",
+      "modelsEndpointRequiresAuth": false,
+      "modelsEndpointScope": "docs_only_policy_restricted",
+      "runtimeExecutionAllowed": false,
+      "policyRestrictedByApp": true,
+      "policyExecutionDisabled": true,
+      "policyBlockedReason": "coding_agent_only_not_backend_runtime",
+      "mode": "safe_static",
+      "source": "docs_fallback",
+      "totalDiscovered": 6,
+      "liveDiscoveryAttempted": false,
+      "liveDiscoverySucceeded": false,
+      "liveDiscoverySkipped": true,
+      "liveDiscoverySkipReason": "coding_agent_only_not_backend_runtime",
+      "docsFallbackUsed": true,
+      "providerUniverseKnown": false,
+      "providerUniversePartiallyKnown": true,
+      "publicDocsUniverseKnown": true,
+      "authenticatedUniverseKnown": false,
+      "endpointSource": "docs_fallback_only",
+      "error": null,
+      "returnedModelCount": 0,
+      "staticFallbackCount": 6,
+      "docsFallbackCount": 6,
+      "effectiveCatalogueCount": 6,
+      "discoveredAt": "1970-01-01T00:00:00.000Z",
+      "notes": [
+        "MiMo is docs-known but policy-disabled for backend runtime. No MiMo endpoint is called."
+      ]
+    },
+    {
+      "provider": "deepinfra",
+      "providerRole": "runtime_execution_provider",
+      "docsCapabilityKnown": true,
+      "liveDiscoverySupported": true,
+      "docsFallbackSupported": true,
+      "apiKeyEnvName": "DEEPINFRA_API_KEY",
+      "apiKeyRequiredForLiveDiscovery": false,
+      "baseUrl": "https://api.deepinfra.com",
+      "alternateBaseUrls": [
+        "https://api.deepinfra.com/v1/openai"
+      ],
+      "modelsEndpoint": "https://api.deepinfra.com/models/list",
+      "modelsEndpointRequiresAuth": false,
+      "modelsEndpointScope": "public_model_catalogue",
+      "runtimeExecutionAllowed": true,
+      "policyRestrictedByApp": false,
+      "policyExecutionDisabled": false,
+      "policyBlockedReason": null,
+      "apiKeyPresent": false,
+      "mode": "safe_static",
+      "source": "docs_fallback",
+      "totalDiscovered": 10,
+      "liveDiscoveryAttempted": false,
+      "liveDiscoverySucceeded": false,
+      "liveDiscoverySkipped": true,
+      "liveDiscoverySkipReason": "safe_static_mode",
+      "docsFallbackUsed": true,
+      "providerUniverseKnown": false,
+      "providerUniversePartiallyKnown": true,
+      "publicDocsUniverseKnown": true,
+      "authenticatedUniverseKnown": false,
+      "endpointSource": "https://api.deepinfra.com/models/list",
+      "error": null,
+      "returnedModelCount": 0,
+      "staticFallbackCount": 10,
+      "docsFallbackCount": 10,
+      "effectiveCatalogueCount": 10,
+      "discoveredAt": "1970-01-01T00:00:00.000Z",
+      "notes": [
+        "Safe discovery uses docs/static fallback only; no authenticated provider calls were made."
+      ]
+    }
+  ],
+  "genxMusicDiscovery": {
+    "genxMusicModelsDiscovered": [
+      "lyria-3-clip-preview",
+      "lyria-3-pro-preview"
+    ],
+    "lyriaClipDiscovered": true,
+    "lyriaProDiscovered": true,
+    "lyriaExactMatches": [
+      "lyria-3-clip-preview",
+      "lyria-3-pro-preview"
+    ],
+    "genxMusicTransportProfile": [
+      "async_job_poll"
+    ],
+    "genxMusicEndpointFamily": [
+      "/api/v1/generate + /api/v1/jobs/:id"
+    ],
+    "genxMusicExecutorReady": false,
+    "genxMusicBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "artifact_persistence_missing"
+    ]
+  },
+  "fullProviderModelUniverseKnown": false,
+  "liveDiscoveryPartial": true,
+  "providersWithFullUniverseKnown": [],
+  "providersPartiallyKnown": [
+    "genx",
+    "groq",
+    "together",
+    "mimo",
+    "deepinfra"
+  ],
+  "providersUsingDocsFallback": [
+    "genx",
+    "groq",
+    "together",
+    "mimo",
+    "deepinfra"
+  ],
+  "providersSkipped": [
+    "genx",
+    "groq",
+    "together",
+    "mimo",
+    "deepinfra"
+  ],
+  "providersFailed": [],
+  "staticFallbackUsedByProvider": {
+    "genx": 47,
+    "groq": 7,
+    "together": 9,
+    "mimo": 6,
+    "deepinfra": 10
+  },
+  "totalLiveDiscoveredModels": 0,
+  "totalDocsFallbackModels": 79,
+  "totalEffectiveCatalogueModels": 79,
+  "modelsExecutableNow": 5,
+  "modelsKnownButBlocked": 74,
+  "policyRestrictedModels": 6,
+  "transportProfilesPresent": [
+    "anthropic_messages_sse",
+    "async_job_poll",
+    "docs_only_policy_restricted",
+    "http_audio_stream_sse",
+    "native_inference_async_webhook",
+    "native_inference_binary",
+    "native_inference_json",
+    "openai_audio_speech_binary",
+    "openai_audio_transcription_multipart",
+    "openai_chat_sse",
+    "websocket_realtime_audio"
+  ],
+  "genxMusicCapabilityKnown": true,
+  "genxMusicExecutionReady": false,
+  "mimoCapabilityKnown": true,
+  "mimoPolicyRestricted": true,
   "countsByProvider": {
-    "genx": 2,
-    "groq": 3,
-    "together": 2,
-    "mimo": 1,
-    "deepinfra": 1
+    "genx": 47,
+    "groq": 7,
+    "together": 9,
+    "mimo": 6,
+    "deepinfra": 10
   },
   "totals": {
-    "discovered": 9,
+    "discovered": 79,
     "executableNow": 5,
-    "catalogueOnly": 4,
-    "missingClient": 2,
-    "missingExecutor": 4
+    "catalogueOnly": 74,
+    "missingClient": 70,
+    "missingExecutor": 74
   },
   "capabilityCoverage": {
-    "video_generation": {
-      "total": 1,
-      "executable": 1,
-      "providers": [
-        "genx"
-      ]
-    },
-    "music_generation": {
-      "total": 1,
-      "executable": 0,
-      "providers": [
-        "genx"
-      ]
-    },
     "chat": {
-      "total": 4,
+      "total": 24,
       "executable": 3,
+      "docsKnown": 24,
+      "liveDiscovered": 0,
       "providers": [
+        "genx",
         "groq",
+        "together",
         "mimo",
         "deepinfra"
       ]
     },
-    "stt": {
-      "total": 1,
-      "executable": 0,
+    "reasoning": {
+      "total": 18,
+      "executable": 3,
+      "docsKnown": 18,
+      "liveDiscovered": 0,
       "providers": [
-        "groq"
+        "genx",
+        "groq",
+        "together",
+        "mimo",
+        "deepinfra"
+      ]
+    },
+    "code": {
+      "total": 11,
+      "executable": 0,
+      "docsKnown": 11,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "together",
+        "mimo",
+        "deepinfra"
+      ]
+    },
+    "tool_use": {
+      "total": 3,
+      "executable": 0,
+      "docsKnown": 3,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "mimo"
+      ]
+    },
+    "structured_output": {
+      "total": 3,
+      "executable": 0,
+      "docsKnown": 3,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "mimo"
+      ]
+    },
+    "summarization": {
+      "total": 8,
+      "executable": 3,
+      "docsKnown": 8,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "together",
+        "deepinfra"
+      ]
+    },
+    "classification": {
+      "total": 6,
+      "executable": 3,
+      "docsKnown": 6,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "together",
+        "deepinfra"
+      ]
+    },
+    "multimodal": {
+      "total": 5,
+      "executable": 0,
+      "docsKnown": 5,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "mimo"
+      ]
+    },
+    "stt": {
+      "total": 6,
+      "executable": 0,
+      "docsKnown": 6,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "together",
+        "mimo",
+        "deepinfra"
       ]
     },
     "image_generation": {
-      "total": 1,
+      "total": 15,
       "executable": 1,
+      "docsKnown": 15,
+      "liveDiscovered": 0,
       "providers": [
-        "together"
+        "genx",
+        "together",
+        "deepinfra"
+      ]
+    },
+    "image_edit": {
+      "total": 1,
+      "executable": 0,
+      "docsKnown": 1,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "video_generation": {
+      "total": 16,
+      "executable": 1,
+      "docsKnown": 16,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "together",
+        "deepinfra"
+      ]
+    },
+    "avatar_generation": {
+      "total": 2,
+      "executable": 0,
+      "docsKnown": 2,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "tts": {
+      "total": 9,
+      "executable": 0,
+      "docsKnown": 9,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "groq",
+        "together",
+        "mimo",
+        "deepinfra"
+      ]
+    },
+    "music_generation": {
+      "total": 3,
+      "executable": 0,
+      "docsKnown": 3,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "deepinfra"
+      ]
+    },
+    "extraction": {
+      "total": 5,
+      "executable": 3,
+      "docsKnown": 5,
+      "liveDiscovered": 0,
+      "providers": [
+        "groq",
+        "together",
+        "deepinfra"
       ]
     },
     "embeddings": {
-      "total": 1,
+      "total": 2,
       "executable": 0,
+      "docsKnown": 2,
+      "liveDiscovered": 0,
       "providers": [
-        "together"
+        "together",
+        "deepinfra"
+      ]
+    },
+    "reranking": {
+      "total": 2,
+      "executable": 0,
+      "docsKnown": 2,
+      "liveDiscovered": 0,
+      "providers": [
+        "together",
+        "deepinfra"
       ]
     }
   },
   "musicReadiness": {
-    "discoveredMusicModels": 1,
+    "discoveredMusicModels": 3,
     "genxMusicModels": [
-      "music-generation-provider-client-pending"
+      "lyria-3-clip-preview",
+      "lyria-3-pro-preview"
     ],
     "togetherMusicModels": [],
-    "deepinfraMusicModels": [],
+    "deepinfraMusicModels": [
+      "facebook/musicgen-large"
+    ],
     "groqMusicModels": [],
-    "lyriaLikeModels": [],
-    "endpointShapeKnown": false,
+    "lyriaLikeModels": [
+      "genx/lyria-3-clip-preview",
+      "genx/lyria-3-pro-preview"
+    ],
+    "endpointShapeKnown": true,
     "providerClientExists": false,
     "workerExecutorExists": false,
     "executableNow": false
