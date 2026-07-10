@@ -41,7 +41,7 @@
       "apiKeyPresent": true,
       "mode": "safe_static",
       "source": "docs_fallback",
-      "totalDiscovered": 47,
+      "totalDiscovered": 61,
       "liveDiscoveryAttempted": false,
       "liveDiscoverySucceeded": false,
       "liveDiscoverySkipped": true,
@@ -54,9 +54,9 @@
       "endpointSource": "/api/v1/models",
       "error": null,
       "returnedModelCount": 0,
-      "staticFallbackCount": 47,
-      "docsFallbackCount": 47,
-      "effectiveCatalogueCount": 47,
+      "staticFallbackCount": 61,
+      "docsFallbackCount": 61,
+      "effectiveCatalogueCount": 61,
       "discoveredAt": "1970-01-01T00:00:00.000Z",
       "notes": [
         "Safe discovery uses docs/static fallback only; no authenticated provider calls were made."
@@ -282,17 +282,17 @@
   ],
   "providersFailed": [],
   "staticFallbackUsedByProvider": {
-    "genx": 47,
+    "genx": 61,
     "groq": 7,
     "together": 9,
     "mimo": 6,
     "deepinfra": 10
   },
   "totalLiveDiscoveredModels": 0,
-  "totalDocsFallbackModels": 79,
-  "totalEffectiveCatalogueModels": 79,
+  "totalDocsFallbackModels": 93,
+  "totalEffectiveCatalogueModels": 93,
   "modelsExecutableNow": 5,
-  "modelsKnownButBlocked": 74,
+  "modelsKnownButBlocked": 88,
   "policyRestrictedModels": 6,
   "transportProfilesPresent": [
     "anthropic_messages_sse",
@@ -312,24 +312,35 @@
   "mimoCapabilityKnown": true,
   "mimoPolicyRestricted": true,
   "countsByProvider": {
-    "genx": 47,
+    "genx": 61,
     "groq": 7,
     "together": 9,
     "mimo": 6,
     "deepinfra": 10
   },
   "totals": {
-    "discovered": 79,
+    "discovered": 93,
     "executableNow": 5,
-    "catalogueOnly": 74,
-    "missingClient": 70,
-    "missingExecutor": 74
+    "catalogueOnly": 88,
+    "missingClient": 84,
+    "missingExecutor": 88
   },
   "capabilityCoverage": {
+    "image_generation": {
+      "total": 17,
+      "executable": 1,
+      "docsKnown": 17,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "together",
+        "deepinfra"
+      ]
+    },
     "chat": {
-      "total": 24,
+      "total": 35,
       "executable": 3,
-      "docsKnown": 24,
+      "docsKnown": 35,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -340,9 +351,9 @@
       ]
     },
     "reasoning": {
-      "total": 18,
+      "total": 15,
       "executable": 3,
-      "docsKnown": 18,
+      "docsKnown": 15,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -353,9 +364,9 @@
       ]
     },
     "code": {
-      "total": 11,
+      "total": 12,
       "executable": 0,
-      "docsKnown": 11,
+      "docsKnown": 12,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -366,9 +377,9 @@
       ]
     },
     "tool_use": {
-      "total": 3,
+      "total": 2,
       "executable": 0,
-      "docsKnown": 3,
+      "docsKnown": 2,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -376,101 +387,34 @@
       ]
     },
     "structured_output": {
+      "total": 2,
+      "executable": 0,
+      "docsKnown": 2,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "mimo"
+      ]
+    },
+    "music_generation": {
       "total": 3,
       "executable": 0,
       "docsKnown": 3,
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "mimo"
-      ]
-    },
-    "summarization": {
-      "total": 8,
-      "executable": 3,
-      "docsKnown": 8,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "groq",
-        "together",
         "deepinfra"
-      ]
-    },
-    "classification": {
-      "total": 6,
-      "executable": 3,
-      "docsKnown": 6,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "groq",
-        "together",
-        "deepinfra"
-      ]
-    },
-    "multimodal": {
-      "total": 5,
-      "executable": 0,
-      "docsKnown": 5,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "groq",
-        "mimo"
-      ]
-    },
-    "stt": {
-      "total": 6,
-      "executable": 0,
-      "docsKnown": 6,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "groq",
-        "together",
-        "mimo",
-        "deepinfra"
-      ]
-    },
-    "image_generation": {
-      "total": 15,
-      "executable": 1,
-      "docsKnown": 15,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "together",
-        "deepinfra"
-      ]
-    },
-    "image_edit": {
-      "total": 1,
-      "executable": 0,
-      "docsKnown": 1,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx"
       ]
     },
     "video_generation": {
-      "total": 16,
+      "total": 21,
       "executable": 1,
-      "docsKnown": 16,
+      "docsKnown": 21,
       "liveDiscovered": 0,
       "providers": [
         "genx",
         "together",
         "deepinfra"
-      ]
-    },
-    "avatar_generation": {
-      "total": 2,
-      "executable": 0,
-      "docsKnown": 2,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx"
       ]
     },
     "tts": {
@@ -486,13 +430,43 @@
         "deepinfra"
       ]
     },
-    "music_generation": {
-      "total": 3,
+    "image_edit": {
+      "total": 4,
       "executable": 0,
-      "docsKnown": 3,
+      "docsKnown": 4,
       "liveDiscovered": 0,
       "providers": [
-        "genx",
+        "genx"
+      ]
+    },
+    "avatar_generation": {
+      "total": 1,
+      "executable": 0,
+      "docsKnown": 1,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "summarization": {
+      "total": 5,
+      "executable": 3,
+      "docsKnown": 5,
+      "liveDiscovered": 0,
+      "providers": [
+        "groq",
+        "together",
+        "deepinfra"
+      ]
+    },
+    "classification": {
+      "total": 5,
+      "executable": 3,
+      "docsKnown": 5,
+      "liveDiscovered": 0,
+      "providers": [
+        "groq",
+        "together",
         "deepinfra"
       ]
     },
@@ -504,6 +478,28 @@
       "providers": [
         "groq",
         "together",
+        "deepinfra"
+      ]
+    },
+    "multimodal": {
+      "total": 3,
+      "executable": 0,
+      "docsKnown": 3,
+      "liveDiscovered": 0,
+      "providers": [
+        "groq",
+        "mimo"
+      ]
+    },
+    "stt": {
+      "total": 4,
+      "executable": 0,
+      "docsKnown": 4,
+      "liveDiscovered": 0,
+      "providers": [
+        "groq",
+        "together",
+        "mimo",
         "deepinfra"
       ]
     },

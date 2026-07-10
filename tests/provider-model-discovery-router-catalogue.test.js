@@ -17,6 +17,69 @@ import {
 } from '../packages/providers/src/index.ts'
 
 const ROOT = process.cwd()
+const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
+  'gpt-image-2',
+  'gpt-5',
+  'gpt-5-mini',
+  'gpt-5-nano',
+  'gpt-5.3-codex',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-pro',
+  'gpt-5.5',
+  'claude-haiku-4-5',
+  'claude-opus-4-6',
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-sonnet-4-6',
+  'claude-sonnet-5',
+  'gemini-3-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro',
+  'lyria-3-clip-preview',
+  'lyria-3-pro-preview',
+  'nano-banana-2',
+  'nano-banana-pro',
+  'veo-3.1',
+  'veo-3.1-fast',
+  'grok-4.2',
+  'grok-4.2-multi-agent',
+  'grok-4.2-reasoning',
+  'grok-4.3',
+  'grok-imagine',
+  'grok-imagine-video',
+  'grok-tts',
+  'recraft-v4.1',
+  'recraft-v4.1-pro',
+  'recraft-v4.1-pro-vector',
+  'recraft-v4.1-utility',
+  'recraft-v4.1-utility-pro',
+  'recraft-v4.1-utility-pro-vector',
+  'recraft-v4.1-utility-vector',
+  'recraft-v4.1-vector',
+  'kling-avatar-v2-pro',
+  'kling-v2.5-turbo',
+  'kling-v2.5-turbo-i2v',
+  'kling-v2.6-pro',
+  'kling-v2.6-pro-i2v',
+  'kling-v3-pro',
+  'kling-v3-pro-i2v',
+  'seedance-2',
+  'seedance-2-i2v',
+  'seedance-2-r2v',
+  'seedance-v1-fast',
+  'seedance-v1-fast-i2v',
+  'pixverse-v5.5',
+  'pixverse-v5.5-i2v',
+  'pixverse-v6',
+  'pixverse-v6-i2v',
+  'aura-2',
+  'genxlm-pro-v1-img',
+  'genxlm-pro-v1-img-fast',
+  'genxlm-pro-v1-tl',
+  'genxlm-pro-v1-tr',
+  'genxlm-voice-v1',
+]
 
 describe('provider model discovery and router catalogue rebuild', () => {
   const originalFetch = global.fetch
@@ -69,10 +132,36 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.mode).toBe('safe_static')
     expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
     expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
-    expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(62)
+    expect(report.totalEffectiveCatalogueModels).toBe(93)
+    expect(report.totalDocsFallbackModels).toBe(93)
+    expect(report.modelsExecutableNow).toBe(5)
+    expect(report.modelsKnownButBlocked).toBe(88)
+    expect(report.countsByProvider.genx).toBe(61)
     expect(report.genxMusicCapabilityKnown).toBe(true)
     expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
+  })
+
+  it('GenX docs fallback contains the exact 61 user-supplied model IDs once', () => {
+    const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
+    const genxModels = catalogue.filter((model) => model.provider === 'genx')
+    expect(genxModels).toHaveLength(61)
+    expect([...new Set(genxModels.map((model) => model.modelId))].sort()).toEqual([...EXPECTED_GENX_DOCS_FALLBACK_MODELS].sort())
+    for (const modelId of EXPECTED_GENX_DOCS_FALLBACK_MODELS) {
+      expect(genxModels.filter((model) => model.modelId === modelId)).toHaveLength(1)
+    }
+    for (const model of genxModels) {
+      expect(model).toMatchObject({
+        provider: 'genx',
+        executionProvider: 'genx',
+        discoverySource: 'docs_fallback',
+        docsKnown: true,
+        liveDiscovered: false,
+        providerCapabilityKnown: true,
+        endpointSource: 'GenX docs/static fallback /api/v1/models',
+        authRequired: true,
+      })
+    }
   })
 
   it('live discovery mode is explicit and safe when keys are missing', () => {
@@ -186,6 +275,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
       upstreamProvider: 'xai',
       modelId: 'grok-imagine-video',
     }))
+    const directProviders = [...new Set(catalogue.map((model) => model.provider))]
+    expect(directProviders.sort()).toEqual(['deepinfra', 'genx', 'groq', 'mimo', 'together'])
+    expect(catalogue.filter((model) => model.provider === 'groq').some((model) => /grok/i.test(model.modelId))).toBe(false)
   })
 
   it('GenX docs fallback includes Lyria and blocks music for wiring, not provider absence', () => {

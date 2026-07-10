@@ -353,7 +353,7 @@ describe('Build Completion Audit', () => {
       liveDiscoverySupported: true,
       fullProviderModelUniverseKnown: false,
     })
-    expect(auditOutput.providerDiscoveryReadiness.effectiveCatalogueModelCount).toBeGreaterThanOrEqual(62)
+    expect(auditOutput.providerDiscoveryReadiness.effectiveCatalogueModelCount).toBe(93)
     expect(auditOutput.mimoReadiness).toMatchObject({
       docsCapabilityKnown: true,
       policyRestrictedByApp: true,

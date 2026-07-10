@@ -245,7 +245,7 @@ function genxModel(modelId, displayName, upstreamProvider, category, overrides =
     providerCategory: category,
     rawProviderType: category,
     discoverySource: 'docs_fallback',
-    endpointSource: 'GenX official docs fallback /api/v1/models',
+    endpointSource: 'GenX docs/static fallback /api/v1/models',
     endpointFamily: category === 'text' ? '/v1/chat/completions' : '/api/v1/generate + /api/v1/jobs/:id',
     transportProfile: defaultTransport,
     endpointShapeKnown: true,
@@ -256,81 +256,88 @@ function genxModel(modelId, displayName, upstreamProvider, category, overrides =
   })
 }
 
-const GENX_DOCS_MODELS = [
-  genxModel('gpt-5', 'GPT-5', 'openai', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code', 'tool_use', 'structured_output'], streamingSupported: true, transportProfile: 'openai_chat_sse' }),
-  genxModel('gpt-5-mini', 'GPT-5 Mini', 'openai', 'text', { inferredCapabilities: ['chat', 'reasoning', 'summarization'], streamingSupported: true, transportProfile: 'openai_chat_sse' }),
-  genxModel('gpt-4.1', 'GPT-4.1', 'openai', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code', 'tool_use', 'structured_output'], streamingSupported: true, transportProfile: 'openai_chat_sse' }),
-  genxModel('gpt-4.1-mini', 'GPT-4.1 Mini', 'openai', 'text', { inferredCapabilities: ['chat', 'summarization', 'classification'], streamingSupported: true, transportProfile: 'openai_chat_sse' }),
-  genxModel('o4-mini', 'o4 Mini', 'openai', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code'], streamingSupported: true, transportProfile: 'openai_chat_sse' }),
-  genxModel('claude-opus-4.1', 'Claude Opus 4.1', 'anthropic', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code'], streamingSupported: true, transportProfile: 'anthropic_messages_sse' }),
-  genxModel('claude-sonnet-4', 'Claude Sonnet 4', 'anthropic', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code'], streamingSupported: true, transportProfile: 'anthropic_messages_sse' }),
-  genxModel('claude-3.7-sonnet', 'Claude 3.7 Sonnet', 'anthropic', 'text', { inferredCapabilities: ['chat', 'reasoning', 'code'], streamingSupported: true, transportProfile: 'anthropic_messages_sse' }),
-  genxModel('gemini-2.5-pro', 'Gemini 2.5 Pro', 'google', 'text', { inferredCapabilities: ['chat', 'reasoning', 'multimodal'], streamingSupported: true }),
-  genxModel('gemini-2.5-flash', 'Gemini 2.5 Flash', 'google', 'text', { inferredCapabilities: ['chat', 'summarization', 'multimodal'], streamingSupported: true }),
-  genxModel('grok-4', 'Grok 4', 'xai', 'text', { inferredCapabilities: ['chat', 'reasoning'], streamingSupported: true }),
-  genxModel('grok-3', 'Grok 3', 'xai', 'text', { inferredCapabilities: ['chat', 'reasoning'], streamingSupported: true }),
-  genxModel('genx-whisper', 'GenX Whisper', 'genx', 'text', { inferredCapabilities: ['stt'], transportProfile: 'openai_audio_transcription_multipart' }),
-  genxModel('genx-transcription-v1', 'GenX Transcription V1', 'genx', 'text', { inferredCapabilities: ['stt'], transportProfile: 'openai_audio_transcription_multipart' }),
-  genxModel('dall-e-3', 'DALL-E 3', 'openai', 'image'),
-  genxModel('gpt-image-1', 'GPT Image 1', 'openai', 'image'),
-  genxModel('imagen-4', 'Imagen 4', 'google', 'image'),
-  genxModel('nano-banana', 'Nano Banana', 'google', 'image'),
-  genxModel('grok-imagine-image', 'Grok Imagine Image', 'xai', 'image'),
-  genxModel('recraft-v3', 'Recraft V3', 'recraft', 'image'),
-  genxModel('recraft-vector', 'Recraft Vector', 'recraft', 'image', { inferredCapabilities: ['image_generation', 'image_edit'] }),
-  genxModel('genx-image-v1', 'GenX Image V1', 'genx', 'image'),
-  genxModel('seedream-v4', 'Seedream V4', 'bytedance', 'image'),
-  genxModel('seedream-v3', 'Seedream V3', 'bytedance', 'image'),
-  genxModel('stable-diffusion-xl', 'Stable Diffusion XL', 'genx', 'image'),
-  genxModel('flux-pro', 'FLUX Pro', 'genx', 'image'),
-  genxModel('veo-3.1', 'Veo 3.1', 'google', 'video'),
-  genxModel('veo-3.1-fast', 'Veo 3.1 Fast', 'google', 'video'),
-  genxModel('veo-3', 'Veo 3', 'google', 'video'),
-  genxModel('veo-2', 'Veo 2', 'google', 'video'),
-  genxModel('seedance-v1-fast', 'Seedance V1 Fast', 'bytedance', 'video', { requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true, artifactPersistenceExists: true }),
-  genxModel('seedance-v1-pro', 'Seedance V1 Pro', 'bytedance', 'video'),
-  genxModel('kling-v2.1', 'Kling V2.1', 'kling', 'video'),
-  genxModel('kling-v2.1-master', 'Kling V2.1 Master', 'kling', 'video'),
-  genxModel('kling-v1.6', 'Kling V1.6', 'kling', 'video'),
-  genxModel('pixverse-v4.5', 'PixVerse V4.5', 'pixverse', 'video'),
-  genxModel('pixverse-v4', 'PixVerse V4', 'pixverse', 'video'),
-  genxModel('grok-imagine-video', 'Grok Imagine Video', 'xai', 'video'),
-  genxModel('wan-2.2', 'WAN 2.2', 'genx', 'video'),
-  genxModel('genx-video-v1', 'GenX Video V1', 'genx', 'video'),
-  genxModel('kling-avatar', 'Kling Avatar', 'kling', 'avatar', { inferredCapabilities: ['avatar_generation'] }),
-  genxModel('hedra-avatar', 'Hedra Avatar', 'genx', 'avatar', { inferredCapabilities: ['avatar_generation'] }),
-  genxModel('deepgram-aura-2', 'Deepgram Aura 2', 'deepgram', 'voice', { inferredCapabilities: ['tts'], transportProfile: 'async_job_poll' }),
-  genxModel('grok-voice', 'Grok Voice', 'xai', 'voice', { inferredCapabilities: ['tts'], transportProfile: 'async_job_poll' }),
-  genxModel('genx-voice-v1', 'GenX Voice V1', 'genx', 'voice', { inferredCapabilities: ['tts'], transportProfile: 'async_job_poll' }),
-  genxModel('lyria-3-clip-preview', 'Lyria 3 Clip Preview', 'google', 'audio', {
-    inferredCapabilities: ['music_generation'],
-    modalitiesIn: ['text', 'image'],
-    modalitiesOut: ['audio', 'text'],
-    providerCapabilityKnown: true,
-    docsKnown: true,
-    endpointShapeKnown: true,
-    requestShapeKnown: false,
-    responseShapeKnown: false,
-    providerClientExists: false,
-    workerExecutorExists: false,
-    artifactPersistenceExists: false,
-    catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.',
-  }),
-  genxModel('lyria-3-pro-preview', 'Lyria 3 Pro Preview', 'google', 'audio', {
-    inferredCapabilities: ['music_generation'],
-    modalitiesIn: ['text', 'image'],
-    modalitiesOut: ['audio', 'text'],
-    providerCapabilityKnown: true,
-    docsKnown: true,
-    endpointShapeKnown: true,
-    requestShapeKnown: false,
-    responseShapeKnown: false,
-    providerClientExists: false,
-    workerExecutorExists: false,
-    artifactPersistenceExists: false,
-    catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.',
-  }),
+const GENX_DOCS_FALLBACK_SPEC = [
+  { upstreamProvider: 'openai', category: 'image', models: ['gpt-image-2'] },
+  { upstreamProvider: 'openai', category: 'text', models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.3-codex', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-pro', 'gpt-5.5'] },
+  { upstreamProvider: 'anthropic', category: 'text', transportProfile: 'anthropic_messages_sse', models: ['claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-sonnet-5'] },
+  { upstreamProvider: 'google', category: 'text', models: ['gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro'] },
+  { upstreamProvider: 'google', category: 'audio', models: ['lyria-3-clip-preview', 'lyria-3-pro-preview'] },
+  { upstreamProvider: 'google', category: 'image', models: ['nano-banana-2', 'nano-banana-pro'] },
+  { upstreamProvider: 'google', category: 'video', models: ['veo-3.1', 'veo-3.1-fast'] },
+  { upstreamProvider: 'xai', category: 'text', models: ['grok-4.2', 'grok-4.2-multi-agent', 'grok-4.2-reasoning', 'grok-4.3'] },
+  { upstreamProvider: 'xai', category: 'image', models: ['grok-imagine'] },
+  { upstreamProvider: 'xai', category: 'video', models: ['grok-imagine-video'] },
+  { upstreamProvider: 'xai', category: 'voice', models: ['grok-tts'] },
+  { upstreamProvider: 'recraft', category: 'image', models: ['recraft-v4.1', 'recraft-v4.1-pro', 'recraft-v4.1-pro-vector', 'recraft-v4.1-utility', 'recraft-v4.1-utility-pro', 'recraft-v4.1-utility-pro-vector', 'recraft-v4.1-utility-vector', 'recraft-v4.1-vector'] },
+  { upstreamProvider: 'kling', category: 'avatar', models: ['kling-avatar-v2-pro'] },
+  { upstreamProvider: 'kling', category: 'video', models: ['kling-v2.5-turbo', 'kling-v2.5-turbo-i2v', 'kling-v2.6-pro', 'kling-v2.6-pro-i2v', 'kling-v3-pro', 'kling-v3-pro-i2v'] },
+  { upstreamProvider: 'bytedance', category: 'video', models: ['seedance-2', 'seedance-2-i2v', 'seedance-2-r2v', 'seedance-v1-fast', 'seedance-v1-fast-i2v'] },
+  { upstreamProvider: 'pixverse', category: 'video', models: ['pixverse-v5.5', 'pixverse-v5.5-i2v', 'pixverse-v6', 'pixverse-v6-i2v'] },
+  { upstreamProvider: 'deepgram', category: 'voice', models: ['aura-2'] },
+  { upstreamProvider: 'genx', category: 'image', models: ['genxlm-pro-v1-img', 'genxlm-pro-v1-img-fast'] },
+  { upstreamProvider: 'genx', category: 'text', models: ['genxlm-pro-v1-tl', 'genxlm-pro-v1-tr'] },
+  { upstreamProvider: 'modal', category: 'voice', models: ['genxlm-voice-v1'] },
 ]
+
+function genxDisplayName(modelId) {
+  return modelId
+    .split(/[-/]/)
+    .map((part) => part.length <= 3 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function genxOverrides(modelId, upstreamProvider, category, transportProfile) {
+  const overrides = {
+    transportProfile: transportProfile ?? (category === 'text' ? 'openai_chat_sse' : 'async_job_poll'),
+  }
+
+  if (modelId === 'seedance-v1-fast') {
+    Object.assign(overrides, {
+      requestShapeKnown: true,
+      responseShapeKnown: true,
+      providerClientExists: true,
+      workerExecutorExists: true,
+      artifactPersistenceExists: true,
+    })
+  }
+
+  if (modelId === 'lyria-3-clip-preview' || modelId === 'lyria-3-pro-preview') {
+    Object.assign(overrides, {
+      inferredCapabilities: ['music_generation'],
+      modalitiesIn: ['text', 'image'],
+      modalitiesOut: ['audio', 'text'],
+      providerCapabilityKnown: true,
+      docsKnown: true,
+      endpointShapeKnown: true,
+      requestShapeKnown: false,
+      responseShapeKnown: false,
+      providerClientExists: false,
+      workerExecutorExists: false,
+      artifactPersistenceExists: false,
+      catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.',
+    })
+  }
+
+  if (upstreamProvider === 'anthropic' && category === 'text') {
+    Object.assign(overrides, {
+      inferredCapabilities: ['chat', 'reasoning', 'code'],
+    })
+  }
+
+  if (modelId.includes('codex')) {
+    Object.assign(overrides, {
+      inferredCapabilities: ['chat', 'reasoning', 'code', 'tool_use', 'structured_output'],
+    })
+  }
+
+  return overrides
+}
+
+const GENX_DOCS_MODELS = GENX_DOCS_FALLBACK_SPEC.flatMap((group) =>
+  group.models.map((modelId) =>
+    genxModel(modelId, genxDisplayName(modelId), group.upstreamProvider, group.category, genxOverrides(modelId, group.upstreamProvider, group.category, group.transportProfile))
+  )
+)
 
 const GROQ_DOCS_MODELS = [
   textModel('groq', 'llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile', { discoverySource: 'static_verified', requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true }),
