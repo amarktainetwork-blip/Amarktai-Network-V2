@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Music, AlertTriangle, Zap, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Music, AlertTriangle, Zap, Clock, CheckCircle, XCircle, Loader2, Upload } from 'lucide-react'
 
 const STATUS_COLORS = {
   queued: 'border-blue-500/30 text-blue-300',
@@ -26,12 +26,21 @@ function statusClass(value) {
 export default function MusicStudioPage() {
   const [prompt, setPrompt] = useState('')
   const [instrumental, setInstrumental] = useState(true)
+  const [genre, setGenre] = useState('')
+  const [mood, setMood] = useState('')
+  const [durationSeconds, setDurationSeconds] = useState(30)
+  const [tempo, setTempo] = useState('')
   const [musicStatus, setMusicStatus] = useState(null)
   const [jobId, setJobId] = useState(null)
   const [jobStatus, setJobStatus] = useState(null)
   const [jobError, setJobError] = useState(null)
   const [artifactUrl, setArtifactUrl] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [referenceArtifact, setReferenceArtifact] = useState(null)
+  const [referenceError, setReferenceError] = useState(null)
+  const [uploadingReference, setUploadingReference] = useState(false)
+  const [rightsBasis, setRightsBasis] = useState('own')
+  const [rightsAccepted, setRightsAccepted] = useState(false)
 
   const canExecute = musicStatus?.executableNow === true
 
@@ -87,6 +96,11 @@ export default function MusicStudioPage() {
         body: JSON.stringify({
           prompt: prompt.trim(),
           instrumentalOnly: instrumental,
+          genre: genre.trim() || undefined,
+          mood: mood.trim() || undefined,
+          tempo: tempo.trim() || undefined,
+          durationSeconds,
+          referenceAudioArtifactId: referenceArtifact?.artifactId || undefined,
         }),
       })
       const data = await response.json()
@@ -102,6 +116,56 @@ export default function MusicStudioPage() {
       setJobError(err.message || 'Network error')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleReferenceUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file || uploadingReference) return
+    setReferenceError(null)
+
+    if (!rightsAccepted) {
+      setReferenceError('Declare reference-track rights before upload.')
+      event.target.value = ''
+      return
+    }
+
+    setUploadingReference(true)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
+    try {
+      const dataBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      const response = await fetch('/api/admin/music/reference-audio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          mimeType: file.type || 'audio/mpeg',
+          dataBase64,
+          rights: {
+            accepted: rightsAccepted,
+            basis: rightsBasis,
+            statement: `Admin declared ${rightsBasis} rights for ${file.name}`,
+          },
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || 'Reference upload failed')
+      setReferenceArtifact(data)
+    } catch (err) {
+      setReferenceError(err.message || 'Reference upload failed')
+      setReferenceArtifact(null)
+    } finally {
+      setUploadingReference(false)
+      event.target.value = ''
     }
   }
 
@@ -159,6 +223,19 @@ export default function MusicStudioPage() {
             <div className="mt-1 text-xs text-emerald-300">{musicStatus?.instrumentalReady ? 'Ready' : 'Blocked'}</div>
           </div>
         </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            ['Vocals', musicStatus?.vocalsReady],
+            ['Lyrics', musicStatus?.lyricsReady],
+            ['Reference Analysis', musicStatus?.referenceAudioAnalysisReady],
+            ['Direct Conditioning', musicStatus?.referenceAudioConditioningReady],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+              <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+              <Badge variant="outline" className={`mt-2 text-[10px] ${statusClass(value)}`}>{value ? 'Ready' : 'Unavailable'}</Badge>
+            </div>
+          ))}
+        </div>
       </Card>
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
@@ -175,11 +252,52 @@ export default function MusicStudioPage() {
             />
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Input disabled={!canExecute} value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Genre" className="bg-white/[0.04] text-sm" />
+            <Input disabled={!canExecute} value={mood} onChange={(e) => setMood(e.target.value)} placeholder="Mood" className="bg-white/[0.04] text-sm" />
+            <Input disabled={!canExecute} value={tempo} onChange={(e) => setTempo(e.target.value)} placeholder="Tempo" className="bg-white/[0.04] text-sm" />
+            <Input disabled={!canExecute} type="number" min="15" max="300" value={durationSeconds} onChange={(e) => setDurationSeconds(Number(e.target.value) || 30)} className="bg-white/[0.04] text-sm" />
+          </div>
+
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs">Instrumental Only</span>
               <Switch disabled={!canExecute} checked={instrumental} onCheckedChange={setInstrumental} />
             </div>
+          </div>
+
+          <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+              <Upload className="h-3.5 w-3.5 text-cyan-300" /> Reference Track
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <select
+                value={rightsBasis}
+                onChange={(e) => setRightsBasis(e.target.value)}
+                className="rounded-md border border-white/[0.08] bg-black/30 px-3 py-2 text-xs"
+              >
+                <option value="own">I own it</option>
+                <option value="permission">I have permission</option>
+                <option value="license">I have a licence</option>
+                <option value="public_domain">Public domain</option>
+              </select>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={rightsAccepted} onChange={(e) => setRightsAccepted(e.target.checked)} />
+                Rights declared
+              </label>
+            </div>
+            <div className="mt-3">
+              <Input disabled={!canExecute || uploadingReference} type="file" accept="audio/*" onChange={handleReferenceUpload} className="bg-white/[0.04] text-xs" />
+            </div>
+            {referenceError && <p className="mt-2 text-[10px] text-red-300">{referenceError}</p>}
+            {referenceArtifact && (
+              <div className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-[10px] text-muted-foreground">
+                <div className="font-semibold text-emerald-300">Reference analysed</div>
+                <div>Artifact: {referenceArtifact.artifactId}</div>
+                <div>Direct conditioning: {referenceArtifact.referenceAudioConditioningReady ? 'Ready' : 'Unavailable'}</div>
+                <div>Profile: {referenceArtifact.profile?.energy || 'unknown'} energy, {referenceArtifact.profile?.loudness || 'unknown'} loudness</div>
+              </div>
+            )}
           </div>
 
           <Button

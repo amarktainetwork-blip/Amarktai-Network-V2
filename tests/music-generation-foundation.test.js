@@ -5,10 +5,15 @@ import {
   MODEL_CATALOGUE,
   PROVIDER_KEYS,
   createMusicGenerationPlan,
+  createLongFormMusicRequest,
+  analyzeMusicReferenceAudio,
+  GENX_LYRIA_REQUEST_CONTRACT,
   getMusicCapabilityStatus,
+  inspirationProfileToPrompt,
   normalizeMusicPrompt,
   routeBrain,
   validateMusicGenerationRequest,
+  validateMusicReferenceUploadRequest,
 } from '../packages/core/src/index.ts'
 import { adminMusicRoutes } from '../apps/api/src/routes/admin-music.ts'
 
@@ -88,9 +93,13 @@ describe('Music generation backend foundation', () => {
     expect(plan.blockedReason).toContain('genx_api_key_not_configured')
     expect(plan.lyricsStatus).toBe('not_requested')
     expect(plan.vocalsStatus).toBe('not_requested')
+    expect(plan.providerPrompt).toContain('Original ambient loop')
+    expect(plan.providerPrompt).toContain('target duration about 30 seconds')
+    expect(plan.nativeProviderFields).toEqual(['model', 'params.prompt'])
+    expect(plan.derivedPromptOnlyFields).toContain('durationSeconds')
   })
 
-  it('marks vocals and lyrics as pending provider support, not ready', () => {
+  it('blocks vocals and lyrics as unproven provider features', () => {
     const plan = createMusicGenerationPlan({
       prompt: 'Original pop track with a hook',
       style: 'pop',
@@ -104,8 +113,94 @@ describe('Music generation backend foundation', () => {
     })
 
     expect(plan.executionReady).toBe(false)
+    expect(plan.blockedReasons).toEqual(expect.arrayContaining(['vocals_not_proven', 'lyrics_not_proven']))
+    expect(plan.blockedReason).toContain('vocals_not_proven')
     expect(plan.vocalsStatus).toBe('pending_provider_support')
     expect(plan.lyricsStatus).toBe('pending_provider_support')
+  })
+
+  it('classifies GenX Lyria controls truthfully', () => {
+    expect(GENX_LYRIA_REQUEST_CONTRACT.prompt).toBe('PROVEN_SUPPORTED')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.model).toBe('PROVEN_SUPPORTED')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.duration).toBe('INTERNAL_DERIVED_PROMPT_ONLY')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.genre).toBe('INTERNAL_DERIVED_PROMPT_ONLY')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.mood).toBe('INTERNAL_DERIVED_PROMPT_ONLY')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.tempoBpm).toBe('INTERNAL_DERIVED_PROMPT_ONLY')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.lyrics).toBe('UNPROVEN')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.vocals).toBe('UNPROVEN')
+    expect(GENX_LYRIA_REQUEST_CONTRACT.referenceAudio).toBe('UNPROVEN')
+  })
+
+  it('derives unsupported native controls into a safe original provider prompt', () => {
+    const plan = createMusicGenerationPlan({
+      prompt: 'Original launch soundtrack',
+      style: 'electronic',
+      mood: 'bright',
+      genre: 'synth pop',
+      tempo: 'fast',
+      bpm: 118,
+      arrangement: ['intro', 'chorus lift', 'soft ending'],
+      durationSeconds: 45,
+      instrumentalOnly: true,
+      vocalsRequested: false,
+      routingMode: 'balanced',
+      safetyLevel: 'standard',
+      outputFormat: 'mp3',
+    })
+
+    expect(plan.providerPrompt).toContain('synth pop genre')
+    expect(plan.providerPrompt).toContain('bright mood')
+    expect(plan.providerPrompt).toContain('approximately 118 BPM')
+    expect(plan.providerPrompt).toContain('arrangement sections: intro, chorus lift, soft ending')
+    expect(plan.providerPrompt).toContain('do not copy melody')
+  })
+
+  it('requires legal reference upload declaration and audio MIME', () => {
+    expect(() => validateMusicReferenceUploadRequest({
+      mimeType: 'audio/mpeg',
+      dataBase64: 'AAAA',
+      rights: { accepted: false, basis: 'own', statement: 'I own this reference' },
+    })).toThrow(/rights declaration/)
+
+    expect(() => validateMusicReferenceUploadRequest({
+      mimeType: 'image/png',
+      dataBase64: 'AAAA',
+      rights: { accepted: true, basis: 'license', statement: 'I have a valid licence' },
+    })).toThrow(/audio MIME/)
+  })
+
+  it('derives a bounded non-copying inspiration profile from reference audio metadata', () => {
+    const profile = analyzeMusicReferenceAudio({
+      artifactId: 'reference-artifact-001',
+      mimeType: 'audio/mpeg',
+      fileSizeBytes: 1024 * 1024,
+      durationSeconds: 60,
+    })
+    const prompt = inspirationProfileToPrompt(profile)
+
+    expect(profile.sourceArtifactId).toBe('reference-artifact-001')
+    expect(profile.durationSeconds).toBe(60)
+    expect(prompt).toContain('reference-inspired abstract traits only')
+    expect(prompt).toContain('no copied melody')
+    expect(prompt).not.toMatch(/lyrics to copy|performer voice to copy/i)
+  })
+
+  it('keeps direct reference-audio conditioning unavailable until provider support is proven', () => {
+    const plan = createMusicGenerationPlan({
+      prompt: 'Original music inspired by broad reference traits',
+      style: 'ambient',
+      durationSeconds: 30,
+      instrumentalOnly: true,
+      vocalsRequested: false,
+      referenceAudioArtifactId: 'reference-artifact-001',
+      routingMode: 'balanced',
+      safetyLevel: 'standard',
+      outputFormat: 'mp3',
+    })
+
+    expect(plan.referenceAudioAnalysisMode).toBe('inspiration_profile')
+    expect(plan.referenceAudioConditioningReady).toBe(false)
+    expect(plan.unsupportedFields).toContain('referenceAudioArtifactId')
   })
 
   it('reports implementation ready but not configured/executable/live-proven without GenX config', () => {
@@ -127,6 +222,14 @@ describe('Music generation backend foundation', () => {
     expect(status.instrumentalReady).toBe(true)
     expect(status.vocalsReady).toBe(false)
     expect(status.lyricsReady).toBe(false)
+    expect(status.referenceAudioAnalysisReady).toBe(true)
+    expect(status.referenceAudioConditioningReady).toBe(false)
+    expect(status.durationControlReady).toBe(false)
+    expect(status.genreControlReady).toBe(false)
+    expect(status.moodControlReady).toBe(false)
+    expect(status.tempoControlReady).toBe(false)
+    expect(status.arrangementControlReady).toBe(false)
+    expect(status.outputFormatControlReady).toBe(false)
     expect(status.configured).toBe(false)
     expect(status.policyAllowed).toBe(true)
     expect(status.infrastructureReady).toBe(true)
@@ -237,12 +340,46 @@ describe('Music generation backend foundation', () => {
     expect(routeSource).toContain('/api/admin/music/status')
     expect(routeSource).toContain('/api/admin/music/plan')
     expect(routeSource).toContain('/api/admin/music/generate')
+    expect(routeSource).toContain('/api/admin/music/reference-audio')
+    expect(routeSource).toContain('rightsDeclaration')
+    expect(routeSource).toContain('checksumSha256')
+    expect(routeSource).toContain("subType: 'music_reference'")
     expect(routeSource).toContain('reply.status(409)')
-    expect(routeSource).not.toContain('saveArtifact')
+    expect(routeSource).toContain('saveArtifact')
     // Route now queues jobs via BullMQ instead of blocking with 409
     expect(routeSource).toContain('Queue')
     expect(routeSource).toContain('prisma.job.create')
     expect(routeSource).toContain('202')
+  })
+
+  it('dashboard uses real music APIs and exposes no provider/model selectors', () => {
+    const page = readFileSync(`${ROOT}/app/dashboard/music/page.js`, 'utf-8')
+    expect(page).toContain('/api/admin/music/status')
+    expect(page).toContain('/api/admin/music/generate')
+    expect(page).toContain('/api/admin/music/reference-audio')
+    expect(page).not.toContain('selectedProvider')
+    expect(page).not.toContain('selectedModel')
+  })
+
+  it('long-form handoff uses canonical music_generation request shape', () => {
+    const request = createLongFormMusicRequest({
+      targetDurationSeconds: 45,
+      mood: 'uplifting',
+      style: 'cinematic',
+      loop: true,
+      fadeOutSeconds: 3,
+      parentExecutionId: 'long-form-001',
+      traceId: 'trace-long-form-music',
+      appSlug: 'future-long-form-app',
+    })
+
+    expect(request.capability).toBe('music_generation')
+    expect(request.purpose).toBe('background_music')
+    expect(request.instrumentalOnly).toBe(true)
+    expect(request.vocalsRequested).toBe(false)
+    expect(request.parentExecutionId).toBe('long-form-001')
+    expect(request.traceId).toBe('trace-long-form-music')
+    expect(request.appSlug).toBe('future-long-form-app')
   })
 })
 

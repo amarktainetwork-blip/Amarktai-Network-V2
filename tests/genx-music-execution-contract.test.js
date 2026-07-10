@@ -265,6 +265,16 @@ describe('GenX music executor', () => {
     expect(result.provider).toBe('genx')
   })
 
+  it('blocks unproven vocal or lyric execution before provider submission', async () => {
+    const result = await executeWithProvider(makePayload({
+      input: { instrumentalOnly: false, vocalsRequested: true, lyrics: 'Original lyric line' },
+    }))
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('vocals_not_proven')
+    expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
+  })
+
   it('does not select MiMo for music_generation', async () => {
     const result = await executeWithProvider(makePayload())
     expect(result.provider).not.toBe('mimo')
@@ -636,5 +646,25 @@ describe('GenX music executor', () => {
     expect(submitCall.instrumental).toBeUndefined()
     expect(submitCall.mood).toBeUndefined()
     expect(submitCall.tempo).toBeUndefined()
+  })
+
+  it('submits derived provider prompt without direct reference audio conditioning', async () => {
+    await executeWithProvider(makePayload({
+      prompt: 'Original upbeat electronic-pop instrumental, approximately 118 BPM, no copied melody',
+      input: {
+        providerPrompt: 'Original upbeat electronic-pop instrumental',
+        referenceAudioArtifactId: 'reference-artifact-001',
+        referenceAudioConditioningReady: false,
+      },
+    }))
+
+    const submitCall = providerMocks.genxSubmitMusic.mock.calls[0][0]
+    expect(submitCall.prompt).toContain('Original upbeat')
+    expect(submitCall.referenceAudioArtifactId).toBeUndefined()
+    expect(submitCall.audio).toBeUndefined()
+    expect(artifactMocks.saveArtifact.mock.calls[0][0].input.metadata).toMatchObject({
+      referenceAudioArtifactId: 'reference-artifact-001',
+      referenceAudioConditioningReady: false,
+    })
   })
 })

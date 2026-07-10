@@ -257,12 +257,6 @@ export async function genxSubmitMusic(request: GenxMusicRequest): Promise<GenxMu
 
   const params: Record<string, unknown> = removeUndefined({
     prompt: request.prompt,
-    duration: request.duration,
-    instrumental: request.instrumental,
-    genre: request.genre,
-    mood: request.mood,
-    tempo: request.tempo,
-    negative_prompt: request.negativePrompt,
   })
 
   const body = removeUndefined({

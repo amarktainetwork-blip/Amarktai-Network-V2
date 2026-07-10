@@ -202,7 +202,7 @@ async function claimMusicExecution(
   return { claimed: false, alreadySubmitted: false, error: 'Execution already claimed by another worker' }
 }
 
-async function recordMusicUsage(appSlug: string, model: string, fileSizeBytes: number): Promise<void> {
+async function recordMusicUsage(appSlug: string, model: string): Promise<void> {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   await prisma.usageMeter.upsert({
@@ -512,20 +512,27 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
     const providerStatus = await getProviderCredentialStatus('genx')
     const {
       genxSubmitMusic,
-      genxPollMusic,
-      genxDownloadMusic,
       resolveGenxMusicModel,
-      GENX_MUSIC_POLL_INTERVAL_MS,
-      GENX_MUSIC_POLL_MAX_ATTEMPTS,
     } = await import('@amarktai/providers')
-    const { saveArtifact } = await import('@amarktai/artifacts')
-    const { isValidMimeForType } = await import('@amarktai/core')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
     model = resolveGenxMusicModel({
       providerDefaultModel: providerStatus.defaultModel || undefined,
       providerFallbackModel: providerStatus.fallbackModel || undefined,
       providerAvailableModels,
     })
+
+    const vocalsRequested = readBool(payload.input, 'vocalsRequested') === true
+      || readBool(payload.input, 'instrumentalOnly') === false
+      || typeof payload.input?.lyrics === 'string'
+    if (vocalsRequested) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'Music generation blocked: vocals_not_proven, lyrics_not_proven.',
+        provider: 'genx',
+        model,
+      }
+    }
 
     // ── 1. Check for existing completed artifact (idempotency) ────────────
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'music_generation')
@@ -740,6 +747,9 @@ async function pollAndDownloadMusic(
                 model: musicResult.model || model,
                 duration: musicResult.duration,
                 providerJobId: remoteJobId,
+                referenceAudioArtifactId: typeof payload.input?.referenceAudioArtifactId === 'string' ? payload.input.referenceAudioArtifactId : null,
+                referenceAudioConditioningReady: false,
+                nativeProviderFields: ['model', 'params.prompt'],
               },
             },
             data: musicResult.audioBuffer,
@@ -753,7 +763,7 @@ async function pollAndDownloadMusic(
           })
 
           // ── Record usage ────────────────────────────────────────────
-          await recordMusicUsage(payload.appSlug, musicResult.model || model, artifact.fileSizeBytes).catch(() => {})
+          await recordMusicUsage(payload.appSlug, musicResult.model || model).catch(() => {})
 
           const output = {
             artifactId: artifact.id,

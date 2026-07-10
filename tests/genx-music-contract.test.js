@@ -94,6 +94,37 @@ describe('GenX music model resolution', () => {
     expect(JSON.parse(globalThis.fetch.mock.calls[1][1].body).model).toBe('lyria-3-clip-preview')
   })
 
+  it('sends only proven GenX Lyria native fields in the submit payload', async () => {
+    globalThis.fetch.mockResolvedValueOnce(jsonResponse({ job_id: 'job-contract', status: 'pending' }))
+
+    await genxSubmitMusic({
+      prompt: 'Original bright electronic instrumental, 118 BPM',
+      duration: 30,
+      instrumental: true,
+      genre: 'electronic',
+      mood: 'bright',
+      tempo: '118 BPM',
+      negativePrompt: 'no vocals',
+      apiKey: 'genx-secret',
+      baseUrl: 'https://query.genx.sh',
+    })
+
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
+    expect(requestBody).toEqual({
+      model: 'lyria-3-clip-preview',
+      params: {
+        prompt: 'Original bright electronic instrumental, 118 BPM',
+      },
+      metadata: { capability: 'music_generation', source: 'amarktai' },
+    })
+    expect(requestBody.params).not.toHaveProperty('duration')
+    expect(requestBody.params).not.toHaveProperty('instrumental')
+    expect(requestBody.params).not.toHaveProperty('negative_prompt')
+    expect(requestBody.params).not.toHaveProperty('genre')
+    expect(requestBody.params).not.toHaveProperty('mood')
+    expect(requestBody.params).not.toHaveProperty('tempo')
+  })
+
   it('uses a supported DB default when the Router model list includes it', async () => {
     const model = resolveGenxMusicModel({
       providerDefaultModel: 'lyria-3-pro-preview',
