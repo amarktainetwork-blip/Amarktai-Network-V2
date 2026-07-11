@@ -4,16 +4,17 @@ const API_BASE = process.env.API_URL ?? 'http://api:3001'
 
 export async function POST(request) {
   const authorization = request.headers.get('authorization')
-  const body = await request.json()
+  const contentType = request.headers.get('content-type')
 
   try {
     const response = await fetch(`${API_BASE}/api/admin/music/reference-audio`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        ...(contentType ? { 'Content-Type': contentType } : {}),
         ...(authorization ? { Authorization: authorization } : {}),
       },
-      body: JSON.stringify(body),
+      body: request.body,
+      duplex: 'half',
       signal: AbortSignal.timeout(30000),
     })
     const data = await response.json()

@@ -91,7 +91,6 @@ export const MusicReferenceUploadRequestSchema = z.object({
   appSlug: z.string().min(1).max(120).default('admin-music'),
   filename: z.string().min(1).max(180).default('reference-audio'),
   mimeType: z.string().min(1).max(120),
-  dataBase64: z.string().min(1),
   durationSeconds: z.number().min(0).max(MAX_REFERENCE_AUDIO_DURATION_SECONDS).optional(),
   rights: MusicReferenceRightsDeclarationSchema,
 })
@@ -533,7 +532,7 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
   const normalized = normalizeMusicPrompt(input.prompt)
   const status = getMusicCapabilityStatus()
   const lyricsRequested = Boolean(input.lyrics?.trim())
-  const vocalsRequested = input.vocalsRequested || lyricsRequested
+  const vocalsRequested = input.vocalsRequested || input.instrumentalOnly === false || lyricsRequested
   const warnings = [...normalized.warnings]
   const blockedReasons: string[] = []
 

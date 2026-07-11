@@ -158,13 +158,11 @@ describe('Music generation backend foundation', () => {
   it('requires legal reference upload declaration and audio MIME', () => {
     expect(() => validateMusicReferenceUploadRequest({
       mimeType: 'audio/mpeg',
-      dataBase64: 'AAAA',
       rights: { accepted: false, basis: 'own', statement: 'I own this reference' },
     })).toThrow(/rights declaration/)
 
     expect(() => validateMusicReferenceUploadRequest({
       mimeType: 'image/png',
-      dataBase64: 'AAAA',
       rights: { accepted: true, basis: 'license', statement: 'I have a valid licence' },
     })).toThrow(/audio MIME/)
   })
@@ -357,8 +355,12 @@ describe('Music generation backend foundation', () => {
     expect(page).toContain('/api/admin/music/status')
     expect(page).toContain('/api/admin/music/generate')
     expect(page).toContain('/api/admin/music/reference-audio')
+    expect(page).toContain('new FormData')
+    expect(page).not.toContain('readAsDataURL')
     expect(page).not.toContain('selectedProvider')
     expect(page).not.toContain('selectedModel')
+    expect(page).toContain('instrumentalOnly: true')
+    expect(page).toContain('<Switch disabled checked />')
   })
 
   it('long-form handoff uses canonical music_generation request shape', () => {

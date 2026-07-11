@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { createHash, randomUUID } from 'node:crypto'
+import multipart from '@fastify/multipart'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { saveArtifact } from '@amarktai/artifacts'
@@ -16,8 +17,11 @@ import {
   validateMusicGenerationRequest,
   validateMusicReferenceUploadRequest,
   type MusicInspirationProfile,
+  type MusicReferenceUploadRequest,
 } from '@amarktai/core'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+
+const REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES = MAX_REFERENCE_AUDIO_BYTES
 
 async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
   const truth = await buildAdminRuntimeTruth(app)
@@ -102,6 +106,37 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
   }
 }
 
+function sanitizeFilename(filename: string): string {
+  const cleaned = filename
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned.substring(0, 180) || 'reference-audio'
+}
+
+function fieldValue(fields: Record<string, unknown>, name: string): string | undefined {
+  const field = fields[name] as { value?: unknown } | undefined
+  return typeof field?.value === 'string' ? field.value : undefined
+}
+
+function parseOptionalNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseRightsField(fields: Record<string, unknown>): MusicReferenceUploadRequest['rights'] {
+  const rightsJson = fieldValue(fields, 'rights')
+  if (rightsJson) {
+    return JSON.parse(rightsJson) as MusicReferenceUploadRequest['rights']
+  }
+  return {
+    accepted: fieldValue(fields, 'rightsAccepted') === 'true',
+    basis: fieldValue(fields, 'rightsBasis') as MusicReferenceUploadRequest['rights']['basis'],
+    statement: fieldValue(fields, 'rightsStatement') ?? '',
+  }
+}
+
 async function getAdminSubject(app: FastifyInstance, request: FastifyRequest): Promise<string> {
   const auth = request.headers.authorization
   if (!auth?.startsWith('Bearer ')) return 'admin'
@@ -161,6 +196,16 @@ async function loadReferenceProfile(artifactId: string, appSlug: string): Promis
 }
 
 export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    attachFieldsToBody: false,
+    limits: {
+      fileSize: REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES,
+      files: 1,
+      fields: 12,
+      parts: 14,
+    },
+  })
+
   let queue: Queue | null = null
   function getQueue(): Queue {
     if (!queue) {
@@ -185,10 +230,35 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
     if (!(await requireAdmin(app, request, reply))) return
 
     try {
-      const upload = validateMusicReferenceUploadRequest(request.body)
-      const data = Buffer.from(upload.dataBase64, 'base64')
+      if (!request.isMultipart()) {
+        return reply.status(415).send({ error: true, message: 'Reference audio upload must use multipart/form-data' })
+      }
+
+      const file = await request.file({
+        limits: {
+          fileSize: REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES,
+          files: 1,
+        },
+      })
+      if (!file) {
+        return reply.status(400).send({ error: true, message: 'Reference audio file is required' })
+      }
+
+      const fields = file.fields as Record<string, unknown>
+      const upload = validateMusicReferenceUploadRequest({
+        appSlug: fieldValue(fields, 'appSlug') ?? 'admin-music',
+        filename: sanitizeFilename(file.filename || fieldValue(fields, 'filename') || 'reference-audio'),
+        mimeType: file.mimetype || fieldValue(fields, 'mimeType') || 'application/octet-stream',
+        durationSeconds: parseOptionalNumber(fieldValue(fields, 'durationSeconds')),
+        rights: parseRightsField(fields),
+      })
+
+      const data = await file.toBuffer()
       if (data.length === 0) {
         return reply.status(400).send({ error: true, message: 'Reference audio upload is empty' })
+      }
+      if (file.file.truncated) {
+        return reply.status(413).send({ error: true, message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes` })
       }
       if (data.length > MAX_REFERENCE_AUDIO_BYTES) {
         return reply.status(413).send({ error: true, message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes` })
@@ -273,6 +343,12 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
         artifactUrl: artifact.storageUrl,
       })
     } catch (error) {
+      if (error instanceof Error && /File too large|request file too large|too large/i.test(error.message)) {
+        return reply.status(413).send({
+          error: true,
+          message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes`,
+        })
+      }
       return reply.status(400).send({
         error: true,
         message: error instanceof Error ? error.message : 'Invalid reference audio upload',
@@ -325,8 +401,8 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const plan = {
         ...rawPlan,
         providerPrompt: createMusicProviderPrompt(musicRequest, rawPlan.normalizedPrompt, inspirationProfile),
-        executionReady: status.executableNow && rawPlan.executionReady,
-        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
+        executionReady: status.executableNow && rawPlan.blockedReasons.length === 0,
+        blockedReason: rawPlan.blockedReasons.length > 0 ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
       }
 
       return reply.send({
@@ -370,8 +446,8 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const plan = {
         ...rawPlan,
         providerPrompt: createMusicProviderPrompt(musicRequest, rawPlan.normalizedPrompt, inspirationProfile),
-        executionReady: status.executableNow && rawPlan.executionReady,
-        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
+        executionReady: status.executableNow && rawPlan.blockedReasons.length === 0,
+        blockedReason: rawPlan.blockedReasons.length > 0 ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
       }
 
       // Creation gate: preserve explicit development/test gating.

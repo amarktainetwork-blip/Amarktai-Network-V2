@@ -25,7 +25,6 @@ function statusClass(value) {
 
 export default function MusicStudioPage() {
   const [prompt, setPrompt] = useState('')
-  const [instrumental, setInstrumental] = useState(true)
   const [genre, setGenre] = useState('')
   const [mood, setMood] = useState('')
   const [durationSeconds, setDurationSeconds] = useState(30)
@@ -95,7 +94,7 @@ export default function MusicStudioPage() {
         },
         body: JSON.stringify({
           prompt: prompt.trim(),
-          instrumentalOnly: instrumental,
+          instrumentalOnly: true,
           genre: genre.trim() || undefined,
           mood: mood.trim() || undefined,
           tempo: tempo.trim() || undefined,
@@ -133,29 +132,22 @@ export default function MusicStudioPage() {
     setUploadingReference(true)
     const token = typeof window !== 'undefined' ? localStorage.getItem('amarktai_token') : null
     try {
-      const dataBase64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
+      const formData = new FormData()
+      formData.append('file', file, file.name)
+      formData.append('filename', file.name)
+      formData.append('mimeType', file.type || 'audio/mpeg')
+      formData.append('rights', JSON.stringify({
+        accepted: rightsAccepted,
+        basis: rightsBasis,
+        statement: `Admin declared ${rightsBasis} rights for ${file.name}`,
+      }))
 
       const response = await fetch('/api/admin/music/reference-audio', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          filename: file.name,
-          mimeType: file.type || 'audio/mpeg',
-          dataBase64,
-          rights: {
-            accepted: rightsAccepted,
-            basis: rightsBasis,
-            statement: `Admin declared ${rightsBasis} rights for ${file.name}`,
-          },
-        }),
+        body: formData,
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.message || 'Reference upload failed')
@@ -262,7 +254,7 @@ export default function MusicStudioPage() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs">Instrumental Only</span>
-              <Switch disabled={!canExecute} checked={instrumental} onCheckedChange={setInstrumental} />
+              <Switch disabled checked />
             </div>
           </div>
 
