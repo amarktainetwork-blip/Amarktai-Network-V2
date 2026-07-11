@@ -34,19 +34,16 @@ describe('dashboard polish and routing map contract', () => {
       expect(capLab.href).toBe('/dashboard/capability-lab')
     })
 
-    it('Capability Lab page contains workflow sections', () => {
+    it('Capability Lab page contains canonical capability families', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/capability-lab/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Chat & Reasoning')
-      expect(content).toContain('Image Creation')
-      expect(content).toContain('Video Creation')
-      expect(content).toContain('Music & Audio')
-      expect(content).toContain('Voice')
-      expect(content).toContain('Research & RAG')
-      expect(content).toContain('Brand & Marketing')
-      expect(content).toContain('Apps & Automation')
-      expect(content).toContain('Operations & Governance')
-      expect(content).toContain('Adult / Restricted')
+      expect(content).toContain('Language')
+      expect(content).toContain('Image')
+      expect(content).toContain('Video')
+      expect(content).toContain('Audio')
+      expect(content).toContain('Knowledge')
+      expect(content).toContain('Marketing')
+      expect(content).toContain('Adult Governed')
     })
 
     it('Capability Lab references platform architecture', () => {
@@ -215,122 +212,49 @@ describe('dashboard polish and routing map contract', () => {
     })
   })
 
-  describe('routing map exists and is correct', () => {
-    it('capability-routing-map.js file exists', () => {
+  describe('canonical routing truth exists and is correct', () => {
+    it('old capability-routing-map.js is removed', () => {
       const mapPath = path.join(ROOT, 'lib/capability-routing-map.js')
-      expect(fs.existsSync(mapPath)).toBe(true)
+      expect(fs.existsSync(mapPath)).toBe(false)
     })
 
-    it('routing map says image_generation is Together-only', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const imageCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'image_generation')
-      expect(imageCap).toBeDefined()
-      expect(imageCap.wiredProvider).toBe('together')
-      expect(imageCap.availableProviders).toEqual(['together'])
-      expect(ROUTING_TRUTH.image_generation_wired_to).toBe('together')
+    it('Brain Router says image_generation is Together-selected and video_generation is GenX-selected', async () => {
+      const { routeBrain } = await import('../packages/core/src/index.ts')
+      expect(routeBrain({ capability: 'image_generation', routingMode: 'balanced' }).selectedProvider).toBe('together')
+      expect(routeBrain({ capability: 'video_generation', routingMode: 'balanced' }).selectedProvider).toBe('genx')
     })
 
-    it('routing map says video_generation is GenX-only', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const videoCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'video_generation')
-      expect(videoCap).toBeDefined()
-      expect(videoCap.wiredProvider).toBe('genx')
-      expect(videoCap.availableProviders).toEqual(['genx'])
-      expect(ROUTING_TRUTH.video_generation_wired_to).toBe('genx')
-    })
-
-    it('routing map says music_generation pending', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const musicCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'music_generation')
-      expect(musicCap).toBeDefined()
-      expect(musicCap.executionStatus).toBe('pending')
-      expect(musicCap.wiredProvider).toBeNull()
-      expect(ROUTING_TRUTH.music_generation).toBe('pending')
-    })
-
-    it('routing map says app-facing provider/model override is false', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      for (const cap of CAPABILITY_ROUTING_MAP) {
-        expect(cap.appFacingProviderOverride).toBe(false)
-        expect(cap.appFacingModelOverride).toBe(false)
+    it('canonical runtime truth keeps provider/model override app-facing false', async () => {
+      const { CAPABILITY_KEYS, routeBrain } = await import('../packages/core/src/index.ts')
+      for (const capability of CAPABILITY_KEYS) {
+        const decision = routeBrain({ capability, routingMode: 'balanced' })
+        expect(decision.appFacingProviderOverride).toBe(false)
+        expect(decision.appFacingModelOverride).toBe(false)
       }
-      expect(ROUTING_TRUTH.app_facing_provider_override).toBe(false)
-      expect(ROUTING_TRUTH.app_facing_model_override).toBe(false)
     })
 
     it('provider list remains exactly genx, groq, together, mimo, deepinfra', async () => {
-      const { APPROVED_PROVIDERS, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      expect(APPROVED_PROVIDERS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-      expect(ROUTING_TRUTH.approved_providers).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
+      expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
     })
 
-    it('MiMo remains coding_tools_only', async () => {
-      const { CAPABILITY_ROUTING_MAP, PROVIDER_ROLES, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      expect(PROVIDER_ROLES.mimo.runtimeUse).toBe('coding_tools_only')
-      expect(ROUTING_TRUTH.mimo_policy).toBe('coding_tools_only')
-      const codingCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'coding_tools')
-      expect(codingCap).toBeDefined()
-      expect(codingCap.executionStatus).toBe('blocked')
+    it('MiMo remains coding_tools_only and adult generation remains on hold', async () => {
+      const { CODING_ONLY_PROVIDERS, getRuntimeTruth } = await import('../packages/core/src/index.ts')
+      const truth = getRuntimeTruth()
+      expect([...CODING_ONLY_PROVIDERS]).toEqual(['mimo'])
+      expect(truth.providers.find((provider) => provider.provider === 'mimo')?.codingOnly).toBe(true)
+      expect(truth.capabilities.filter((capability) => capability.capability.startsWith('adult_')).every((capability) => capability.classification === 'POLICY_RESTRICTED')).toBe(true)
     })
 
-    it('adult generation remains on hold', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const adultCaps = CAPABILITY_ROUTING_MAP.filter((c) => c.id.startsWith('adult_'))
-      expect(adultCaps.length).toBeGreaterThan(0)
-      for (const cap of adultCaps) {
-        expect(cap.executionStatus).toBe('blocked')
-        expect(cap.wiredProvider).toBeNull()
-      }
-      expect(ROUTING_TRUTH.adult_generation).toBe('on_hold')
-    })
-
-    it('no new providers were added', async () => {
-      const { APPROVED_PROVIDERS } = await import('../lib/capability-routing-map.js')
-      const banned = ['hugging_face', 'huggingface', 'qwen', 'gemini', 'openai', 'anthropic', 'replicate', 'heygen', 'minimax']
-      for (const provider of APPROVED_PROVIDERS) {
-        expect(banned).not.toContain(provider)
-      }
-      expect(APPROVED_PROVIDERS.length).toBe(5)
-    })
-
-    it('text/chat is wired to Groq with DeepInfra fallback', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const chatCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'chat')
-      expect(chatCap).toBeDefined()
-      expect(chatCap.wiredProvider).toBe('groq')
-      expect(chatCap.executionStatus).toBe('live')
-      expect(chatCap.fallbacksPlanned).toContain('deepinfra')
-      expect(ROUTING_TRUTH.text_chat_wired_to).toBe('groq')
-      expect(ROUTING_TRUTH.text_chat_fallback).toBe('deepinfra')
-    })
-
-    it('long-form video is pending', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const lfCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'long_form_video')
-      expect(lfCap).toBeDefined()
-      expect(lfCap.executionStatus).toBe('pending')
-      expect(ROUTING_TRUTH.long_form_video).toBe('pending')
-    })
-
-    it('research is pending', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const researchCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'research')
-      expect(researchCap).toBeDefined()
-      expect(researchCap.executionStatus).toBe('pending')
-      expect(ROUTING_TRUTH.research).toBe('pending')
-    })
-
-    it('voice is pending', async () => {
-      const { ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      expect(ROUTING_TRUTH.voice).toBe('pending')
-    })
-
-    it('embeddings RAG workflow is partial', async () => {
-      const { CAPABILITY_ROUTING_MAP, ROUTING_TRUTH } = await import('../lib/capability-routing-map.js')
-      const embCap = CAPABILITY_ROUTING_MAP.find((c) => c.id === 'embeddings')
-      expect(embCap).toBeDefined()
-      expect(embCap.executionStatus).toBe('partial')
-      expect(ROUTING_TRUTH.embeddings_rag_workflow).toContain('partial')
+    it('chat has Groq with DeepInfra fallback and long-form/research remain not live-proven', async () => {
+      const { getRuntimeTruth, routeBrain } = await import('../packages/core/src/index.ts')
+      const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
+      const truth = getRuntimeTruth()
+      expect(decision.selectedProvider).toBe('groq')
+      expect(decision.fallbackChain.some((entry) => entry.provider === 'deepinfra')).toBe(true)
+      expect(truth.capabilities.find((capability) => capability.capability === 'long_form_video')?.liveProven).toBe(false)
+      expect(truth.capabilities.find((capability) => capability.capability === 'research')?.liveProven).toBe(false)
+      expect(truth.capabilities.find((capability) => capability.capability === 'embeddings')?.classification).not.toBe('LIVE_PROVEN')
     })
   })
 

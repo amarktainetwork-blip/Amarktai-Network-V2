@@ -25,7 +25,7 @@ const BANNED_PROVIDER_NAMES = [
 
 const dashboardTruthFiles = [
   'lib/runtime-proof-status.js',
-  'lib/capability-display-catalog.js',
+  'lib/capability-catalog.js',
   'components/dashboard/runtime-proof-summary.jsx',
   'app/dashboard/command-center/page.js',
   'app/dashboard/capabilities/page.js',
@@ -99,6 +99,11 @@ describe('Dashboard runtime proof status UI contract', () => {
     expect(source('components/dashboard/runtime-proof-summary.jsx')).toContain('Proven capabilities')
     expect(source('components/dashboard/runtime-proof-summary.jsx')).toContain('Unproven capabilities')
     expect(source('components/dashboard/runtime-proof-summary.jsx')).toContain('Backend proof source')
+  })
+
+  it('does not keep the old duplicate capability display catalog', () => {
+    expect(fs.existsSync(path.join(ROOT, 'lib/capability-display-catalog.js'))).toBe(false)
+    expect(source('lib/capability-catalog.js')).toContain('../packages/core/src/capabilities.ts')
   })
 
   it('disables unproven dashboard and Studio capability UI instead of implying readiness', () => {

@@ -26,12 +26,14 @@ export {
 export {
   PROVIDER_KEYS,
   PROVIDER_HEALTH_STATUSES,
+  PROVIDER_ENV_VARS,
   CREDENTIAL_USAGE_POLICIES,
   COST_TIERS,
   LATENCY_TIERS,
   ProviderDefinitionSchema,
   ProviderCapabilityMapSchema,
   isValidProvider,
+  getProviderEnvVar,
   type ProviderKey,
   type ProviderHealthStatus,
   type CredentialUsagePolicy,
@@ -129,19 +131,6 @@ export {
   CRAWLEE_TIMEOUT_MS,
   TOKEN_COST_MULTIPLIER,
 } from './config.js'
-
-// Provider routing skeleton
-export {
-  routeProvider,
-  isProviderConfigured,
-  isDeepInfraGated,
-  isValidProviderId,
-  getProviderEnvVar,
-  getProviderCategorySupport,
-  type ProviderCandidate,
-  type ProviderRouteDecision,
-  type RoutingOptions,
-} from './provider-routing.js'
 
 // Model catalogue
 export {

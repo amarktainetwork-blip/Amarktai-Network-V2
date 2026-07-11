@@ -40,9 +40,8 @@ import {
   VALID_ROUTING_MODES,
   CAPABILITY_KEYS,
   MODEL_CATALOGUE,
+  getRuntimeTruth,
 } from '../packages/core/src/index.ts'
-
-import { BRAIN_ROUTER_V1, ROUTING_TRUTH, APPROVED_PROVIDERS } from '../lib/capability-routing-map.js'
 
 const ROOT = path.join(import.meta.dirname, '..')
 
@@ -280,8 +279,9 @@ describe('Brain Router worker integration', () => {
       expect(decision.selectedProvider).toBeNull()
     })
 
-    it('routing map shows music_generation as pending', () => {
-      expect(ROUTING_TRUTH.music_generation).toBe('pending')
+    it('runtime truth keeps music_generation not live-proven until proof exists', () => {
+      const music = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'music_generation')
+      expect(music?.liveProven).toBe(false)
     })
   })
 
@@ -291,8 +291,10 @@ describe('Brain Router worker integration', () => {
       expect(decision.executionAllowed).toBe(false)
     })
 
-    it('routing map shows long_form_video as pending', () => {
-      expect(ROUTING_TRUTH.long_form_video).toBe('pending')
+    it('runtime truth keeps long_form_video not live-proven until full multimedia proof exists', () => {
+      const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
+      expect(longForm?.liveProven).toBe(false)
+      expect(longForm?.fullMultimediaReady).toBe(false)
     })
   })
 
@@ -358,21 +360,18 @@ describe('Brain Router worker integration', () => {
   })
 
   describe('17. Brain Router tests from PR #76 still pass', () => {
-    it('BRAIN_ROUTER_V1 exists', () => {
-      expect(BRAIN_ROUTER_V1.exists).toBe(true)
-      expect(BRAIN_ROUTER_V1.version).toBe('v1')
+    it('routeBrain returns Brain Router v1 truth', () => {
+      expect(routeBrain({ capability: 'chat', routingMode: 'balanced' }).truth).toContain('Brain Router v1')
     })
 
-    it('BRAIN_ROUTER_V1 integratedInWorker is true', () => {
-      expect(BRAIN_ROUTER_V1.integratedInWorker).toBe(true)
-    })
-
-    it('ROUTING_TRUTH includes brain_router_integrated_in_worker', () => {
-      expect(ROUTING_TRUTH.brain_router_integrated_in_worker).toBe(true)
+    it('provider executor integrates routeBrain in worker', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts'), 'utf8')
+      expect(content).toContain('routeBrain')
+      expect(content).toContain('resolveBrainRouterDecision')
     })
 
     it('5 routing modes exist', () => {
-      expect(BRAIN_ROUTER_V1.routingModes).toEqual(['balanced', 'premium', 'fast', 'budget', 'experimental'])
+      expect(VALID_ROUTING_MODES).toEqual(['balanced', 'premium', 'fast', 'budget', 'experimental'])
     })
   })
 
@@ -382,8 +381,10 @@ describe('Brain Router worker integration', () => {
       expect(PROVIDER_KEYS).toHaveLength(5)
     })
 
-    it('APPROVED_PROVIDERS matches PROVIDER_KEYS', () => {
-      expect(APPROVED_PROVIDERS).toEqual([...PROVIDER_KEYS])
+    it('runtime execution providers are a subset of PROVIDER_KEYS', () => {
+      for (const provider of getRuntimeTruth().providerPolicy.runtimeExecutionProviders) {
+        expect(PROVIDER_KEYS).toContain(provider)
+      }
     })
 
     it('no banned providers in PROVIDER_KEYS', () => {
@@ -403,8 +404,9 @@ describe('Brain Router worker integration', () => {
       }
     })
 
-    it('ROUTING_TRUTH shows adult_generation on_hold', () => {
-      expect(ROUTING_TRUTH.adult_generation).toBe('on_hold')
+    it('runtime truth shows adult generation on hold', () => {
+      const adult = getRuntimeTruth().capabilities.filter((capability) => capability.capability.startsWith('adult_'))
+      expect(adult.every((capability) => capability.classification === 'POLICY_RESTRICTED')).toBe(true)
     })
 
     it('routeBrain blocks adult capabilities', () => {
@@ -441,12 +443,15 @@ describe('Brain Router worker integration', () => {
       expect(content).toContain('routingMode')
     })
 
-    it('routing_mode_is_preference is true in ROUTING_TRUTH', () => {
-      expect(ROUTING_TRUTH.routing_mode_is_preference).toBe(true)
+    it('routing mode remains preference-only metadata', () => {
+      const queue = fs.readFileSync(path.join(ROOT, 'packages/core/src/queue.ts'), 'utf8')
+      expect(queue).toContain('routingMode')
+      expect(queue).not.toContain('providerOverride')
     })
 
-    it('provider_model_override_blocked is true in ROUTING_TRUTH', () => {
-      expect(ROUTING_TRUTH.provider_model_override_blocked).toBe(true)
+    it('provider/model override remains blocked', () => {
+      expect(hasBlockedOverrides({ provider: 'groq' })).toBe('provider')
+      expect(hasBlockedOverrides({ model: 'llama' })).toBe('model')
     })
   })
 })

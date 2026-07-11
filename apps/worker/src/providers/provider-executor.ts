@@ -8,7 +8,6 @@
  */
 
 import {
-  routeProvider,
   routeBrain,
   extractRoutingMode,
   type CapabilityKey,
@@ -24,10 +23,10 @@ import type { WorkerJobData, ProcessorResult } from '../processors/job-processor
 type ProvidersModule = typeof import('@amarktai/providers')
 
 function formatSupportedCandidates(capability: CapabilityKey): string {
-  return routeProvider(capability).candidates
-    .filter((candidate) => candidate.supported)
-    .map((candidate) => `${candidate.provider}(${candidate.configured ? 'configured' : 'missing-config'})`)
-    .join(', ') || 'none'
+  const decision = routeBrain({ capability, routingMode: 'balanced' })
+  const executable = decision.executableCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(executable)`)
+  const catalogueOnly = decision.catalogueOnlyCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(catalogue-only)`)
+  return [...executable, ...catalogueOnly].join(', ') || 'none'
 }
 
 function redactProviderSecrets(message: string, extraKeys: string[] = []): string {

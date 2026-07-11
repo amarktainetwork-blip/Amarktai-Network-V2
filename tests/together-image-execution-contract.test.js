@@ -55,7 +55,7 @@ import { executeWithProvider } from '../apps/worker/src/providers/provider-execu
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
 import {
   PROVIDER_KEYS,
-  routeProvider,
+  routeBrain,
 } from '../packages/core/src/index.ts'
 
 const ORIGINAL_ENV = process.env
@@ -392,11 +392,10 @@ describe('Execution routing gate', () => {
   })
 
   it('DeepInfra is not an image_generation runtime candidate', () => {
-    const decision = routeProvider('image_generation')
-    const deepinfra = decision.candidates.find((candidate) => candidate.provider === 'deepinfra')
+    const decision = routeBrain({ capability: 'image_generation', routingMode: 'balanced' })
+    const deepinfra = decision.rejectedCandidates.find((candidate) => candidate.provider === 'deepinfra')
 
-    expect(deepinfra?.supported).toBe(false)
-    expect(deepinfra?.gated).toBe(false)
+    expect(deepinfra?.reason).toContain("does not support capability 'image_generation'")
   })
 
   it('provider/model user override is ignored by the executor', async () => {

@@ -52,7 +52,7 @@ vi.mock('@amarktai/providers', () => ({
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
-import { routeProvider, GROQ_DEFAULT_MODEL } from '../packages/core/src/index.ts'
+import { routeBrain, GROQ_DEFAULT_MODEL } from '../packages/core/src/index.ts'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -129,15 +129,16 @@ describe('Groq executor — client contract', () => {
     process.env = originalEnv
   })
 
-  it('requires GROQ_API_KEY to be configured for Groq routing', () => {
-    delete process.env.GROQ_API_KEY
-    delete process.env.TOGETHER_API_KEY
-    delete process.env.MIMO_API_KEY
-    delete process.env.GENX_API_KEY
-    delete process.env.DEEPINFRA_API_KEY
-    const decision = routeProvider('chat')
-    // Without any provider config, routing is blocked
-    expect(decision.blocked).toBe(true)
+  it('blocks chat routing when configured text providers are disabled', () => {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
+      providerStates: {
+        groq: { disabled: true },
+        deepinfra: { disabled: true },
+      },
+    })
+    expect(decision.executionAllowed).toBe(false)
   })
 
   it('builds request with provider groq', async () => {
@@ -289,12 +290,12 @@ describe('Routing/execution gate', () => {
   })
 
   it('chat routes to Groq when Groq config is present', () => {
-    const decision = routeProvider('chat')
+    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
     expect(decision.selectedProvider).toBe('groq')
   })
 
   it('chat does not route to DeepInfra by default', () => {
-    const decision = routeProvider('chat')
+    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
     expect(decision.selectedProvider).not.toBe('deepinfra')
   })
 
