@@ -94,13 +94,13 @@ export async function checkFfmpegAvailable(): Promise<FfmpegAvailability> {
 // ── Resolve Scene Artifacts ───────────────────────────────────────────────────
 
 export async function resolveSceneArtifacts(executionId: string): Promise<SceneArtifactInfo[]> {
-  // Find all jobs with this executionId
+  // Find all scene jobs with this exact durable executionId.
   const jobs = await prisma.job.findMany({
     where: {
       capability: 'video_generation',
-      metadataJson: { contains: executionId },
+      executionId,
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { sceneNumber: 'asc' },
   })
 
   const sceneArtifacts: SceneArtifactInfo[] = []

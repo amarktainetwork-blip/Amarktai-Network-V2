@@ -106,6 +106,21 @@ export interface CapabilityRuntimeTruth {
   }>
   blockedReasons: string[]
   remainingWork: string[]
+  plannerReady?: boolean
+  durableParentReady?: boolean
+  durablePlanReady?: boolean
+  sceneLinkageReady?: boolean
+  sceneSubmissionReady?: boolean
+  sceneExecutionReady?: boolean
+  retryResumeReady?: boolean
+  progressTrackingReady?: boolean
+  batchStructureReady?: boolean
+  assemblyHandoffReady?: boolean
+  videoOnlyAssemblyReady?: boolean
+  voiceoverReady?: boolean
+  subtitlesReady?: boolean
+  musicBedReady?: boolean
+  fullMultimediaReady?: boolean
 }
 
 export interface RuntimeTruth {
@@ -174,6 +189,7 @@ const ARTIFACT_PATH_CAPABILITIES = new Set<CapabilityKey>([
   'image_generation',
   'video_generation',
   'music_generation',
+  'long_form_video',
 ])
 
 function toIso(value: string | Date | null | undefined): string | null {
@@ -316,7 +332,7 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
       || MEDIA_WORKER_CAPABILITIES.has(capability)
     const routeImplemented = runtime.routeImplemented ?? ROUTE_IMPLEMENTED_CAPABILITIES.has(capability)
     const queueRequired = QUEUE_CAPABILITIES.has(capability)
-    const queuePathImplemented = runtime.queuePathImplemented ?? (!queueRequired || MEDIA_WORKER_CAPABILITIES.has(capability))
+    const queuePathImplemented = runtime.queuePathImplemented ?? (!queueRequired || MEDIA_WORKER_CAPABILITIES.has(capability) || capability === 'long_form_video')
     const artifactRequired = capabilityDef?.artifactRequired === true || ARTIFACT_CAPABILITIES.has(capability)
     const artifactPathImplemented = runtime.artifactPathImplemented ?? (!artifactRequired || ARTIFACT_PATH_CAPABILITIES.has(capability))
     const eligibleProviders = uniqueProviders(eligibleByImplementation)
@@ -430,6 +446,41 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
           blockedReasons: music.blockedReasons,
           remainingWork: music.blockedReasons,
         }),
+      }
+    }
+
+    if (capability === 'long_form_video') {
+      const longFormTruth: CapabilityRuntimeTruth = {
+        ...withClassification,
+        plannerReady: true,
+        durableParentReady: true,
+        durablePlanReady: true,
+        sceneLinkageReady: true,
+        sceneSubmissionReady: true,
+        sceneExecutionReady: true,
+        retryResumeReady: true,
+        progressTrackingReady: true,
+        batchStructureReady: true,
+        assemblyHandoffReady: true,
+        videoOnlyAssemblyReady: true,
+        voiceoverReady: false,
+        subtitlesReady: false,
+        musicBedReady: false,
+        fullMultimediaReady: false,
+        liveProven: false,
+        executableNow: false,
+        blockedReasons: [...new Set([
+          ...withClassification.blockedReasons,
+          'voiceover_missing',
+          'subtitles_missing',
+          'music_bed_missing',
+          'full_multimedia_not_ready',
+        ])],
+      }
+      return {
+        ...longFormTruth,
+        classification: classifyCapability(longFormTruth),
+        remainingWork: longFormTruth.blockedReasons.filter((reason) => reason !== 'live_proof_missing'),
       }
     }
 

@@ -265,6 +265,7 @@ export {
   type SceneExecutionPayload,
   type SceneExecutionState,
   type LongFormExecutionState,
+  type LongFormAssemblyHandoff,
 } from './long-form-execution.js'
 
 // Music generation foundation

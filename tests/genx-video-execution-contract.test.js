@@ -20,6 +20,8 @@ const providerMocks = vi.hoisted(() => ({
   groqChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
+  genxPollVideo: vi.fn(),
+  genxDownloadVideo: vi.fn(),
   resolveGenxVideoModel: vi.fn((request = {}) => {
     const available = request.providerAvailableModels ?? []
     if (request.model?.trim()) return request.model.trim()
@@ -28,16 +30,34 @@ const providerMocks = vi.hoisted(() => ({
     }
     return available.find((model) => !model.toLowerCase().includes('avatar')) ?? request.providerDefaultModel ?? 'seedance-v1-fast'
   }),
+  GENX_POLL_INTERVAL_MS: 0,
+  GENX_POLL_MAX_ATTEMPTS: 3,
 }))
 
 const artifactMocks = vi.hoisted(() => ({
   saveArtifact: vi.fn(),
+  findCompletedArtifactByTraceId: vi.fn(),
+}))
+
+const prismaMock = vi.hoisted(() => ({
+  aiProvider: {
+    findUnique: vi.fn(),
+  },
+  job: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  usageMeter: {
+    upsert: vi.fn(),
+  },
 }))
 
 vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  prisma: prismaMock,
 }))
 
 vi.mock('@amarktai/providers', () => providerMocks)
@@ -96,6 +116,12 @@ describe('GenX video executor', () => {
       source: 'database',
     })
     mockGenxProviderStatus()
+    artifactMocks.findCompletedArtifactByTraceId.mockResolvedValue(null)
+    prismaMock.aiProvider.findUnique.mockResolvedValue(null)
+    prismaMock.job.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.job.findUnique.mockResolvedValue({ metadataJson: '{}' })
+    prismaMock.job.update.mockResolvedValue({})
+    prismaMock.usageMeter.upsert.mockResolvedValue({})
     providerMocks.genxGenerateVideo.mockResolvedValue({
       videoBuffer: Buffer.from('video-bytes'),
       mimeType: 'video/mp4',
@@ -108,6 +134,22 @@ describe('GenX video executor', () => {
         providerJobId: 'genx-provider-job-001',
         selectedModel: 'grok-imagine-video',
       },
+    })
+    providerMocks.genxPollVideo.mockResolvedValue({
+      jobId: 'genx-provider-job-001',
+      status: 'completed',
+      progress: 100,
+      resultUrl: 'https://query.genx.sh/api/v1/jobs/genx-provider-job-001/file',
+      metadata: {},
+    })
+    providerMocks.genxDownloadVideo.mockResolvedValue({
+      videoBuffer: Buffer.from('resumed-video-bytes'),
+      mimeType: 'video/mp4',
+      duration: 4,
+      width: 1280,
+      height: 720,
+      model: 'grok-imagine-video',
+      metadata: { downloaded: true },
     })
     artifactMocks.saveArtifact.mockResolvedValue({
       id: 'artifact-video-001',
@@ -180,6 +222,35 @@ describe('GenX video executor', () => {
       providerJobId: 'genx-provider-job-001',
       selectedModel: 'grok-imagine-video',
     })
+  })
+
+  it('resumes an existing GenX remote job without submitting a duplicate provider request', async () => {
+    prismaMock.job.findUnique.mockResolvedValueOnce({
+      metadataJson: JSON.stringify({
+        genxProviderJobId: 'genx-remote-resume-001',
+        genxProviderModel: 'grok-imagine-video',
+      }),
+    })
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(true)
+    expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
+    expect(providerMocks.genxPollVideo).toHaveBeenCalledWith('genx-remote-resume-001', expect.objectContaining({
+      apiKey: 'genx-secret-key',
+      baseUrl: 'https://query.genx.sh',
+      pollAttempt: 1,
+    }))
+    expect(providerMocks.genxDownloadVideo).toHaveBeenCalledWith('https://query.genx.sh/api/v1/jobs/genx-provider-job-001/file', expect.objectContaining({
+      apiKey: 'genx-secret-key',
+      baseUrl: 'https://query.genx.sh',
+      model: 'grok-imagine-video',
+    }))
+    expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      data: Buffer.from('resumed-video-bytes'),
+    }))
+    const output = JSON.parse(result.output)
+    expect(output.providerJobId).toBe('genx-remote-resume-001')
   })
 
   it('returns safe GenX failure diagnostics without leaking the API key', async () => {

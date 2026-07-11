@@ -64,7 +64,7 @@ export function createLongFormVideoPlan(request: LongFormVideoRequest): LongForm
   // Determine executability
   const executableNow = false // Final long-form video is not executable yet
   const perSceneVideoGenerationPossible = true // Can use existing video_generation
-  const finalAssemblyReady = false // Stitching is not ready
+  const finalAssemblyReady = false // Durable handoff is ready; full multimedia assembly remains blocked
 
   // Build reason if blocked
   const reasonIfBlocked = buildBlockReason(missingDependencies)
