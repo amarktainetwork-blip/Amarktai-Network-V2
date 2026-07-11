@@ -108,18 +108,25 @@ const db = vi.hoisted(() => {
       .filter((job) => job.artifactId)
       .map((job) => job.artifactId)
     const progress = total > 0 ? Math.round((completed.length / total) * 100) : 0
+    const parentIsCancelled = parent.status === 'cancelled'
+    const parentIsCancelling = parent.status === 'cancelling'
     const assemblyHandoff = {
       ...(metadata.assemblyHandoff ?? {}),
       parentJobId: parent.id,
       executionId: parent.executionId,
       orderedSceneArtifactIds: completedArtifactIds,
       expectedSceneCount: total,
-      assemblyStatus: completed.length === total ? 'ready_for_video_only' : 'waiting_for_scenes',
+      assemblyStatus: parentIsCancelled
+        ? 'cancelled'
+        : completed.length === total && total > 0
+          ? 'ready_for_video_only'
+          : 'waiting_for_scenes',
       missingDependencies: [
-        ...(completed.length === total ? [] : ['scene_artifacts_pending']),
+        ...(completed.length === total && !parentIsCancelled ? [] : ['scene_artifacts_pending']),
         'full_multimedia_assembly_pending',
       ],
     }
+    const finalAssemblyReady = !parentIsCancelled && !parentIsCancelling && completed.length === total && total > 0 && failed.length === 0 && cancelled.length === 0 && cancelling.length === 0
     const nextMetadata = {
       ...metadata,
       plannedSceneCount: total,
@@ -131,8 +138,8 @@ const db = vi.hoisted(() => {
       partialFailure: failed.length > 0 && completed.length < total,
       completedArtifactIds,
       retryableFailures: failed.filter((job) => job.retryCount < 3).map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber })),
-      finalAssemblyReady: completed.length === total && total > 0 && failed.length === 0 && cancelled.length === 0 && cancelling.length === 0,
-      currentPhase: parent.status === 'cancelled'
+      finalAssemblyReady,
+      currentPhase: parentIsCancelled
         ? 'cancelled'
         : cancelling.length > 0
           ? 'cancellation_requested'
@@ -140,7 +147,7 @@ const db = vi.hoisted(() => {
             ? 'planned'
             : failed.length > 0
               ? 'partial_failure'
-              : completed.length === total && total > 0
+              : finalAssemblyReady
                 ? 'assembly_handoff_ready'
                 : 'scene_execution',
       assemblyHandoff,
@@ -148,6 +155,7 @@ const db = vi.hoisted(() => {
     parent.metadataJson = JSON.stringify(nextMetadata)
     parent.progress = progress
     parent.workflowPhase = nextMetadata.currentPhase
+    if (parentIsCancelled && !parent.completedAt) parent.completedAt = new Date()
     parent.updatedAt = new Date()
     return { parent, sceneJobs, metadata: nextMetadata }
   })
@@ -437,6 +445,9 @@ describe('durable long-form orchestration', () => {
     const updatedScenes = db.jobs.filter((job) => job.parentJobId === parentId)
 
     expect(cancel.statusCode).toBe(200)
+    expect(cancel.json().cancellation.locallyCancelled).toBe(true)
+    expect(cancel.json().cancellation.resumable).toBe(false)
+    expect(cancel.json().cancellation.assemblyAllowed).toBe(false)
     expect(queue.getJob).toHaveBeenCalled()
     expect(queue.remove).toHaveBeenCalled()
     expect(updatedScenes.find((scene) => scene.id === scenes[0].id).status).toBe('completed')
@@ -464,9 +475,13 @@ describe('durable long-form orchestration', () => {
 
     expect(cancel.statusCode).toBe(200)
     expect(cancel.json().cancellation.remoteExecutionMayFinish).toBe(true)
-    expect(cancel.json().cancellation.lateArtifactsReactivateParent).toBe(false)
-    expect(updatedScene.status).toBe('cancelling')
-    expect(db.jobs.find((job) => job.id === parentId).status).toBe('cancelling')
+    expect(cancel.json().cancellation.lateArtifactLinked).toBe(false)
+    expect(cancel.json().cancellation.resumable).toBe(false)
+    expect(cancel.json().cancellation.assemblyAllowed).toBe(false)
+    expect(cancel.json().cancellation.locallyCancelled).toBe(true)
+    expect(updatedScene.status).toBe('cancelled')
+    expect(updatedScene.workflowPhase).toBe('cancelled_remote_may_finish')
+    expect(db.jobs.find((job) => job.id === parentId).status).toBe('cancelled')
 
     await app.close()
   })
@@ -638,5 +653,321 @@ describe('durable long-form orchestration', () => {
     expect(longForm.assemblyHandoffReady).toBe(true)
     expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.liveProven).toBe(false)
+  })
+
+  it('cancelling a queued scene results in cancelled', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scene = db.jobs.find((job) => job.parentJobId === parentId && job.sceneNumber === 1)
+    expect(scene.status).toBe('queued')
+
+    const cancel = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const updatedScene = db.jobs.find((job) => job.id === scene.id)
+
+    expect(cancel.statusCode).toBe(200)
+    expect(updatedScene.status).toBe('cancelled')
+    expect(updatedScene.completedAt).toBeInstanceOf(Date)
+    await app.close()
+  })
+
+  it('cancelling a processing scene results in a durable local terminal state', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scene = db.jobs.find((job) => job.parentJobId === parentId && job.sceneNumber === 1)
+    await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'processing', providerClaimAt: new Date() } })
+
+    const cancel = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const updatedScene = db.jobs.find((job) => job.id === scene.id)
+
+    expect(cancel.statusCode).toBe(200)
+    expect(updatedScene.status).toBe('cancelled')
+    expect(updatedScene.completedAt).toBeInstanceOf(Date)
+    expect(updatedScene.workflowPhase).toBe('cancelled_remote_may_finish')
+    expect(updatedScene.providerClaimAt).not.toBeNull()
+    await app.close()
+  })
+
+  it('a claimed remote provider job may finish but cannot reactivate the scene', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scene = db.jobs.find((job) => job.parentJobId === parentId && job.sceneNumber === 1)
+    await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'processing', providerClaimAt: new Date() } })
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+
+    const updatedScene = db.jobs.find((job) => job.id === scene.id)
+    expect(updatedScene.status).toBe('cancelled')
+
+    await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: 'late-artifact' } })
+    await db.refreshLongFormParentState(parentId)
+    const parent = db.jobs.find((job) => job.id === parentId)
+
+    expect(parent.status).toBe('cancelled')
+    await app.close()
+  })
+
+  it('late success cannot mark the cancelled scene completed via worker guard', async () => {
+    const parentMeta = { parentJobId: 'test-parent' }
+    const { createJobProcessor } = await import('../apps/worker/src/processors/job-processor.ts')
+    const cancelledJob = {
+      id: 'late-scene',
+      appSlug: 'dashboard-long-form',
+      capability: 'video_generation',
+      prompt: 'test',
+      inputJson: '{}',
+      metadataJson: JSON.stringify(parentMeta),
+      traceId: 'trace',
+      status: 'cancelled',
+      provider: '',
+      model: '',
+      artifactId: null,
+      progress: 0,
+      output: null,
+      error: null,
+      callbackUrl: null,
+      providerClaimAt: null,
+      parentJobId: 'test-parent',
+      executionId: 'exec',
+      sceneNumber: 1,
+      workflowPhase: 'cancelled_remote_may_finish',
+      retryCount: 0,
+      queueJobId: '',
+      queuedAt: null,
+      createdAt: new Date(),
+      startedAt: null,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    db.jobs.push(cancelledJob)
+    const processor = createJobProcessor({
+      executeCapability: async () => ({ success: true, status: 'completed', artifactId: 'late-artifact-id' }),
+    })
+
+    const result = await processor({
+      jobId: 'late-scene',
+      appSlug: 'dashboard-long-form',
+      capability: 'video_generation',
+      prompt: 'test',
+      traceId: 'trace',
+    })
+
+    expect(result.metadata?.skippedTerminalOverwrite || result.metadata?.lateResultDiscarded || result.metadata?.skipped).toBe(true)
+    expect(db.jobs.find((job) => job.id === 'late-scene').status).toBe('cancelled')
+    expect(db.jobs.find((job) => job.id === 'late-scene').artifactId).toBeNull()
+
+    db.jobs.splice(db.jobs.indexOf(cancelledJob), 1)
+  })
+
+  it('late failure cannot change the cancelled scene to failed', async () => {
+    const parentMeta = { parentJobId: 'test-parent-2' }
+    const { createJobProcessor } = await import('../apps/worker/src/processors/job-processor.ts')
+    const cancelledJob = {
+      id: 'late-scene-fail',
+      appSlug: 'dashboard-long-form',
+      capability: 'video_generation',
+      prompt: 'test',
+      inputJson: '{}',
+      metadataJson: JSON.stringify(parentMeta),
+      traceId: 'trace',
+      status: 'cancelled',
+      provider: '',
+      model: '',
+      artifactId: null,
+      progress: 0,
+      output: null,
+      error: null,
+      callbackUrl: null,
+      providerClaimAt: null,
+      parentJobId: 'test-parent-2',
+      executionId: 'exec-2',
+      sceneNumber: 1,
+      workflowPhase: 'cancelled',
+      retryCount: 0,
+      queueJobId: '',
+      queuedAt: null,
+      createdAt: new Date(),
+      startedAt: null,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    db.jobs.push(cancelledJob)
+    const processor = createJobProcessor({
+      executeCapability: async () => ({ success: false, status: 'failed', error: 'provider failed' }),
+    })
+
+    const result = await processor({
+      jobId: 'late-scene-fail',
+      appSlug: 'dashboard-long-form',
+      capability: 'video_generation',
+      prompt: 'test',
+      traceId: 'trace',
+    })
+
+    expect(result.metadata?.skipped).toBe(true)
+    expect(result.metadata?.terminalStatus).toBe('cancelled')
+    expect(db.jobs.find((job) => job.id === 'late-scene-fail').status).toBe('cancelled')
+
+    db.jobs.splice(db.jobs.indexOf(cancelledJob), 1)
+  })
+
+  it('parent becomes and remains cancelled after refresh', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+
+    const cancel = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    expect(cancel.statusCode).toBe(200)
+    expect(cancel.json().execution.parent.status).toBe('cancelled')
+
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    for (const scene of scenes) {
+      if (scene.status === 'completed') continue
+      await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}` } })
+    }
+    await db.refreshLongFormParentState(parentId)
+    const parent = db.jobs.find((job) => job.id === parentId)
+    expect(parent.status).toBe('cancelled')
+    expect(parent.completedAt).toBeInstanceOf(Date)
+
+    await app.close()
+  })
+
+  it('cancelled parent cannot resume', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const resume = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/resume`, headers: auth })
+    expect(resume.statusCode).toBe(409)
+
+    await app.close()
+  })
+
+  it('cancelled parent cannot retry scenes', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scene = db.jobs.find((job) => job.parentJobId === parentId && job.sceneNumber === 1)
+    await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'failed', error: 'provider failed' } })
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const retry = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/scenes/1/retry`, headers: auth })
+    expect(retry.statusCode).toBe(409)
+
+    await app.close()
+  })
+
+  it('cancelled parent cannot run assembly dry-run', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const assemble = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/assemble/${parentId}`, headers: auth, payload: { dryRun: true } })
+    expect(assemble.statusCode).toBe(409)
+    expect(assemble.json().message).toContain('cancelled')
+
+    await app.close()
+  })
+
+  it('cancelled parent cannot run real assembly', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const assemble = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/assemble/${parentId}`, headers: auth, payload: {} })
+    expect(assemble.statusCode).toBe(409)
+
+    await app.close()
+  })
+
+  it('all scenes completed before cancellation still does not permit assembly', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    for (const scene of scenes) {
+      await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
+    }
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const assemble = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/assemble/${parentId}`, headers: auth, payload: { dryRun: true } })
+    expect(assemble.statusCode).toBe(409)
+
+    await app.close()
+  })
+
+  it('cancellation keeps existing completed scene artifacts intact', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scene = db.jobs.find((job) => job.parentJobId === parentId && job.sceneNumber === 1)
+    await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: 'preserved-artifact', progress: 100 } })
+
+    await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
+    const updatedScene = db.jobs.find((job) => job.id === scene.id)
+    expect(updatedScene.status).toBe('completed')
+    expect(updatedScene.artifactId).toBe('preserved-artifact')
+
+    await app.close()
+  })
+
+  it('canonical truth does not treat a cancelled late result as long-form live proof', () => {
+    const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
+    expect(longForm.fullMultimediaReady).toBe(false)
+    expect(longForm.liveProven).toBe(false)
+  })
+
+  it('normal non-cancelled long-form behavior does not regress', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+    const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
+    const parentId = create.json().parentJobId
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    for (const scene of scenes) {
+      await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
+    }
+    await db.refreshLongFormParentState(parentId)
+
+    const status = await app.inject({ method: 'GET', url: `/api/admin/long-form-video/executions/${parentId}`, headers: auth })
+    const execution = status.json().execution
+
+    expect(execution.completedScenes).toBe(3)
+    expect(execution.failedScenes).toBe(0)
+    expect(execution.cancelledScenes).toBe(0)
+    expect(execution.progress).toBe(100)
+    expect(execution.finalAssemblyReady).toBe(true)
+    expect(execution.locallyCancelled).toBe(false)
+    expect(execution.assemblyAllowed).toBe(true)
+    expect(execution.resumable).toBe(true)
+
+    await app.close()
   })
 })

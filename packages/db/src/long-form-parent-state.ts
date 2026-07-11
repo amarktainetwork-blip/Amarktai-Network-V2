@@ -87,7 +87,9 @@ export async function refreshLongFormParentState(parentJobId: string): Promise<{
     .filter((job) => job.status === 'completed' && job.artifactId)
     .sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
     .map((job) => job.artifactId as string)
-  const finalAssemblyReady = totalScenes > 0 && completedSceneCount === totalScenes && failedSceneCount === 0 && cancelledSceneCount === 0 && cancellingSceneCount === 0
+  const parentIsCancelled = parent.status === 'cancelled'
+  const parentIsCancelling = parent.status === 'cancelling'
+  const finalAssemblyReady = !parentIsCancelled && !parentIsCancelling && totalScenes > 0 && completedSceneCount === totalScenes && failedSceneCount === 0 && cancelledSceneCount === 0 && cancellingSceneCount === 0
   const partialFailure = failedSceneCount > 0 && completedSceneCount < totalScenes
   const blockedReasons = [
     ...(failedSceneCount > 0 ? ['scene_failure'] : []),
@@ -128,6 +130,7 @@ export async function refreshLongFormParentState(parentJobId: string): Promise<{
           : finalAssemblyReady
             ? 'processing'
             : parent.status
+  const completedAt = parentIsCancelled && !parent.completedAt ? new Date() : parent.completedAt
 
   const nextMetadata = {
     ...metadata,
@@ -145,7 +148,9 @@ export async function refreshLongFormParentState(parentJobId: string): Promise<{
     finalAssemblyReady,
     currentPhase,
     blockedReasons,
-    assemblyHandoff,
+    assemblyHandoff: parentIsCancelled
+      ? { ...assemblyHandoff, assemblyStatus: 'cancelled' }
+      : assemblyHandoff,
     refreshedAt: new Date().toISOString(),
   }
 
@@ -156,6 +161,7 @@ export async function refreshLongFormParentState(parentJobId: string): Promise<{
       progress,
       workflowPhase: currentPhase,
       metadataJson: JSON.stringify(nextMetadata),
+      completedAt,
       error: partialFailure ? `Long-form scene failures: ${failedSceneCount}` : parent.error,
     },
   })

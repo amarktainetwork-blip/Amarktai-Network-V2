@@ -272,6 +272,24 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           data: completedData,
         })
         if (completed.count !== 1) {
+          const latest = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
+          const isCancelled = latest?.status === 'cancelled' || latest?.status === 'cancelling'
+          if (isCancelled) {
+            console.info('[worker] late provider result discarded for cancelled job', {
+              dbJobId: jobId,
+              jobStatus: latest?.status,
+              lateArtifactId: result.artifactId ?? null,
+            })
+            await refreshParentFromPayload(payload)
+            return {
+              ...result,
+              metadata: {
+                ...result.metadata,
+                lateResultDiscarded: true,
+                cancelledJobStatus: latest?.status,
+              },
+            }
+          }
           await refreshParentFromPayload(payload)
           return {
             ...result,
@@ -286,7 +304,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       // 8. Execution failed (expected in Phase 4)
       // Update DB job to failed, then THROW so BullMQ also records failure
       const errorMsg = result.error ?? 'Execution failed'
-      await updateJobMany({
+      const failedUpdate = await updateJobMany({
         where: { id: jobId, status: 'processing' },
         data: {
           status: 'failed',
@@ -297,8 +315,20 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           completedAt: new Date(),
         },
       })
-      console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
-      await refreshParentFromPayload(payload)
+      if (failedUpdate.count !== 1) {
+        const latest = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
+        const isCancelled = latest?.status === 'cancelled' || latest?.status === 'cancelling'
+        if (isCancelled) {
+          console.info('[worker] late provider failure discarded for cancelled job', {
+            dbJobId: jobId,
+            jobStatus: latest?.status,
+          })
+          await refreshParentFromPayload(payload)
+        }
+      } else {
+        console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
+        await refreshParentFromPayload(payload)
+      }
 
       // Throw so BullMQ records the queue job as failed too
       throw new Error(errorMsg)

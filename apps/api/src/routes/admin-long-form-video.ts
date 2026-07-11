@@ -160,14 +160,22 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
   const processingScenes = sceneJobs.filter((job) => job.status === 'processing').length
   const completedScenes = sceneJobs.filter((job) => job.status === 'completed').length
   const failedScenes = sceneJobs.filter((job) => job.status === 'failed').length
+  const cancelledScenes = sceneJobs.filter((job) => job.status === 'cancelled').length
   const retryableFailures = sceneJobs
     .filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES)
     .map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber, retryCount: job.retryCount, error: job.error }))
   const progress = totalScenes > 0 ? Math.round((completedScenes / totalScenes) * 100) : 0
-  const finalAssemblyReadiness = completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0
+  const parentIsCancelled = parent.status === 'cancelled'
+  const parentIsCancelling = parent.status === 'cancelling'
+  const parentIsTerminal = parentIsCancelled || parent.status === 'completed' || parent.status === 'failed'
+  const finalAssemblyReadiness = !parentIsCancelled && !parentIsCancelling && completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0 && cancelledScenes === 0
   const partialFailure = failedScenes > 0 && completedScenes < totalScenes
   const phase = parent.workflowPhase || (finalAssemblyReadiness ? 'assembly_handoff_ready' : partialFailure ? 'partial_failure' : 'scene_execution')
   const handoff = buildAssemblyHandoff({ parentJobId: parent.id, executionId: parent.executionId, request, plan, sceneJobs })
+  const locallyCancelled = parentIsCancelled || parentIsCancelling
+  const remoteExecutionMayFinish = locallyCancelled && sceneJobs.some(
+    (job) => (job.status === 'cancelled' || job.status === 'cancelling') && (job.providerClaimAt || !!(safeJson(job.metadataJson).genxProviderJobId))
+  )
 
   return {
     parent: {
@@ -181,6 +189,7 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
       error: parent.error,
       createdAt: parent.createdAt.toISOString(),
       updatedAt: parent.updatedAt.toISOString(),
+      completedAt: parent.completedAt ? parent.completedAt.toISOString() : null,
     },
     executionId: parent.executionId,
     planId: plan.id,
@@ -191,6 +200,7 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
     processingScenes,
     completedScenes,
     failedScenes,
+    cancelledScenes,
     progress,
     retryableFailures,
     completedArtifactIds: sceneJobs
@@ -210,19 +220,26 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
         retryCount: job.retryCount,
         queueJobId: job.queueJobId,
         error: job.error,
+        workflowPhase: job.workflowPhase,
       })),
     finalAssemblyReady: finalAssemblyReadiness,
     finalArtifactId: parent.artifactId,
     partialFailure,
+    locallyCancelled,
+    remoteExecutionMayFinish,
+    lateArtifactLinked: false,
+    resumable: !locallyCancelled && !parentIsTerminal,
+    assemblyAllowed: finalAssemblyReadiness && !locallyCancelled,
     blockedReasons: [
       ...(failedScenes > 0 ? ['scene_failure'] : []),
+      ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
       ...((metadata.blockedReasons as string[] | undefined) ?? []),
       'voiceover_not_implemented',
       'subtitles_not_implemented',
       'music_bed_not_implemented',
       'full_multimedia_not_ready',
     ],
-    assemblyHandoff: handoff,
+    assemblyHandoff: locallyCancelled ? { ...handoff, assemblyStatus: 'cancelled' } : handoff,
   }
 }
 
@@ -609,15 +626,17 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       removedQueueJobs.push(...await removeQueueJob(getQueue(), scene))
 
       if (scene.status === 'processing') {
-        activeRemoteMayFinish = activeRemoteMayFinish || !!scene.providerClaimAt
+        const hasRemoteClaim = !!scene.providerClaimAt || !!(safeJson(scene.metadataJson).genxProviderJobId)
+        activeRemoteMayFinish = activeRemoteMayFinish || hasRemoteClaim
         await prisma.job.update({
           where: { id: scene.id },
           data: {
-            status: 'cancelling',
-            workflowPhase: 'cancellation_requested',
-            error: scene.providerClaimAt
-              ? 'Cancellation requested. Remote GenX execution may finish; late artifacts must not reactivate the parent.'
-              : 'Cancellation requested before provider submission.',
+            status: 'cancelled',
+            workflowPhase: hasRemoteClaim ? 'cancelled_remote_may_finish' : 'cancelled',
+            completedAt: new Date(),
+            error: hasRemoteClaim
+              ? 'Cancelled locally. Remote provider execution may finish; late artifacts will not reactivate the parent or scene.'
+              : 'Cancelled before execution completed.',
           },
         })
       } else {
@@ -638,11 +657,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     await prisma.job.update({
       where: { id: loaded.parent.id },
       data: {
-        status: activeRemoteMayFinish ? 'cancelling' : 'cancelled',
-        workflowPhase: activeRemoteMayFinish ? 'cancellation_requested' : 'cancelled',
-        completedAt: activeRemoteMayFinish ? null : new Date(),
+        status: 'cancelled',
+        workflowPhase: 'cancelled',
+        completedAt: new Date(),
         error: activeRemoteMayFinish
-          ? 'Cancellation requested. One or more remote provider executions may finish; late artifacts will not reactivate this parent.'
+          ? 'Long-form execution cancelled. One or more remote provider executions may finish; late artifacts will not reactivate this parent.'
           : 'Long-form execution cancelled.',
       },
     })
@@ -652,8 +671,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       removedQueueJobs,
       cancellation: {
         requested: true,
+        locallyCancelled: true,
         remoteExecutionMayFinish: activeRemoteMayFinish,
-        lateArtifactsReactivateParent: false,
+        lateArtifactLinked: false,
+        resumable: false,
+        assemblyAllowed: false,
       },
       execution: refreshed ? deriveStatus(refreshed.parent, refreshed.sceneJobs) : null,
     })
@@ -667,6 +689,17 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     const outputTitle = body.outputTitle as string | undefined
     const loaded = await loadParentAndScenes(executionId, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+
+    if (loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling') {
+      return reply.status(409).send({ error: true, message: 'Cannot assemble: parent execution is cancelled', parentStatus: loaded.parent.status })
+    }
+    if (loaded.parent.status === 'failed') {
+      return reply.status(409).send({ error: true, message: 'Cannot assemble: parent execution has failed', parentStatus: loaded.parent.status })
+    }
+    if (loaded.parent.status === 'completed') {
+      return reply.status(409).send({ error: true, message: 'Cannot assemble: parent execution is already completed', parentStatus: loaded.parent.status })
+    }
+
     const status = deriveStatus(loaded.parent, loaded.sceneJobs)
     if (!status.finalAssemblyReady) {
       return reply.status(409).send({
@@ -674,6 +707,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         message: 'Cannot assemble: not all scenes are completed',
         completedScenes: status.completedScenes,
         totalScenes: status.totalScenes,
+        cancelledScenes: status.cancelledScenes,
       })
     }
 
@@ -717,6 +751,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     const { executionId } = request.params as { executionId: string }
     const loaded = await loadParentAndScenes(executionId, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+    const parentBlocked = loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling' || loaded.parent.status === 'failed' || loaded.parent.status === 'completed'
     const status = deriveStatus(loaded.parent, loaded.sceneJobs)
     const sceneArtifacts = await resolveSceneArtifacts(loaded.parent.executionId)
     const validation = validateSceneArtifactsForAssembly(sceneArtifacts, status.totalScenes)
@@ -724,7 +759,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     return reply.status(200).send({
       success: true,
       executionId: loaded.parent.executionId,
-      canAssemble: status.finalAssemblyReady && validation.valid && ffmpeg.available,
+      canAssemble: !parentBlocked && status.finalAssemblyReady && validation.valid && ffmpeg.available,
+      parentStatus: loaded.parent.status,
+      assemblyBlockedByParent: parentBlocked,
       missingDependencies: status.assemblyHandoff.missingDependencies,
       assemblyHandoff: status.assemblyHandoff,
       validation,
