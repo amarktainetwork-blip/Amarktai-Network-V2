@@ -155,12 +155,19 @@ describe('Stored-key live proof contract', () => {
   })
 
   it('DeepInfra is approved as text fallback but does not create proof by routing alone', async () => {
-    const { routeProvider } = await import('@amarktai/core')
-    const decision = routeProvider('chat')
-    const deepinfra = decision.candidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfra?.supported).toBe(true)
-    expect(deepinfra?.gated).toBe(false)
-    expect(decision.executionAllowed).toBe(false)
+    const { routeBrain } = await import('@amarktai/core')
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
+      providerStates: {
+        groq: { disabled: true },
+        deepinfra: { configured: false },
+      },
+    })
+    const deepinfra = decision.executableCandidates.find((c) => c.provider === 'deepinfra')
+    expect(deepinfra).toBeDefined()
+    expect(decision.executionAllowed).toBe(true)
+    expect(decision.truth).toContain('Brain Router v1')
   })
 })
 

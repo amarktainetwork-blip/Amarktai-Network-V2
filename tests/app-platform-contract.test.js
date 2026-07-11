@@ -181,9 +181,10 @@ describe('app platform contract', () => {
   })
 
   it('MiMo remains coding_tools_only', () => {
-    const routingPath = path.join(ROOT, 'packages/core/src/provider-routing.ts')
-    const content = fs.readFileSync(routingPath, 'utf8')
-    expect(content).toContain('mimo: []')
+    const truthPath = path.join(ROOT, 'packages/core/src/runtime-truth.ts')
+    const content = fs.readFileSync(truthPath, 'utf8')
+    expect(content).toContain("CODING_ONLY_PROVIDERS = ['mimo']")
+    expect(content).toContain('coding_tools_only_not_backend_runtime')
   })
 
   it('adult generation remains on hold', () => {

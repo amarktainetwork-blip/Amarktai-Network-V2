@@ -4,12 +4,13 @@ import {
   MODEL_CATALOGUE,
   ROUTING_MODES,
   routeBrain,
+  CAPABILITY_CATALOG,
+  getRuntimeTruth,
   getExecutableModels,
   getPlannedModels,
   getBlockedModels,
   hasBlockedOverrides,
 } from '../packages/core/src/index.ts'
-import { BRAIN_ROUTER_V1, MODEL_CATALOGUE_SUMMARY, APPROVED_PROVIDERS, ROUTING_TRUTH } from '../lib/capability-routing-map.js'
 
 describe('Brain Router v1 foundation', () => {
   describe('1. Approved provider list', () => {
@@ -135,11 +136,11 @@ describe('Brain Router v1 foundation', () => {
       expect(hasBlockedOverrides({ capability: 'chat', prompt: 'hi', model: 'llama' })).toBe('model')
     })
 
-    it('routing map all caps have app override false', () => {
-      const { CAPABILITY_ROUTING_MAP } = require('../lib/capability-routing-map.js')
-      for (const cap of CAPABILITY_ROUTING_MAP) {
-        expect(cap.appFacingProviderOverride).toBe(false)
-        expect(cap.appFacingModelOverride).toBe(false)
+    it('Brain Router all caps have app override false', () => {
+      for (const cap of CAPABILITY_CATALOG) {
+        const decision = routeBrain({ capability: cap.key, routingMode: 'balanced' })
+        expect(decision.appFacingProviderOverride).toBe(false)
+        expect(decision.appFacingModelOverride).toBe(false)
       }
     })
   })
@@ -316,8 +317,9 @@ describe('Brain Router v1 foundation', () => {
       expect(decision.blockReason).toContain('music_generation')
     })
 
-    it('routing map shows music_generation as pending', () => {
-      expect(ROUTING_TRUTH.music_generation).toBe('pending')
+    it('runtime truth keeps music_generation not live-proven until proof exists', () => {
+      const music = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'music_generation')
+      expect(music?.liveProven).toBe(false)
     })
   })
 
@@ -336,8 +338,10 @@ describe('Brain Router v1 foundation', () => {
       }
     })
 
-    it('routing map shows long_form_video as pending', () => {
-      expect(ROUTING_TRUTH.long_form_video).toBe('pending')
+    it('runtime truth keeps long_form_video not live-proven until full multimedia proof exists', () => {
+      const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
+      expect(longForm?.liveProven).toBe(false)
+      expect(longForm?.fullMultimediaReady).toBe(false)
     })
   })
 
@@ -349,8 +353,11 @@ describe('Brain Router v1 foundation', () => {
       }
     })
 
-    it('APPROVED_PROVIDERS matches PROVIDER_KEYS', () => {
-      expect(APPROVED_PROVIDERS).toEqual([...PROVIDER_KEYS])
+    it('runtime execution providers are a subset of PROVIDER_KEYS', () => {
+      const truth = getRuntimeTruth()
+      for (const provider of truth.providerPolicy.runtimeExecutionProviders) {
+        expect(PROVIDER_KEYS).toContain(provider)
+      }
     })
 
     it('all catalogue models use only approved providers', () => {
@@ -370,16 +377,15 @@ describe('Brain Router v1 foundation', () => {
       }
     })
 
-    it('routing map shows adult capabilities as blocked', () => {
-      const { CAPABILITY_ROUTING_MAP } = require('../lib/capability-routing-map.js')
-      const adultCaps = CAPABILITY_ROUTING_MAP.filter((c) => c.id.startsWith('adult_'))
+    it('runtime truth shows adult capabilities as policy restricted', () => {
+      const adultCaps = getRuntimeTruth().capabilities.filter((c) => c.capability.startsWith('adult_'))
       for (const cap of adultCaps) {
-        expect(cap.executionStatus).toBe('blocked')
+        expect(cap.classification).toBe('POLICY_RESTRICTED')
       }
     })
 
-    it('ROUTING_TRUTH shows adult_generation on_hold', () => {
-      expect(ROUTING_TRUTH.adult_generation).toBe('on_hold')
+    it('routeBrain blocks adult generation', () => {
+      expect(routeBrain({ capability: 'adult_text', routingMode: 'balanced' }).executionAllowed).toBe(false)
     })
   })
 
@@ -406,24 +412,18 @@ describe('Brain Router v1 foundation', () => {
   })
 
   describe('Brain Router v1 structural integrity', () => {
-    it('BRAIN_ROUTER_V1 exists in routing map', () => {
-      expect(BRAIN_ROUTER_V1.exists).toBe(true)
-      expect(BRAIN_ROUTER_V1.version).toBe('v1')
+    it('routeBrain returns Brain Router v1 truth', () => {
+      expect(routeBrain({ capability: 'chat', routingMode: 'balanced' }).truth).toContain('Brain Router v1')
     })
 
-    it('MODEL_CATALOGUE_SUMMARY counts match', () => {
-      expect(MODEL_CATALOGUE_SUMMARY.executable.length).toBe(5)
-      expect(MODEL_CATALOGUE_SUMMARY.planned.length).toBe(6)
-      expect(MODEL_CATALOGUE_SUMMARY.blocked.length).toBe(1)
+    it('model catalogue helper counts match catalogue records', () => {
+      expect(getExecutableModels()).toEqual(MODEL_CATALOGUE.filter((model) => model.executable && model.status === 'available'))
+      expect(getPlannedModels()).toEqual(MODEL_CATALOGUE.filter((model) => model.status === 'planned'))
+      expect(getBlockedModels()).toEqual(MODEL_CATALOGUE.filter((model) => model.status === 'blocked'))
     })
 
-    it('ROUTING_TRUTH includes brain_router_v1 and model_catalogue_v1', () => {
-      expect(ROUTING_TRUTH.brain_router_v1).toBe(true)
-      expect(ROUTING_TRUTH.model_catalogue_v1).toBe(true)
-    })
-
-    it('ROUTING_TRUTH includes routing_modes', () => {
-      expect(ROUTING_TRUTH.routing_modes).toEqual(['balanced', 'premium', 'fast', 'budget', 'experimental'])
+    it('canonical routing modes exist', () => {
+      expect([...ROUTING_MODES]).toEqual(['balanced', 'premium', 'fast', 'budget', 'experimental'])
     })
 
     it('getExecutableModels returns only executable models', () => {

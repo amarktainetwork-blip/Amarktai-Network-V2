@@ -79,6 +79,16 @@ export interface ProviderRuntimeTruth {
 
 export interface CapabilityRuntimeTruth {
   capability: CapabilityKey
+  label: string
+  description: string
+  family: string
+  category: string
+  outputType: string
+  artifactRequired: boolean
+  policyRequirement: string
+  schemaKey: string
+  studioMode: string
+  dashboardType: string
   classification: CapabilityRuntimeClassification
   catalogueKnown: boolean
   discoveredModels: string[]
@@ -387,6 +397,16 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
 
     const truthBase: Omit<CapabilityRuntimeTruth, 'classification'> = {
       capability,
+      label: capabilityDef?.label ?? capability,
+      description: capabilityDef?.description ?? '',
+      family: capabilityDef?.family ?? 'Unsorted',
+      category: capabilityDef?.category ?? 'system_ops',
+      outputType: capabilityDef?.outputType ?? 'text',
+      artifactRequired,
+      policyRequirement: capabilityDef?.policyRequirement ?? 'standard',
+      schemaKey: capabilityDef?.schemaKey ?? capability,
+      studioMode: capabilityDef?.studioMode ?? capability,
+      dashboardType: capabilityDef?.dashboardType ?? capability,
       catalogueKnown,
       discoveredModels: modelIds(candidates),
       discoveredModelCount: candidates.length,

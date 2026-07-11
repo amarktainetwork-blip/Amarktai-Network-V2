@@ -5,7 +5,7 @@ import { RuntimeProofSummary, useRuntimeProofStatus, getAdminToken } from '@/com
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { groupedCapabilities } from '@/lib/capability-display-catalog'
+import { groupedCapabilities } from '@/lib/capability-catalog'
 import {
   getRuntimeCapabilityProof,
   runtimeProofStatusClasses,

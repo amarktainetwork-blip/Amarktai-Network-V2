@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { CAPABILITY_SCHEMAS } from '@/lib/studio-capability-schemas'
 import { getBackendCapability } from '@/lib/capability-map'
-import { TARGET_CAPABILITY_CATALOG, groupedCapabilities } from '@/lib/capability-display-catalog'
+import { TARGET_CAPABILITY_CATALOG, groupedCapabilities } from '@/lib/capability-catalog'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import {
   getRuntimeCapabilityProof,

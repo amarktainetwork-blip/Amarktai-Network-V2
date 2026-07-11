@@ -13,6 +13,14 @@ export const PROVIDER_KEYS = ['genx', 'groq', 'together', 'mimo', 'deepinfra'] a
 
 export type ProviderKey = (typeof PROVIDER_KEYS)[number]
 
+export const PROVIDER_ENV_VARS: Record<ProviderKey, string> = {
+  genx: 'GENX_API_KEY',
+  groq: 'GROQ_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  mimo: 'MIMO_API_KEY',
+  deepinfra: 'DEEPINFRA_API_KEY',
+}
+
 // ── Provider Status ───────────────────────────────────────────────────────────
 
 export const PROVIDER_HEALTH_STATUSES = [
@@ -81,4 +89,8 @@ export type ProviderCapabilityMap = z.infer<typeof ProviderCapabilityMapSchema>
 
 export function isValidProvider(key: string): key is ProviderKey {
   return (PROVIDER_KEYS as readonly string[]).includes(key)
+}
+
+export function getProviderEnvVar(provider: ProviderKey): string {
+  return PROVIDER_ENV_VARS[provider]
 }

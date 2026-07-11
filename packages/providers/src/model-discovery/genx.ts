@@ -22,8 +22,8 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'veo-3.1', displayName: 'Veo 3.1', rawProviderType: 'video', category: 'video', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'xai', modelId: 'grok-imagine-video', displayName: 'Grok Imagine Video', rawProviderType: 'video', category: 'video', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'genx', modelId: 'genx-image-v1', displayName: 'GenX Image V1', rawProviderType: 'image', category: 'image', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
-    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3 Clip Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll', catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.' }),
-    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-pro-preview', displayName: 'Lyria 3 Pro Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll', catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3 Clip Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll', catalogueOnlyReason: '' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-pro-preview', displayName: 'Lyria 3 Pro Preview', rawProviderType: 'music', category: 'audio', modalitiesIn: ['text', 'image'], modalitiesOut: ['audio', 'text'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll', catalogueOnlyReason: '' }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -59,18 +59,18 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
         discoverySource: 'live_endpoint',
         upstreamProvider: stringField(record, ['provider', 'upstreamProvider', 'upstream_provider'], 'genx'),
         endpointFamily: '/api/v1/generate + /api/v1/jobs/:id',
-        providerClientExists: videoLike && !musicLike,
-        workerExecutorExists: videoLike && !musicLike,
+        providerClientExists: videoLike || musicLike,
+        workerExecutorExists: videoLike || musicLike,
         endpointShapeKnown: videoLike || musicLike,
-        requestShapeKnown: videoLike && !musicLike,
-        responseShapeKnown: videoLike && !musicLike,
-        artifactPersistenceExists: videoLike && !musicLike,
+        requestShapeKnown: videoLike || musicLike,
+        responseShapeKnown: videoLike || musicLike,
+        artifactPersistenceExists: videoLike || musicLike,
         transportProfile: 'async_job_poll',
         rawMetadata: record,
       })
     })
 
-    return liveResult('genx', endpointSource, 'live_model_list', models, ['GenX live discovery swept model-list categories only. Music/Lyria-like models are catalogued but not executable without client, request/response shape, worker, and artifact path.'])
+    return liveResult('genx', endpointSource, 'live_model_list', models, ['GenX live discovery swept model-list categories only. Music/Lyria-like models use the existing GenX music client, worker executor, and artifact path when configured; this does not prove live completion.'])
   } catch (error) {
     return failedLiveResult('genx', endpointSource, error instanceof Error ? error.message : 'GenX discovery failed', [])
   }

@@ -5,7 +5,7 @@
     "displayName": "GPT Image 2",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -48,7 +48,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -60,7 +60,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -68,7 +69,7 @@
     "displayName": "GPT 5",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -111,7 +112,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -122,7 +123,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -130,7 +132,7 @@
     "displayName": "GPT 5 Mini",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -173,7 +175,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -184,7 +186,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -192,7 +195,7 @@
     "displayName": "GPT 5 Nano",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -235,7 +238,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -246,7 +249,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -254,7 +258,7 @@
     "displayName": "GPT 5.3 Codex",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -301,7 +305,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -312,7 +316,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -320,7 +325,7 @@
     "displayName": "GPT 5.4",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -363,7 +368,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -374,7 +379,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -382,7 +388,7 @@
     "displayName": "GPT 5.4 Mini",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -425,7 +431,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -436,7 +442,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -444,7 +451,7 @@
     "displayName": "GPT 5.4 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -487,7 +494,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -498,7 +505,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -506,7 +514,7 @@
     "displayName": "GPT 5.5",
     "executionProvider": "genx",
     "upstreamProvider": "openai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -549,7 +557,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -560,7 +568,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -568,7 +577,7 @@
     "displayName": "Claude Haiku 4 5",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -613,7 +622,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -624,7 +633,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -632,7 +642,7 @@
     "displayName": "Claude Opus 4 6",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -677,7 +687,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -688,7 +698,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -696,7 +707,7 @@
     "displayName": "Claude Opus 4 7",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -741,7 +752,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -752,7 +763,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -760,7 +772,7 @@
     "displayName": "Claude Opus 4 8",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -805,7 +817,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -816,7 +828,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -824,7 +837,7 @@
     "displayName": "Claude Sonnet 4 6",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -869,7 +882,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -880,7 +893,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -888,7 +902,7 @@
     "displayName": "Claude Sonnet 5",
     "executionProvider": "genx",
     "upstreamProvider": "anthropic",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -933,7 +947,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -944,7 +958,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -952,7 +967,7 @@
     "displayName": "Gemini 3 Flash",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -995,7 +1010,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1006,7 +1021,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1014,7 +1030,7 @@
     "displayName": "Gemini 3.1 Flash Lite",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1057,7 +1073,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1068,7 +1084,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1076,7 +1093,7 @@
     "displayName": "Gemini 3.1 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1119,7 +1136,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1130,7 +1147,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1138,7 +1156,7 @@
     "displayName": "Lyria 3 Clip Preview",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -1165,7 +1183,7 @@
     "outputPrice": null,
     "artifactOutput": true,
     "artifactOutputKnown": true,
-    "artifactPersistenceExists": false,
+    "artifactPersistenceExists": true,
     "authRequired": true,
     "providerCapabilityKnown": true,
     "policyRestrictedByApp": false,
@@ -1179,24 +1197,19 @@
     "webhookSupported": false,
     "endpointSource": "GenX docs/static fallback /api/v1/models",
     "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": false,
-    "workerExecutorExists": false,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "provider_client_missing",
-      "worker_executor_missing",
-      "artifact_persistence_missing"
-    ],
-    "catalogueOnlyReason": "GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "executableNow": true,
+    "executableBlockers": [],
+    "catalogueOnlyReason": "",
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1204,7 +1217,7 @@
     "displayName": "Lyria 3 PRO Preview",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -1231,7 +1244,7 @@
     "outputPrice": null,
     "artifactOutput": true,
     "artifactOutputKnown": true,
-    "artifactPersistenceExists": false,
+    "artifactPersistenceExists": true,
     "authRequired": true,
     "providerCapabilityKnown": true,
     "policyRestrictedByApp": false,
@@ -1245,24 +1258,19 @@
     "webhookSupported": false,
     "endpointSource": "GenX docs/static fallback /api/v1/models",
     "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": false,
-    "workerExecutorExists": false,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "provider_client_missing",
-      "worker_executor_missing",
-      "artifact_persistence_missing"
-    ],
-    "catalogueOnlyReason": "GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "executableNow": true,
+    "executableBlockers": [],
+    "catalogueOnlyReason": "",
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1270,7 +1278,7 @@
     "displayName": "Nano Banana 2",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -1313,7 +1321,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1325,7 +1333,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1333,7 +1342,7 @@
     "displayName": "Nano Banana PRO",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -1376,7 +1385,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1388,7 +1397,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1396,7 +1406,7 @@
     "displayName": "VEO 3.1",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -1439,7 +1449,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1451,7 +1461,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1459,7 +1470,7 @@
     "displayName": "VEO 3.1 Fast",
     "executionProvider": "genx",
     "upstreamProvider": "google",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -1502,7 +1513,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1514,7 +1525,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1522,7 +1534,7 @@
     "displayName": "Grok 4.2",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1565,7 +1577,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1576,7 +1588,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1584,7 +1597,7 @@
     "displayName": "Grok 4.2 Multi Agent",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1627,7 +1640,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1638,7 +1651,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1646,7 +1660,7 @@
     "displayName": "Grok 4.2 Reasoning",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1689,7 +1703,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1700,7 +1714,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1708,7 +1723,7 @@
     "displayName": "Grok 4.3",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -1751,7 +1766,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1762,7 +1777,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1770,7 +1786,7 @@
     "displayName": "Grok Imagine",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -1813,7 +1829,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1825,7 +1841,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1833,7 +1850,7 @@
     "displayName": "Grok Imagine Video",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -1876,7 +1893,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1888,7 +1905,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1896,7 +1914,7 @@
     "displayName": "Grok TTS",
     "executionProvider": "genx",
     "upstreamProvider": "xai",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "voice",
@@ -1939,7 +1957,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -1951,7 +1969,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -1959,7 +1978,7 @@
     "displayName": "Recraft V4.1",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2002,7 +2021,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2014,7 +2033,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2022,7 +2042,7 @@
     "displayName": "Recraft V4.1 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2065,7 +2085,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2077,7 +2097,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2085,7 +2106,7 @@
     "displayName": "Recraft V4.1 PRO Vector",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2129,7 +2150,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2141,7 +2162,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2149,7 +2171,7 @@
     "displayName": "Recraft V4.1 Utility",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2192,7 +2214,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2204,7 +2226,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2212,7 +2235,7 @@
     "displayName": "Recraft V4.1 Utility PRO",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2255,7 +2278,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2267,7 +2290,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2275,7 +2299,7 @@
     "displayName": "Recraft V4.1 Utility PRO Vector",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2319,7 +2343,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2331,7 +2355,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2339,7 +2364,7 @@
     "displayName": "Recraft V4.1 Utility Vector",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2383,7 +2408,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2395,7 +2420,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2403,7 +2429,7 @@
     "displayName": "Recraft V4.1 Vector",
     "executionProvider": "genx",
     "upstreamProvider": "recraft",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -2447,7 +2473,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2459,7 +2485,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2467,7 +2494,7 @@
     "displayName": "Kling Avatar V2 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "avatar",
@@ -2511,7 +2538,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2522,7 +2549,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2530,7 +2558,7 @@
     "displayName": "Kling V2.5 Turbo",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2573,7 +2601,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2585,7 +2613,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2593,7 +2622,7 @@
     "displayName": "Kling V2.5 Turbo I2V",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2636,7 +2665,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2648,7 +2677,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2656,7 +2686,7 @@
     "displayName": "Kling V2.6 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2699,7 +2729,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2711,7 +2741,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2719,7 +2750,7 @@
     "displayName": "Kling V2.6 PRO I2V",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2762,7 +2793,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2774,7 +2805,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2782,7 +2814,7 @@
     "displayName": "Kling V3 PRO",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2825,7 +2857,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2837,7 +2869,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2845,7 +2878,7 @@
     "displayName": "Kling V3 PRO I2V",
     "executionProvider": "genx",
     "upstreamProvider": "kling",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2888,7 +2921,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2900,7 +2933,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2908,7 +2942,7 @@
     "displayName": "Seedance 2",
     "executionProvider": "genx",
     "upstreamProvider": "bytedance",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -2951,7 +2985,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -2963,7 +2997,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -2971,7 +3006,7 @@
     "displayName": "Seedance 2 I2V",
     "executionProvider": "genx",
     "upstreamProvider": "bytedance",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3014,7 +3049,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3026,7 +3061,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3034,7 +3070,7 @@
     "displayName": "Seedance 2 R2V",
     "executionProvider": "genx",
     "upstreamProvider": "bytedance",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3077,7 +3113,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3089,7 +3125,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3097,7 +3134,7 @@
     "displayName": "Seedance V1 Fast",
     "executionProvider": "genx",
     "upstreamProvider": "bytedance",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3140,13 +3177,14 @@
     "providerClientExists": true,
     "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": true,
     "executableBlockers": [],
     "catalogueOnlyReason": "",
-    "blockedReason": ""
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3154,7 +3192,7 @@
     "displayName": "Seedance V1 Fast I2V",
     "executionProvider": "genx",
     "upstreamProvider": "bytedance",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3197,7 +3235,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3209,7 +3247,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3217,7 +3256,7 @@
     "displayName": "Pixverse V5.5",
     "executionProvider": "genx",
     "upstreamProvider": "pixverse",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3260,7 +3299,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3272,7 +3311,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3280,7 +3320,7 @@
     "displayName": "Pixverse V5.5 I2V",
     "executionProvider": "genx",
     "upstreamProvider": "pixverse",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3323,7 +3363,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3335,7 +3375,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3343,7 +3384,7 @@
     "displayName": "Pixverse V6",
     "executionProvider": "genx",
     "upstreamProvider": "pixverse",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3386,7 +3427,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3398,7 +3439,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3406,7 +3448,7 @@
     "displayName": "Pixverse V6 I2V",
     "executionProvider": "genx",
     "upstreamProvider": "pixverse",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -3449,7 +3491,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3461,7 +3503,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3469,7 +3512,7 @@
     "displayName": "Aura 2",
     "executionProvider": "genx",
     "upstreamProvider": "deepgram",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "voice",
@@ -3512,7 +3555,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3524,7 +3567,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3532,7 +3576,7 @@
     "displayName": "Genxlm PRO V1 IMG",
     "executionProvider": "genx",
     "upstreamProvider": "genx",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -3575,7 +3619,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3587,7 +3631,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3595,7 +3640,7 @@
     "displayName": "Genxlm PRO V1 IMG Fast",
     "executionProvider": "genx",
     "upstreamProvider": "genx",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -3638,7 +3683,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3650,7 +3695,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3658,7 +3704,7 @@
     "displayName": "Genxlm PRO V1 TL",
     "executionProvider": "genx",
     "upstreamProvider": "genx",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -3701,7 +3747,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3712,7 +3758,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3720,7 +3767,7 @@
     "displayName": "Genxlm PRO V1 TR",
     "executionProvider": "genx",
     "upstreamProvider": "genx",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -3763,7 +3810,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3774,7 +3821,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "genx",
@@ -3782,7 +3830,7 @@
     "displayName": "Genxlm Voice V1",
     "executionProvider": "genx",
     "upstreamProvider": "modal",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "voice",
@@ -3825,7 +3873,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -3837,7 +3885,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -3845,7 +3894,7 @@
     "displayName": "Llama 3.3 70B Versatile",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "static_verified",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -3892,13 +3941,14 @@
     "providerClientExists": true,
     "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "static_verified",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": true,
     "executableBlockers": [],
     "catalogueOnlyReason": "",
-    "blockedReason": ""
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -3906,7 +3956,7 @@
     "displayName": "Llama 3.1 8B Instant",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "static_verified",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -3953,13 +4003,14 @@
     "providerClientExists": true,
     "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "static_verified",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": true,
     "executableBlockers": [],
     "catalogueOnlyReason": "",
-    "blockedReason": ""
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -3967,7 +4018,7 @@
     "displayName": "GPT OSS 120B",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4012,7 +4063,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4023,7 +4074,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -4031,7 +4083,7 @@
     "displayName": "GPT OSS 20B",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4075,7 +4127,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4086,7 +4138,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -4094,7 +4147,7 @@
     "displayName": "Llama 4 Scout",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4141,7 +4194,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4152,7 +4205,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -4160,7 +4214,7 @@
     "displayName": "Whisper Large V3",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -4203,7 +4257,7 @@
     "providerClientExists": true,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4213,7 +4267,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "groq",
@@ -4221,7 +4276,7 @@
     "displayName": "Orpheus V1 English",
     "executionProvider": "groq",
     "upstreamProvider": "groq",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -4264,7 +4319,7 @@
     "providerClientExists": true,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4275,7 +4330,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4283,7 +4339,7 @@
     "displayName": "Llama 3.3 70B Instruct Turbo",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4330,7 +4386,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4341,7 +4397,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4349,7 +4406,7 @@
     "displayName": "Qwen 2.5 Coder 32B",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4393,7 +4450,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4404,7 +4461,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4412,7 +4470,7 @@
     "displayName": "FLUX.1 Schnell",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "static_verified",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -4455,13 +4513,14 @@
     "providerClientExists": true,
     "workerExecutorExists": true,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "static_verified",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": true,
     "executableBlockers": [],
     "catalogueOnlyReason": "",
-    "blockedReason": ""
+    "blockedReason": "",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4469,7 +4528,7 @@
     "displayName": "FLUX.1 Dev",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "image",
@@ -4512,7 +4571,7 @@
     "providerClientExists": true,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4522,7 +4581,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4530,7 +4590,7 @@
     "displayName": "M2-BERT 80M 32K Retrieval",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "embedding",
@@ -4573,7 +4633,7 @@
     "providerClientExists": true,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4583,7 +4643,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4591,7 +4652,7 @@
     "displayName": "BGE Reranker Base",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "rerank",
@@ -4634,7 +4695,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4645,7 +4706,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4653,7 +4715,7 @@
     "displayName": "Together Moderation Docs Known",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "moderation",
@@ -4696,7 +4758,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4707,7 +4769,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4715,7 +4778,7 @@
     "displayName": "Together STT Realtime",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -4758,7 +4821,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4769,7 +4832,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4777,7 +4841,7 @@
     "displayName": "Together TTS Streaming",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -4820,7 +4884,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4832,7 +4896,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "together",
@@ -4840,7 +4905,7 @@
     "displayName": "Together Video Async",
     "executionProvider": "together",
     "upstreamProvider": "together",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "video",
@@ -4883,7 +4948,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4895,7 +4960,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
     "provider": "mimo",
@@ -4903,7 +4969,7 @@
     "displayName": "MiMo V2.5 Pro",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -4954,7 +5020,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -4965,7 +5031,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "mimo",
@@ -4973,7 +5040,7 @@
     "displayName": "MiMo V2.5",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text",
@@ -5021,7 +5088,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -5032,7 +5099,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "mimo",
@@ -5040,7 +5108,7 @@
     "displayName": "MiMo V2.5 ASR",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -5083,7 +5151,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -5094,7 +5162,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "mimo",
@@ -5102,7 +5171,7 @@
     "displayName": "MiMo V2.5 TTS",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -5145,7 +5214,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -5157,7 +5226,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "mimo",
@@ -5165,7 +5235,7 @@
     "displayName": "MiMo V2.5 TTS Voiceclone",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -5208,7 +5278,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -5220,7 +5290,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "mimo",
@@ -5228,7 +5299,7 @@
     "displayName": "MiMo V2.5 TTS Voice Design",
     "executionProvider": "mimo",
     "upstreamProvider": "mimo",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "audio",
@@ -5271,7 +5342,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -5283,7 +5354,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "provider_not_runtime_execution_provider, policy_restricted_by_app, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "coding_agent_only_not_backend_runtime"
   },
   {
     "provider": "deepinfra",
@@ -5291,7 +5363,7 @@
     "displayName": "tencent/Hy3",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "text-generation",
@@ -5336,7 +5408,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {
       "model_name": "tencent/Hy3",
@@ -5379,7 +5451,8 @@
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
     "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "publicEndpointDiscovered": true
+    "publicEndpointDiscovered": true,
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
   },
   {
     "provider": "deepinfra",
@@ -9953,8 +10026,8 @@
         "rate_per_service_tier_priority": 1.5
       },
       "max_tokens": 131072,
-      "deprecated": null,
-      "replaced_by": null,
+      "deprecated": 1784327640,
+      "replaced_by": "google/gemma-4-31B-it",
       "quantization": "fp8",
       "create_ts": "2024-09-26T21:46:21+00:00",
       "private": 0,
@@ -22380,8 +22453,8 @@
         "rate_per_service_tier_priority": null
       },
       "max_tokens": 131072,
-      "deprecated": null,
-      "replaced_by": null,
+      "deprecated": 1784327312,
+      "replaced_by": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
       "quantization": "fp8",
       "create_ts": "2025-09-09T21:56:24+00:00",
       "private": 0,
@@ -24385,15 +24458,15 @@
   {
     "provider": "deepinfra",
     "modelId": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "displayName": "Meta Llama 3.1 8B Instruct",
+    "displayName": "meta-llama/Meta-Llama-3.1-8B-Instruct",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "static_verified",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
+    "category": "text-generation",
+    "providerCategory": "text-generation",
+    "rawProviderType": "text-generation",
     "modalitiesIn": [
       "text"
     ],
@@ -24410,7 +24483,7 @@
       "classification",
       "extraction"
     ],
-    "contextWindow": null,
+    "contextWindow": 131072,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -24437,11 +24510,42 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "static_verified",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "type": "text-generation",
+      "reported_type": "text-generation",
+      "description": "Meta developed and released the Meta Llama 3.1 family of large language models (LLMs), a collection of pretrained and instruction tuned generative text models in 8B, 70B and 405B sizes",
+      "tags": [
+        "openai",
+        "tools",
+        "json",
+        "non-reasoning",
+        "structured-output"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "tokens",
+        "cents_per_input_token": 0.000002,
+        "cents_per_output_token": 0.000005,
+        "rate_per_input_token_cached": null,
+        "rate_per_input_token_cache_write": null,
+        "rate_per_service_tier_priority": null
+      },
+      "max_tokens": 131072,
+      "deprecated": 1784240551,
+      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+      "quantization": "bfloat16",
+      "create_ts": "2024-07-23T17:54:23+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": true,
     "executableBlockers": [],
     "catalogueOnlyReason": "",
-    "blockedReason": ""
+    "blockedReason": "",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -25174,15 +25278,15 @@
   {
     "provider": "deepinfra",
     "modelId": "Wan-AI/Wan2.1-T2V-14B",
-    "displayName": "Wan 2.1 T2V 14B",
+    "displayName": "Wan-AI/Wan2.1-T2V-14B",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "video",
-    "providerCategory": "video",
-    "rawProviderType": "video",
+    "category": "text-to-video",
+    "providerCategory": "text-to-video",
+    "rawProviderType": "text-to-video",
     "modalitiesIn": [
       "video"
     ],
@@ -25195,7 +25299,7 @@
     "inferredCapabilities": [
       "video_generation"
     ],
-    "contextWindow": null,
+    "contextWindow": 0,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -25222,7 +25326,32 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "Wan-AI/Wan2.1-T2V-14B",
+      "type": "text-to-video",
+      "reported_type": "text-to-video",
+      "description": "The Wan2.1 14B model is a high-capacity, state-of-the-art video foundation model capable of producing both 480P and 720P videos. It excels at capturing complex prompts and generating visually rich, detailed scenes, making it ideal for high-end creative tasks.",
+      "tags": [],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "image_units",
+        "cents_per_image_unit": 40,
+        "default_width": 0,
+        "default_height": 0,
+        "default_iterations": 0,
+        "default_price_cents": null,
+        "usage_from_cost": false
+      },
+      "max_tokens": null,
+      "deprecated": 1775771311,
+      "replaced_by": "Wan-AI/Wan2.2-T2V-A14B",
+      "quantization": null,
+      "create_ts": "2025-03-13T14:11:43+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -25232,7 +25361,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -26253,15 +26383,15 @@
   {
     "provider": "deepinfra",
     "modelId": "BAAI/bge-large-en-v1.5",
-    "displayName": "BGE Large EN",
+    "displayName": "BAAI/bge-large-en-v1.5",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "embedding",
-    "providerCategory": "embedding",
-    "rawProviderType": "embedding",
+    "category": "embeddings",
+    "providerCategory": "embeddings",
+    "rawProviderType": "embeddings",
     "modalitiesIn": [
       "retrieval"
     ],
@@ -26274,7 +26404,7 @@
     "inferredCapabilities": [
       "embeddings"
     ],
-    "contextWindow": null,
+    "contextWindow": 512,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -26301,7 +26431,30 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "BAAI/bge-large-en-v1.5",
+      "type": "embeddings",
+      "reported_type": "embeddings",
+      "description": "BGE embedding is a general Embedding Model. It is pre-trained using retromae and trained on large-scale pair data using contrastive learning. Note that the goal of pre-training is to reconstruct the text, and the pre-trained model cannot be used for similarity calculation directly, it needs to be fine-tuned",
+      "tags": [
+        "openai",
+        "priority"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_tokens",
+        "cents_per_input_token": 0.000001
+      },
+      "max_tokens": 512,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": null,
+      "create_ts": "2023-11-22T19:31:18+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -26310,7 +26463,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -28366,15 +28520,15 @@
   {
     "provider": "deepinfra",
     "modelId": "openai/whisper-large-v3",
-    "displayName": "Whisper Large V3",
+    "displayName": "openai/whisper-large-v3",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "audio",
-    "providerCategory": "audio",
-    "rawProviderType": "audio",
+    "category": "automatic-speech-recognition",
+    "providerCategory": "automatic-speech-recognition",
+    "rawProviderType": "automatic-speech-recognition",
     "modalitiesIn": [
       "audio"
     ],
@@ -28387,7 +28541,7 @@
     "inferredCapabilities": [
       "stt"
     ],
-    "contextWindow": null,
+    "contextWindow": 0,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -28414,7 +28568,29 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "openai/whisper-large-v3",
+      "type": "automatic-speech-recognition",
+      "reported_type": "automatic-speech-recognition",
+      "description": "Whisper is a general-purpose speech recognition model. It is trained on a large dataset of diverse audio and is also a multi-task model that can perform multilingual speech recognition as well as speech translation and language identification.",
+      "tags": [
+        "openai"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_length",
+        "cents_per_input_sec": 0.00075
+      },
+      "max_tokens": null,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": null,
+      "create_ts": "2024-07-17T21:49:19+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -28423,7 +28599,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -28929,15 +29106,15 @@
   {
     "provider": "deepinfra",
     "modelId": "meta-llama/Llama-3.3-70B-Instruct",
-    "displayName": "Llama 3.3 70B Instruct",
+    "displayName": "meta-llama/Llama-3.3-70B-Instruct",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
+    "category": "text-generation",
+    "providerCategory": "text-generation",
+    "rawProviderType": "text-generation",
     "modalitiesIn": [
       "text"
     ],
@@ -28954,7 +29131,7 @@
       "classification",
       "extraction"
     ],
-    "contextWindow": null,
+    "contextWindow": 131072,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -28981,7 +29158,36 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "meta-llama/Llama-3.3-70B-Instruct",
+      "type": "text-generation",
+      "reported_type": "text-generation",
+      "description": "Llama 3.3-70B is a multilingual LLM trained on a massive dataset of 15 trillion tokens, fine-tuned for instruction-following and conversational dialogue. The model is designed to be helpful, safe, and flexible, with a focus on responsible deployment and mitigating potential risks such as bias, toxicity, and misinformation. It achieves state-of-the-art performance on various benchmarks, including conversational tasks, language translation, and text generation.",
+      "tags": [
+        "openai",
+        "json",
+        "tools",
+        "structured-output"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "tokens",
+        "cents_per_input_token": 0.000023,
+        "cents_per_output_token": 0.00004,
+        "rate_per_input_token_cached": null,
+        "rate_per_input_token_cache_write": null,
+        "rate_per_service_tier_priority": null
+      },
+      "max_tokens": 131072,
+      "deprecated": 1762392581,
+      "replaced_by": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "quantization": "bfloat16",
+      "create_ts": "2024-12-06T17:39:34+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -28990,7 +29196,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -33926,8 +34133,8 @@
         "rate_per_service_tier_priority": 1.5
       },
       "max_tokens": 196608,
-      "deprecated": null,
-      "replaced_by": null,
+      "deprecated": 1784320259,
+      "replaced_by": "MiniMaxAI/MiniMax-M2.7",
       "quantization": "fp8",
       "create_ts": "2026-02-13T16:09:28+00:00",
       "private": 0,
@@ -34862,15 +35069,15 @@
   {
     "provider": "deepinfra",
     "modelId": "Qwen/Qwen2.5-Coder-32B-Instruct",
-    "displayName": "Qwen 2.5 Coder 32B",
+    "displayName": "Qwen/Qwen2.5-Coder-32B-Instruct",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
+    "category": "text-generation",
+    "providerCategory": "text-generation",
+    "rawProviderType": "text-generation",
     "modalitiesIn": [
       "text"
     ],
@@ -34884,7 +35091,7 @@
       "chat",
       "code"
     ],
-    "contextWindow": null,
+    "contextWindow": 32768,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -34911,7 +35118,33 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "type": "text-generation",
+      "reported_type": "text-generation",
+      "description": "Qwen2.5-Coder is the latest series of Code-Specific Qwen large language models (formerly known as CodeQwen). It has significant improvements in code generation, code reasoning and code fixing. A more comprehensive foundation for real-world applications such as Code Agents. Not only enhancing coding capabilities but also maintaining its strengths in mathematics and general competencies.",
+      "tags": [
+        "openai"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "tokens",
+        "cents_per_input_token": 0.000006,
+        "cents_per_output_token": 0.000015,
+        "rate_per_input_token_cached": null,
+        "rate_per_input_token_cache_write": null,
+        "rate_per_service_tier_priority": null
+      },
+      "max_tokens": 32768,
+      "deprecated": 1757622099,
+      "replaced_by": "Qwen/Qwen3-32B",
+      "quantization": "fp8",
+      "create_ts": "2024-11-11T23:08:15+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -34920,20 +35153,21 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
     "modelId": "hexgrad/Kokoro-82M",
-    "displayName": "Kokoro 82M",
+    "displayName": "hexgrad/Kokoro-82M",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "audio",
-    "providerCategory": "audio",
-    "rawProviderType": "audio",
+    "category": "text-to-speech",
+    "providerCategory": "text-to-speech",
+    "rawProviderType": "text-to-speech",
     "modalitiesIn": [
       "audio"
     ],
@@ -34946,7 +35180,7 @@
     "inferredCapabilities": [
       "tts"
     ],
-    "contextWindow": null,
+    "contextWindow": 0,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -34973,7 +35207,30 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "hexgrad/Kokoro-82M",
+      "type": "text-to-speech",
+      "reported_type": "text-to-speech",
+      "description": "Kokoro is an open-weight TTS model with 82 million parameters. Despite its lightweight architecture, it delivers comparable quality to larger models while being significantly faster and more cost-efficient. With Apache-licensed weights, Kokoro can be deployed anywhere from production environments to personal projects.",
+      "tags": [
+        "priority",
+        "openai"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_character_length",
+        "cents_per_input_chars": 0.000062
+      },
+      "max_tokens": null,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": null,
+      "create_ts": "2025-01-15T02:42:21+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -34983,7 +35240,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -35266,15 +35524,15 @@
   {
     "provider": "deepinfra",
     "modelId": "stabilityai/sdxl-turbo",
-    "displayName": "SDXL Turbo",
+    "displayName": "stabilityai/sdxl-turbo",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
     "discoverySource": "docs_fallback",
     "docsKnown": true,
     "liveDiscovered": false,
-    "category": "image",
-    "providerCategory": "image",
-    "rawProviderType": "image",
+    "category": "text-to-image",
+    "providerCategory": "text-to-image",
+    "rawProviderType": "text-to-image",
     "modalitiesIn": [
       "image"
     ],
@@ -35287,7 +35545,7 @@
     "inferredCapabilities": [
       "image_generation"
     ],
-    "contextWindow": null,
+    "contextWindow": 0,
     "maxOutputTokens": null,
     "inputPrice": null,
     "outputPrice": null,
@@ -35314,7 +35572,34 @@
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
     "source": "docs_fallback",
     "liveDiscoverySkipped": true,
-    "rawMetadata": {},
+    "rawMetadata": {
+      "model_name": "stabilityai/sdxl-turbo",
+      "type": "text-to-image",
+      "reported_type": "text-to-image",
+      "description": "The SDXL Turbo model, developed by Stability AI, is an optimized, fast text-to-image generative model. It is a distilled version of SDXL 1.0, leveraging Adversarial Diffusion Distillation (ADD) to generate high-quality images in less steps.",
+      "tags": [
+        "openai"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "image_units",
+        "cents_per_image_unit": 0.02,
+        "default_width": 1024,
+        "default_height": 1024,
+        "default_iterations": 5,
+        "default_price_cents": null,
+        "usage_from_cost": false
+      },
+      "max_tokens": null,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": null,
+      "create_ts": "2024-09-06T09:56:45+00:00",
+      "private": 0,
+      "is_partner": false
+    },
     "executableNow": false,
     "executableBlockers": [
       "request_shape_missing",
@@ -35324,7 +35609,8 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "publicEndpointDiscovered": true
   },
   {
     "provider": "deepinfra",
@@ -37250,7 +37536,7 @@
     "displayName": "BGE Reranker Large",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "rerank",
@@ -37293,7 +37579,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -37304,7 +37590,8 @@
       "worker_executor_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
   },
   {
     "provider": "deepinfra",
@@ -37312,7 +37599,7 @@
     "displayName": "MusicGen Large",
     "executionProvider": "deepinfra",
     "upstreamProvider": "deepinfra",
-    "discoverySource": "docs_fallback",
+    "discoverySource": "last_known_good",
     "docsKnown": true,
     "liveDiscovered": false,
     "category": "music",
@@ -37357,7 +37644,7 @@
     "providerClientExists": false,
     "workerExecutorExists": false,
     "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "docs_fallback",
+    "source": "last_known_good",
     "liveDiscoverySkipped": true,
     "rawMetadata": {},
     "executableNow": false,
@@ -37369,6 +37656,7 @@
       "artifact_persistence_missing"
     ],
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing"
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
   }
 ]

@@ -77,7 +77,7 @@ import {
   PROVIDER_HEALTH_STATUSES,
   CREDENTIAL_USAGE_POLICIES,
   CAPABILITY_CATALOG,
-  routeProvider,
+  routeBrain,
   hasBlockedOverrides,
   CAPABILITY_KEYS,
 } from '../packages/core/src/index.ts'
@@ -362,26 +362,30 @@ describe('DeepInfra disabled state', () => {
   })
 
   it('disabled DeepInfra is not selected by router', () => {
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
         deepinfra: { disabled: true },
       },
     })
 
-    const deepinfraCandidate = decision.candidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfraCandidate.disabled).toBe(true)
+    const deepinfraCandidate = decision.rejectedCandidates.find((c) => c.provider === 'deepinfra')
+    expect(deepinfraCandidate.reason).toContain('disabled')
     expect(decision.selectedProvider).not.toBe('deepinfra')
     expect(decision.selectedProvider).toBe('groq')
   })
 
   it('disabled DeepInfra candidate has correct reason', () => {
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
         deepinfra: { disabled: true },
       },
     })
 
-    const deepinfraCandidate = decision.candidates.find((c) => c.provider === 'deepinfra')
+    const deepinfraCandidate = decision.rejectedCandidates.find((c) => c.provider === 'deepinfra')
     expect(deepinfraCandidate.reason).toContain('disabled')
   })
 
@@ -389,22 +393,28 @@ describe('DeepInfra disabled state', () => {
     delete process.env.GROQ_API_KEY
     delete process.env.TOGETHER_API_KEY
 
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
+        groq: { disabled: true },
         deepinfra: { disabled: true },
       },
     })
 
     expect(decision.selectedProvider).toBeNull()
-    expect(decision.blocked).toBe(true)
+    expect(decision.executionAllowed).toBe(false)
   })
 
   it('enabled DeepInfra participates normally', () => {
     delete process.env.GROQ_API_KEY
     delete process.env.TOGETHER_API_KEY
 
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
+        groq: { disabled: true },
         deepinfra: { disabled: false },
       },
     })
@@ -413,15 +423,15 @@ describe('DeepInfra disabled state', () => {
   })
 
   it('disabled state does not affect other providers', () => {
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
         deepinfra: { disabled: true },
       },
     })
 
-    const groqCandidate = decision.candidates.find((c) => c.provider === 'groq')
-    expect(groqCandidate.disabled).toBe(false)
-    expect(groqCandidate.supported).toBe(true)
+    expect(decision.executableCandidates.some((c) => c.provider === 'groq')).toBe(true)
   })
 
   it('worker executor checks disabled state before DeepInfra fallback', () => {
@@ -447,25 +457,27 @@ describe('MiMo coding_tools_only', () => {
   })
 
   it('MiMo has empty category support (coding_tools_only)', () => {
-    const decision = routeProvider('code')
-    const mimo = decision.candidates.find((c) => c.provider === 'mimo')
-    expect(mimo.supported).toBe(false)
+    const decision = routeBrain({ capability: 'code', routingMode: 'balanced' })
+    const mimo = decision.policyRestrictedCandidates.find((c) => c.provider === 'mimo')
+    expect(mimo.reason).toContain('coding_tools_only')
   })
 
   it('MiMo is never selected for runtime jobs', () => {
-    const decision = routeProvider('chat')
+    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
     expect(decision.selectedProvider).not.toBe('mimo')
   })
 
   it('MiMo runtime_restricted state is respected by router', () => {
-    const decision = routeProvider('chat', {
+    const decision = routeBrain({
+      capability: 'chat',
+      routingMode: 'balanced',
       providerStates: {
         mimo: { runtimeRestricted: true },
       },
     })
 
-    const mimoCandidate = decision.candidates.find((c) => c.provider === 'mimo')
-    expect(mimoCandidate.runtimeRestricted).toBe(true)
+    const mimoCandidate = decision.policyRestrictedCandidates.find((c) => c.provider === 'mimo')
+    expect(mimoCandidate.reason).toContain('coding_tools_only')
     expect(decision.selectedProvider).not.toBe('mimo')
   })
 
@@ -621,7 +633,7 @@ describe('Apps cannot choose provider or model', () => {
   })
 
   it('router function signature has no provider/model input', () => {
-    const routingPath = path.join(ROOT, 'packages/core/src/provider-routing.ts')
+    const routingPath = path.join(ROOT, 'packages/core/src/brain-router.ts')
     const content = fs.readFileSync(routingPath, 'utf8')
     expect(content).toContain('capability: CapabilityKey')
     expect(content).not.toContain('providerOverride')

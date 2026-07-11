@@ -158,6 +158,10 @@ export const CapabilityDefinitionSchema = z.object({
   outputType: z.string().default('text'),
   artifactRequired: z.boolean().default(false),
   policyRequirement: z.string().default('standard'),
+  family: z.string().default('Unsorted'),
+  schemaKey: z.string().default(''),
+  studioMode: z.string().default(''),
+  dashboardType: z.string().default(''),
   proofStatus: z.enum(['proven', 'unproven']).default('unproven'),
   readyForDashboardExecution: z.boolean().default(false),
 })
@@ -166,7 +170,7 @@ export type CapabilityDefinition = z.infer<typeof CapabilityDefinitionSchema>
 
 // ── Built-in Capability Catalog ───────────────────────────────────────────────
 
-const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition, 'key' | 'category' | 'enabled' | 'allowedProviders' | 'proofStatus' | 'readyForDashboardExecution'>> = {
+const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition, 'key' | 'category' | 'enabled' | 'allowedProviders' | 'family' | 'schemaKey' | 'studioMode' | 'dashboardType' | 'proofStatus' | 'readyForDashboardExecution'>> = {
   chat: { label: 'Chat', description: 'Conversational text generation for external app requests.', requiredFlags: [], inputContract: ['prompt', 'input.context?'], outputType: 'text', artifactRequired: false, policyRequirement: 'standard' },
   reasoning: { label: 'Reasoning', description: 'Structured analysis and decision support.', requiredFlags: [], inputContract: ['prompt', 'input.constraints?'], outputType: 'text', artifactRequired: false, policyRequirement: 'standard' },
   code: { label: 'Code', description: 'Code generation, review, and repair planning.', requiredFlags: [], inputContract: ['prompt', 'input.repoContext?'], outputType: 'text', artifactRequired: false, policyRequirement: 'standard' },
@@ -203,9 +207,47 @@ const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition, 'key
   adult_video: { label: 'Adult Video', description: 'Governed adult video capability; requires explicit permission and proof.', requiredFlags: ['adult_permission'], inputContract: ['prompt', 'input.ageGateProof'], outputType: 'video', artifactRequired: true, policyRequirement: 'adult_permission' },
 }
 
+const CAPABILITY_DISPLAY_METADATA: Record<CapabilityKey, Pick<CapabilityDefinition, 'family' | 'schemaKey' | 'studioMode' | 'dashboardType'>> = {
+  chat: { family: 'Language', schemaKey: 'chat', studioMode: 'chat', dashboardType: 'text.chat' },
+  reasoning: { family: 'Language', schemaKey: 'reasoning', studioMode: 'reasoning', dashboardType: 'text.reasoning' },
+  code: { family: 'Language', schemaKey: 'code', studioMode: 'code', dashboardType: 'text.code' },
+  summarization: { family: 'Language', schemaKey: 'summarization', studioMode: 'summarization', dashboardType: 'text.summarization' },
+  translation: { family: 'Language', schemaKey: 'translation', studioMode: 'translation', dashboardType: 'text.translation' },
+  classification: { family: 'Language', schemaKey: 'classification', studioMode: 'classification', dashboardType: 'text.classification' },
+  extraction: { family: 'Language', schemaKey: 'extraction', studioMode: 'extraction', dashboardType: 'text.extraction' },
+  image_generation: { family: 'Image', schemaKey: 'image', studioMode: 'image', dashboardType: 'image.generate' },
+  image_edit: { family: 'Image', schemaKey: 'image_edit', studioMode: 'image_edit', dashboardType: 'image.edit' },
+  image_to_video: { family: 'Video', schemaKey: 'image_to_video', studioMode: 'image_to_video', dashboardType: 'video.image_to_video' },
+  long_form_video: { family: 'Video', schemaKey: 'longvideo', studioMode: 'longvideo', dashboardType: 'video.longform' },
+  tts: { family: 'Audio', schemaKey: 'voice', studioMode: 'voice', dashboardType: 'voice.tts' },
+  stt: { family: 'Audio', schemaKey: 'voice_stt', studioMode: 'voice_stt', dashboardType: 'voice.stt' },
+  video_generation: { family: 'Video', schemaKey: 'video', studioMode: 'video', dashboardType: 'video.generate' },
+  music_generation: { family: 'Audio', schemaKey: 'music', studioMode: 'music', dashboardType: 'music.generate' },
+  avatar_generation: { family: 'Avatar', schemaKey: 'avatar', studioMode: 'avatar', dashboardType: 'avatar.generate' },
+  embeddings: { family: 'Knowledge', schemaKey: 'embeddings', studioMode: 'embeddings', dashboardType: 'knowledge.embeddings' },
+  reranking: { family: 'Knowledge', schemaKey: 'reranking', studioMode: 'reranking', dashboardType: 'knowledge.reranking' },
+  research: { family: 'Intelligence', schemaKey: 'research', studioMode: 'research', dashboardType: 'research' },
+  multimodal: { family: 'Multimodal', schemaKey: 'multimodal', studioMode: 'multimodal', dashboardType: 'multimodal.request' },
+  tool_use: { family: 'Language', schemaKey: 'tool_use', studioMode: 'tool_use', dashboardType: 'text.tool_use' },
+  structured_output: { family: 'Language', schemaKey: 'structured_output', studioMode: 'structured_output', dashboardType: 'text.structured_output' },
+  brand_scrape: { family: 'Intelligence', schemaKey: 'scrape', studioMode: 'scrape', dashboardType: 'scrape.crawl' },
+  rag_ingest: { family: 'Knowledge', schemaKey: 'rag', studioMode: 'rag', dashboardType: 'rag.ingest' },
+  rag_search: { family: 'Knowledge', schemaKey: 'rag_search', studioMode: 'rag_search', dashboardType: 'rag.query' },
+  document_qa: { family: 'Document', schemaKey: 'document_qa', studioMode: 'document_qa', dashboardType: 'document.qa' },
+  ocr: { family: 'Document', schemaKey: 'ocr', studioMode: 'ocr', dashboardType: 'document.ocr' },
+  campaign_generation: { family: 'Marketing', schemaKey: 'campaign', studioMode: 'campaign', dashboardType: 'campaign.generate' },
+  social_content_generation: { family: 'Marketing', schemaKey: 'social_reel', studioMode: 'social_reel', dashboardType: 'social.reel_pack' },
+  adult_text: { family: 'Adult Governed', schemaKey: 'adult_text', studioMode: 'adult_text', dashboardType: 'adult.text' },
+  adult_image: { family: 'Adult Governed', schemaKey: 'adult_image', studioMode: 'adult_image', dashboardType: 'adult.image' },
+  adult_voice: { family: 'Adult Governed', schemaKey: 'adult_voice', studioMode: 'adult_voice', dashboardType: 'adult.voice' },
+  adult_avatar: { family: 'Adult Governed', schemaKey: 'adult_avatar', studioMode: 'adult_avatar', dashboardType: 'adult.avatar' },
+  adult_video: { family: 'Adult Governed', schemaKey: 'adult_video', studioMode: 'adult_video', dashboardType: 'adult.video' },
+}
+
 export const CAPABILITY_CATALOG: CapabilityDefinition[] = CAPABILITY_KEYS.map((key) => ({
   key,
   ...CAPABILITY_METADATA[key],
+  ...CAPABILITY_DISPLAY_METADATA[key],
   category: CAPABILITY_CATEGORY_MAP[key],
   enabled: true,
   allowedProviders: [],
