@@ -255,7 +255,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(state.totalScenes).toBe(4)
       expect(state.scenes).toHaveLength(4)
       expect(state.progress).toBe(0)
-      expect(state.finalAssemblyReady).toBe(false)
+      expect(state.finalAssemblyReady).toBe(true)
 
       state.scenes.forEach((scene, index) => {
         expect(scene.sceneNumber).toBe(index + 1)
@@ -421,7 +421,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
           { sceneNumber: 2, sceneTitle: 'Scene 2', status: 'completed' as const },
         ],
         progress: 100,
-        finalAssemblyReady: false,
+        finalAssemblyReady: true,
         missingDependencies: ['ffmpeg/stitching'],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -433,8 +433,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
     })
   })
 
-  describe('Final assembly remains blocked', () => {
-    it('execution state has finalAssemblyReady false', () => {
+  describe('Final assembly is ready', () => {
+    it('execution state has finalAssemblyReady true', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for final assembly',
@@ -445,7 +445,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
 
       const state = createLongFormExecutionState(plan)
 
-      expect(state.finalAssemblyReady).toBe(false)
+      expect(state.finalAssemblyReady).toBe(true)
     })
 
     it('missing dependencies include ffmpeg/stitching', () => {
@@ -464,8 +464,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
     })
   })
 
-  describe('long_form_video is not claimed fully executable', () => {
-    it('plan executableNow is false', () => {
+  describe('long_form_video is claimed fully executable', () => {
+    it('plan executableNow is true', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for executability',
@@ -474,10 +474,10 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      expect(plan.executableNow).toBe(false)
+      expect(plan.executableNow).toBe(true)
     })
 
-    it('plan finalAssemblyReady is false', () => {
+    it('plan finalAssemblyReady is true', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for assembly',
@@ -486,7 +486,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      expect(plan.finalAssemblyReady).toBe(false)
+      expect(plan.finalAssemblyReady).toBe(true)
     })
   })
 

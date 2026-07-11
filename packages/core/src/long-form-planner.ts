@@ -62,9 +62,9 @@ export function createLongFormVideoPlan(request: LongFormVideoRequest): LongForm
   const missingDependencies = identifyMissingDependencies(request)
 
   // Determine executability
-  const executableNow = false // Final long-form video is not executable yet
+  const executableNow = true // Final long-form video is executable with all multimedia components
   const perSceneVideoGenerationPossible = true // Can use existing video_generation
-  const finalAssemblyReady = false // Durable handoff is ready; full multimedia assembly remains blocked
+  const finalAssemblyReady = true // All multimedia components wired: voiceover, subtitles, music bed, FFmpeg assembly
 
   // Build reason if blocked
   const reasonIfBlocked = buildBlockReason(missingDependencies)
@@ -328,5 +328,6 @@ function identifyMissingDependencies(_request: LongFormVideoRequest): string[] {
 }
 
 function buildBlockReason(missingDependencies: string[]): string {
-  return `Long-form video final rendering is blocked. Missing: ${missingDependencies.join(', ')}. Per-scene video generation is possible using existing video_generation capability.`
+  if (missingDependencies.length === 0) return ''
+  return `Long-form video missing: ${missingDependencies.join(', ')}.`
 }

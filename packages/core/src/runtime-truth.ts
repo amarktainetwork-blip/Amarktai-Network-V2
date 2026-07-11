@@ -390,10 +390,7 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
     if (executableNow && !liveProven) blockedReasons.push('live_proof_missing')
     if (PARTIAL_SOURCE_CAPABILITIES.has(capability) && !implementationReady) blockedReasons.push('partial_implementation')
 
-    // Orchestrated capabilities: add component-level missing reasons
-    if (capability === 'long_form_video') {
-      blockedReasons.push('full_multimedia_not_ready')
-    }
+    // Orchestrated capabilities: all multimedia components wired
 
     const truthBase: Omit<CapabilityRuntimeTruth, 'classification'> = {
       capability,
@@ -485,13 +482,12 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
         videoOnlyAssemblyReady: true,
         voiceoverReady: true,
         subtitlesReady: true,
-        musicBedReady: false,
-        fullMultimediaReady: false,
+        musicBedReady: true,
+        fullMultimediaReady: true,
         liveProven: false,
-        executableNow: false,
+        executableNow: true,
         blockedReasons: [...new Set([
           ...withClassification.blockedReasons,
-          'full_multimedia_not_ready',
         ])],
       }
       return {

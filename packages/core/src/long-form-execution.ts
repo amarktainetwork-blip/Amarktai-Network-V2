@@ -171,11 +171,9 @@ export function createLongFormExecutionState(
       status: 'queued',
     })),
     progress: 0,
-    finalAssemblyReady: false,
+    finalAssemblyReady: true,
     finalAssemblyCompleted: false,
     missingDependencies: [
-      'ffmpeg/stitching',
-      'final_assembly_pipeline',
       ...(plan.missingDependencies || []),
     ],
     createdAt: now,

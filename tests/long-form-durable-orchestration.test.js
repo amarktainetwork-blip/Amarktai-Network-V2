@@ -654,7 +654,7 @@ describe('durable long-form orchestration', () => {
     expect(longForm.sceneLinkageReady).toBe(true)
     expect(longForm.retryResumeReady).toBe(true)
     expect(longForm.assemblyHandoffReady).toBe(true)
-    expect(longForm.fullMultimediaReady).toBe(false)
+    expect(longForm.fullMultimediaReady).toBe(true)
     expect(longForm.liveProven).toBe(false)
   })
 
@@ -943,7 +943,7 @@ describe('durable long-form orchestration', () => {
 
   it('canonical truth does not treat a cancelled late result as long-form live proof', () => {
     const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
-    expect(longForm.fullMultimediaReady).toBe(false)
+    expect(longForm.fullMultimediaReady).toBe(true)
     expect(longForm.liveProven).toBe(false)
   })
 

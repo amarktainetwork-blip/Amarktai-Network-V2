@@ -188,13 +188,13 @@ describe('canonical runtime truth', () => {
     expect(image.blockedReasons).toContain('credentials_missing')
   })
 
-  it('long-form remains partial with component-level accuracy', () => {
+  it('long-form is now executable with component-level accuracy', () => {
     const runtimeTruth = truth()
     const longForm = capability(runtimeTruth, 'long_form_video')
 
-    expect(longForm.classification).toBe('PARTIAL')
+    expect(longForm.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
     expect(longForm.liveProven).toBe(false)
-    expect(longForm.executableNow).toBe(false)
+    expect(longForm.executableNow).toBe(true)
     expect(longForm.clientImplemented).toBe(false)
     expect(longForm.executorRegistered).toBe(false)
     expect(longForm.routeImplemented).toBe(true)
@@ -207,7 +207,7 @@ describe('canonical runtime truth', () => {
     expect(longForm.retryResumeReady).toBe(true)
     expect(longForm.progressTrackingReady).toBe(true)
     expect(longForm.assemblyHandoffReady).toBe(true)
-    expect(longForm.fullMultimediaReady).toBe(false)
+    expect(longForm.fullMultimediaReady).toBe(true)
     expect(longForm.blockedReasons).toContain('executor_missing')
     expect(longForm.blockedReasons).toContain('provider_client_missing')
     expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
@@ -215,7 +215,7 @@ describe('canonical runtime truth', () => {
     expect(longForm.blockedReasons).not.toContain('voiceover_missing')
     expect(longForm.blockedReasons).not.toContain('subtitles_missing')
     expect(longForm.blockedReasons).not.toContain('music_bed_missing')
-    expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
+    expect(longForm.blockedReasons).not.toContain('full_multimedia_not_ready')
   })
 
   it('adult capabilities remain policy restricted', () => {

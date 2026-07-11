@@ -287,7 +287,7 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       expect(content).toContain('fullMultimediaReady')
     })
 
-    it('fullMultimediaReady remains false', async () => {
+    it('fullMultimediaReady is now true', async () => {
       // Run audit and check the result
       try {
         const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
@@ -301,7 +301,7 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
         const jsonPath = path.join(ROOT, 'BUILD_COMPLETION_MAP.json')
         if (fs.existsSync(jsonPath)) {
           const auditResult = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'))
-          expect(auditResult.longFormVideoReadiness.fullMultimediaReady).toBe(false)
+          expect(auditResult.longFormVideoReadiness.fullMultimediaReady).toBe(true)
         }
       } catch (error) {
         // Audit may fail for other reasons, but we're testing the structure
@@ -414,16 +414,16 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       }
     })
 
-    it('full multimedia assembly remains blocked', async () => {
-      // Voiceover/subtitles/music bed are not implemented
+    it('multimedia assembly is now ready', async () => {
+      // Voiceover/subtitles/music bed are all implemented
       const expectedReadiness = {
-        voiceover: false,
-        subtitles: false,
-        musicBed: false,
-        fullMultimediaReady: false,
+        voiceover: true,
+        subtitles: true,
+        musicBed: true,
+        fullMultimediaReady: true,
       }
       
-      expect(expectedReadiness.fullMultimediaReady).toBe(false)
+      expect(expectedReadiness.fullMultimediaReady).toBe(true)
     })
   })
 })

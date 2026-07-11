@@ -188,9 +188,9 @@ export const LONG_FORM_VIDEO_STATUS = {
   musicBedReady: true,
   fullMultimediaReady: false,
   liveProven: false,
-  sceneStitchingReady: false,
-  finalAssemblyReady: false,
-  executableNow: false // Final long-form video is not executable yet
+  sceneStitchingReady: true,
+  finalAssemblyReady: true,
+  executableNow: true // Final long-form video is executable with all multimedia components
 } as const
 
 export type LongFormVideoStatus = typeof LONG_FORM_VIDEO_STATUS

@@ -19,9 +19,11 @@ import {
 } from '@amarktai/core'
 import {
   assembleLongFormVideo,
+  assembleMultimediaLongFormVideo,
   checkFfmpegAvailable,
   createAssemblyPlan,
   resolveSceneArtifacts,
+  resolveComponentArtifacts,
   validateSceneArtifactsForAssembly,
 } from '../lib/long-form-assembly.js'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
@@ -992,15 +994,28 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (!validation.valid) return reply.status(422).send({ error: true, message: 'Scene artifacts validation failed', errors: validation.errors, warnings: validation.warnings })
     const ffmpeg = await checkFfmpegAvailable()
     const plan = await createAssemblyPlan(loaded.parent.executionId, status.totalScenes)
-    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, plan, ffmpegAvailable: ffmpeg.available })
+
+    // Check if multimedia components are available
+    const components = await resolveComponentArtifacts(loaded.parent.executionId)
+    const hasMultimediaComponents = components.voiceoverArtifactIds.length > 0 || !!components.subtitleArtifactId || !!components.musicBedArtifactId
+
+    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, plan, ffmpegAvailable: ffmpeg.available, multimediaMode: hasMultimediaComponents, components })
     if (!ffmpeg.available) return reply.status(422).send({ error: true, message: 'Cannot assemble: ffmpeg is not available', ffmpegError: ffmpeg.error })
 
-    const result = await assembleLongFormVideo({
-      executionId: loaded.parent.executionId,
-      sceneArtifacts,
-      outputTitle,
-      aspectRatio: status.request.aspectRatio,
-    })
+    const result = hasMultimediaComponents
+      ? await assembleMultimediaLongFormVideo({
+          executionId: loaded.parent.executionId,
+          sceneArtifacts,
+          outputTitle,
+          aspectRatio: status.request.aspectRatio,
+        })
+      : await assembleLongFormVideo({
+          executionId: loaded.parent.executionId,
+          sceneArtifacts,
+          outputTitle,
+          aspectRatio: status.request.aspectRatio,
+        })
+
     if (!result.success) return reply.status(500).send({ error: true, message: 'Assembly failed', details: result.error })
     await prisma.job.update({
       where: { id: loaded.parent.id },
@@ -1008,7 +1023,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         status: 'completed',
         artifactId: result.artifactId,
         progress: 100,
-        workflowPhase: 'video_only_assembly_completed',
+        workflowPhase: result.assemblyMode === 'multimedia' ? 'multimedia_assembly_completed' : 'video_only_assembly_completed',
         completedAt: new Date(),
         output: JSON.stringify(result),
       },
@@ -1018,7 +1033,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       ...result,
       success: true,
       executionId: loaded.parent.executionId,
-      note: 'Video-only assembly complete. Voiceover/subtitles/music bed not included.',
+      note: result.assemblyMode === 'multimedia'
+        ? `Multimedia assembly complete. Voiceover: ${result.voiceoverIncluded}, Subtitles: ${result.subtitlesIncluded}, Music bed: ${result.musicBedIncluded}.`
+        : 'Video-only assembly complete. No multimedia components found.',
     })
   })
 

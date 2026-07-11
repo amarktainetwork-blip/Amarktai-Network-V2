@@ -30,7 +30,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(LONG_FORM_VIDEO_STATUS.orchestrationFoundationReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.schemaReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.plannerReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
+      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(true)
     })
   })
 
@@ -119,9 +119,9 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(plan.renderSteps).toBeDefined()
       expect(plan.artifactPlan).toBeDefined()
       expect(plan.missingDependencies).toBeDefined()
-      expect(plan.executableNow).toBe(false)
+      expect(plan.executableNow).toBe(true)
       expect(plan.perSceneVideoGenerationPossible).toBe(true)
-      expect(plan.finalAssemblyReady).toBe(false)
+      expect(plan.finalAssemblyReady).toBe(true)
     })
 
     it('splits target duration correctly across scenes', () => {
@@ -353,16 +353,16 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(LONG_FORM_VIDEO_STATUS.perSceneVideoGenerationPossible).toBe(true)
     })
 
-    it('final assembly is not ready', () => {
-      expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(false)
+    it('final assembly is ready', () => {
+      expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(true)
+      expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(true)
     })
 
-    it('final long-form video is not executable', () => {
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
+    it('final long-form video is executable', () => {
+      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(true)
     })
   })
 })
