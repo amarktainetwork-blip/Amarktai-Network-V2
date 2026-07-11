@@ -294,3 +294,14 @@ export {
   type MusicGenerationPlan,
   type MusicGenerationResult,
 } from './music-generation.js'
+
+// Subtitle generation
+export {
+  generateSubtitles,
+  buildSubtitleSegments,
+  generateSrt,
+  generateVtt,
+  getSubtitleMimeType,
+  type SubtitleSegment,
+  type SubtitleGenerationInput,
+} from './subtitle-generation.js'

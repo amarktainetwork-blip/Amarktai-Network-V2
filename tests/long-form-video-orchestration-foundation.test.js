@@ -227,7 +227,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(voiceoverStep.status).toBe('ready')
     })
 
-    it('lists subtitles missing when enabled', () => {
+    it('lists subtitles as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for subtitles missing validation',
         targetDurationSeconds: 60,
@@ -236,11 +236,11 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('subtitle_backend')
+      expect(plan.missingDependencies).not.toContain('subtitle_backend')
       
       const subtitleStep = plan.renderSteps.find(s => s.type === 'subtitle_generation')
       expect(subtitleStep).toBeDefined()
-      expect(subtitleStep.status).toBe('blocked')
+      expect(subtitleStep.status).toBe('ready')
     })
 
     it('lists music bed missing when enabled', () => {
@@ -357,7 +357,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(false)
       expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(false)
       expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(false)
+      expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(false)
     })
 

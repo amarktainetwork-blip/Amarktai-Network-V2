@@ -212,8 +212,8 @@ describe('canonical runtime truth', () => {
     expect(longForm.blockedReasons).toContain('provider_client_missing')
     expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
     // Accurate component-level blockers
-    expect(longForm.blockedReasons).toContain('voiceover_missing')
-    expect(longForm.blockedReasons).toContain('subtitles_missing')
+    expect(longForm.blockedReasons).not.toContain('voiceover_missing')
+    expect(longForm.blockedReasons).not.toContain('subtitles_missing')
     expect(longForm.blockedReasons).toContain('music_bed_missing')
     expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
   })

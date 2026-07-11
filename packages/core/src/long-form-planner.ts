@@ -231,10 +231,9 @@ function createRenderSteps(request: LongFormVideoRequest): LongFormRenderStep[] 
     steps.push({
       stepNumber: stepNumber++,
       type: 'subtitle_generation',
-      description: 'Generate subtitle files',
+      description: 'Generate SRT/VTT subtitle files from scene text',
       dependencies: [],
-      status: 'blocked',
-      blockedReason: 'Subtitle backend not wired yet'
+      status: 'ready'
     })
   }
 
@@ -317,10 +316,8 @@ function identifyMissingDependencies(request: LongFormVideoRequest): string[] {
   // Voiceover is wired via Groq TTS child jobs
   // No longer a missing dependency
 
-  // Subtitles are missing if enabled
-  if (request.subtitlesEnabled) {
-    missing.push('subtitle_backend')
-  }
+  // Subtitles are wired via local SRT/VTT generation endpoint
+  // No longer a missing dependency
 
   // Music bed is missing if enabled
   if (request.musicBedEnabled) {

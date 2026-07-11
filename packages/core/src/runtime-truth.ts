@@ -392,7 +392,7 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
 
     // Orchestrated capabilities: add component-level missing reasons
     if (capability === 'long_form_video') {
-      blockedReasons.push('voiceover_missing', 'subtitles_missing', 'music_bed_missing', 'full_multimedia_not_ready')
+      blockedReasons.push('music_bed_missing', 'full_multimedia_not_ready')
     }
 
     const truthBase: Omit<CapabilityRuntimeTruth, 'classification'> = {
@@ -483,16 +483,14 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
         batchStructureReady: true,
         assemblyHandoffReady: true,
         videoOnlyAssemblyReady: true,
-        voiceoverReady: false,
-        subtitlesReady: false,
+        voiceoverReady: true,
+        subtitlesReady: true,
         musicBedReady: false,
         fullMultimediaReady: false,
         liveProven: false,
         executableNow: false,
         blockedReasons: [...new Set([
           ...withClassification.blockedReasons,
-          'voiceover_missing',
-          'subtitles_missing',
           'music_bed_missing',
           'full_multimedia_not_ready',
         ])],

@@ -34,8 +34,8 @@ function buildAssemblyHandoff(parent: JobRow, sceneJobs: JobRow[], metadata: Rec
   const requestedMusic = request.musicBedEnabled === true
   const missingDependencies = [
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(requestedVoiceover ? ['voiceover_not_implemented'] : []),
-    ...(requestedSubtitles ? ['subtitles_not_implemented'] : []),
+    ...(requestedVoiceover ? ['voiceover_pending'] : []),
+    ...(requestedSubtitles ? ['subtitles_pending'] : []),
     ...(requestedMusic ? ['music_bed_not_implemented'] : []),
     'full_multimedia_assembly_pending',
   ]

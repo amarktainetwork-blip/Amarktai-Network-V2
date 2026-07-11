@@ -2,12 +2,15 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma, refreshLongFormParentState } from '@amarktai/db'
+import { saveArtifact } from '@amarktai/artifacts'
 import {
   BLOCKED_OVERRIDE_FIELDS,
   DEFAULT_JOB_OPTIONS,
   QUEUE_NAMES,
   createLongFormVideoPlan,
   createSceneExecutionPayloads,
+  generateSubtitles,
+  getSubtitleMimeType,
   isValidRoutingMode,
   validateLongFormVideoRequest,
   type JobPayload,
@@ -123,7 +126,7 @@ function buildAssemblyHandoff({
   const missingDependencies = [
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
     ...(request.voiceoverEnabled ? ['voiceover_pending'] : []),
-    ...(request.subtitlesEnabled ? ['subtitles_not_implemented'] : []),
+    ...(request.subtitlesEnabled ? ['subtitles_pending'] : []),
     ...(request.musicBedEnabled ? ['music_bed_not_implemented'] : []),
     'full_multimedia_assembly_pending',
   ]
@@ -234,7 +237,7 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
       ...(failedScenes > 0 ? ['scene_failure'] : []),
       ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
       ...((metadata.blockedReasons as string[] | undefined) ?? []),
-      'subtitles_not_implemented',
+      'subtitles_pending',
       'music_bed_not_implemented',
       'full_multimedia_not_ready',
     ],
@@ -786,6 +789,90 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     })
   })
 
+  app.post('/api/admin/long-form-video/subtitles/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { executionId } = request.params as { executionId: string }
+    const body = request.body as Record<string, unknown>
+    const format = (body.format as string) === 'vtt' ? 'vtt' : 'srt'
+
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+    if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+
+    const metadata = safeJson(loaded.parent.metadataJson)
+    const plan = metadata.plan as LongFormVideoPlan | undefined
+    if (!plan?.storyboard?.scenes) {
+      return reply.status(409).send({ error: true, message: 'No plan found in parent metadata' })
+    }
+
+    const scenes = plan.storyboard.scenes.filter(
+      (s: { subtitleText?: string }) => s.subtitleText?.trim()
+    ) as Array<{ sceneNumber: number; subtitleText: string; durationSeconds: number }>
+    if (scenes.length === 0) {
+      return reply.status(409).send({ error: true, message: 'No scenes with subtitle text found' })
+    }
+
+    const subtitleContent = generateSubtitles({
+      scenes: scenes.map((s) => ({
+        sceneNumber: s.sceneNumber,
+        subtitleText: s.subtitleText,
+        durationSeconds: s.durationSeconds,
+      })),
+      format,
+    })
+
+    if (!subtitleContent) {
+      return reply.status(409).send({ error: true, message: 'Generated subtitle content is empty' })
+    }
+
+    const traceId = `trace_longform_${executionId}_subtitles_${format}`
+    const mimeType = getSubtitleMimeType(format)
+    const filename = `long-form-${executionId}-subtitles.${format}`
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: APP_SLUG,
+        type: 'transcript',
+        subType: `subtitles_${format}`,
+        title: filename,
+        description: `Long-form video subtitles (${format.toUpperCase()})`,
+        provider: 'local',
+        model: 'subtitle-generator',
+        traceId,
+        mimeType,
+        metadata: {
+          executionId,
+          parentJobId: loaded.parent.id,
+          format,
+          sceneCount: scenes.length,
+          totalDurationSeconds: scenes.reduce((sum: number, s: { durationSeconds: number }) => sum + s.durationSeconds, 0),
+        },
+      },
+      data: Buffer.from(subtitleContent, 'utf-8'),
+      explicitMimeType: mimeType,
+    })
+
+    await prisma.job.update({
+      where: { id: loaded.parent.id },
+      data: {
+        metadataJson: JSON.stringify({
+          ...metadata,
+          subtitleArtifactId: artifact.id,
+          subtitleFormat: format,
+          subtitlesReady: true,
+        }),
+      },
+    })
+
+    return reply.status(201).send({
+      success: true,
+      artifactId: artifact.id,
+      format,
+      mimeType,
+      sceneCount: scenes.length,
+      artifactUrl: artifact.storageUrl,
+    })
+  })
+
   app.post('/api/admin/long-form-video/assemble/:executionId', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { executionId } = request.params as { executionId: string }
@@ -903,7 +990,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         executionStateRecovery: 'Recovered by exact parentJobId/executionId fields',
         assemblyMode: 'video_only handoff prepared; full multimedia pending',
         voiceoverIncluded: true,
-        subtitlesIncluded: false,
+        subtitlesIncluded: true,
         musicBedIncluded: false,
       },
     })

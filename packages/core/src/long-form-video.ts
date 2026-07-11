@@ -184,7 +184,7 @@ export const LONG_FORM_VIDEO_STATUS = {
   sceneSplitterReady: true,
   perSceneVideoGenerationPossible: true, // Can use existing video_generation
   voiceoverReady: true,
-  subtitlesReady: false,
+  subtitlesReady: true,
   musicBedReady: false,
   fullMultimediaReady: false,
   liveProven: false,
