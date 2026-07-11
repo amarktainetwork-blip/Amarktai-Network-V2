@@ -3,6 +3,9 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const OUTPUT_ROOT = process.env.AMARKTAI_DISCOVERY_OUTPUT_ROOT
+  ? path.resolve(process.env.AMARKTAI_DISCOVERY_OUTPUT_ROOT)
+  : ROOT
 const LIVE = process.argv.includes('--live')
 const STRICT = process.argv.includes('--strict')
 const TEST_MODE = process.env.AMARKTAI_DISCOVERY_TEST === '1'
@@ -104,6 +107,106 @@ const PROVIDER_TRUTH = {
     policyExecutionDisabled: true,
     policyBlockedReason: 'coding_agent_only_not_backend_runtime',
   },
+}
+
+const OUTPUT_PATHS = {
+  report: path.join(OUTPUT_ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'),
+  discovered: path.join(OUTPUT_ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'),
+  generated: path.join(OUTPUT_ROOT, 'packages/core/src/generated/provider-model-catalogue.generated.json'),
+}
+
+function readJsonFile(filePath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+  } catch {
+    return fallback
+  }
+}
+
+function ensureDirFor(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+}
+
+function atomicWriteJson(filePath, value) {
+  ensureDirFor(filePath)
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`)
+  fs.renameSync(tempPath, filePath)
+}
+
+const PREVIOUS_MODELS = readJsonFile(OUTPUT_PATHS.generated, readJsonFile(OUTPUT_PATHS.discovered, []))
+
+function previousModelsForProvider(provider) {
+  return Array.isArray(PREVIOUS_MODELS)
+    ? PREVIOUS_MODELS.filter((model) => model?.provider === provider && model?.modelId)
+    : []
+}
+
+function mergeByProviderModel(...modelGroups) {
+  return [...new Map(modelGroups.flat().filter(Boolean).map((model) => [`${model.provider}:${model.modelId}`, model])).values()]
+}
+
+function lastKnownGoodModels(provider, fallbackModels, reason) {
+  const previous = previousModelsForProvider(provider)
+  const seed = previous.length > 0 ? previous : fallbackModels
+  return mergeByProviderModel(seed, fallbackModels).map((model) => ({
+    ...model,
+    source: previous.length > 0 ? 'last_known_good' : model.source,
+    discoverySource: previous.length > 0 ? 'last_known_good' : model.discoverySource,
+    docsKnown: model.docsKnown ?? true,
+    liveDiscovered: false,
+    liveDiscoverySkipped: true,
+    lastDiscoverySkipReason: reason,
+  }))
+}
+
+function skippedProviderResult(provider, fallbackModels, reason, overrides = {}) {
+  const truth = PROVIDER_TRUTH[provider]
+  const models = lastKnownGoodModels(provider, fallbackModels, reason)
+  const previousCount = previousModelsForProvider(provider).length
+  return {
+    ...truth,
+    apiKeyPresent: Boolean(truth.apiKeyEnvName && process.env[truth.apiKeyEnvName]),
+    mode: LIVE ? 'live_model_list' : 'safe_static',
+    source: previousCount > 0 ? 'last_known_good' : 'docs_fallback',
+    models,
+    totalDiscovered: models.length,
+    liveDiscoveryAttempted: LIVE,
+    liveDiscoverySucceeded: false,
+    liveDiscoverySkipped: true,
+    liveDiscoverySkipReason: reason,
+    docsFallbackUsed: fallbackModels.length > 0,
+    providerUniverseKnown: false,
+    providerUniversePartiallyKnown: true,
+    publicDocsUniverseKnown: true,
+    authenticatedUniverseKnown: false,
+    endpointSource: truth.modelsEndpoint,
+    error: null,
+    returnedModelCount: 0,
+    publicEndpointModelCount: 0,
+    staticFallbackCount: fallbackModels.length,
+    docsFallbackCount: fallbackModels.length,
+    previousInventoryCount: previousCount,
+    lastKnownGoodCount: models.length,
+    effectiveCatalogueCount: models.length,
+    discoveredAt: now,
+    notes: previousCount > 0
+      ? [`${provider} discovery skipped (${reason}); preserved previous last-known-good inventory and supplemented docs fallback metadata.`]
+      : [`${provider} discovery skipped (${reason}); no previous inventory exists, so docs/static fallback seeded a partial catalogue.`],
+    ...overrides,
+  }
+}
+
+function failedProviderResult(provider, fallbackModels, error, overrides = {}) {
+  const result = skippedProviderResult(provider, fallbackModels, 'discovery_failed', overrides)
+  return {
+    ...result,
+    liveDiscoverySkipped: false,
+    error: sanitizeError(error),
+    notes: previousModelsForProvider(provider).length > 0
+      ? [`${provider} discovery failed; preserved previous last-known-good inventory and supplemented docs fallback metadata.`]
+      : [`${provider} discovery failed; no previous inventory exists, so docs/static fallback seeded a partial catalogue.`],
+  }
 }
 
 function inferCapabilities(modelId, category = '') {
@@ -380,12 +483,12 @@ function genxOverrides(modelId, upstreamProvider, category, transportProfile) {
       providerCapabilityKnown: true,
       docsKnown: true,
       endpointShapeKnown: true,
-      requestShapeKnown: false,
-      responseShapeKnown: false,
-      providerClientExists: false,
-      workerExecutorExists: false,
-      artifactPersistenceExists: false,
-      catalogueOnlyReason: 'GenX music capability is known from official docs/catalogue. Execution is blocked until GenX music request/response/artifact client and worker executor are wired.',
+      requestShapeKnown: true,
+      responseShapeKnown: true,
+      providerClientExists: true,
+      workerExecutorExists: true,
+      artifactPersistenceExists: true,
+      catalogueOnlyReason: '',
     })
   }
 
@@ -569,87 +672,44 @@ async function liveDiscoverProvider(provider) {
   const truth = PROVIDER_TRUTH[provider]
   const fallbackModels = DOCS_FALLBACK_MODELS.filter((model) => model.provider === provider)
   if (provider === 'mimo') {
-    return {
-      ...truth,
-      mode: LIVE ? 'live_model_list' : 'safe_static',
-      source: 'docs_fallback',
-      models: fallbackModels,
-      totalDiscovered: fallbackModels.length,
+    return skippedProviderResult(provider, fallbackModels, 'coding_agent_only_not_backend_runtime', {
       liveDiscoveryAttempted: false,
-      liveDiscoverySucceeded: false,
-      liveDiscoverySkipped: true,
-      liveDiscoverySkipReason: 'coding_agent_only_not_backend_runtime',
-      docsFallbackUsed: true,
-      providerUniverseKnown: false,
-      providerUniversePartiallyKnown: true,
-      publicDocsUniverseKnown: true,
-      authenticatedUniverseKnown: false,
-      endpointSource: truth.modelsEndpoint,
-      error: null,
-      returnedModelCount: 0,
-      staticFallbackCount: fallbackModels.length,
-      docsFallbackCount: fallbackModels.length,
-      effectiveCatalogueCount: fallbackModels.length,
-      discoveredAt: now,
       notes: ['MiMo is docs-known but policy-disabled for backend runtime. No MiMo endpoint is called.'],
-    }
+    })
   }
   if (provider === 'deepinfra') {
     if (TEST_MODE) {
-      return {
-        ...truth,
-        apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
-        mode: LIVE ? 'live_model_list' : 'safe_static',
-        source: 'docs_fallback',
-        models: fallbackModels,
-        totalDiscovered: fallbackModels.length,
-        liveDiscoveryAttempted: LIVE,
-        liveDiscoverySucceeded: false,
-        liveDiscoverySkipped: !LIVE,
-        liveDiscoverySkipReason: LIVE ? 'test_mode_public_discovery_disabled' : 'safe_static_test_mode',
+      return skippedProviderResult(provider, fallbackModels, LIVE ? 'test_mode_public_discovery_disabled' : 'safe_static_test_mode', {
         publicDiscoveryAttempted: false,
         publicDiscoverySucceeded: false,
         publicEndpointUsed: false,
-        docsFallbackUsed: true,
-        providerUniverseKnown: false,
-        providerUniversePartiallyKnown: true,
-        publicDocsUniverseKnown: true,
-        authenticatedUniverseKnown: false,
-        endpointSource: truth.modelsEndpoint,
-        error: null,
-        returnedModelCount: 0,
-        publicEndpointModelCount: 0,
-        staticFallbackCount: fallbackModels.length,
-        docsFallbackCount: fallbackModels.length,
-        effectiveCatalogueCount: fallbackModels.length,
-        discoveredAt: now,
-        notes: ['Test-mode safe discovery uses DeepInfra docs/static fallback only; no public provider call was made.'],
-      }
+      })
     }
     try {
       const records = await fetchModelList(truth.modelsEndpoint)
       const publicModels = records.map((record) => publicEndpointModel('deepinfra', record)).filter((model) => model.modelId)
       const publicDiscoverySucceeded = publicModels.length > 0
       const merged = publicDiscoverySucceeded
-        ? [...new Map([...publicModels, ...fallbackModels].map((model) => [`${model.provider}:${model.modelId}`, model])).values()]
-        : fallbackModels
+        ? mergeByProviderModel(lastKnownGoodModels(provider, fallbackModels, 'public_discovery_supplemented'), publicModels)
+        : lastKnownGoodModels(provider, fallbackModels, 'public_discovery_returned_zero_models')
+      const previousCount = previousModelsForProvider(provider).length
       return {
         ...truth,
         apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
         mode: LIVE ? 'live_model_list' : 'safe_static',
-        source: publicDiscoverySucceeded ? 'docs_fallback' : 'docs_fallback',
+        source: publicDiscoverySucceeded ? 'public_endpoint_with_last_known_good' : previousCount > 0 ? 'last_known_good' : 'docs_fallback',
         models: merged,
         totalDiscovered: merged.length,
         liveDiscoveryAttempted: LIVE,
         liveDiscoverySucceeded: publicDiscoverySucceeded,
-        liveDiscoverySkipped: false,
-        liveDiscoverySkipReason: null,
+        liveDiscoverySkipped: !publicDiscoverySucceeded,
+        liveDiscoverySkipReason: publicDiscoverySucceeded ? null : 'public_discovery_returned_zero_models',
         publicDiscoveryAttempted: true,
         publicDiscoverySucceeded,
         publicEndpointUsed: publicDiscoverySucceeded,
-        docsFallbackUsed: !publicDiscoverySucceeded,
-        providerUniverseKnown: publicDiscoverySucceeded,
-        providerUniversePartiallyKnown: !publicDiscoverySucceeded,
+        docsFallbackUsed: true,
+        providerUniverseKnown: false,
+        providerUniversePartiallyKnown: true,
         publicDocsUniverseKnown: publicDiscoverySucceeded,
         authenticatedUniverseKnown: false,
         endpointSource: truth.modelsEndpoint,
@@ -657,135 +717,47 @@ async function liveDiscoverProvider(provider) {
         returnedModelCount: publicModels.length,
         publicEndpointModelCount: publicModels.length,
         staticFallbackCount: fallbackModels.length,
-        docsFallbackCount: publicDiscoverySucceeded ? 0 : fallbackModels.length,
+        docsFallbackCount: fallbackModels.length,
+        previousInventoryCount: previousCount,
+        lastKnownGoodCount: merged.length - publicModels.length,
         effectiveCatalogueCount: merged.length,
         discoveredAt: now,
         notes: publicDiscoverySucceeded
-          ? ['DeepInfra public model-list discovery succeeded. Models are catalogue truth only unless executor/client/readiness gates are satisfied.']
+          ? ['DeepInfra public model-list discovery succeeded and was merged with previous last-known-good inventory to avoid destructive catalogue shrinkage. Models are catalogue truth only unless executor/client/readiness gates are satisfied.']
           : ['DeepInfra public model-list returned no usable models; docs fallback remains partial truth.'],
       }
     } catch (error) {
       if (STRICT) {
-        return {
-          ...truth,
-          apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
-          mode: LIVE ? 'live_model_list' : 'safe_static',
-          source: 'docs_fallback',
-          models: fallbackModels,
-          totalDiscovered: fallbackModels.length,
-          liveDiscoveryAttempted: LIVE,
-          liveDiscoverySucceeded: false,
-          liveDiscoverySkipped: false,
-          liveDiscoverySkipReason: null,
+        return failedProviderResult(provider, fallbackModels, error, {
           publicDiscoveryAttempted: true,
           publicDiscoverySucceeded: false,
           publicEndpointUsed: false,
-          docsFallbackUsed: true,
-          providerUniverseKnown: false,
-          providerUniversePartiallyKnown: true,
-          publicDocsUniverseKnown: true,
-          authenticatedUniverseKnown: false,
-          endpointSource: truth.modelsEndpoint,
-          error: sanitizeError(error),
-          returnedModelCount: 0,
-          publicEndpointModelCount: 0,
-          staticFallbackCount: fallbackModels.length,
-          docsFallbackCount: fallbackModels.length,
-          effectiveCatalogueCount: fallbackModels.length,
-          discoveredAt: now,
           notes: ['DeepInfra public model-list discovery failed; strict mode should fail this provider.'],
-        }
+        })
       }
-      return {
-        ...truth,
-        apiKeyPresent: Boolean(process.env.DEEPINFRA_API_KEY),
-        mode: LIVE ? 'live_model_list' : 'safe_static',
-        source: 'docs_fallback',
-        models: fallbackModels,
-        totalDiscovered: fallbackModels.length,
-        liveDiscoveryAttempted: LIVE,
-        liveDiscoverySucceeded: false,
-        liveDiscoverySkipped: false,
-        liveDiscoverySkipReason: null,
+      return failedProviderResult(provider, fallbackModels, error, {
         publicDiscoveryAttempted: true,
         publicDiscoverySucceeded: false,
         publicEndpointUsed: false,
-        docsFallbackUsed: true,
-        providerUniverseKnown: false,
-        providerUniversePartiallyKnown: true,
-        publicDocsUniverseKnown: true,
-        authenticatedUniverseKnown: false,
-        endpointSource: truth.modelsEndpoint,
-        error: sanitizeError(error),
-        returnedModelCount: 0,
-        publicEndpointModelCount: 0,
-        staticFallbackCount: fallbackModels.length,
-        docsFallbackCount: fallbackModels.length,
-        effectiveCatalogueCount: fallbackModels.length,
-        discoveredAt: now,
-        notes: ['DeepInfra public model-list discovery failed safely; docs fallback remains partial truth.'],
-      }
+      })
     }
   }
   if (!LIVE) {
-    return {
-      ...truth,
-      apiKeyPresent: Boolean(truth.apiKeyEnvName && process.env[truth.apiKeyEnvName]),
-      mode: 'safe_static',
-      source: 'docs_fallback',
-      models: fallbackModels,
-      totalDiscovered: fallbackModels.length,
+    return skippedProviderResult(provider, fallbackModels, 'safe_static_mode', {
       liveDiscoveryAttempted: false,
-      liveDiscoverySucceeded: false,
-      liveDiscoverySkipped: true,
-      liveDiscoverySkipReason: 'safe_static_mode',
-      docsFallbackUsed: true,
       docsFallbackRepresentative: provider === 'together',
       docsFallbackComplete: provider === 'genx',
-      providerUniverseKnown: false,
-      providerUniversePartiallyKnown: true,
-      publicDocsUniverseKnown: true,
-      authenticatedUniverseKnown: false,
-      endpointSource: truth.modelsEndpoint,
-      error: null,
-      returnedModelCount: 0,
-      staticFallbackCount: fallbackModels.length,
-      docsFallbackCount: fallbackModels.length,
-      effectiveCatalogueCount: fallbackModels.length,
-      discoveredAt: now,
-      notes: ['Safe discovery uses docs/static fallback only; no authenticated provider calls were made.'],
-    }
+    })
   }
 
   const apiKey = truth.apiKeyEnvName ? process.env[truth.apiKeyEnvName] : ''
   if (truth.modelsEndpointRequiresAuth && !apiKey) {
-    return {
-      ...truth,
+    return skippedProviderResult(provider, fallbackModels, `${truth.apiKeyEnvName}_missing`, {
       apiKeyPresent: false,
-      mode: 'live_model_list',
-      source: 'docs_fallback',
-      models: fallbackModels,
-      totalDiscovered: fallbackModels.length,
       liveDiscoveryAttempted: false,
-      liveDiscoverySucceeded: false,
-      liveDiscoverySkipped: true,
-      liveDiscoverySkipReason: `${truth.apiKeyEnvName}_missing`,
-      docsFallbackUsed: true,
       docsFallbackRepresentative: provider === 'together',
       docsFallbackComplete: provider === 'genx',
-      providerUniverseKnown: false,
-      providerUniversePartiallyKnown: true,
-      publicDocsUniverseKnown: true,
-      authenticatedUniverseKnown: false,
-      endpointSource: truth.modelsEndpoint,
-      error: null,
-      returnedModelCount: 0,
-      staticFallbackCount: fallbackModels.length,
-      docsFallbackCount: fallbackModels.length,
-      effectiveCatalogueCount: fallbackModels.length,
-      discoveredAt: now,
-      notes: [`${provider} live discovery skipped because ${truth.apiKeyEnvName} is missing. Docs fallback remains partial truth.`],
-    }
+    })
   }
 
   try {
@@ -832,31 +804,10 @@ async function liveDiscoverProvider(provider) {
       notes: ['Live discovery called provider model-list endpoints only. No generation calls or artifacts were created.'],
     }
   } catch (error) {
-    return {
-      ...truth,
+    return failedProviderResult(provider, fallbackModels, error, {
       apiKeyPresent: Boolean(apiKey),
-      mode: 'live_model_list',
-      source: 'docs_fallback',
-      models: fallbackModels,
-      totalDiscovered: fallbackModels.length,
       liveDiscoveryAttempted: true,
-      liveDiscoverySucceeded: false,
-      liveDiscoverySkipped: false,
-      liveDiscoverySkipReason: null,
-      docsFallbackUsed: true,
-      providerUniverseKnown: false,
-      providerUniversePartiallyKnown: true,
-      publicDocsUniverseKnown: true,
-      authenticatedUniverseKnown: false,
-      endpointSource: truth.modelsEndpoint,
-      error: sanitizeError(error),
-      returnedModelCount: 0,
-      staticFallbackCount: fallbackModels.length,
-      docsFallbackCount: fallbackModels.length,
-      effectiveCatalogueCount: fallbackModels.length,
-      discoveredAt: now,
-      notes: ['Live model-list discovery failed safely; docs fallback remains partial truth.'],
-    }
+    })
   }
 }
 
@@ -993,9 +944,20 @@ const report = {
   },
 }
 
-fs.writeFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), `${JSON.stringify(report, null, 2)}\n`)
-fs.writeFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), `${JSON.stringify(models, null, 2)}\n`)
-fs.writeFileSync(path.join(ROOT, 'packages/core/src/generated/provider-model-catalogue.generated.json'), `${JSON.stringify(models, null, 2)}\n`)
+const providerTotal = Object.values(countsByProvider).reduce((sum, count) => sum + count, 0)
+if (providerTotal !== models.length) {
+  throw new Error(`provider totals (${providerTotal}) do not equal model catalogue total (${models.length})`)
+}
+if (report.totalEffectiveCatalogueModels !== models.length || report.totals.discovered !== models.length) {
+  throw new Error('discovery report totals do not match generated model catalogue total')
+}
+if (models.length === 0) {
+  throw new Error('refusing to write empty model catalogue')
+}
+
+atomicWriteJson(OUTPUT_PATHS.report, report)
+atomicWriteJson(OUTPUT_PATHS.discovered, models)
+atomicWriteJson(OUTPUT_PATHS.generated, models)
 
 console.log('Provider model discovery complete')
 console.log(`Mode: ${report.discoveryMode}${STRICT ? ' strict' : ''}`)

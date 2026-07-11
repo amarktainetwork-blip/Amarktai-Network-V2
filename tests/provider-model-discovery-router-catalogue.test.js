@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'child_process'
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import {
   PROVIDER_KEYS,
@@ -84,6 +85,30 @@ const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'genxlm-voice-v1',
 ]
 
+function createDiscoveryOutputRoot() {
+  const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'amarktai-discovery-'))
+  fs.mkdirSync(path.join(outputRoot, 'packages/core/src/generated'), { recursive: true })
+  return outputRoot
+}
+
+function runDiscovery(args = [], env = DISCOVERY_TEST_ENV, outputRoot = createDiscoveryOutputRoot()) {
+  const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', ...args], {
+    cwd: ROOT,
+    env: { ...env, AMARKTAI_DISCOVERY_OUTPUT_ROOT: outputRoot },
+    encoding: 'utf-8',
+  })
+  return {
+    outputRoot,
+    output,
+    report: JSON.parse(fs.readFileSync(path.join(outputRoot, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8')),
+    catalogue: JSON.parse(fs.readFileSync(path.join(outputRoot, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8')),
+  }
+}
+
+function fileHash(filePath) {
+  return fs.readFileSync(filePath, 'utf8')
+}
+
 describe('provider model discovery and router catalogue rebuild', () => {
   const originalFetch = global.fetch
 
@@ -128,9 +153,8 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('default discovery mode makes no live calls and writes reports', () => {
-    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs'], { cwd: ROOT, env: DISCOVERY_TEST_ENV, encoding: 'utf-8' })
+    const { output, report } = runDiscovery()
     expect(output).toContain('Mode: safe_static')
-    const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryAttempted).toBe(false)
     expect(report.mode).toBe('safe_static')
     expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
@@ -139,14 +163,14 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
     expect(report.deepinfraPublicDiscoverySucceeded).toBe(false)
     expect(report.totalPublicEndpointModels).toBe(0)
-    expect(report.modelsExecutableNow).toBe(5)
+    expect(report.modelsExecutableNow).toBe(7)
     expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
     expect(report.countsByProvider.genx).toBe(61)
     expect(report.togetherDocsFallbackComplete).toBe(false)
     expect(report.togetherProviderUniverseKnown).toBe(false)
     expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
     expect(report.genxMusicCapabilityKnown).toBe(true)
-    expect(report.genxMusicExecutionReady).toBe(false)
+    expect(report.genxMusicExecutionReady).toBe(true)
     expect(report.mimoPolicyRestricted).toBe(true)
   }, 30000)
 
@@ -162,13 +186,13 @@ describe('provider model discovery and router catalogue rebuild', () => {
       expect(model).toMatchObject({
         provider: 'genx',
         executionProvider: 'genx',
-        discoverySource: 'docs_fallback',
         docsKnown: true,
         liveDiscovered: false,
         providerCapabilityKnown: true,
         endpointSource: 'GenX docs/static fallback /api/v1/models',
         authRequired: true,
       })
+      expect(['docs_fallback', 'last_known_good']).toContain(model.discoverySource)
     }
   })
 
@@ -191,7 +215,8 @@ describe('provider model discovery and router catalogue rebuild', () => {
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     delete env.MIMO_API_KEY
-    expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1' }, encoding: 'utf-8' })).toThrow()
+    const outputRoot = createDiscoveryOutputRoot()
+    expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1', AMARKTAI_DISCOVERY_OUTPUT_ROOT: outputRoot }, encoding: 'utf-8' })).toThrow()
     const source = fs.readFileSync(path.join(ROOT, 'scripts/discover-provider-models.mjs'), 'utf-8')
     expect(source).toContain("const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']")
   }, 30000)
@@ -202,11 +227,80 @@ describe('provider model discovery and router catalogue rebuild', () => {
     delete env.GROQ_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
-    const output = execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1' }, encoding: 'utf-8' })
+    const { output, report } = runDiscovery(['--live'], { ...env, AMARKTAI_DISCOVERY_TEST: '1' })
     expect(output).toContain('Live discovery is partial')
-    const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     expect(report.liveDiscoveryPartial).toBe(true)
     expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
+  }, 30000)
+
+  it('discovery tests write only temporary output files, not committed catalogues', () => {
+    const files = [
+      path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'),
+      path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'),
+      path.join(ROOT, 'packages/core/src/generated/provider-model-catalogue.generated.json'),
+    ]
+    const before = Object.fromEntries(files.map((file) => [file, fileHash(file)]))
+    runDiscovery()
+    const after = Object.fromEntries(files.map((file) => [file, fileHash(file)]))
+    expect(after).toEqual(before)
+  }, 30000)
+
+  it('skipped discovery preserves previous last-known-good provider inventory', () => {
+    const outputRoot = createDiscoveryOutputRoot()
+    const previousDeepInfraModel = {
+      provider: 'deepinfra',
+      executionProvider: 'deepinfra',
+      upstreamProvider: 'deepinfra',
+      modelId: 'deepinfra/previous-only-model',
+      displayName: 'Previous Only Model',
+      rawProviderType: 'text',
+      category: 'text',
+      providerCategory: 'text',
+      source: 'live_endpoint',
+      discoverySource: 'live_endpoint',
+      docsKnown: false,
+      liveDiscovered: true,
+      liveDiscoverySkipped: false,
+      lastDiscoveredAt: '2026-01-01T00:00:00.000Z',
+      endpointSource: 'previous live discovery',
+      endpointFamily: 'previous live discovery',
+      inferredCapabilities: ['chat'],
+      capabilities: ['chat'],
+      modalities: ['text'],
+      modalitiesIn: ['text'],
+      modalitiesOut: ['text'],
+      artifactOutput: false,
+      artifactOutputKnown: false,
+      artifactPersistenceExists: true,
+      authRequired: false,
+      providerCapabilityKnown: true,
+      policyRestrictedByApp: false,
+      policyBlockedReason: '',
+      endpointShapeKnown: true,
+      requestShapeKnown: true,
+      responseShapeKnown: true,
+      providerClientExists: false,
+      workerExecutorExists: false,
+      transportProfile: 'openai_chat_sse',
+      executable: false,
+      executableNow: false,
+      executableBlockers: ['provider_client_missing', 'worker_executor_missing'],
+      catalogueOnlyReason: 'provider_client_missing, worker_executor_missing',
+      blockedReason: 'provider_client_missing, worker_executor_missing',
+    }
+    const generatedPath = path.join(outputRoot, 'packages/core/src/generated/provider-model-catalogue.generated.json')
+    fs.writeFileSync(generatedPath, `${JSON.stringify([previousDeepInfraModel], null, 2)}\n`)
+
+    const { report, catalogue } = runDiscovery([], DISCOVERY_TEST_ENV, outputRoot)
+    const preserved = catalogue.find((model) => model.provider === 'deepinfra' && model.modelId === 'deepinfra/previous-only-model')
+
+    expect(preserved).toMatchObject({
+      source: 'last_known_good',
+      discoverySource: 'last_known_good',
+      lastDiscoverySkipReason: 'safe_static_test_mode',
+    })
+    expect(report.countsByProvider.deepinfra).toBeGreaterThan(10)
+    expect(report.totalEffectiveCatalogueModels).toBe(catalogue.length)
   }, 30000)
 
   it('Together live discovery maps every returned model type without assuming execution', async () => {
@@ -328,7 +422,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(live.models[0].modelId).toBe('llama-test-model')
   })
 
-  it('GenX discovery checks for Lyria-like music models without assuming execution', async () => {
+  it('GenX discovery reflects existing Lyria music client, worker, and artifact wiring', async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -349,9 +443,12 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(lyria).toBeDefined()
     expect(lyria.inferredCapabilities).toContain('music_generation')
     expect(lyria.endpointShapeKnown).toBe(true)
-    expect(lyria.providerClientExists).toBe(false)
-    expect(lyria.workerExecutorExists).toBe(false)
-    expect(lyria.executableNow).toBe(false)
+    expect(lyria.requestShapeKnown).toBe(true)
+    expect(lyria.responseShapeKnown).toBe(true)
+    expect(lyria.providerClientExists).toBe(true)
+    expect(lyria.workerExecutorExists).toBe(true)
+    expect(lyria.artifactPersistenceExists).toBe(true)
+    expect(lyria.executableNow).toBe(true)
   })
 
   it('MiMo remains coding_tools_only and never executable', async () => {
@@ -387,7 +484,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(catalogue.filter((model) => model.provider === 'groq').some((model) => /grok/i.test(model.modelId))).toBe(false)
   })
 
-  it('GenX docs fallback includes Lyria and blocks music for wiring, not provider absence', () => {
+  it('GenX docs fallback includes Lyria as source-executable without claiming local live proof', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
     const clip = catalogue.find((model) => model.provider === 'genx' && model.modelId === 'lyria-3-clip-preview')
@@ -396,13 +493,18 @@ describe('provider model discovery and router catalogue rebuild', () => {
       upstreamProvider: 'google',
       providerCapabilityKnown: true,
       docsKnown: true,
-      executableNow: false,
+      requestShapeKnown: true,
+      responseShapeKnown: true,
+      providerClientExists: true,
+      workerExecutorExists: true,
+      artifactPersistenceExists: true,
+      executableNow: true,
       transportProfile: 'async_job_poll',
     })
-    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: false })
+    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: true })
     expect(report.genxMusicDiscovery.lyriaClipDiscovered).toBe(true)
     expect(report.genxMusicDiscovery.lyriaProDiscovered).toBe(true)
-    expect(report.genxMusicDiscovery.genxMusicBlockers).toEqual(expect.arrayContaining(['request_shape_missing', 'response_shape_missing', 'provider_client_missing', 'worker_executor_missing', 'artifact_persistence_missing']))
+    expect(report.genxMusicDiscovery.genxMusicBlockers).toEqual([])
     expect(JSON.stringify(report)).not.toContain('provider_lacks_music')
   })
 
@@ -443,7 +545,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     const readiness = buildCapabilityReadiness(DISCOVERED_PROVIDER_MODELS)
     const music = readiness.find((item) => item.capability === 'music_generation')
     expect(music.modelDiscovered).toBe(true)
-    expect(music.executableNow).toBe(false)
+    expect(music.executableNow).toBe(true)
   })
 
   it('musicGenerationReady is true when client, worker, and artifact path are wired', () => {

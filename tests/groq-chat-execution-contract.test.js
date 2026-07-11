@@ -174,13 +174,12 @@ describe('Groq executor — client contract', () => {
 
     await executeWithProvider(makePayload())
 
-    // groqChat should be called without a model (uses default internally)
+    // groqChat receives the Brain Router's internal model, not any app-supplied model.
     expect(mockGroqChat).toHaveBeenCalledWith(
       expect.objectContaining({ prompt: 'Hello world' })
     )
-    // No model field in the request
     const callArgs = mockGroqChat.mock.calls[0][0]
-    expect(callArgs.model).toBeUndefined()
+    expect(callArgs.model).toBe(GROQ_DEFAULT_MODEL)
   })
 
   it('does not accept app-supplied provider/model override', async () => {

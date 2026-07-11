@@ -180,15 +180,17 @@ describe('GenX video executor', () => {
     expect(result.provider).toBe('genx')
     expect(result.model).toBe('grok-imagine-video')
     expect(providerMocks.resolveGenxVideoModel).toHaveBeenCalledWith({
+      model: 'seedance-v1-fast',
       providerDefaultModel: 'seedance-v1-fast',
       providerFallbackModel: '',
       providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
     })
     expect(providerMocks.genxGenerateVideo).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'seedance-v1-fast',
       providerDefaultModel: 'seedance-v1-fast',
       providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
     }))
-    expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBeUndefined()
+    expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBe('seedance-v1-fast')
   })
 
   it('saves a video artifact and returns provider job metadata in output', async () => {
@@ -276,9 +278,9 @@ describe('GenX video executor', () => {
 
     expect(result.success).toBe(false)
     expect(result.provider).toBe('genx')
-    expect(result.model).toBe('grok-imagine-video')
+    expect(result.model).toBe('seedance-v1-fast')
     expect(result.error).toContain('provider=genx')
-    expect(result.error).toContain('selectedModel=grok-imagine-video')
+    expect(result.error).toContain('selectedModel=seedance-v1-fast')
     expect(result.error).toContain('providerJobId=job-remote')
     expect(result.error).toContain('pollAttempt=41')
     expect(result.error).toContain('httpStatus=500')

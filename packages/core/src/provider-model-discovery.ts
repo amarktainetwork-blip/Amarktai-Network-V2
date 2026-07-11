@@ -8,6 +8,7 @@ export const MODEL_DISCOVERY_SOURCES = [
   'static_verified',
   'static_repo',
   'live_discovered',
+  'last_known_good',
   'manual_planned',
   'blocked_policy',
 ] as const

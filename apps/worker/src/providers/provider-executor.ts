@@ -103,6 +103,10 @@ function readBool(input: Record<string, unknown> | undefined, key: string): bool
   return typeof value === 'boolean' ? value : undefined
 }
 
+function normalizeSelectedModel(model: string | null | undefined): string | undefined {
+  return typeof model === 'string' && model.trim() ? model.trim() : undefined
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -366,7 +370,7 @@ async function recordMusicUsage(appSlug: string, model: string): Promise<void> {
   })
 }
 
-async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeGroqChat(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
 
   try {
@@ -376,6 +380,7 @@ async function executeGroqChat(payload: WorkerJobData): Promise<ProcessorResult>
     const result = await groqChat({
       prompt: payload.prompt,
       apiKey,
+      model: selectedModel,
     })
 
     if (!result.content || !result.content.trim()) {
@@ -419,7 +424,7 @@ const TEXT_CAPABILITY_SYSTEM_PROMPTS: Partial<Record<CapabilityKey, (payload: Wo
   },
 }
 
-async function executeGroqTextCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeGroqTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
 
   try {
@@ -433,6 +438,7 @@ async function executeGroqTextCapability(payload: WorkerJobData): Promise<Proces
     const result = await groqChat({
       prompt: payload.prompt,
       apiKey,
+      model: selectedModel,
       systemPrompt,
     })
 
@@ -454,7 +460,7 @@ async function executeGroqTextCapability(payload: WorkerJobData): Promise<Proces
   }
 }
 
-async function executeDeepInfraTextCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeDeepInfraTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
 
   try {
@@ -470,7 +476,7 @@ async function executeDeepInfraTextCapability(payload: WorkerJobData): Promise<P
       prompt: payload.prompt,
       apiKey,
       baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: providerStatus.defaultModel,
+      providerDefaultModel: selectedModel || providerStatus.defaultModel,
       systemPrompt,
     })
 
@@ -492,9 +498,9 @@ async function executeDeepInfraTextCapability(payload: WorkerJobData): Promise<P
   }
 }
 
-async function executeTextCapabilityWithFallback(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeTextCapabilityWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   try {
-    return await executeGroqTextCapability(payload)
+    return await executeGroqTextCapability(payload, selectedModel)
   } catch (err) {
     if (!(err instanceof ProviderConfigError)) throw err
   }
@@ -521,9 +527,9 @@ async function executeTextCapabilityWithFallback(payload: WorkerJobData): Promis
   }
 }
 
-async function executeChatWithFallback(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeChatWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   try {
-    return await executeGroqChat(payload)
+    return await executeGroqChat(payload, selectedModel)
   } catch (err) {
     if (!(err instanceof ProviderConfigError)) throw err
   }
@@ -552,7 +558,7 @@ async function executeChatWithFallback(payload: WorkerJobData): Promise<Processo
 
 // ── Together Image Generation ────────────────────────────────────────────────
 
-async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeTogetherImage(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
 
   try {
@@ -564,6 +570,7 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
     const result = await togetherGenerateImage({
       prompt: payload.prompt,
       apiKey,
+      model: selectedModel,
       providerDefaultModel: providerStatus.defaultModel,
       width: readNumber(payload.input, 'width'),
       height: readNumber(payload.input, 'height'),
@@ -635,7 +642,7 @@ async function executeTogetherImage(payload: WorkerJobData): Promise<ProcessorRe
   }
 }
 
-async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
   let model = 'lyria-3-clip-preview'
 
@@ -649,6 +656,7 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
     } = await import('@amarktai/providers')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
     model = resolveGenxMusicModel({
+      model: selectedModel,
       providerDefaultModel: providerStatus.defaultModel || undefined,
       providerFallbackModel: providerStatus.fallbackModel || undefined,
       providerAvailableModels,
@@ -724,6 +732,7 @@ async function executeGenxMusic(payload: WorkerJobData): Promise<ProcessorResult
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
+        model: selectedModel,
         providerDefaultModel: providerStatus.defaultModel || undefined,
         providerFallbackModel: providerStatus.fallbackModel || undefined,
         providerAvailableModels,
@@ -951,7 +960,7 @@ async function pollAndDownloadMusic(
   }
 }
 
-async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult> {
+async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
   let model = 'seedance-v1-fast'
 
@@ -964,6 +973,7 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     const { saveArtifact } = await import('@amarktai/artifacts')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
     model = resolveGenxVideoModel({
+      model: selectedModel,
       providerDefaultModel: providerStatus.defaultModel,
       providerFallbackModel: providerStatus.fallbackModel,
       providerAvailableModels,
@@ -974,6 +984,8 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     }).catch(() => null)
     const jobMetadata = safeParseJsonObject(job?.metadataJson)
     const existingRemoteJobId = readProviderJobIdFromMetadata(jobMetadata)
+    const existingRemoteModel = readString(jobMetadata, 'genxProviderModel')
+    if (existingRemoteModel) model = existingRemoteModel
 
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
     if (existingArtifact) {
@@ -1019,6 +1031,7 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
+        model: selectedModel,
         providerDefaultModel: providerStatus.defaultModel || undefined,
         providerFallbackModel: providerStatus.fallbackModel || undefined,
         providerAvailableModels,
@@ -1176,14 +1189,16 @@ async function executeWithSelectedProvider(
   decision: BrainRouterDecision,
   routingMode: RoutingMode,
 ): Promise<ProcessorResult> {
+  const selectedModel = normalizeSelectedModel(decision.selectedModel)
+
   try {
     if (provider === 'groq' && capability === 'chat') {
-      const result = await executeChatWithFallback(payload)
+      const result = await executeChatWithFallback(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
     if (provider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      const result = await executeTextCapabilityWithFallback(payload)
+      const result = await executeTextCapabilityWithFallback(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
@@ -1196,22 +1211,22 @@ async function executeWithSelectedProvider(
           metadata: { brainRouter: { routingMode, selectedProvider: 'deepinfra', executionAllowed: false, truth: decision.truth } },
         }
       }
-      const result = await executeDeepInfraTextCapability(payload)
+      const result = await executeDeepInfraTextCapability(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
     if (provider === 'together' && capability === 'image_generation') {
-      const result = await executeTogetherImage(payload)
+      const result = await executeTogetherImage(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
     if (provider === 'genx' && capability === 'video_generation') {
-      const result = await executeGenxVideo(payload)
+      const result = await executeGenxVideo(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
     if (provider === 'genx' && capability === 'music_generation') {
-      const result = await executeGenxMusic(payload)
+      const result = await executeGenxMusic(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
   } catch (err) {

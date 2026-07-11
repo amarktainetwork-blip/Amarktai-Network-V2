@@ -203,7 +203,7 @@ describe('Together image executor', () => {
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 
-  it('uses the DB Together default model, not a user-supplied model', async () => {
+  it('uses the Brain Router model and DB Together default, not a user-supplied model', async () => {
     await executeWithProvider(makePayload({
       input: { model: 'user-model', modelOverride: 'user-model-2' },
       model: 'user-model-3',
@@ -211,6 +211,7 @@ describe('Together image executor', () => {
 
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledWith(
       expect.objectContaining({
+        model: 'black-forest-labs/FLUX.1-schnell',
         providerDefaultModel: 'db-together-image-model',
       }),
     )
@@ -235,7 +236,7 @@ describe('Together image executor', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('together')
-    expect(result.model).toBe('db-together-image-model')
+    expect(result.model).toBe('black-forest-labs/FLUX.1-schnell')
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledTimes(1)
   })
 
@@ -405,7 +406,7 @@ describe('Execution routing gate', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('together')
-    expect(result.model).toBe('db-together-image-model')
+    expect(result.model).toBe('black-forest-labs/FLUX.1-schnell')
   })
 
   it('non-image capabilities do not execute Together', async () => {
@@ -454,7 +455,7 @@ describe('Artifact persistence and worker completion', () => {
         type: 'image',
         subType: 'image_generation',
         provider: 'together',
-        model: 'db-together-image-model',
+        model: 'black-forest-labs/FLUX.1-schnell',
         traceId: 'trace-image-001',
         mimeType: 'image/png',
       }),
@@ -473,7 +474,7 @@ describe('Artifact persistence and worker completion', () => {
     expect(input.metadata).toMatchObject({
       capability: 'image_generation',
       provider: 'together',
-      model: 'db-together-image-model',
+      model: 'black-forest-labs/FLUX.1-schnell',
       width: 1024,
       height: 1024,
     })
@@ -504,7 +505,7 @@ describe('Artifact persistence and worker completion', () => {
 
     expect(completedUpdate).toBeDefined()
     expect(completedUpdate[0].data.provider).toBe('together')
-    expect(completedUpdate[0].data.model).toBe('db-together-image-model')
+    expect(completedUpdate[0].data.model).toBe('black-forest-labs/FLUX.1-schnell')
     expect(completedUpdate[0].data.artifactId).toBe('artifact-image-001')
     expect(completedUpdate[0].data.progress).toBe(100)
     expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)
