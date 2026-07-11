@@ -95,7 +95,7 @@ const db = vi.hoisted(() => {
     const parent = jobs.find((job) => job.id === parentJobId)
     if (!parent) return null
     const sceneJobs = jobs
-      .filter((job) => job.parentJobId === parent.id)
+      .filter((job) => job.parentJobId === parent.id && job.capability === 'video_generation')
       .sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
     const metadata = JSON.parse(parent.metadataJson || '{}')
     const completed = sceneJobs.filter((job) => job.status === 'completed')
@@ -249,7 +249,9 @@ describe('durable long-form orchestration', () => {
     expect(response.statusCode).toBe(202)
     const body = response.json()
     const parent = db.jobs.find((job) => job.id === body.parentJobId)
-    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const childJobs = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const scenes = childJobs.filter((job) => job.capability === 'video_generation')
+    const voiceovers = childJobs.filter((job) => job.capability === 'tts')
     const parentMeta = JSON.parse(parent.metadataJson)
 
     expect(parent.capability).toBe('long_form_video')
@@ -336,7 +338,8 @@ describe('durable long-form orchestration', () => {
     })
     const body = create.json()
     const parent = db.jobs.find((job) => job.id === body.parentJobId)
-    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id && job.capability === 'video_generation')
+    const voiceovers = db.jobs.filter((job) => job.parentJobId === parent.id && job.capability === 'tts')
 
     expect(create.statusCode).toBe(200)
     expect(parent.status).toBe('planned')
@@ -438,11 +441,11 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     await db.prisma.job.update({ where: { id: scenes[0].id }, data: { status: 'completed', artifactId: 'artifact-stays', progress: 100 } })
 
     const cancel = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
-    const updatedScenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const updatedScenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
 
     expect(cancel.statusCode).toBe(200)
     expect(cancel.json().cancellation.locallyCancelled).toBe(true)
@@ -492,7 +495,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     await db.prisma.job.update({ where: { id: scenes[0].id }, data: { status: 'completed', artifactId: 'artifact-1', progress: 100 } })
     await db.prisma.job.update({ where: { id: scenes[1].id }, data: { status: 'failed', error: 'provider failed', progress: 0 } })
 
@@ -515,7 +518,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     expect(JSON.parse(db.jobs.find((job) => job.id === parentId).metadataJson).assemblyHandoff.orderedSceneArtifactIds).toEqual([])
 
     await db.prisma.job.update({ where: { id: scenes[2].id }, data: { status: 'completed', artifactId: 'artifact-3', progress: 100 } })
@@ -831,7 +834,7 @@ describe('durable long-form orchestration', () => {
     expect(cancel.statusCode).toBe(200)
     expect(cancel.json().execution.parent.status).toBe('cancelled')
 
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       if (scene.status === 'completed') continue
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}` } })
@@ -909,7 +912,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
     }
@@ -950,7 +953,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
     }

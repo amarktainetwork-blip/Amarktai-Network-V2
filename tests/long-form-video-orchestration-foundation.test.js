@@ -211,7 +211,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(plan.missingDependencies).toContain('ffmpeg/stitching')
     })
 
-    it('lists voiceover missing when enabled', () => {
+    it('lists voiceover as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for voiceover missing validation',
         targetDurationSeconds: 60,
@@ -220,11 +220,11 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('voiceover_backend')
+      expect(plan.missingDependencies).not.toContain('voiceover_backend')
       
       const voiceoverStep = plan.renderSteps.find(s => s.type === 'voiceover_generation')
       expect(voiceoverStep).toBeDefined()
-      expect(voiceoverStep.status).toBe('blocked')
+      expect(voiceoverStep.status).toBe('ready')
     })
 
     it('lists subtitles missing when enabled', () => {
@@ -356,7 +356,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
     it('final assembly is not ready', () => {
       expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(false)
       expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(false)
+      expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(false)
       expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(false)
     })

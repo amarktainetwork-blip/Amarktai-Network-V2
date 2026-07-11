@@ -24,6 +24,8 @@
     "proof:router-app-contract": "node scripts/proof-router-app-contract.mjs",
     "proof:long-form-runtime": "node scripts/proof-long-form-runtime.mjs",
     "proof:long-form-runtime:strict": "node scripts/proof-long-form-runtime.mjs --strict-runtime",
+    "proof:live-execution": "node scripts/proof-live-execution.mjs",
+    "proof:music-generation": "node scripts/proof-music-generation.mjs",
     "audit:completion": "tsx scripts/audit-build-completion-map.mjs",
     "discover:models": "node scripts/discover-provider-models.mjs",
     "discover:models:live": "node scripts/discover-provider-models.mjs --live",

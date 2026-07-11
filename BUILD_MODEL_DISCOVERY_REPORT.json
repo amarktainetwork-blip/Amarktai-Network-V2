@@ -41,7 +41,7 @@
       "apiKeyPresent": true,
       "mode": "safe_static",
       "source": "last_known_good",
-      "totalDiscovered": 61,
+      "totalDiscovered": 65,
       "liveDiscoveryAttempted": false,
       "liveDiscoverySucceeded": false,
       "liveDiscoverySkipped": true,
@@ -55,11 +55,11 @@
       "error": null,
       "returnedModelCount": 0,
       "publicEndpointModelCount": 0,
-      "staticFallbackCount": 61,
-      "docsFallbackCount": 61,
-      "previousInventoryCount": 61,
-      "lastKnownGoodCount": 61,
-      "effectiveCatalogueCount": 61,
+      "staticFallbackCount": 65,
+      "docsFallbackCount": 65,
+      "previousInventoryCount": 65,
+      "lastKnownGoodCount": 65,
+      "effectiveCatalogueCount": 65,
       "discoveredAt": "1970-01-01T00:00:00.000Z",
       "notes": [
         "genx discovery skipped (safe_static_mode); preserved previous last-known-good inventory and supplemented docs fallback metadata."
@@ -303,18 +303,18 @@
   ],
   "providersFailed": [],
   "staticFallbackUsedByProvider": {
-    "genx": 61,
+    "genx": 65,
     "groq": 7,
     "together": 10,
     "mimo": 6,
     "deepinfra": 10
   },
   "totalLiveDiscoveredModels": 0,
-  "totalDocsFallbackModels": 86,
+  "totalDocsFallbackModels": 90,
   "totalPublicEndpointModels": 340,
-  "totalEffectiveCatalogueModels": 426,
+  "totalEffectiveCatalogueModels": 430,
   "modelsExecutableNow": 7,
-  "modelsKnownButBlocked": 419,
+  "modelsKnownButBlocked": 423,
   "policyRestrictedModels": 6,
   "transportProfilesPresent": [
     "anthropic_messages_sse",
@@ -381,35 +381,37 @@
     "video_generation"
   ],
   "countsByProvider": {
-    "genx": 61,
+    "genx": 65,
     "groq": 7,
     "together": 10,
     "mimo": 6,
     "deepinfra": 342
   },
   "totals": {
-    "discovered": 426,
+    "discovered": 430,
     "executableNow": 7,
-    "catalogueOnly": 419,
-    "missingClient": 415,
-    "missingExecutor": 419
+    "catalogueOnly": 423,
+    "missingClient": 419,
+    "missingExecutor": 423
   },
   "capabilityCoverage": {
-    "image_generation": {
-      "total": 64,
-      "executable": 1,
-      "docsKnown": 64,
+    "tts": {
+      "total": 28,
+      "executable": 0,
+      "docsKnown": 28,
       "liveDiscovered": 0,
       "providers": [
         "genx",
+        "groq",
         "together",
+        "mimo",
         "deepinfra"
       ]
     },
     "chat": {
-      "total": 254,
+      "total": 258,
       "executable": 3,
-      "docsKnown": 254,
+      "docsKnown": 258,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -445,6 +447,17 @@
         "deepinfra"
       ]
     },
+    "image_generation": {
+      "total": 64,
+      "executable": 1,
+      "docsKnown": 64,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "together",
+        "deepinfra"
+      ]
+    },
     "tool_use": {
       "total": 2,
       "executable": 0,
@@ -466,16 +479,6 @@
         "deepinfra"
       ]
     },
-    "music_generation": {
-      "total": 4,
-      "executable": 2,
-      "docsKnown": 4,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "deepinfra"
-      ]
-    },
     "video_generation": {
       "total": 50,
       "executable": 1,
@@ -487,16 +490,22 @@
         "deepinfra"
       ]
     },
-    "tts": {
-      "total": 28,
+    "avatar_generation": {
+      "total": 1,
       "executable": 0,
-      "docsKnown": 28,
+      "docsKnown": 1,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "music_generation": {
+      "total": 4,
+      "executable": 2,
+      "docsKnown": 4,
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "groq",
-        "together",
-        "mimo",
         "deepinfra"
       ]
     },
@@ -508,15 +517,6 @@
       "providers": [
         "genx",
         "deepinfra"
-      ]
-    },
-    "avatar_generation": {
-      "total": 1,
-      "executable": 0,
-      "docsKnown": 1,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx"
       ]
     },
     "summarization": {

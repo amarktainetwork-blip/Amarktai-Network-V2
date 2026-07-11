@@ -31,6 +31,9 @@ const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'gpt-5.4-mini',
   'gpt-5.4-pro',
   'gpt-5.5',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
   'claude-haiku-4-5',
   'claude-opus-4-6',
   'claude-opus-4-7',
@@ -50,6 +53,7 @@ const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'grok-4.2-multi-agent',
   'grok-4.2-reasoning',
   'grok-4.3',
+  'grok-4.5',
   'grok-imagine',
   'grok-imagine-video',
   'grok-tts',
@@ -165,7 +169,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.totalPublicEndpointModels).toBe(0)
     expect(report.modelsExecutableNow).toBe(7)
     expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
-    expect(report.countsByProvider.genx).toBe(61)
+    expect(report.countsByProvider.genx).toBe(65)
     expect(report.togetherDocsFallbackComplete).toBe(false)
     expect(report.togetherProviderUniverseKnown).toBe(false)
     expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
@@ -174,15 +178,17 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.mimoPolicyRestricted).toBe(true)
   }, 30000)
 
-  it('GenX docs fallback contains the exact 61 user-supplied model IDs once', () => {
+  it('GenX docs fallback contains the expected user-supplied model IDs once', () => {
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
     const genxModels = catalogue.filter((model) => model.provider === 'genx')
-    expect(genxModels).toHaveLength(61)
-    expect([...new Set(genxModels.map((model) => model.modelId))].sort()).toEqual([...EXPECTED_GENX_DOCS_FALLBACK_MODELS].sort())
+    expect(genxModels.length).toBeGreaterThanOrEqual(61)
+    const docsModels = genxModels.filter((model) => !model.liveDiscovered)
+    expect(docsModels).toHaveLength(65)
+    expect([...new Set(docsModels.map((model) => model.modelId))].sort()).toEqual([...EXPECTED_GENX_DOCS_FALLBACK_MODELS].sort())
     for (const modelId of EXPECTED_GENX_DOCS_FALLBACK_MODELS) {
-      expect(genxModels.filter((model) => model.modelId === modelId)).toHaveLength(1)
+      expect(docsModels.filter((model) => model.modelId === modelId)).toHaveLength(1)
     }
-    for (const model of genxModels) {
+    for (const model of docsModels) {
       expect(model).toMatchObject({
         provider: 'genx',
         executionProvider: 'genx',
@@ -193,6 +199,15 @@ describe('provider model discovery and router catalogue rebuild', () => {
         authRequired: true,
       })
       expect(['docs_fallback', 'last_known_good']).toContain(model.discoverySource)
+    }
+    const liveModels = genxModels.filter((model) => model.liveDiscovered)
+    for (const model of liveModels) {
+      expect(model).toMatchObject({
+        provider: 'genx',
+        executionProvider: 'genx',
+        liveDiscovered: true,
+        discoverySource: 'live_endpoint',
+      })
     }
   })
 

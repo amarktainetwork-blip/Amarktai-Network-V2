@@ -183,7 +183,7 @@ export const LONG_FORM_VIDEO_STATUS = {
   videoOnlyAssemblyReady: true,
   sceneSplitterReady: true,
   perSceneVideoGenerationPossible: true, // Can use existing video_generation
-  voiceoverReady: false,
+  voiceoverReady: true,
   subtitlesReady: false,
   musicBedReady: false,
   fullMultimediaReady: false,

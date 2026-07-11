@@ -220,10 +220,9 @@ function createRenderSteps(request: LongFormVideoRequest): LongFormRenderStep[] 
     steps.push({
       stepNumber: stepNumber++,
       type: 'voiceover_generation',
-      description: 'Generate voiceover audio',
+      description: 'Generate voiceover audio per scene via Groq TTS',
       dependencies: [],
-      status: 'blocked',
-      blockedReason: 'Voiceover backend not wired yet'
+      status: 'ready'
     })
   }
 
@@ -315,10 +314,8 @@ function identifyMissingDependencies(request: LongFormVideoRequest): string[] {
   // Scene stitching is always missing
   missing.push('ffmpeg/stitching')
 
-  // Voiceover is missing if enabled
-  if (request.voiceoverEnabled) {
-    missing.push('voiceover_backend')
-  }
+  // Voiceover is wired via Groq TTS child jobs
+  // No longer a missing dependency
 
   // Subtitles are missing if enabled
   if (request.subtitlesEnabled) {

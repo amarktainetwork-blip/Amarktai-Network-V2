@@ -122,7 +122,7 @@ function buildAssemblyHandoff({
   const expectedSceneCount = plan.storyboard.scenes.length
   const missingDependencies = [
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(request.voiceoverEnabled ? ['voiceover_not_implemented'] : []),
+    ...(request.voiceoverEnabled ? ['voiceover_pending'] : []),
     ...(request.subtitlesEnabled ? ['subtitles_not_implemented'] : []),
     ...(request.musicBedEnabled ? ['music_bed_not_implemented'] : []),
     'full_multimedia_assembly_pending',
@@ -234,7 +234,6 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
       ...(failedScenes > 0 ? ['scene_failure'] : []),
       ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
       ...((metadata.blockedReasons as string[] | undefined) ?? []),
-      'voiceover_not_implemented',
       'subtitles_not_implemented',
       'music_bed_not_implemented',
       'full_multimedia_not_ready',
@@ -385,12 +384,79 @@ async function prepareSceneRetry(q: Queue, scene: DbJob): Promise<DbJob | null> 
   return await prisma.job.findUnique({ where: { id: scene.id } })
 }
 
+async function enqueueVoiceoverJob(q: Queue, voiceoverJob: DbJob): Promise<{ queued: boolean; skipped: boolean; error?: string }> {
+  if (voiceoverJob.status === 'completed' && voiceoverJob.artifactId) return { queued: false, skipped: true }
+  if (TERMINAL_SCENE_STATUSES.has(voiceoverJob.status)) return { queued: false, skipped: true, error: 'terminal_state' }
+  if ((voiceoverJob.status === 'queued' || voiceoverJob.status === 'processing') && voiceoverJob.queueJobId) return { queued: false, skipped: true }
+  if (voiceoverJob.status === 'failed' && voiceoverJob.retryCount >= MAX_SCENE_RETRIES) {
+    return { queued: false, skipped: true, error: 'retry_limit_reached' }
+  }
+
+  const metadata = safeJson(voiceoverJob.metadataJson)
+  const payload: JobPayload = {
+    jobId: voiceoverJob.id,
+    appSlug: voiceoverJob.appSlug,
+    capability: 'tts',
+    prompt: voiceoverJob.prompt,
+    input: safeJson(voiceoverJob.inputJson),
+    metadata,
+    traceId: voiceoverJob.traceId,
+    routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+  }
+
+  const queueJobId = voiceoverJob.retryCount > 0 ? `${voiceoverJob.id}:attempt:${voiceoverJob.retryCount}` : voiceoverJob.id
+  await q.add('process', payload, {
+    ...DEFAULT_JOB_OPTIONS,
+    jobId: queueJobId,
+  })
+  await prisma.job.update({
+    where: { id: voiceoverJob.id },
+    data: {
+      status: 'queued',
+      error: null,
+      queueJobId,
+      queuedAt: new Date(),
+      workflowPhase: 'voiceover_queued',
+    },
+  })
+  return { queued: true, skipped: false }
+}
+
+async function enqueueVoiceoverJobs(q: Queue, voiceoverJobs: DbJob[]) {
+  const queued: string[] = []
+  const skipped: string[] = []
+  const failed: Array<{ jobId: string; error: string }> = []
+
+  for (const voiceoverJob of voiceoverJobs) {
+    try {
+      const result = await enqueueVoiceoverJob(q, voiceoverJob)
+      if (result.queued) queued.push(voiceoverJob.id)
+      if (result.skipped) skipped.push(voiceoverJob.id)
+      if (result.error) failed.push({ jobId: voiceoverJob.id, error: result.error })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Queue submission failed'
+      failed.push({ jobId: voiceoverJob.id, error: message })
+      await prisma.job.update({
+        where: { id: voiceoverJob.id },
+        data: {
+          status: 'failed',
+          error: `Voiceover queue submission failed: ${message}`,
+          workflowPhase: 'voiceover_queue_failed',
+          completedAt: new Date(),
+        },
+      })
+    }
+  }
+
+  return { queued, skipped, failed }
+}
+
 async function createDurableLongFormExecution(appSlug: string, input: LongFormVideoRequest, routingMode: string, q: Queue, dryRun = false) {
   const plan = createLongFormVideoPlan(input)
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
 
-  const { parent, sceneJobs } = await prisma.$transaction(async (tx) => {
+  const { parent, sceneJobs, voiceoverJobs } = await prisma.$transaction(async (tx) => {
     const parent = await tx.job.create({
       data: {
         appSlug,
@@ -435,23 +501,62 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       if (!scene) continue
     }
 
+    const voiceoverJobs: DbJob[] = []
+    if (input.voiceoverEnabled) {
+      for (const scene of plan.storyboard.scenes) {
+        if (!scene.voiceoverText) continue
+        const voMetadata = {
+          longFormVideo: true,
+          longFormVoiceover: true,
+          longFormExecutionId: executionId,
+          planId: plan.id,
+          sceneNumber: scene.sceneNumber,
+          sceneTitle: scene.title,
+          parentJobId: parent.id,
+          routingMode,
+          retryGeneration: 0,
+        }
+        const voJob = await tx.job.create({
+          data: {
+            appSlug,
+            capability: 'tts',
+            prompt: scene.voiceoverText,
+            inputJson: JSON.stringify({ text: scene.voiceoverText, sceneNumber: scene.sceneNumber }),
+            metadataJson: JSON.stringify(voMetadata),
+            traceId: `trace_longform_${executionId}_voiceover_${scene.sceneNumber}`,
+            status: dryRun ? 'planned' : 'queued',
+            parentJobId: parent.id,
+            executionId,
+            sceneNumber: scene.sceneNumber,
+            workflowPhase: dryRun ? 'voiceover_planned' : 'voiceover_created',
+          },
+        })
+        voiceoverJobs.push(voJob)
+      }
+    }
+
     await tx.job.update({
       where: { id: parent.id },
       data: {
         metadataJson: JSON.stringify({
           ...parentMetadata(input, plan, executionId),
+          voiceoverJobIds: voiceoverJobs.map((j) => j.id),
           assemblyHandoff: buildAssemblyHandoff({ parentJobId: parent.id, executionId, request: input, plan, sceneJobs }),
         }),
       },
     })
 
-    return { parent, sceneJobs }
+    return { parent, sceneJobs, voiceoverJobs }
   })
 
   await refreshLongFormParentState(parent.id)
   const queueResult = dryRun ? { queued: [], skipped: [], failed: [] } : await enqueueSceneJobs(q, parent, sceneJobs)
+  let voiceoverQueueResult = { queued: [] as string[], skipped: [] as string[], failed: [] as Array<{ jobId: string; error: string }> }
+  if (input.voiceoverEnabled && !dryRun && voiceoverJobs.length > 0) {
+    voiceoverQueueResult = await enqueueVoiceoverJobs(q, voiceoverJobs)
+  }
   const latest = await loadParentAndScenes(parent.id, appSlug)
-  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, queueResult, plan, executionId }
+  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, voiceoverJobs, queueResult, voiceoverQueueResult, plan, executionId }
 }
 
 export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<void> {
@@ -794,10 +899,10 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       ffmpeg,
       message: 'Long-form durable orchestration and scene recovery are ready. Full multimedia assembly remains pending.',
       limitations: {
-        executionStateStorage: 'Durable parent and linked scene Job rows',
+        executionStateStorage: 'Durable parent and linked Job rows (scene + voiceover)',
         executionStateRecovery: 'Recovered by exact parentJobId/executionId fields',
         assemblyMode: 'video_only handoff prepared; full multimedia pending',
-        voiceoverIncluded: false,
+        voiceoverIncluded: true,
         subtitlesIncluded: false,
         musicBedIncluded: false,
       },

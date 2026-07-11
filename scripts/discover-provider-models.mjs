@@ -432,13 +432,13 @@ function genxModel(modelId, displayName, upstreamProvider, category, overrides =
 
 const GENX_DOCS_FALLBACK_SPEC = [
   { upstreamProvider: 'openai', category: 'image', models: ['gpt-image-2'] },
-  { upstreamProvider: 'openai', category: 'text', models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.3-codex', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-pro', 'gpt-5.5'] },
+  { upstreamProvider: 'openai', category: 'text', models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.3-codex', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-pro', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'] },
   { upstreamProvider: 'anthropic', category: 'text', transportProfile: 'anthropic_messages_sse', models: ['claude-haiku-4-5', 'claude-opus-4-6', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-sonnet-5'] },
   { upstreamProvider: 'google', category: 'text', models: ['gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro'] },
   { upstreamProvider: 'google', category: 'audio', models: ['lyria-3-clip-preview', 'lyria-3-pro-preview'] },
   { upstreamProvider: 'google', category: 'image', models: ['nano-banana-2', 'nano-banana-pro'] },
   { upstreamProvider: 'google', category: 'video', models: ['veo-3.1', 'veo-3.1-fast'] },
-  { upstreamProvider: 'xai', category: 'text', models: ['grok-4.2', 'grok-4.2-multi-agent', 'grok-4.2-reasoning', 'grok-4.3'] },
+  { upstreamProvider: 'xai', category: 'text', models: ['grok-4.2', 'grok-4.2-multi-agent', 'grok-4.2-reasoning', 'grok-4.3', 'grok-4.5'] },
   { upstreamProvider: 'xai', category: 'image', models: ['grok-imagine'] },
   { upstreamProvider: 'xai', category: 'video', models: ['grok-imagine-video'] },
   { upstreamProvider: 'xai', category: 'voice', models: ['grok-tts'] },
@@ -589,10 +589,12 @@ async function fetchModelList(url, apiKey) {
 }
 
 function modelIdFromRecord(record) {
+  if (typeof record === 'string') return record.trim()
   return String(record?.id ?? record?.model ?? record?.model_name ?? record?.slug ?? record?.name ?? '').trim()
 }
 
 function categoryFromRecord(record) {
+  if (typeof record === 'string') return ''
   return String(record?.category ?? record?.type ?? record?.reported_type ?? record?.task ?? record?.pipeline_tag ?? record?.display_type ?? record?.object ?? '').trim()
 }
 
@@ -766,7 +768,8 @@ async function liveDiscoverProvider(provider) {
       const byId = new Map()
       for (const category of ['', 'text', 'image', 'video', 'voice', 'audio']) {
         const endpoint = genxModelsEndpoint(truth.baseUrl, category)
-        for (const record of await fetchModelList(endpoint, apiKey)) {
+        for (const rawRecord of await fetchModelList(endpoint, apiKey)) {
+          const record = typeof rawRecord === 'string' ? { id: rawRecord } : rawRecord
           const id = modelIdFromRecord(record)
           if (id) byId.set(id, { ...byId.get(id), ...record, category: record.category ?? category })
         }
