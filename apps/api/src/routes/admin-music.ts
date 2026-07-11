@@ -1,15 +1,27 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import multipart from '@fastify/multipart'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
+import { saveArtifact } from '@amarktai/artifacts'
 import {
   BLOCKED_OVERRIDE_FIELDS,
+  MAX_REFERENCE_AUDIO_BYTES,
+  MAX_REFERENCE_AUDIO_DURATION_SECONDS,
   QUEUE_NAMES,
+  analyzeMusicReferenceAudio,
   createMusicGenerationPlan,
+  createMusicProviderPrompt,
   getMusicCapabilityStatus,
+  isValidMimeForType,
   validateMusicGenerationRequest,
+  validateMusicReferenceUploadRequest,
+  type MusicInspirationProfile,
+  type MusicReferenceUploadRequest,
 } from '@amarktai/core'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+
+const REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES = MAX_REFERENCE_AUDIO_BYTES
 
 async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
   const truth = await buildAdminRuntimeTruth(app)
@@ -82,7 +94,118 @@ function parseMusicRequest(body: Record<string, unknown>) {
   return validateMusicGenerationRequest(input)
 }
 
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function sanitizeFilename(filename: string): string {
+  const cleaned = filename
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned.substring(0, 180) || 'reference-audio'
+}
+
+function fieldValue(fields: Record<string, unknown>, name: string): string | undefined {
+  const field = fields[name] as { value?: unknown } | undefined
+  return typeof field?.value === 'string' ? field.value : undefined
+}
+
+function parseOptionalNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === '') return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseRightsField(fields: Record<string, unknown>): MusicReferenceUploadRequest['rights'] {
+  const rightsJson = fieldValue(fields, 'rights')
+  if (rightsJson) {
+    return JSON.parse(rightsJson) as MusicReferenceUploadRequest['rights']
+  }
+  return {
+    accepted: fieldValue(fields, 'rightsAccepted') === 'true',
+    basis: fieldValue(fields, 'rightsBasis') as MusicReferenceUploadRequest['rights']['basis'],
+    statement: fieldValue(fields, 'rightsStatement') ?? '',
+  }
+}
+
+async function getAdminSubject(app: FastifyInstance, request: FastifyRequest): Promise<string> {
+  const auth = request.headers.authorization
+  if (!auth?.startsWith('Bearer ')) return 'admin'
+  try {
+    const payload = await app.jwtVerify(auth.replace('Bearer ', ''))
+    const claims = payload as unknown as Record<string, unknown>
+    const candidate = claims.sub ?? claims.email ?? claims.username
+    return typeof candidate === 'string' && candidate ? candidate : 'admin'
+  } catch {
+    return 'admin'
+  }
+}
+
+async function loadReferenceProfile(artifactId: string, appSlug: string): Promise<MusicInspirationProfile> {
+  const artifact = await prisma.artifact.findUnique({ where: { id: artifactId } })
+  if (!artifact) {
+    throw new Error('Reference audio artifact not found')
+  }
+  if (artifact.appSlug !== appSlug) {
+    throw new Error('Reference audio artifact does not belong to this app')
+  }
+  if (artifact.status !== 'completed') {
+    throw new Error('Reference audio artifact is not ready')
+  }
+  if (!artifact.mimeType.startsWith('audio/')) {
+    throw new Error('Reference audio artifact must be audio')
+  }
+
+  const metadata = parseJsonObject(artifact.metadata)
+  const rights = metadata.rightsDeclaration as Record<string, unknown> | undefined
+  if (rights?.accepted !== true) {
+    throw new Error('Reference audio rights declaration is missing')
+  }
+
+  const existingProfile = metadata.musicInspirationProfile as MusicInspirationProfile | undefined
+  if (existingProfile?.sourceArtifactId === artifact.id) return existingProfile
+
+  const profile = analyzeMusicReferenceAudio({
+    artifactId: artifact.id,
+    mimeType: artifact.mimeType,
+    fileSizeBytes: artifact.fileSizeBytes,
+    durationSeconds: typeof metadata.durationSeconds === 'number' ? metadata.durationSeconds : null,
+  })
+
+  await prisma.artifact.update({
+    where: { id: artifact.id },
+    data: {
+      metadata: JSON.stringify({
+        ...metadata,
+        musicInspirationProfile: profile,
+        analysedAt: new Date().toISOString(),
+      }),
+    },
+  })
+
+  return profile
+}
+
 export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    attachFieldsToBody: false,
+    limits: {
+      fileSize: REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES,
+      files: 1,
+      fields: 12,
+      parts: 14,
+    },
+  })
+
   let queue: Queue | null = null
   function getQueue(): Queue {
     if (!queue) {
@@ -103,6 +226,158 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
     })
   })
 
+  app.post('/api/admin/music/reference-audio', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    try {
+      if (!request.isMultipart()) {
+        return reply.status(415).send({ error: true, message: 'Reference audio upload must use multipart/form-data' })
+      }
+
+      const file = await request.file({
+        limits: {
+          fileSize: REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES,
+          files: 1,
+        },
+      })
+      if (!file) {
+        return reply.status(400).send({ error: true, message: 'Reference audio file is required' })
+      }
+
+      const fields = file.fields as Record<string, unknown>
+      const upload = validateMusicReferenceUploadRequest({
+        appSlug: fieldValue(fields, 'appSlug') ?? 'admin-music',
+        filename: sanitizeFilename(file.filename || fieldValue(fields, 'filename') || 'reference-audio'),
+        mimeType: file.mimetype || fieldValue(fields, 'mimeType') || 'application/octet-stream',
+        durationSeconds: parseOptionalNumber(fieldValue(fields, 'durationSeconds')),
+        rights: parseRightsField(fields),
+      })
+
+      const data = await file.toBuffer()
+      if (data.length === 0) {
+        return reply.status(400).send({ error: true, message: 'Reference audio upload is empty' })
+      }
+      if (file.file.truncated) {
+        return reply.status(413).send({ error: true, message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes` })
+      }
+      if (data.length > MAX_REFERENCE_AUDIO_BYTES) {
+        return reply.status(413).send({ error: true, message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes` })
+      }
+      if (upload.durationSeconds && upload.durationSeconds > MAX_REFERENCE_AUDIO_DURATION_SECONDS) {
+        return reply.status(413).send({ error: true, message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_DURATION_SECONDS} seconds` })
+      }
+      if (!isValidMimeForType('audio', upload.mimeType)) {
+        return reply.status(400).send({ error: true, message: `Unsupported reference audio MIME type: ${upload.mimeType}` })
+      }
+
+      const appSlug = upload.appSlug || 'admin-music'
+      const traceId = `trace_${randomUUID()}`
+      const checksum = createHash('sha256').update(data).digest('hex')
+      const uploader = await getAdminSubject(app, request)
+      const provenance = {
+        source: 'admin_reference_audio_upload',
+        noRemoteUrlIngestion: true,
+        uploadedAt: new Date().toISOString(),
+      }
+
+      const artifact = await saveArtifact({
+        input: {
+          appSlug,
+          type: 'audio',
+          subType: 'music_reference',
+          title: upload.filename,
+          description: 'User-declared legal reference track for abstract music inspiration analysis.',
+          provider: 'user_upload',
+          model: 'none',
+          traceId,
+          mimeType: upload.mimeType,
+          metadata: {
+            rightsDeclaration: upload.rights,
+            rightsBasis: upload.rights.basis,
+            uploader,
+            checksumSha256: checksum,
+            durationSeconds: upload.durationSeconds ?? null,
+            provenance,
+            directReferenceAudioConditioningReady: false,
+          },
+        },
+        data,
+        explicitMimeType: upload.mimeType,
+      })
+
+      const profile = analyzeMusicReferenceAudio({
+        artifactId: artifact.id,
+        mimeType: artifact.mimeType,
+        fileSizeBytes: artifact.fileSizeBytes,
+        durationSeconds: upload.durationSeconds ?? null,
+      })
+
+      await prisma.artifact.update({
+        where: { id: artifact.id },
+        data: {
+          metadata: JSON.stringify({
+            rightsDeclaration: upload.rights,
+            rightsBasis: upload.rights.basis,
+            uploader,
+            checksumSha256: checksum,
+            durationSeconds: upload.durationSeconds ?? null,
+            provenance,
+            musicInspirationProfile: profile,
+            analysedAt: new Date().toISOString(),
+            directReferenceAudioConditioningReady: false,
+          }),
+        },
+      })
+
+      return reply.status(201).send({
+        success: true,
+        artifactId: artifact.id,
+        appSlug,
+        mimeType: artifact.mimeType,
+        fileSizeBytes: artifact.fileSizeBytes,
+        checksumSha256: checksum,
+        rightsBasis: upload.rights.basis,
+        profile,
+        referenceAudioAnalysisReady: true,
+        referenceAudioConditioningReady: false,
+        artifactUrl: artifact.storageUrl,
+      })
+    } catch (error) {
+      if (error instanceof Error && /File too large|request file too large|too large/i.test(error.message)) {
+        return reply.status(413).send({
+          error: true,
+          message: `Reference audio exceeds ${MAX_REFERENCE_AUDIO_BYTES} bytes`,
+        })
+      }
+      return reply.status(400).send({
+        error: true,
+        message: error instanceof Error ? error.message : 'Invalid reference audio upload',
+      })
+    }
+  })
+
+  app.post('/api/admin/music/reference-audio/:id/analyze', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+
+    const { id } = request.params as { id: string }
+    try {
+      const profile = await loadReferenceProfile(id, 'admin-music')
+      return reply.send({
+        success: true,
+        artifactId: id,
+        profile,
+        referenceAudioAnalysisReady: true,
+        referenceAudioConditioningReady: false,
+        message: 'Reference audio analysed into abstract non-copying inspiration profile. Direct provider conditioning is not enabled.',
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: error instanceof Error ? error.message : 'Reference audio analysis failed',
+      })
+    }
+  })
+
   app.post('/api/admin/music/plan', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
@@ -119,10 +394,15 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const musicRequest = parseMusicRequest(body)
       const rawPlan = createMusicGenerationPlan(musicRequest)
       const status = await getAdminMusicCapabilityStatus(app)
+      let inspirationProfile: MusicInspirationProfile | null = null
+      if (musicRequest.referenceAudioArtifactId) {
+        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, 'admin-music')
+      }
       const plan = {
         ...rawPlan,
-        executionReady: status.executableNow && rawPlan.executionReady,
-        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason,
+        providerPrompt: createMusicProviderPrompt(musicRequest, rawPlan.normalizedPrompt, inspirationProfile),
+        executionReady: status.executableNow && rawPlan.blockedReasons.length === 0,
+        blockedReason: rawPlan.blockedReasons.length > 0 ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
       }
 
       return reply.send({
@@ -159,25 +439,34 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const musicRequest = parseMusicRequest(body)
       const rawPlan = createMusicGenerationPlan(musicRequest)
       const status = await getAdminMusicCapabilityStatus(app)
+      let inspirationProfile: MusicInspirationProfile | null = null
+      if (musicRequest.referenceAudioArtifactId) {
+        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, 'admin-music')
+      }
       const plan = {
         ...rawPlan,
-        executionReady: status.executableNow && rawPlan.executionReady,
-        blockedReason: status.executableNow && rawPlan.executionReady ? rawPlan.blockedReason : status.blockedReason,
+        providerPrompt: createMusicProviderPrompt(musicRequest, rawPlan.normalizedPrompt, inspirationProfile),
+        executionReady: status.executableNow && rawPlan.blockedReasons.length === 0,
+        blockedReason: rawPlan.blockedReasons.length > 0 ? rawPlan.blockedReason : status.blockedReason || rawPlan.blockedReason,
       }
 
       // Creation gate: preserve explicit development/test gating.
       // Music may be queued only when implementation gates are present.
       // liveProven=true is NOT required to run the first proof.
-      if (!status.executableNow) {
+      if (!status.executableNow || !plan.executionReady) {
+        const blockerMessage = !status.executableNow
+          ? status.blockedReason || plan.blockedReason
+          : plan.blockedReason || status.blockedReason
         return reply.status(409).send({
           error: true,
           success: false,
           executionBlocked: true,
-          message: status.blockedReason,
+          message: blockerMessage,
           plan,
           status,
-          missingDependencies: status.blockedReason
+          missingDependencies: blockerMessage
             .replace('Music execution blocked: ', '')
+            .replace('Music generation blocked: ', '')
             .replace(/\.$/, '')
             .split(', '),
         })
@@ -186,15 +475,21 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       // Create canonical Job
       const appSlug = 'admin-music'
       const traceId = `trace_${randomUUID()}`
-      const safePrompt = musicRequest.prompt.substring(0, 10000)
+      const safePrompt = plan.providerPrompt.substring(0, 10000)
       const inputObj = {
-        prompt: safePrompt,
+        originalPrompt: musicRequest.prompt.substring(0, 10000),
+        providerPrompt: safePrompt,
         genre: musicRequest.genre,
         mood: musicRequest.mood,
+        tempo: musicRequest.tempo,
+        bpm: musicRequest.bpm,
+        arrangement: musicRequest.arrangement ?? [],
         durationSeconds: musicRequest.durationSeconds,
         instrumentalOnly: musicRequest.instrumentalOnly,
         style: musicRequest.style,
         outputFormat: musicRequest.outputFormat,
+        referenceAudioArtifactId: musicRequest.referenceAudioArtifactId ?? null,
+        referenceAudioConditioningReady: false,
       }
 
       const job = await prisma.job.create({
@@ -218,7 +513,12 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
           capability: 'music_generation',
           prompt: safePrompt,
           input: inputObj,
-          metadata: { routingMode: musicRequest.routingMode },
+          metadata: {
+            routingMode: musicRequest.routingMode,
+            originalPrompt: musicRequest.prompt,
+            musicFeatureContract: rawPlan.derivedPromptOnlyFields,
+            referenceAudioAnalysisMode: rawPlan.referenceAudioAnalysisMode,
+          },
           traceId,
         }
         app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability: 'music_generation', traceId }, 'Enqueuing music generation job')

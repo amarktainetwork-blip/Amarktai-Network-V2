@@ -31,11 +31,44 @@ export type MusicOutputFormat = (typeof MUSIC_OUTPUT_FORMATS)[number]
 export const MUSIC_SAFETY_LEVELS = ['standard', 'strict'] as const
 export type MusicSafetyLevel = (typeof MUSIC_SAFETY_LEVELS)[number]
 
+export const MUSIC_RIGHTS_BASES = ['own', 'permission', 'license', 'public_domain'] as const
+export type MusicRightsBasis = (typeof MUSIC_RIGHTS_BASES)[number]
+
+export const MUSIC_FEATURE_CLASSIFICATIONS = [
+  'PROVEN_SUPPORTED',
+  'INTERNAL_DERIVED_PROMPT_ONLY',
+  'UNSUPPORTED',
+  'UNPROVEN',
+] as const
+export type MusicFeatureClassification = (typeof MUSIC_FEATURE_CLASSIFICATIONS)[number]
+
+export const GENX_LYRIA_REQUEST_CONTRACT: Record<string, MusicFeatureClassification> = {
+  prompt: 'PROVEN_SUPPORTED',
+  model: 'PROVEN_SUPPORTED',
+  duration: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  instrumental: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  vocals: 'UNPROVEN',
+  lyrics: 'UNPROVEN',
+  genre: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  mood: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  tempoBpm: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  arrangement: 'INTERNAL_DERIVED_PROMPT_ONLY',
+  negativePrompt: 'UNPROVEN',
+  outputFormat: 'UNPROVEN',
+  referenceAudio: 'UNPROVEN',
+} as const
+
+export const MAX_REFERENCE_AUDIO_BYTES = 25 * 1024 * 1024
+export const MAX_REFERENCE_AUDIO_DURATION_SECONDS = 300
+
 export const MusicGenerationRequestSchema = z.object({
   prompt: z.string().min(1).max(4000),
   style: z.enum(MUSIC_STYLES).default('custom'),
   mood: z.string().max(120).optional(),
   genre: z.string().max(120).optional(),
+  tempo: z.string().max(80).optional(),
+  bpm: z.number().int().min(40).max(220).optional(),
+  arrangement: z.array(z.string().min(1).max(80)).max(12).optional(),
   durationSeconds: z.number().int().min(MUSIC_DURATION_LIMITS.minSeconds).max(MUSIC_DURATION_LIMITS.maxSeconds).default(MUSIC_DURATION_LIMITS.defaultSeconds),
   instrumentalOnly: z.boolean().default(true),
   vocalsRequested: z.boolean().default(false),
@@ -47,6 +80,33 @@ export const MusicGenerationRequestSchema = z.object({
 })
 
 export type MusicGenerationRequest = z.infer<typeof MusicGenerationRequestSchema>
+
+export const MusicReferenceRightsDeclarationSchema = z.object({
+  accepted: z.boolean(),
+  basis: z.enum(MUSIC_RIGHTS_BASES),
+  statement: z.string().min(8).max(1000),
+})
+
+export const MusicReferenceUploadRequestSchema = z.object({
+  appSlug: z.string().min(1).max(120).default('admin-music'),
+  filename: z.string().min(1).max(180).default('reference-audio'),
+  mimeType: z.string().min(1).max(120),
+  durationSeconds: z.number().min(0).max(MAX_REFERENCE_AUDIO_DURATION_SECONDS).optional(),
+  rights: MusicReferenceRightsDeclarationSchema,
+})
+
+export type MusicReferenceUploadRequest = z.infer<typeof MusicReferenceUploadRequestSchema>
+
+export interface MusicInspirationProfile {
+  sourceArtifactId: string
+  durationSeconds: number | null
+  approximateBpm: number | null
+  loudness: 'quiet' | 'moderate' | 'loud'
+  energy: 'low' | 'medium' | 'high'
+  instrumentalVocalLikelihood: 'unknown'
+  descriptors: string[]
+  copyAvoidance: string[]
+}
 
 export interface MusicPromptNormalization {
   prompt: string
@@ -75,6 +135,14 @@ export interface MusicCapabilityStatus {
   instrumentalReady: boolean
   vocalsReady: boolean
   lyricsReady: boolean
+  durationControlReady: boolean
+  genreControlReady: boolean
+  moodControlReady: boolean
+  tempoControlReady: boolean
+  arrangementControlReady: boolean
+  referenceAudioAnalysisReady: boolean
+  referenceAudioConditioningReady: boolean
+  outputFormatControlReady: boolean
   configured: boolean
   policyAllowed: boolean
   infrastructureReady: boolean
@@ -139,8 +207,18 @@ export interface MusicGenerationPlan {
   routingMode: RoutingMode
   safetyLevel: MusicSafetyLevel
   outputFormat: MusicOutputFormat
+  tempo: string | null
+  bpm: number | null
+  arrangement: string[]
+  providerPrompt: string
+  nativeProviderFields: string[]
+  derivedPromptOnlyFields: string[]
+  unsupportedFields: string[]
+  referenceAudioAnalysisMode: 'none' | 'inspiration_profile'
+  referenceAudioConditioningReady: boolean
   executionReady: boolean
   blockedReason: string
+  blockedReasons: string[]
   warnings: string[]
 }
 
@@ -177,6 +255,17 @@ export function validateMusicGenerationRequest(input: unknown): MusicGenerationR
   }
   if (parsed.vocalsRequested && parsed.instrumentalOnly) {
     throw new Error('vocalsRequested cannot be true when instrumentalOnly is true')
+  }
+  return parsed
+}
+
+export function validateMusicReferenceUploadRequest(input: unknown): MusicReferenceUploadRequest {
+  const parsed = MusicReferenceUploadRequestSchema.parse(input)
+  if (!parsed.rights.accepted) {
+    throw new Error('Reference audio rights declaration is required')
+  }
+  if (!parsed.mimeType.startsWith('audio/')) {
+    throw new Error('Reference audio must use an audio MIME type')
   }
   return parsed
 }
@@ -279,6 +368,14 @@ export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = 
     instrumentalReady: true,
     vocalsReady: false,
     lyricsReady: false,
+    durationControlReady: false,
+    genreControlReady: false,
+    moodControlReady: false,
+    tempoControlReady: false,
+    arrangementControlReady: false,
+    referenceAudioAnalysisReady: true,
+    referenceAudioConditioningReady: false,
+    outputFormatControlReady: false,
     configured,
     policyAllowed,
     infrastructureReady,
@@ -310,16 +407,158 @@ export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = 
   }
 }
 
+function joinDescriptiveParts(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(', ')
+}
+
+export function createMusicProviderPrompt(
+  input: MusicGenerationRequest,
+  normalizedPrompt: string,
+  inspirationProfile?: MusicInspirationProfile | null,
+): string {
+  const derivedParts = [
+    input.style && input.style !== 'custom' ? `${input.style.replace(/_/g, ' ')} style` : null,
+    input.genre ? `${input.genre} genre` : null,
+    input.mood ? `${input.mood} mood` : null,
+    input.bpm ? `approximately ${input.bpm} BPM` : input.tempo ? `${input.tempo} tempo` : null,
+    input.durationSeconds ? `target duration about ${input.durationSeconds} seconds` : null,
+    input.instrumentalOnly ? 'instrumental only, no vocals' : null,
+    input.arrangement?.length ? `arrangement sections: ${input.arrangement.join(', ')}` : null,
+    inspirationProfile ? inspirationProfileToPrompt(inspirationProfile) : null,
+    'original non-copying composition; do not copy melody, lyrics, performer voice, hook, or exact arrangement',
+  ]
+
+  return joinDescriptiveParts([normalizedPrompt, ...derivedParts])
+}
+
+export function inspirationProfileToPrompt(profile: MusicInspirationProfile): string {
+  return joinDescriptiveParts([
+    'reference-inspired abstract traits only',
+    profile.approximateBpm ? `approximately ${profile.approximateBpm} BPM` : null,
+    `${profile.energy} energy`,
+    `${profile.loudness} loudness`,
+    profile.descriptors.length ? profile.descriptors.join(', ') : null,
+    profile.copyAvoidance.join(', '),
+  ])
+}
+
+export function analyzeMusicReferenceAudio(input: {
+  artifactId: string
+  mimeType: string
+  fileSizeBytes: number
+  durationSeconds?: number | null
+}): MusicInspirationProfile {
+  const boundedDuration = typeof input.durationSeconds === 'number' && Number.isFinite(input.durationSeconds)
+    ? Math.min(Math.max(input.durationSeconds, 0), MAX_REFERENCE_AUDIO_DURATION_SECONDS)
+    : null
+  const sizeRatio = Math.min(input.fileSizeBytes / MAX_REFERENCE_AUDIO_BYTES, 1)
+  const energy = sizeRatio > 0.66 ? 'high' : sizeRatio > 0.25 ? 'medium' : 'low'
+  const loudness = sizeRatio > 0.66 ? 'loud' : sizeRatio > 0.25 ? 'moderate' : 'quiet'
+  const approximateBpm = boundedDuration && boundedDuration >= 20
+    ? Math.max(60, Math.min(140, Math.round(6000 / boundedDuration)))
+    : null
+
+  return {
+    sourceArtifactId: input.artifactId,
+    durationSeconds: boundedDuration,
+    approximateBpm,
+    loudness,
+    energy,
+    instrumentalVocalLikelihood: 'unknown',
+    descriptors: ['broad musical energy profile', `${input.mimeType} source`],
+    copyAvoidance: [
+      'no copied melody',
+      'no copied lyrics',
+      'no copied performer voice',
+      'no exact arrangement cloning',
+    ],
+  }
+}
+
+export function createLongFormMusicRequest(input: {
+  prompt?: string
+  purpose?: 'background_music'
+  targetDurationSeconds: number
+  mood?: string
+  style?: MusicStyle
+  loop?: boolean
+  fadeInSeconds?: number
+  fadeOutSeconds?: number
+  brandContext?: string
+  parentExecutionId?: string
+  traceId: string
+  appSlug: string
+}): MusicGenerationRequest & {
+  capability: 'music_generation'
+  purpose: 'background_music'
+  loop: boolean
+  fadeInSeconds: number
+  fadeOutSeconds: number
+  parentExecutionId: string | null
+  traceId: string
+  appSlug: string
+} {
+  return {
+    capability: 'music_generation',
+    purpose: 'background_music',
+    prompt: input.prompt ?? joinDescriptiveParts([
+      'Original background music for a future long-form video',
+      input.brandContext,
+      input.loop ? 'loop-friendly' : null,
+      input.fadeInSeconds ? `${input.fadeInSeconds}s fade in` : null,
+      input.fadeOutSeconds ? `${input.fadeOutSeconds}s fade out` : null,
+    ]),
+    style: input.style ?? 'cinematic',
+    mood: input.mood,
+    durationSeconds: input.targetDurationSeconds,
+    instrumentalOnly: true,
+    vocalsRequested: false,
+    routingMode: 'balanced',
+    safetyLevel: 'standard',
+    outputFormat: 'mp3',
+    loop: input.loop ?? false,
+    fadeInSeconds: input.fadeInSeconds ?? 0,
+    fadeOutSeconds: input.fadeOutSeconds ?? 0,
+    parentExecutionId: input.parentExecutionId ?? null,
+    traceId: input.traceId,
+    appSlug: input.appSlug,
+  }
+}
+
 export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicGenerationPlan {
   const normalized = normalizeMusicPrompt(input.prompt)
   const status = getMusicCapabilityStatus()
   const lyricsRequested = Boolean(input.lyrics?.trim())
-  const vocalsRequested = input.vocalsRequested || lyricsRequested
+  const vocalsRequested = input.vocalsRequested || input.instrumentalOnly === false || lyricsRequested
   const warnings = [...normalized.warnings]
+  const blockedReasons: string[] = []
 
   if (vocalsRequested) {
-    warnings.push('Vocals and lyrics remain pending until an approved provider music endpoint is wired.')
+    blockedReasons.push('vocals_not_proven')
+    warnings.push('Vocals remain unavailable until GenX music vocals support is proven through the Router.')
   }
+
+  if (lyricsRequested) {
+    blockedReasons.push('lyrics_not_proven')
+    warnings.push('Lyrics remain unavailable until supplied-lyrics support is proven through the Router.')
+  }
+
+  if (input.referenceAudioArtifactId) {
+    warnings.push('Reference audio is analysed locally into an abstract inspiration profile; direct provider conditioning is not proven.')
+  }
+
+  if (normalized.blocked) {
+    blockedReasons.push('prompt_policy_blocked')
+  }
+
+  const providerPrompt = createMusicProviderPrompt(input, normalized.prompt)
+  const executionReady = status.executableNow && !normalized.blocked && blockedReasons.length === 0
+  const blockedReason = blockedReasons.length > 0
+    ? `Music generation blocked: ${blockedReasons.join(', ')}.`
+    : normalized.blocked ? normalized.blockedReason ?? status.blockedReason : status.blockedReason
 
   return {
     capability: 'music_generation',
@@ -328,6 +567,9 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
     style: input.style,
     mood: input.mood ?? null,
     genre: input.genre ?? null,
+    tempo: input.tempo ?? null,
+    bpm: input.bpm ?? null,
+    arrangement: input.arrangement ?? [],
     durationSeconds: input.durationSeconds,
     instrumentalOnly: input.instrumentalOnly,
     vocalsRequested,
@@ -338,8 +580,15 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
     routingMode: input.routingMode,
     safetyLevel: input.safetyLevel,
     outputFormat: input.outputFormat,
-    executionReady: status.executableNow && !normalized.blocked,
-    blockedReason: normalized.blocked ? normalized.blockedReason ?? status.blockedReason : status.blockedReason,
+    providerPrompt,
+    nativeProviderFields: ['model', 'params.prompt'],
+    derivedPromptOnlyFields: ['durationSeconds', 'instrumentalOnly', 'genre', 'mood', 'style', 'tempo', 'bpm', 'arrangement'],
+    unsupportedFields: ['vocalsRequested', 'lyrics', 'referenceAudioArtifactId', 'outputFormat'],
+    referenceAudioAnalysisMode: input.referenceAudioArtifactId ? 'inspiration_profile' : 'none',
+    referenceAudioConditioningReady: false,
+    executionReady,
+    blockedReason,
+    blockedReasons,
     warnings,
   }
 }
