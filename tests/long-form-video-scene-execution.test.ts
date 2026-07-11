@@ -353,6 +353,16 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(progress).toBe(63) // Rounded
     })
 
+    it('does not count failed scenes as successful progress', () => {
+      const scenes = [
+        { sceneNumber: 1, sceneTitle: 'Scene 1', status: 'completed' as const },
+        { sceneNumber: 2, sceneTitle: 'Scene 2', status: 'failed' as const },
+        { sceneNumber: 3, sceneTitle: 'Scene 3', status: 'queued' as const },
+      ]
+
+      expect(calculateLongFormProgress(scenes)).toBe(33)
+    })
+
     it('returns 0 for empty scenes', () => {
       const progress = calculateLongFormProgress([])
       expect(progress).toBe(0)
@@ -382,7 +392,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
           { sceneNumber: 3, sceneTitle: 'Scene 3', status: 'failed' as const },
           { sceneNumber: 4, sceneTitle: 'Scene 4', status: 'queued' as const },
         ],
-        progress: 75,
+        progress: 50,
         finalAssemblyReady: false,
         missingDependencies: ['ffmpeg/stitching'],
         createdAt: new Date().toISOString(),
@@ -396,7 +406,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(summary.failedScenes).toBe(1)
       expect(summary.queuedScenes).toBe(1)
       expect(summary.processingScenes).toBe(0)
-      expect(summary.progress).toBe(75)
+      expect(summary.progress).toBe(50)
       expect(summary.canAssemble).toBe(false) // Not all completed
     })
 

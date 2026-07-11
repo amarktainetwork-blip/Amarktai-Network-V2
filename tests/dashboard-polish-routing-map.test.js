@@ -164,7 +164,7 @@ describe('dashboard polish and routing map contract', () => {
     })
   })
 
-  describe('Video page shows short/live and long-form/pending honestly', () => {
+  describe('Video page shows short/live and long-form durable Phase 1 honestly', () => {
     it('Video page shows short video as live capability', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
@@ -172,12 +172,13 @@ describe('dashboard polish and routing map contract', () => {
       expect(content).toContain('Live')
     })
 
-    it('Video page shows long-form as pending', () => {
+    it('Video page shows long-form durable orchestration as ready while multimedia remains pending', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
       expect(content).toContain('Long-Form Video')
-      expect(content).toContain('Pending')
-      expect(content).toContain('Backend Pending')
+      expect(content).toContain('Phase 1 Ready')
+      expect(content).toContain('Durable Orchestration Ready')
+      expect(content).toContain('Full multimedia assembly is pending')
     })
 
     it('Video page shows image-to-video as pending', () => {

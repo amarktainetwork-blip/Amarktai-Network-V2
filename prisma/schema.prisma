@@ -1821,14 +1821,28 @@ model Job {
   error           String?   @db.LongText
   callbackUrl     String?   @map("callback_url")
   providerClaimAt DateTime? @map("provider_claim_at")
+  parentJobId     String?   @map("parent_job_id")
+  executionId     String    @default("") @map("execution_id")
+  sceneNumber     Int?      @map("scene_number")
+  workflowPhase   String    @default("") @map("workflow_phase")
+  retryCount      Int       @default(0) @map("retry_count")
+  queueJobId      String    @default("") @map("queue_job_id")
+  queuedAt        DateTime? @map("queued_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   startedAt       DateTime? @map("started_at")
   completedAt     DateTime? @map("completed_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  parentJob       Job?      @relation("JobChildren", fields: [parentJobId], references: [id], onDelete: SetNull)
+  childJobs       Job[]     @relation("JobChildren")
+
   @@index([appSlug])
   @@index([status])
   @@index([traceId])
+  @@index([parentJobId])
+  @@index([executionId])
+  @@index([appSlug, executionId])
+  @@index([parentJobId, sceneNumber])
   @@index([createdAt])
   @@map("jobs")
 }

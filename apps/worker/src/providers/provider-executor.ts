@@ -21,6 +21,8 @@ import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey
 import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 
+type ProvidersModule = typeof import('@amarktai/providers')
+
 function formatSupportedCandidates(capability: CapabilityKey): string {
   return routeProvider(capability).candidates
     .filter((candidate) => candidate.supported)
@@ -128,6 +130,17 @@ function safeParseJsonObject(value: unknown): Record<string, unknown> {
   }
 }
 
+function readProviderJobIdFromMetadata(metadata: Record<string, unknown>): string | undefined {
+  const value = metadata.genxProviderJobId
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function extractGenxProviderJobIdFromError(err: unknown): string | undefined {
+  const message = err instanceof Error ? err.message : String(err)
+  const match = message.match(/providerJobId=([^;\s]+)/)
+  return match?.[1]?.trim()
+}
+
 async function persistJobMetadata(
   jobId: string,
   updates: Record<string, unknown>,
@@ -200,6 +213,127 @@ async function claimMusicExecution(
   }
 
   return { claimed: false, alreadySubmitted: false, error: 'Execution already claimed by another worker' }
+}
+
+async function claimProviderExecution(
+  jobId: string,
+): Promise<{ claimed: boolean; error?: string }> {
+  const now = new Date()
+  const result = await prisma.job.updateMany({
+    where: {
+      id: jobId,
+      status: 'processing',
+      providerClaimAt: null,
+    },
+    data: {
+      providerClaimAt: now,
+    },
+  })
+
+  if (result.count === 1) return { claimed: true }
+
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: { providerClaimAt: true, status: true },
+  })
+  if (!job) return { claimed: false, error: 'Job not found' }
+  if (job.status !== 'processing') return { claimed: false, error: `Job is not execution-eligible: ${job.status}` }
+
+  if (job.providerClaimAt) {
+    const claimAge = now.getTime() - job.providerClaimAt.getTime()
+    if (claimAge > STALE_CLAIM_MS) {
+      const reclaim = await prisma.job.updateMany({
+        where: {
+          id: jobId,
+          status: 'processing',
+          providerClaimAt: job.providerClaimAt,
+        },
+        data: {
+          providerClaimAt: now,
+        },
+      })
+      if (reclaim.count === 1) return { claimed: true }
+    }
+  }
+
+  return { claimed: false, error: 'Execution already claimed by another worker' }
+}
+
+async function resumeGenxVideoProviderJob(input: {
+  remoteJobId: string
+  apiKey: string
+  baseUrl?: string
+  model: string
+  providerAvailableModels: string[]
+  providers: Pick<ProvidersModule, 'genxPollVideo' | 'genxDownloadVideo' | 'GENX_POLL_INTERVAL_MS' | 'GENX_POLL_MAX_ATTEMPTS'>
+}): Promise<{
+  videoBuffer: Buffer
+  mimeType: string
+  duration?: number
+  width?: number
+  height?: number
+  model?: string
+  providerJobId?: string
+  metadata?: Record<string, unknown>
+}> {
+  let attempts = 0
+  while (attempts < input.providers.GENX_POLL_MAX_ATTEMPTS) {
+    await sleep(input.providers.GENX_POLL_INTERVAL_MS)
+    attempts++
+
+    const pollResult = await input.providers.genxPollVideo(input.remoteJobId, {
+      apiKey: input.apiKey,
+      baseUrl: input.baseUrl,
+      pollAttempt: attempts,
+    })
+
+    if (pollResult.status === 'failed') {
+      throw new Error(`GenX video generation failed for providerJobId=${input.remoteJobId}; model=${input.model}; pollAttempt=${attempts}; providerStatus=failed; ${pollResult.error ?? 'unknown error'}`)
+    }
+
+    if (pollResult.status !== 'completed') {
+      continue
+    }
+
+    const downloadUrls = [
+      pollResult.resultUrl,
+      `/api/v1/jobs/${input.remoteJobId}/result`,
+      `/api/v1/jobs/${input.remoteJobId}/file`,
+    ].filter((candidate): candidate is string => !!candidate)
+
+    let lastDownloadError: unknown
+    for (const downloadUrl of downloadUrls) {
+      try {
+        const video = await input.providers.genxDownloadVideo(downloadUrl, {
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl,
+          model: input.model,
+          providerAvailableModels: input.providerAvailableModels,
+        })
+        return {
+          ...video,
+          model: input.model,
+          providerJobId: input.remoteJobId,
+          metadata: {
+            ...video.metadata,
+            providerJobId: input.remoteJobId,
+            selectedModel: input.model,
+            pollAttempt: attempts,
+            resumed: true,
+          },
+        }
+      } catch (err) {
+        lastDownloadError = err
+      }
+    }
+
+    if (lastDownloadError instanceof Error) {
+      throw new Error(`GenX video download failed for providerJobId=${input.remoteJobId}; model=${input.model}; ${lastDownloadError.message}`)
+    }
+    throw new Error(`GenX video download failed for providerJobId=${input.remoteJobId}; model=${input.model}`)
+  }
+
+  throw new Error(`GenX video generation timed out after ${input.providers.GENX_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${input.remoteJobId}; model=${input.model}`)
 }
 
 async function recordMusicUsage(appSlug: string, model: string): Promise<void> {
@@ -826,7 +960,8 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
-    const { genxGenerateVideo, resolveGenxVideoModel } = await import('@amarktai/providers')
+    const providers = await import('@amarktai/providers')
+    const { genxGenerateVideo, resolveGenxVideoModel } = providers
     const { saveArtifact } = await import('@amarktai/artifacts')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
     model = resolveGenxVideoModel({
@@ -834,18 +969,73 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       providerFallbackModel: providerStatus.fallbackModel,
       providerAvailableModels,
     })
+    const job = await prisma.job.findUnique({
+      where: { id: payload.jobId },
+      select: { metadataJson: true },
+    }).catch(() => null)
+    const jobMetadata = safeParseJsonObject(job?.metadataJson)
+    const existingRemoteJobId = readProviderJobIdFromMetadata(jobMetadata)
 
-    const result = await genxGenerateVideo({
-      prompt: payload.prompt,
-      apiKey,
-      baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: providerStatus.defaultModel || undefined,
-      providerFallbackModel: providerStatus.fallbackModel || undefined,
-      providerAvailableModels,
-      duration: readNumber(payload.input, 'duration'),
-      aspectRatio: readString(payload.input, 'aspectRatio'),
-      style: readString(payload.input, 'style'),
-    })
+    const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
+    if (existingArtifact) {
+      const output = {
+        artifactId: existingArtifact.id,
+        artifactUrl: existingArtifact.storageUrl,
+        mimeType: existingArtifact.mimeType,
+        fileSizeBytes: existingArtifact.fileSizeBytes,
+        reused: true,
+      }
+      return {
+        success: true,
+        status: 'completed',
+        provider: 'genx',
+        model,
+        artifactId: existingArtifact.id,
+        output: JSON.stringify(output),
+        metadata: output,
+      }
+    }
+
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) {
+      return {
+        success: false,
+        status: 'failed',
+        error: claim.error || 'Execution already claimed by another worker',
+        provider: 'genx',
+        model,
+      }
+    }
+
+    const result = existingRemoteJobId
+      ? await resumeGenxVideoProviderJob({
+        remoteJobId: existingRemoteJobId,
+        apiKey,
+        baseUrl: providerStatus.baseUrl || undefined,
+        model,
+        providerAvailableModels,
+        providers,
+      })
+      : await genxGenerateVideo({
+        prompt: payload.prompt,
+        apiKey,
+        baseUrl: providerStatus.baseUrl || undefined,
+        providerDefaultModel: providerStatus.defaultModel || undefined,
+        providerFallbackModel: providerStatus.fallbackModel || undefined,
+        providerAvailableModels,
+        duration: readNumber(payload.input, 'duration'),
+        aspectRatio: readString(payload.input, 'aspectRatio'),
+        style: readString(payload.input, 'style'),
+      }).catch(async (err) => {
+        const remoteJobId = extractGenxProviderJobIdFromError(err)
+        if (remoteJobId) {
+          await persistJobMetadata(payload.jobId, {
+            genxProviderJobId: remoteJobId,
+            genxProviderModel: model,
+          }).catch(() => {})
+        }
+        throw err
+      })
 
     if (!result.videoBuffer || result.videoBuffer.length === 0) {
       return {
@@ -874,6 +1064,10 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
           height: result.height,
           duration: result.duration,
           providerJobId: result.providerJobId,
+          longFormVideo: payload.metadata?.longFormVideo === true,
+          parentJobId: typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : undefined,
+          executionId: typeof payload.metadata?.executionId === 'string' ? payload.metadata.executionId : undefined,
+          sceneNumber: typeof payload.metadata?.sceneNumber === 'number' ? payload.metadata.sceneNumber : undefined,
         },
       },
       data: result.videoBuffer,
@@ -890,6 +1084,13 @@ async function executeGenxVideo(payload: WorkerJobData): Promise<ProcessorResult
       duration: result.duration,
       providerJobId: result.providerJobId,
       selectedModel: result.model || model,
+    }
+
+    if (result.providerJobId) {
+      await persistJobMetadata(payload.jobId, {
+        genxProviderJobId: result.providerJobId,
+        genxProviderModel: result.model || model,
+      }).catch(() => {})
     }
 
     return {

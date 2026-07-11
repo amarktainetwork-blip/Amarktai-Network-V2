@@ -89,7 +89,7 @@ export default function VideoStudioPage() {
               <Zap className="mr-1 h-2.5 w-2.5" /> Phase 1 Ready
             </Badge>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">Orchestration foundation ready. Final render pending.</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Durable orchestration and scene recovery ready. Multimedia render pending.</p>
         </Card>
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
@@ -184,10 +184,10 @@ export default function VideoStudioPage() {
           {mode === 'long' && (
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
               <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
-                <AlertTriangle className="h-3.5 w-3.5" /> Backend Pending
+                <AlertTriangle className="h-3.5 w-3.5" /> Durable Orchestration Ready
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Long-form video generation (storyboard, stitching, multi-scene) is not yet wired to a backend endpoint.
+                Long-form can persist a parent job, plan, linked scene jobs, and recovery state. Full multimedia assembly is pending.
               </p>
             </div>
           )}
@@ -237,9 +237,9 @@ export default function VideoStudioPage() {
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Video Phase 3</h3>
           <div className="space-y-3">
             <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-cyan-200">Video-Only Assembly Ready</p>
+              <p className="text-xs font-semibold text-cyan-200">Durable Scene Workflow Ready</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Scene execution and final video stitching are ready. Requires ffmpeg on the system.
+                Parent orchestration, scene linkage, retry/resume, progress tracking, and video-only handoff are durable.
               </p>
             </div>
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
@@ -248,10 +248,11 @@ export default function VideoStudioPage() {
                 <li>Plan creation with scene splitting</li>
                 <li>Per-scene video generation via GenX</li>
                 <li>Scene job queuing and tracking</li>
+                <li>Durable parent job and exact scene linkage</li>
+                <li>Scene retry/resume without duplicate queue submission</li>
                 <li>Brain Router provider/model selection</li>
                 <li>Enhanced cinematic prompts per scene</li>
-                <li>Scene stitching with ffmpeg (video-only)</li>
-                <li>Final artifact assembly and persistence</li>
+                <li>Video-only assembly handoff preparation</li>
               </ul>
             </div>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">

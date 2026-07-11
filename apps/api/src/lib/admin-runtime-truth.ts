@@ -250,7 +250,7 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
   const capabilities = selectCapabilityProofStates(completedJobs, artifactRecords) ?? {}
 
   const queueInfrastructureReady = Boolean(app.redis)
-  for (const capability of ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation', 'music_generation'] as CapabilityKey[]) {
+  for (const capability of ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation', 'music_generation', 'long_form_video'] as CapabilityKey[]) {
     capabilities[capability] = {
       ...capabilities[capability],
       infrastructureReady: queueInfrastructureReady,

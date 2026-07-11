@@ -46,6 +46,7 @@ export interface SceneExecutionState {
 
 export interface LongFormExecutionState {
   executionId: string
+  parentJobId?: string
   planId: string
   routingMode: string
   totalScenes: number
@@ -57,9 +58,25 @@ export interface LongFormExecutionState {
   finalArtifactUrl?: string
   finalAssemblyCompletedAt?: string
   finalAssemblyMode?: 'video_only'
+  assemblyHandoff?: LongFormAssemblyHandoff
   missingDependencies: string[]
   createdAt: string
   updatedAt: string
+}
+
+export interface LongFormAssemblyHandoff {
+  parentJobId: string
+  executionId: string
+  orderedSceneArtifactIds: string[]
+  expectedSceneCount: number
+  expectedDurationSeconds: number
+  aspectRatio: string
+  outputTitle: string
+  requestedVoiceover: boolean
+  requestedSubtitles: boolean
+  requestedMusic: boolean
+  assemblyStatus: 'waiting_for_scenes' | 'ready_for_video_only' | 'blocked' | 'completed'
+  missingDependencies: string[]
 }
 
 // ── Build Scene Video Prompt ───────────────────────────────────────────────────
@@ -213,7 +230,7 @@ export function calculateLongFormProgress(
     queued: 0,
     processing: 0.5,
     completed: 1,
-    failed: 1, // Count failed as "done" for progress
+    failed: 0,
   }
 
   const totalWeight = scenes.reduce((sum, scene) => {
