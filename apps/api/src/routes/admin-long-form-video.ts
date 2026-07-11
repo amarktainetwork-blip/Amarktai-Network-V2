@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
-import { prisma } from '@amarktai/db'
+import { prisma, refreshLongFormParentState } from '@amarktai/db'
 import {
   BLOCKED_OVERRIDE_FIELDS,
   DEFAULT_JOB_OPTIONS,
@@ -25,6 +25,7 @@ import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 const APP_SLUG = 'dashboard-long-form'
 const MAX_SCENE_RETRIES = 3
+const TERMINAL_SCENE_STATUSES = new Set(['completed', 'cancelled', 'cancelling'])
 
 type DbJob = Awaited<ReturnType<typeof prisma.job.findMany>>[number]
 
@@ -225,7 +226,7 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
   }
 }
 
-async function loadParentAndScenes(id: string, appSlug = APP_SLUG) {
+async function loadParentAndScenes(id: string, appSlug: string) {
   const parent = await prisma.job.findFirst({
     where: {
       appSlug,
@@ -241,8 +242,28 @@ async function loadParentAndScenes(id: string, appSlug = APP_SLUG) {
   return { parent, sceneJobs }
 }
 
+async function removeQueueJob(q: Queue, sceneJob: DbJob): Promise<string[]> {
+  const removed: string[] = []
+  const ids = [sceneJob.queueJobId, sceneJob.id].filter((value, index, values): value is string =>
+    typeof value === 'string' && value.length > 0 && values.indexOf(value) === index)
+
+  for (const id of ids) {
+    try {
+      const job = await q.getJob(id)
+      if (job) {
+        await job.remove()
+        removed.push(id)
+      }
+    } catch {
+      // Queue cleanup is best-effort; DB cancellation remains authoritative.
+    }
+  }
+  return removed
+}
+
 async function enqueueSceneJob(q: Queue, sceneJob: DbJob): Promise<{ queued: boolean; skipped: boolean; error?: string }> {
   if (sceneJob.status === 'completed' && sceneJob.artifactId) return { queued: false, skipped: true }
+  if (TERMINAL_SCENE_STATUSES.has(sceneJob.status)) return { queued: false, skipped: true, error: 'terminal_scene_state' }
   if ((sceneJob.status === 'queued' || sceneJob.status === 'processing') && sceneJob.queueJobId) return { queued: false, skipped: true }
   if (sceneJob.status === 'failed' && sceneJob.retryCount >= MAX_SCENE_RETRIES) {
     return { queued: false, skipped: true, error: 'retry_limit_reached' }
@@ -260,16 +281,17 @@ async function enqueueSceneJob(q: Queue, sceneJob: DbJob): Promise<{ queued: boo
     routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
   }
 
+  const queueJobId = sceneJob.retryCount > 0 ? `${sceneJob.id}:attempt:${sceneJob.retryCount}` : sceneJob.id
   await q.add('process', payload, {
     ...DEFAULT_JOB_OPTIONS,
-    jobId: sceneJob.id,
+    jobId: queueJobId,
   })
   await prisma.job.update({
     where: { id: sceneJob.id },
     data: {
       status: 'queued',
       error: null,
-      queueJobId: sceneJob.id,
+      queueJobId,
       queuedAt: new Date(),
       workflowPhase: 'scene_queued',
     },
@@ -313,11 +335,40 @@ async function enqueueSceneJobs(q: Queue, parent: DbJob, sceneJobs: DbJob[]) {
       error: failed.length > 0 ? `Scene queue failures: ${failed.map((item) => item.jobId).join(', ')}` : null,
     },
   })
+  await refreshLongFormParentState(parent.id)
 
   return { queued, skipped, failed }
 }
 
-async function createDurableLongFormExecution(input: LongFormVideoRequest, routingMode: string, q: Queue, dryRun = false) {
+async function prepareSceneRetry(q: Queue, scene: DbJob): Promise<DbJob | null> {
+  await removeQueueJob(q, scene)
+  const metadata = safeJson(scene.metadataJson)
+  const nextRetryCount = scene.retryCount + 1
+  const updated = await prisma.job.updateMany({
+    where: {
+      id: scene.id,
+      status: 'failed',
+      retryCount: scene.retryCount,
+    },
+    data: {
+      status: 'queued',
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      providerClaimAt: null,
+      progress: 0,
+      retryCount: { increment: 1 },
+      queueJobId: '',
+      queuedAt: null,
+      workflowPhase: 'scene_retry_requested',
+      metadataJson: JSON.stringify({ ...metadata, retryGeneration: nextRetryCount }),
+    },
+  })
+  if (updated.count !== 1) return null
+  return await prisma.job.findUnique({ where: { id: scene.id } })
+}
+
+async function createDurableLongFormExecution(appSlug: string, input: LongFormVideoRequest, routingMode: string, q: Queue, dryRun = false) {
   const plan = createLongFormVideoPlan(input)
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
@@ -325,13 +376,13 @@ async function createDurableLongFormExecution(input: LongFormVideoRequest, routi
   const { parent, sceneJobs } = await prisma.$transaction(async (tx) => {
     const parent = await tx.job.create({
       data: {
-        appSlug: APP_SLUG,
+        appSlug,
         capability: 'long_form_video',
         prompt: input.prompt,
         inputJson: JSON.stringify(input),
         metadataJson: JSON.stringify(parentMetadata(input, plan, executionId)),
         traceId: `trace_longform_${executionId}`,
-        status: dryRun ? 'queued' : 'processing',
+        status: dryRun ? 'planned' : 'processing',
         progress: 0,
         executionId,
         workflowPhase: dryRun ? 'planned' : 'scene_submission',
@@ -350,13 +401,13 @@ async function createDurableLongFormExecution(input: LongFormVideoRequest, routi
       }
       const job = await tx.job.create({
         data: {
-          appSlug: APP_SLUG,
+          appSlug,
           capability: 'video_generation',
           prompt: payload.prompt,
           inputJson: JSON.stringify(payload.input),
           metadataJson: JSON.stringify(metadata),
           traceId: `trace_longform_${executionId}_scene_${payload.sceneNumber}`,
-          status: dryRun ? 'queued' : 'queued',
+          status: dryRun ? 'planned' : 'queued',
           parentJobId: parent.id,
           executionId,
           sceneNumber: payload.sceneNumber,
@@ -380,8 +431,9 @@ async function createDurableLongFormExecution(input: LongFormVideoRequest, routi
     return { parent, sceneJobs }
   })
 
-  const queueResult = dryRun ? { queued: [], skipped: sceneJobs.map((job) => job.id), failed: [] } : await enqueueSceneJobs(q, parent, sceneJobs)
-  const latest = await loadParentAndScenes(parent.id)
+  await refreshLongFormParentState(parent.id)
+  const queueResult = dryRun ? { queued: [], skipped: [], failed: [] } : await enqueueSceneJobs(q, parent, sceneJobs)
+  const latest = await loadParentAndScenes(parent.id, appSlug)
   return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, queueResult, plan, executionId }
 }
 
@@ -430,7 +482,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     try {
       const requestInput = body.request && typeof body.request === 'object' ? body.request : body
       const validatedRequest = validateLongFormVideoRequest(requestInput)
-      const result = await createDurableLongFormExecution(validatedRequest, routingMode, getQueue(), dryRun)
+      const result = await createDurableLongFormExecution(APP_SLUG, validatedRequest, routingMode, getQueue(), dryRun)
       const status = deriveStatus(result.parent, result.sceneJobs)
       return reply.status(dryRun ? 200 : result.queueResult.failed.length > 0 ? 207 : 202).send({
         success: result.queueResult.failed.length === 0,
@@ -461,7 +513,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.get('/api/admin/long-form-video/executions/:id', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id } = request.params as { id: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     return reply.status(200).send({
       success: true,
@@ -473,7 +525,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.get('/api/admin/long-form-video/executions/:id/scenes', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id } = request.params as { id: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     return reply.status(200).send({ success: true, scenes: deriveStatus(loaded.parent, loaded.sceneJobs).scenes })
   })
@@ -481,11 +533,17 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.post('/api/admin/long-form-video/executions/:id/resume', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id } = request.params as { id: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
-    const resumable = loaded.sceneJobs.filter((job) => job.status === 'queued' || (job.status === 'failed' && job.error?.includes('queue submission')))
+    if (loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling') {
+      return reply.status(409).send({ error: true, message: 'Cancelled long-form executions cannot be resumed without an explicit supported transition' })
+    }
+    const resumable = loaded.sceneJobs.filter((job) =>
+      job.status === 'planned'
+      || (job.status === 'queued' && !job.queueJobId)
+      || (job.status === 'failed' && job.error?.includes('queue submission')))
     const result = await enqueueSceneJobs(getQueue(), loaded.parent, resumable)
-    const latest = await loadParentAndScenes(loaded.parent.id)
+    const latest = await loadParentAndScenes(loaded.parent.id, APP_SLUG)
     return reply.status(result.failed.length > 0 ? 207 : 200).send({
       success: result.failed.length === 0,
       queueResult: result,
@@ -496,7 +554,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.post('/api/admin/long-form-video/executions/:id/scenes/:sceneNumber/retry', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id, sceneNumber } = request.params as { id: string; sceneNumber: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     const scene = loaded.sceneJobs.find((job) => job.sceneNumber === Number(sceneNumber))
     if (!scene) return reply.status(404).send({ error: true, message: 'Scene job not found' })
@@ -504,22 +562,10 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (scene.status !== 'failed') return reply.status(409).send({ error: true, message: 'Only failed scenes can be retried' })
     if (scene.retryCount >= MAX_SCENE_RETRIES) return reply.status(409).send({ error: true, message: 'Scene retry limit reached' })
 
-    const metadata = safeJson(scene.metadataJson)
-    const updated = await prisma.job.update({
-      where: { id: scene.id },
-      data: {
-        status: 'queued',
-        error: null,
-        completedAt: null,
-        progress: 0,
-        retryCount: { increment: 1 },
-        queueJobId: '',
-        workflowPhase: 'scene_retry_requested',
-        metadataJson: JSON.stringify({ ...metadata, retryGeneration: scene.retryCount + 1 }),
-      },
-    })
+    const updated = await prepareSceneRetry(getQueue(), scene)
+    if (!updated) return reply.status(409).send({ error: true, message: 'Scene retry was already claimed by another request' })
     const result = await enqueueSceneJobs(getQueue(), loaded.parent, [updated])
-    const latest = await loadParentAndScenes(loaded.parent.id)
+    const latest = await loadParentAndScenes(loaded.parent.id, APP_SLUG)
     return reply.status(result.failed.length > 0 ? 207 : 200).send({
       success: result.failed.length === 0,
       queueResult: result,
@@ -530,28 +576,19 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.post('/api/admin/long-form-video/executions/:id/retry-failed', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id } = request.params as { id: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+    if (loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling') {
+      return reply.status(409).send({ error: true, message: 'Cancelled long-form executions cannot be retried without an explicit supported transition' })
+    }
     const retryable = loaded.sceneJobs.filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES)
     const updated = []
     for (const scene of retryable) {
-      const metadata = safeJson(scene.metadataJson)
-      updated.push(await prisma.job.update({
-        where: { id: scene.id },
-        data: {
-          status: 'queued',
-          error: null,
-          completedAt: null,
-          progress: 0,
-          retryCount: { increment: 1 },
-          queueJobId: '',
-          workflowPhase: 'scene_retry_requested',
-          metadataJson: JSON.stringify({ ...metadata, retryGeneration: scene.retryCount + 1 }),
-        },
-      }))
+      const prepared = await prepareSceneRetry(getQueue(), scene)
+      if (prepared) updated.push(prepared)
     }
     const result = await enqueueSceneJobs(getQueue(), loaded.parent, updated)
-    const latest = await loadParentAndScenes(loaded.parent.id)
+    const latest = await loadParentAndScenes(loaded.parent.id, APP_SLUG)
     return reply.status(result.failed.length > 0 ? 207 : 200).send({
       success: result.failed.length === 0,
       queueResult: result,
@@ -562,18 +599,64 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.post('/api/admin/long-form-video/executions/:id/cancel', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { id } = request.params as { id: string }
-    const loaded = await loadParentAndScenes(id)
+    const loaded = await loadParentAndScenes(id, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
-    await prisma.job.updateMany({
-      where: { parentJobId: loaded.parent.id, status: { in: ['queued', 'processing'] } },
-      data: { status: 'cancelled', workflowPhase: 'cancelled', completedAt: new Date() },
-    })
-    const parent = await prisma.job.update({
+
+    const removedQueueJobs: string[] = []
+    let activeRemoteMayFinish = false
+    for (const scene of loaded.sceneJobs) {
+      if (scene.status === 'completed') continue
+      removedQueueJobs.push(...await removeQueueJob(getQueue(), scene))
+
+      if (scene.status === 'processing') {
+        activeRemoteMayFinish = activeRemoteMayFinish || !!scene.providerClaimAt
+        await prisma.job.update({
+          where: { id: scene.id },
+          data: {
+            status: 'cancelling',
+            workflowPhase: 'cancellation_requested',
+            error: scene.providerClaimAt
+              ? 'Cancellation requested. Remote GenX execution may finish; late artifacts must not reactivate the parent.'
+              : 'Cancellation requested before provider submission.',
+          },
+        })
+      } else {
+        await prisma.job.update({
+          where: { id: scene.id },
+          data: {
+            status: 'cancelled',
+            workflowPhase: 'cancelled',
+            completedAt: new Date(),
+            queueJobId: '',
+            queuedAt: null,
+            error: 'Cancelled before execution completed.',
+          },
+        })
+      }
+    }
+
+    await prisma.job.update({
       where: { id: loaded.parent.id },
-      data: { status: 'cancelled', workflowPhase: 'cancelled', completedAt: new Date() },
+      data: {
+        status: activeRemoteMayFinish ? 'cancelling' : 'cancelled',
+        workflowPhase: activeRemoteMayFinish ? 'cancellation_requested' : 'cancelled',
+        completedAt: activeRemoteMayFinish ? null : new Date(),
+        error: activeRemoteMayFinish
+          ? 'Cancellation requested. One or more remote provider executions may finish; late artifacts will not reactivate this parent.'
+          : 'Long-form execution cancelled.',
+      },
     })
-    const sceneJobs = await prisma.job.findMany({ where: { parentJobId: parent.id }, orderBy: { sceneNumber: 'asc' } })
-    return reply.status(200).send({ success: true, execution: deriveStatus(parent, sceneJobs) })
+    const refreshed = await refreshLongFormParentState(loaded.parent.id)
+    return reply.status(200).send({
+      success: true,
+      removedQueueJobs,
+      cancellation: {
+        requested: true,
+        remoteExecutionMayFinish: activeRemoteMayFinish,
+        lateArtifactsReactivateParent: false,
+      },
+      execution: refreshed ? deriveStatus(refreshed.parent, refreshed.sceneJobs) : null,
+    })
   })
 
   app.post('/api/admin/long-form-video/assemble/:executionId', async (request, reply) => {
@@ -582,7 +665,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     const body = request.body as Record<string, unknown>
     const dryRun = body.dryRun === true
     const outputTitle = body.outputTitle as string | undefined
-    const loaded = await loadParentAndScenes(executionId)
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     const status = deriveStatus(loaded.parent, loaded.sceneJobs)
     if (!status.finalAssemblyReady) {
@@ -620,6 +703,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         output: JSON.stringify(result),
       },
     })
+    await refreshLongFormParentState(loaded.parent.id)
     return reply.status(200).send({
       ...result,
       success: true,
@@ -631,7 +715,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
   app.get('/api/admin/long-form-video/assembly/:executionId', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { executionId } = request.params as { executionId: string }
-    const loaded = await loadParentAndScenes(executionId)
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     const status = deriveStatus(loaded.parent, loaded.sceneJobs)
     const sceneArtifacts = await resolveSceneArtifacts(loaded.parent.executionId)

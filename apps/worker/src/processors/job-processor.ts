@@ -15,7 +15,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { prisma } from '@amarktai/db'
+import { prisma, refreshLongFormParentState } from '@amarktai/db'
 import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ export interface ProcessorDeps {
 }
 
 type PartialWorkerJobData = Partial<WorkerJobData> & { jobId?: string }
+const TERMINAL_JOB_STATUSES = new Set(['completed', 'cancelled', 'cancelling'])
 
 // ── Canonical queue name (must match API ingestion) ────────────────────────────
 
@@ -81,9 +82,25 @@ function makeTraceId(): string {
   return `trace_${randomUUID()}`
 }
 
+async function updateJobMany(args: Parameters<typeof prisma.job.updateMany>[0]): Promise<{ count: number }> {
+  const maybeUpdateMany = (prisma.job as typeof prisma.job & { updateMany?: typeof prisma.job.updateMany }).updateMany
+  if (typeof maybeUpdateMany === 'function') {
+    return await maybeUpdateMany(args)
+  }
+
+  // Compatibility for older unit-test mocks. Real Prisma clients always expose
+  // updateMany, which is required for the atomic cancellation guard.
+  const id = args.where && 'id' in args.where && typeof args.where.id === 'string' ? args.where.id : null
+  if (id) {
+    await prisma.job.update({ where: { id }, data: args.data })
+    return { count: 1 }
+  }
+  return { count: 0 }
+}
+
 async function markJobFailed(jobId: string, error: string): Promise<void> {
-  await prisma.job.update({
-    where: { id: jobId },
+  await updateJobMany({
+    where: { id: jobId, status: { notIn: ['completed', 'cancelled', 'cancelling'] } },
     data: {
       status: 'failed',
       error,
@@ -92,6 +109,13 @@ async function markJobFailed(jobId: string, error: string): Promise<void> {
   }).catch(() => {
     // Preserve the original worker error for BullMQ if the status write fails.
   })
+}
+
+async function refreshParentFromPayload(payload: WorkerJobData): Promise<void> {
+  const parentJobId = typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : null
+  if (parentJobId) {
+    await refreshLongFormParentState(parentJobId).catch(() => {})
+  }
 }
 
 async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
@@ -181,10 +205,20 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       throw new Error(error)
     }
 
-    // 5. Update status to processing
+    // 5. Atomically claim an execution-eligible queued job.
+    if (TERMINAL_JOB_STATUSES.has(job.status)) {
+      console.info('[worker] skipping terminal job', { dbJobId: jobId, appSlug, capability, status: job.status })
+      return {
+        success: false,
+        status: 'failed',
+        error: `Job skipped because it is already terminal: ${job.status}`,
+        metadata: { skipped: true, terminalStatus: job.status },
+      }
+    }
+
     console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, from: job.status, to: 'processing' })
-    await prisma.job.update({
-      where: { id: jobId },
+    const processingClaim = await updateJobMany({
+      where: { id: jobId, status: 'queued' },
       data: {
         status: 'processing',
         startedAt: new Date(),
@@ -193,6 +227,16 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         progress: 0,
       },
     })
+    if (processingClaim.count !== 1) {
+      const latest = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
+      console.info('[worker] skipped non-executable job state', { dbJobId: jobId, appSlug, capability, status: latest?.status ?? job.status })
+      return {
+        success: false,
+        status: 'failed',
+        error: `Job skipped because status is not execution-eligible: ${latest?.status ?? job.status}`,
+        metadata: { skipped: true, terminalStatus: latest?.status ?? job.status },
+      }
+    }
 
     try {
       // 6. Call execution (does NOT call providers in Phase 4)
@@ -223,19 +267,27 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           completedData.artifactId = result.artifactId
         }
 
-        await prisma.job.update({
-          where: { id: jobId },
+        const completed = await updateJobMany({
+          where: { id: jobId, status: 'processing' },
           data: completedData,
         })
+        if (completed.count !== 1) {
+          await refreshParentFromPayload(payload)
+          return {
+            ...result,
+            metadata: { ...result.metadata, skippedTerminalOverwrite: true },
+          }
+        }
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'completed' })
+        await refreshParentFromPayload(payload)
         return result
       }
 
       // 8. Execution failed (expected in Phase 4)
       // Update DB job to failed, then THROW so BullMQ also records failure
       const errorMsg = result.error ?? 'Execution failed'
-      await prisma.job.update({
-        where: { id: jobId },
+      await updateJobMany({
+        where: { id: jobId, status: 'processing' },
         data: {
           status: 'failed',
           error: errorMsg,
@@ -246,6 +298,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         },
       })
       console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
+      await refreshParentFromPayload(payload)
 
       // Throw so BullMQ records the queue job as failed too
       throw new Error(errorMsg)
@@ -260,8 +313,8 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       // Attempt to update DB to failed state
       // If step 8 already updated it, this is a harmless no-op (same status)
       // If executeCapability threw, this records the error
-      await prisma.job.update({
-        where: { id: jobId },
+      await updateJobMany({
+        where: { id: jobId, status: { notIn: ['completed', 'cancelled', 'cancelling'] } },
         data: {
           status: 'failed',
           error: errorMessage,
@@ -270,6 +323,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       }).catch(() => {
         // If DB update fails, the original error is more important
       })
+      await refreshParentFromPayload(payload)
 
       // Re-throw so BullMQ records the failure
       throw err

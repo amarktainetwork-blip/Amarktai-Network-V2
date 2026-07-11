@@ -253,6 +253,20 @@ describe('GenX video executor', () => {
     expect(output.providerJobId).toBe('genx-remote-resume-001')
   })
 
+  it('blocks provider submission when cancellation wins before the provider claim', async () => {
+    prismaMock.job.findUnique
+      .mockResolvedValueOnce({ metadataJson: '{}' })
+      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' })
+    prismaMock.job.updateMany.mockResolvedValueOnce({ count: 0 })
+
+    const result = await executeWithProvider(makePayload())
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not execution-eligible: cancelled')
+    expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
+    expect(providerMocks.genxPollVideo).not.toHaveBeenCalled()
+  })
+
   it('returns safe GenX failure diagnostics without leaking the API key', async () => {
     providerMocks.genxGenerateVideo.mockRejectedValueOnce(
       new Error('GenX poll failed for providerJobId=job-remote; model=grok-imagine-video; pollAttempt=41; httpStatus=500; body=Internal Server Error genx-secret-key'),

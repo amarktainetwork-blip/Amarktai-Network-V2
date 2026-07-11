@@ -222,6 +222,7 @@ async function claimProviderExecution(
   const result = await prisma.job.updateMany({
     where: {
       id: jobId,
+      status: 'processing',
       providerClaimAt: null,
     },
     data: {
@@ -233,9 +234,10 @@ async function claimProviderExecution(
 
   const job = await prisma.job.findUnique({
     where: { id: jobId },
-    select: { providerClaimAt: true },
+    select: { providerClaimAt: true, status: true },
   })
   if (!job) return { claimed: false, error: 'Job not found' }
+  if (job.status !== 'processing') return { claimed: false, error: `Job is not execution-eligible: ${job.status}` }
 
   if (job.providerClaimAt) {
     const claimAge = now.getTime() - job.providerClaimAt.getTime()
@@ -243,6 +245,7 @@ async function claimProviderExecution(
       const reclaim = await prisma.job.updateMany({
         where: {
           id: jobId,
+          status: 'processing',
           providerClaimAt: job.providerClaimAt,
         },
         data: {

@@ -13,6 +13,7 @@ const prismaMock = vi.hoisted(() => ({
   job: {
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
 }))
 
@@ -35,6 +36,7 @@ const credentialMocks = vi.hoisted(() => {
 
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
+  refreshLongFormParentState: vi.fn(async () => null),
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
@@ -90,6 +92,14 @@ function makeDbJob(overrides = {}) {
     ...overrides,
   }
 }
+
+beforeEach(() => {
+  prismaMock.job.update.mockResolvedValue({})
+  prismaMock.job.updateMany.mockImplementation(async (args) => {
+    prismaMock.job.update({ where: { id: args.where.id }, data: args.data })
+    return { count: 1 }
+  })
+})
 
 // ── Queue name tests ─────────────────────────────────────────────────────────
 
@@ -320,6 +330,38 @@ describe('Job processor — execution lifecycle', () => {
         }),
       })
     )
+  })
+
+  it('skips cancelled jobs without calling the provider or converting them to failed', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ success: true, status: 'completed', output: 'nope' })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ status: 'cancelled' }))
+
+    const result = await processor(makePayload())
+
+    expect(result.metadata?.skipped).toBe(true)
+    expect(mockExecute).not.toHaveBeenCalled()
+    expect(prismaMock.job.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'failed' }),
+    }))
+  })
+
+  it('does not overwrite a job cancelled after provider execution starts', async () => {
+    const mockExecute = vi.fn().mockResolvedValue({ success: true, status: 'completed', output: 'late artifact' })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
+    prismaMock.job.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 })
+
+    const result = await processor(makePayload())
+
+    expect(mockExecute).toHaveBeenCalled()
+    expect(result.metadata?.skippedTerminalOverwrite).toBe(true)
+    expect(prismaMock.job.updateMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { id: 'job-uuid-001', status: 'processing' },
+      data: expect.objectContaining({ status: 'completed' }),
+    }))
   })
 
   it('clears stale completion fields when a retry starts processing', async () => {
