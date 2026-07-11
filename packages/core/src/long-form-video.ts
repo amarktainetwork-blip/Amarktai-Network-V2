@@ -185,7 +185,7 @@ export const LONG_FORM_VIDEO_STATUS = {
   perSceneVideoGenerationPossible: true, // Can use existing video_generation
   voiceoverReady: true,
   subtitlesReady: true,
-  musicBedReady: false,
+  musicBedReady: true,
   fullMultimediaReady: false,
   liveProven: false,
   sceneStitchingReady: false,

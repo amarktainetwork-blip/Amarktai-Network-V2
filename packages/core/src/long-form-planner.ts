@@ -242,10 +242,9 @@ function createRenderSteps(request: LongFormVideoRequest): LongFormRenderStep[] 
     steps.push({
       stepNumber: stepNumber++,
       type: 'music_bed_generation',
-      description: 'Generate music bed audio',
+      description: 'Generate instrumental music bed via GenX Lyria',
       dependencies: [],
-      status: 'blocked',
-      blockedReason: 'Music bed backend not wired yet'
+      status: 'ready'
     })
   }
 
@@ -307,7 +306,7 @@ function createArtifactPlan(
 
 // ── Missing Dependencies Identification ───────────────────────────────────────
 
-function identifyMissingDependencies(request: LongFormVideoRequest): string[] {
+function identifyMissingDependencies(_request: LongFormVideoRequest): string[] {
   const missing: string[] = []
 
   // Scene stitching is always missing
@@ -319,10 +318,8 @@ function identifyMissingDependencies(request: LongFormVideoRequest): string[] {
   // Subtitles are wired via local SRT/VTT generation endpoint
   // No longer a missing dependency
 
-  // Music bed is missing if enabled
-  if (request.musicBedEnabled) {
-    missing.push('music_bed_backend')
-  }
+  // Music bed is wired via GenX music generation endpoint
+  // No longer a missing dependency
 
   // Final assembly is always missing
   missing.push('final_assembly_pipeline')

@@ -127,7 +127,7 @@ function buildAssemblyHandoff({
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
     ...(request.voiceoverEnabled ? ['voiceover_pending'] : []),
     ...(request.subtitlesEnabled ? ['subtitles_pending'] : []),
-    ...(request.musicBedEnabled ? ['music_bed_not_implemented'] : []),
+    ...(request.musicBedEnabled ? ['music_bed_pending'] : []),
     'full_multimedia_assembly_pending',
   ]
 
@@ -238,7 +238,6 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
       ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
       ...((metadata.blockedReasons as string[] | undefined) ?? []),
       'subtitles_pending',
-      'music_bed_not_implemented',
       'full_multimedia_not_ready',
     ],
     assemblyHandoff: locallyCancelled ? { ...handoff, assemblyStatus: 'cancelled' } : handoff,
@@ -873,6 +872,91 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     })
   })
 
+  app.post('/api/admin/long-form-video/music-bed/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { executionId } = request.params as { executionId: string }
+    const body = request.body as Record<string, unknown>
+
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+    if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+
+    const metadata = safeJson(loaded.parent.metadataJson)
+    const plan = metadata.plan as LongFormVideoPlan | undefined
+    if (!plan) {
+      return reply.status(409).send({ error: true, message: 'No plan found in parent metadata' })
+    }
+
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const prompt = (body.prompt as string) || `${plan.tone} ${plan.style} instrumental background music`
+    const routingMode = isValidRoutingMode(body.routingMode) ? body.routingMode as string : 'balanced'
+
+    try {
+      const { randomUUID: uuid } = await import('node:crypto')
+      const musicJobId = uuid()
+      const traceId = `trace_longform_${executionId}_music_bed`
+
+      await prisma.job.create({
+        data: {
+          id: musicJobId,
+          appSlug: APP_SLUG,
+          capability: 'music_generation',
+          prompt,
+          inputJson: JSON.stringify({
+            prompt,
+            durationSeconds: plan.totalDurationSeconds,
+            instrumentalOnly: true,
+            style: plan.style,
+            mood: plan.tone,
+          }),
+          metadataJson: JSON.stringify({
+            longFormVideo: true,
+            longFormMusicBed: true,
+            longFormExecutionId: executionId,
+            parentJobId: loaded.parent.id,
+            planId: plan.id,
+            routingMode,
+            retryGeneration: 0,
+          }),
+          traceId,
+          status: 'queued',
+          parentJobId: loaded.parent.id,
+          executionId,
+          workflowPhase: 'music_bed_created',
+        },
+      })
+
+      if (getQueue()) {
+        const q = getQueue()
+        const payload: JobPayload = {
+          jobId: musicJobId,
+          appSlug: APP_SLUG,
+          capability: 'music_generation',
+          prompt,
+          input: { prompt, durationSeconds: plan.totalDurationSeconds, instrumentalOnly: true },
+          metadata: { longFormVideo: true, longFormMusicBed: true, longFormExecutionId: executionId, parentJobId: loaded.parent.id, routingMode },
+          traceId,
+          routingMode,
+        }
+        await q.add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: musicJobId })
+      }
+
+      return reply.status(202).send({
+        success: true,
+        musicJobId,
+        prompt,
+        message: 'Music bed job submitted. Poll the job for completion.',
+      })
+    } catch (error) {
+      return reply.status(500).send({
+        error: true,
+        message: 'Music bed job creation failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
   app.post('/api/admin/long-form-video/assemble/:executionId', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { executionId } = request.params as { executionId: string }
@@ -991,7 +1075,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         assemblyMode: 'video_only handoff prepared; full multimedia pending',
         voiceoverIncluded: true,
         subtitlesIncluded: true,
-        musicBedIncluded: false,
+        musicBedIncluded: true,
       },
     })
   })

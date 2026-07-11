@@ -214,7 +214,7 @@ describe('canonical runtime truth', () => {
     // Accurate component-level blockers
     expect(longForm.blockedReasons).not.toContain('voiceover_missing')
     expect(longForm.blockedReasons).not.toContain('subtitles_missing')
-    expect(longForm.blockedReasons).toContain('music_bed_missing')
+    expect(longForm.blockedReasons).not.toContain('music_bed_missing')
     expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
   })
 

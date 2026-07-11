@@ -520,8 +520,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      // Music bed is requested but not executable
-      expect(plan.missingDependencies).toContain('music_bed_backend')
+      // Music bed is requested and ready
+      expect(plan.missingDependencies).not.toContain('music_bed_backend')
     })
   })
 

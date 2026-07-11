@@ -36,7 +36,7 @@ function buildAssemblyHandoff(parent: JobRow, sceneJobs: JobRow[], metadata: Rec
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
     ...(requestedVoiceover ? ['voiceover_pending'] : []),
     ...(requestedSubtitles ? ['subtitles_pending'] : []),
-    ...(requestedMusic ? ['music_bed_not_implemented'] : []),
+    ...(requestedMusic ? ['music_bed_pending'] : []),
     'full_multimedia_assembly_pending',
   ]
 

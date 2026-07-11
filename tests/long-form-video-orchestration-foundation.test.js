@@ -243,7 +243,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(subtitleStep.status).toBe('ready')
     })
 
-    it('lists music bed missing when enabled', () => {
+    it('lists music bed as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for music bed missing validation',
         targetDurationSeconds: 60,
@@ -252,11 +252,11 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('music_bed_backend')
+      expect(plan.missingDependencies).not.toContain('music_bed_backend')
       
       const musicStep = plan.renderSteps.find(s => s.type === 'music_bed_generation')
       expect(musicStep).toBeDefined()
-      expect(musicStep.status).toBe('blocked')
+      expect(musicStep.status).toBe('ready')
     })
 
     it('does not list voiceover/subtitles/music when disabled', () => {
@@ -358,7 +358,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(false)
       expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(true)
       expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(false)
+      expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(true)
     })
 
     it('final long-form video is not executable', () => {
