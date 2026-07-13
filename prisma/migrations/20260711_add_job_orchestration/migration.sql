@@ -1,6 +1,7 @@
--- AlterTable: Add durable long-form orchestration fields to existing jobs.
+﻿-- AlterTable: Add durable long-form orchestration fields to existing jobs.
 -- Safe for existing rows: all new columns are nullable or have defaults.
 ALTER TABLE `jobs`
+  ADD COLUMN `provider_claim_at` DATETIME(3) NULL,
   ADD COLUMN `parent_job_id` VARCHAR(191) NULL,
   ADD COLUMN `execution_id` VARCHAR(191) NOT NULL DEFAULT '',
   ADD COLUMN `scene_number` INTEGER NULL,

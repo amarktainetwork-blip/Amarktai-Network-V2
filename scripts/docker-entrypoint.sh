@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # AmarktAI Network V2 Docker entrypoint.
+# API and worker containers NEVER mutate database schema.
+# Schema migrations are applied by a separate one-shot migrate service.
 
 SERVICE="${1:-api}"
 
@@ -29,9 +31,14 @@ for i in $(seq 1 30); do
 done
 echo "[boot] Redis ready"
 
-echo "[boot] Syncing schema..."
-node scripts/prisma-db-push-safe.mjs
-echo "[boot] Schema synced"
+# Verify migrations have been applied (read-only check, no mutation).
+echo "[boot] Checking migration status..."
+npx prisma migrate status --schema=./prisma/schema.prisma 2>&1 || {
+  echo "[boot] ERROR: Database migrations are not up to date."
+  echo "[boot] Run the migrate service or: npx prisma migrate deploy"
+  exit 1
+}
+echo "[boot] Migrations OK"
 
 if [ "$SERVICE" = "api" ]; then
   echo "[boot] Admin bootstrap is handled idempotently by the API runtime"

@@ -341,7 +341,7 @@ describe('Brain Router v1 foundation', () => {
     it('runtime truth keeps long_form_video not live-proven until full multimedia proof exists', () => {
       const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
       expect(longForm?.liveProven).toBe(false)
-      expect(longForm?.fullMultimediaReady).toBe(true)
+      expect(longForm?.fullMultimediaReady).toBe(false)
     })
   })
 

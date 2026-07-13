@@ -68,6 +68,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: api
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     image: amarktai/api:latest
     restart: unless-stopped
     env_file:
@@ -97,6 +100,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     image: amarktai/worker:latest
     restart: unless-stopped
     env_file:

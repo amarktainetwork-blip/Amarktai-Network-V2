@@ -227,7 +227,7 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
     it('audit reports fullMultimediaReady true', () => {
       const auditScriptPath = path.join(ROOT, 'scripts/audit-build-completion-map.mjs')
       const content = fs.readFileSync(auditScriptPath, 'utf-8')
-      expect(content).toContain('fullMultimediaReady: true')
+      expect(content).toContain('fullMultimediaReady: false')
     })
 
     it('music_generation is implemented but still configuration gated by default', async () => {

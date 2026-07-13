@@ -684,11 +684,11 @@ async function runAudit() {
     videoOnlyReady: longFormSchemaExists && longFormPlannerExists && longFormExecutionExists && 
                     longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
     
-    // Multimedia readiness (all components wired)
-    fullMultimediaReady: true,
-    voiceoverReady: true,
-    subtitlesReady: true,
-    musicBedReady: true,
+    // Multimedia readiness (code exists but not live-proven)
+    fullMultimediaReady: false,
+    voiceoverReady: false,
+    subtitlesReady: false,
+    musicBedReady: false,
     
     // Legacy fields for backward compatibility
     orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,

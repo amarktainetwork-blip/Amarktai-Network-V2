@@ -255,7 +255,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(state.totalScenes).toBe(4)
       expect(state.scenes).toHaveLength(4)
       expect(state.progress).toBe(0)
-      expect(state.finalAssemblyReady).toBe(true)
+      expect(state.finalAssemblyReady).toBe(false)
 
       state.scenes.forEach((scene, index) => {
         expect(scene.sceneNumber).toBe(index + 1)
@@ -445,7 +445,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
 
       const state = createLongFormExecutionState(plan)
 
-      expect(state.finalAssemblyReady).toBe(true)
+      expect(state.finalAssemblyReady).toBe(false)
     })
 
     it('missing dependencies include ffmpeg/stitching', () => {
@@ -474,10 +474,10 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      expect(plan.executableNow).toBe(true)
+      expect(plan.executableNow).toBe(false)
     })
 
-    it('plan finalAssemblyReady is true', () => {
+    it('plan finalAssemblyReady is false', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for assembly',
@@ -486,7 +486,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      expect(plan.finalAssemblyReady).toBe(true)
+      expect(plan.finalAssemblyReady).toBe(false)
     })
   })
 

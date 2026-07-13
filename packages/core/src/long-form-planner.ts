@@ -62,9 +62,9 @@ export function createLongFormVideoPlan(request: LongFormVideoRequest): LongForm
   const missingDependencies = identifyMissingDependencies(request)
 
   // Determine executability
-  const executableNow = true // Final long-form video is executable with all multimedia components
+  const executableNow = false // Not live-proven yet
   const perSceneVideoGenerationPossible = true // Can use existing video_generation
-  const finalAssemblyReady = true // All multimedia components wired: voiceover, subtitles, music bed, FFmpeg assembly
+  const finalAssemblyReady = false // Video-only concat works; full multimedia assembly not live-proven
 
   // Build reason if blocked
   const reasonIfBlocked = buildBlockReason(missingDependencies)

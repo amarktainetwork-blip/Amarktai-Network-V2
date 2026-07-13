@@ -480,14 +480,18 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
         batchStructureReady: true,
         assemblyHandoffReady: true,
         videoOnlyAssemblyReady: true,
-        voiceoverReady: true,
-        subtitlesReady: true,
-        musicBedReady: true,
-        fullMultimediaReady: true,
+        voiceoverReady: false, // TTS client exists but long-form child dispatch not live-proven
+        subtitlesReady: false, // Subtitle generation code exists but not live-proven
+        musicBedReady: false, // Music bed endpoint exists but not live-proven
+        fullMultimediaReady: false,
         liveProven: false,
-        executableNow: true,
+        executableNow: false, // Not live-proven
         blockedReasons: [...new Set([
           ...withClassification.blockedReasons,
+          'voiceover_not_live_proven',
+          'subtitles_not_live_proven',
+          'music_bed_not_live_proven',
+          'full_multimedia_not_ready',
         ])],
       }
       return {

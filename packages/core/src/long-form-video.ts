@@ -183,14 +183,14 @@ export const LONG_FORM_VIDEO_STATUS = {
   videoOnlyAssemblyReady: true,
   sceneSplitterReady: true,
   perSceneVideoGenerationPossible: true, // Can use existing video_generation
-  voiceoverReady: true,
-  subtitlesReady: true,
-  musicBedReady: true,
+  voiceoverReady: false, // TTS client exists but long-form child dispatch not live-proven
+  subtitlesReady: false, // Subtitle generation code exists but not live-proven
+  musicBedReady: false, // Music bed endpoint exists but not live-proven
   fullMultimediaReady: false,
   liveProven: false,
   sceneStitchingReady: true,
-  finalAssemblyReady: true,
-  executableNow: true // Final long-form video is executable with all multimedia components
+  finalAssemblyReady: false, // Video-only concat works; full multimedia assembly not live-proven
+  executableNow: false // Not live-proven
 } as const
 
 export type LongFormVideoStatus = typeof LONG_FORM_VIDEO_STATUS

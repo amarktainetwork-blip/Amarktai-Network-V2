@@ -37,6 +37,13 @@ COPY . .
 RUN rm -rf .next packages/*/dist apps/*/dist && \
     find packages apps -name "*.tsbuildinfo" -delete
 
+# Build identity injection
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+
+# Generate build-info.json for health route consumption
+RUN node -e "const p=require('./package.json');process.stdout.write(JSON.stringify({gitSha:'${GIT_SHA}',buildTime:'${BUILD_TIME}',serviceName:'amarktai-api',version:p.version||'0.0.0'}))" > build-info.json
+
 # Generate Prisma client with correct binaryTargets for Debian
 RUN npx prisma generate --schema=./prisma/schema.prisma
 
@@ -77,6 +84,9 @@ COPY --from=build /app/packages/db/dist       packages/db/dist
 COPY --from=build /app/packages/providers/dist packages/providers/dist
 COPY --from=build /app/packages/artifacts/dist packages/artifacts/dist
 
+# Copy build identity for health route
+COPY --from=build /app/build-info.json build-info.json
+
 # Copy package.json files for runtime resolution
 COPY packages/core/package.json     packages/core/package.json
 COPY packages/db/package.json       packages/db/package.json
@@ -87,8 +97,8 @@ COPY packages/artifacts/package.json packages/artifacts/package.json
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy schema sync script
-COPY scripts/prisma-db-push-safe.mjs scripts/prisma-db-push-safe.mjs
+# Copy migration deploy script (used by migrate service, not by API/worker)
+COPY scripts/prisma-migrate-deploy.mjs scripts/prisma-migrate-deploy.mjs
 
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api

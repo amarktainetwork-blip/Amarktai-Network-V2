@@ -127,9 +127,9 @@ function buildAssemblyHandoff({
   const expectedSceneCount = plan.storyboard.scenes.length
   const missingDependencies = [
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(request.voiceoverEnabled ? ['voiceover_pending'] : []),
-    ...(request.subtitlesEnabled ? ['subtitles_pending'] : []),
-    ...(request.musicBedEnabled ? ['music_bed_pending'] : []),
+    ...(request.voiceoverEnabled ? ['voiceover_not_live_proven'] : []),
+    ...(request.subtitlesEnabled ? ['subtitles_not_live_proven'] : []),
+    ...(request.musicBedEnabled ? ['music_bed_not_live_proven'] : []),
     'full_multimedia_assembly_pending',
   ]
 
@@ -239,7 +239,9 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
       ...(failedScenes > 0 ? ['scene_failure'] : []),
       ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
       ...((metadata.blockedReasons as string[] | undefined) ?? []),
-      'subtitles_pending',
+      'voiceover_not_live_proven',
+      'subtitles_not_live_proven',
+      'music_bed_not_live_proven',
       'full_multimedia_not_ready',
     ],
     assemblyHandoff: locallyCancelled ? { ...handoff, assemblyStatus: 'cancelled' } : handoff,
@@ -1090,9 +1092,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         executionStateStorage: 'Durable parent and linked Job rows (scene + voiceover)',
         executionStateRecovery: 'Recovered by exact parentJobId/executionId fields',
         assemblyMode: 'video_only handoff prepared; full multimedia pending',
-        voiceoverIncluded: true,
-        subtitlesIncluded: true,
-        musicBedIncluded: true,
+        voiceoverIncluded: false, // Not live-proven
+        subtitlesIncluded: false, // Not live-proven
+        musicBedIncluded: false, // Not live-proven
       },
     })
   })

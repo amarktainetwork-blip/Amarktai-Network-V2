@@ -3,10 +3,33 @@
  *
  * MariaDB and Redis are critical — API reports unhealthy if either is down.
  * Qdrant is optional (used for RAG) — reported as degraded, not blocking.
+ *
+ * Exposes immutable build identity: git SHA, build time, service name, version.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const BUILD_INFO = loadBuildInfo()
+
+function loadBuildInfo(): { gitSha: string; buildTime: string; serviceName: string; version: string } {
+  // Try to read from build-info.json (generated at build time)
+  try {
+    const buildInfoPath = join(process.cwd(), 'build-info.json')
+    const raw = readFileSync(buildInfoPath, 'utf-8')
+    return JSON.parse(raw)
+  } catch {
+    // Fallback: try git SHA from environment (set in Dockerfile or CI)
+    return {
+      gitSha: process.env.GIT_SHA ?? 'unknown',
+      buildTime: process.env.BUILD_TIME ?? 'unknown',
+      serviceName: 'amarktai-api',
+      version: process.env.npm_package_version ?? '0.0.0',
+    }
+  }
+}
 
 export async function healthRoutes(app: FastifyInstance): Promise<void> {
   const healthHandler = async (_request: FastifyRequest, reply: FastifyReply) => {
@@ -64,6 +87,12 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(statusCode).send({
       status: criticalHealthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
+      build: {
+        gitSha: BUILD_INFO.gitSha,
+        buildTime: BUILD_INFO.buildTime,
+        serviceName: BUILD_INFO.serviceName,
+        version: BUILD_INFO.version,
+      },
       checks,
     })
   }

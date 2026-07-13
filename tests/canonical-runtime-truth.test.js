@@ -188,13 +188,13 @@ describe('canonical runtime truth', () => {
     expect(image.blockedReasons).toContain('credentials_missing')
   })
 
-  it('long-form is now executable with component-level accuracy', () => {
+  it('long-form is PARTIAL with component-level accuracy', () => {
     const runtimeTruth = truth()
     const longForm = capability(runtimeTruth, 'long_form_video')
 
-    expect(longForm.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
+    expect(longForm.classification).toBe('PARTIAL')
     expect(longForm.liveProven).toBe(false)
-    expect(longForm.executableNow).toBe(true)
+    expect(longForm.executableNow).toBe(false)
     expect(longForm.clientImplemented).toBe(false)
     expect(longForm.executorRegistered).toBe(false)
     expect(longForm.routeImplemented).toBe(true)
@@ -207,15 +207,19 @@ describe('canonical runtime truth', () => {
     expect(longForm.retryResumeReady).toBe(true)
     expect(longForm.progressTrackingReady).toBe(true)
     expect(longForm.assemblyHandoffReady).toBe(true)
-    expect(longForm.fullMultimediaReady).toBe(true)
+    expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.blockedReasons).toContain('executor_missing')
     expect(longForm.blockedReasons).toContain('provider_client_missing')
     expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
-    // Accurate component-level blockers
+    // Phase 1 multimedia blockers
+    expect(longForm.blockedReasons).toContain('voiceover_not_live_proven')
+    expect(longForm.blockedReasons).toContain('subtitles_not_live_proven')
+    expect(longForm.blockedReasons).toContain('music_bed_not_live_proven')
+    expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
+    // Old inaccurate blockers must not appear
     expect(longForm.blockedReasons).not.toContain('voiceover_missing')
     expect(longForm.blockedReasons).not.toContain('subtitles_missing')
     expect(longForm.blockedReasons).not.toContain('music_bed_missing')
-    expect(longForm.blockedReasons).not.toContain('full_multimedia_not_ready')
   })
 
   it('adult capabilities remain policy restricted', () => {

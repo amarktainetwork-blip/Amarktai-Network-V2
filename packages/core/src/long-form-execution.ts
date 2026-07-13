@@ -171,9 +171,13 @@ export function createLongFormExecutionState(
       status: 'queued',
     })),
     progress: 0,
-    finalAssemblyReady: true,
+    finalAssemblyReady: false, // Not live-proven
     finalAssemblyCompleted: false,
     missingDependencies: [
+      'voiceover_not_live_proven',
+      'subtitles_not_live_proven',
+      'music_bed_not_live_proven',
+      'full_multimedia_not_ready',
       ...(plan.missingDependencies || []),
     ],
     createdAt: now,

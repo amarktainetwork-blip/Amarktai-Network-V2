@@ -267,8 +267,8 @@ describe('durable long-form orchestration', () => {
   })
 
   it('migration covers every durable Job field, index, and self relation', async () => {
-    const source = await import('node:fs/promises').then((fs) => fs.readFile('prisma/migrations/20260711_add_long_form_job_orchestration_fields/migration.sql', 'utf8'))
-    for (const column of ['parent_job_id', 'execution_id', 'scene_number', 'workflow_phase', 'retry_count', 'queue_job_id', 'queued_at']) {
+    const source = await import('node:fs/promises').then((fs) => fs.readFile('prisma/migrations/20260711_add_job_orchestration/migration.sql', 'utf8'))
+    for (const column of ['provider_claim_at', 'parent_job_id', 'execution_id', 'scene_number', 'workflow_phase', 'retry_count', 'queue_job_id', 'queued_at']) {
       expect(source).toContain(`\`${column}\``)
     }
     expect(source).toContain('jobs_parent_job_id_idx')
@@ -654,7 +654,7 @@ describe('durable long-form orchestration', () => {
     expect(longForm.sceneLinkageReady).toBe(true)
     expect(longForm.retryResumeReady).toBe(true)
     expect(longForm.assemblyHandoffReady).toBe(true)
-    expect(longForm.fullMultimediaReady).toBe(true)
+    expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.liveProven).toBe(false)
   })
 
@@ -943,7 +943,7 @@ describe('durable long-form orchestration', () => {
 
   it('canonical truth does not treat a cancelled late result as long-form live proof', () => {
     const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
-    expect(longForm.fullMultimediaReady).toBe(true)
+    expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.liveProven).toBe(false)
   })
 

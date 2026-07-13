@@ -176,9 +176,9 @@ export async function runProof({
       && content.includes('videoOnlyReady')
   })
 
-  await check(state, 'audit reports fullMultimediaReady true', () => {
+  await check(state, 'audit reports fullMultimediaReady false (not live-proven)', () => {
     const content = readSource(root, 'scripts/audit-build-completion-map.mjs')
-    return content.includes('fullMultimediaReady: true')
+    return content.includes('fullMultimediaReady: false')
   })
 
   log('\n-- Security --')

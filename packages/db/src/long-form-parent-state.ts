@@ -34,10 +34,10 @@ function buildAssemblyHandoff(parent: JobRow, sceneJobs: JobRow[], metadata: Rec
   const requestedMusic = request.musicBedEnabled === true
   const missingDependencies = [
     ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(requestedVoiceover ? ['voiceover_pending'] : []),
-    ...(requestedSubtitles ? ['subtitles_pending'] : []),
-    ...(requestedMusic ? ['music_bed_pending'] : []),
-    'full_multimedia_assembly_pending',
+    ...(requestedVoiceover ? ['voiceover_not_live_proven'] : []),
+    ...(requestedSubtitles ? ['subtitles_not_live_proven'] : []),
+    ...(requestedMusic ? ['music_bed_not_live_proven'] : []),
+    'full_multimedia_not_ready',
   ]
 
   return {
