@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { CAPABILITY_KEYS, QUEUE_NAMES } from '@amarktai/core'
+import { CAPABILITY_KEYS, QUEUE_NAMES, validateOrchestraRequest } from '@amarktai/core'
 import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
 
 const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
@@ -81,9 +81,10 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: true, message: 'Capability is not mapped to a backend execution key' })
     }
 
-    // Reject provider/model override
-    if (body.provider || body.model || metadata.provider || metadata.model) {
-      return reply.status(400).send({ error: true, message: 'Provider/model override not allowed. Runtime selects provider/model.' })
+    // Reject provider/model/routing override using shared validation
+    const blockedField = validateOrchestraRequest(body) || validateOrchestraRequest(metadata)
+    if (blockedField) {
+      return reply.status(400).send({ error: true, message: `Provider/model/routing override not allowed. Orchestra selects provider and model. Blocked field: ${blockedField}` })
     }
 
     // Evaluate runtime proof from the single snapshot

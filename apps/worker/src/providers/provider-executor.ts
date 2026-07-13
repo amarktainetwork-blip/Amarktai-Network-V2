@@ -9,12 +9,16 @@
 
 import {
   routeBrain,
+  evaluateOrchestra,
+  normalizeDbCandidates,
   extractRoutingMode,
   type CapabilityKey,
   type ProviderKey,
   type RoutingMode,
   type BrainRouterDecision,
   type BrainRouterProviderState,
+  type OrchestraDecision,
+  type OrchestraCandidate,
 } from '@amarktai/core'
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
 import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
@@ -1130,6 +1134,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
 async function resolveBrainRouterDecision(payload: WorkerJobData): Promise<{
   decision: BrainRouterDecision
   routingMode: RoutingMode
+  orchestraDecision: OrchestraDecision
 }> {
   const routingMode = extractRoutingMode(payload.metadata) as RoutingMode
   const providerStates = await buildProviderStates()
@@ -1141,7 +1146,25 @@ async function resolveBrainRouterDecision(payload: WorkerJobData): Promise<{
     appSlug: payload.appSlug,
   })
 
-  return { decision, routingMode }
+  // Use shared normalizer for Orchestra candidates
+  let orchestraCandidates: OrchestraCandidate[] = []
+  const cap = payload.capability as CapabilityKey
+  try {
+    const [models, providers] = await Promise.all([
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
+      prisma.aiProvider.findMany(),
+    ])
+    orchestraCandidates = normalizeDbCandidates(models, providers, cap)
+  } catch {
+    // DB unavailable — Orchestra will evaluate with empty candidates and block
+  }
+
+  const orchestraDecision = evaluateOrchestra(
+    { capability: cap, routingMode: routingMode as 'balanced' | 'quality' | 'economy' | 'fast', executionId: payload.jobId },
+    orchestraCandidates,
+  )
+
+  return { decision, routingMode, orchestraDecision }
 }
 
 function canExecuteProviderForCapability(
@@ -1252,48 +1275,79 @@ async function executeWithSelectedProvider(
 export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
   const capability = payload.capability as CapabilityKey
 
-  const { decision, routingMode } = await resolveBrainRouterDecision(payload)
+  const { decision, routingMode, orchestraDecision } = await resolveBrainRouterDecision(payload)
 
-  if (!decision.executionAllowed) {
+  // Persist routing decision metadata
+  await persistJobMetadata(payload.jobId, {
+    orchestraExecutionId: orchestraDecision.executionId,
+    orchestraSelectedProvider: orchestraDecision.selectedProvider,
+    orchestraSelectedModel: orchestraDecision.selectedModel,
+    orchestraScore: orchestraDecision.score,
+    orchestraRoutingMode: orchestraDecision.routingMode,
+    orchestraSnapshotTimestamp: orchestraDecision.snapshotTimestamp,
+    orchestraFallbackCount: orchestraDecision.fallbackRoutes.length,
+  }).catch(() => {})
+
+  if (!orchestraDecision.executionAllowed) {
     return {
       success: false,
       status: 'failed',
-      error: `Brain Router blocked execution for '${capability}' in '${routingMode}' mode. ${decision.blockReason ?? ''}. Truth: ${decision.truth}`,
+      error: `Orchestra blocked execution for '${capability}' in '${orchestraDecision.routingMode}' mode. ${orchestraDecision.blockReason ?? ''}.`,
       metadata: {
-        brainRouter: {
-          routingMode,
+        orchestra: {
+          routingMode: orchestraDecision.routingMode,
           executionAllowed: false,
-          blockReason: decision.blockReason,
-          truth: decision.truth,
+          blockReason: orchestraDecision.blockReason,
+          snapshotTimestamp: orchestraDecision.snapshotTimestamp,
         },
       },
     }
   }
 
-  const selectedProvider = decision.selectedProvider!
+  const selectedProvider = orchestraDecision.selectedProvider!
 
-  if (!canExecuteProviderForCapability(capability, selectedProvider)) {
-    const fallback = decision.fallbackChain.find((f) => canExecuteProviderForCapability(capability, f.provider as ProviderKey))
-    if (fallback) {
-      return await executeWithSelectedProvider(payload, capability, fallback.provider as ProviderKey, decision, routingMode)
-    }
+  // Try primary route
+  if (canExecuteProviderForCapability(capability, selectedProvider)) {
+    const result = await executeWithSelectedProvider(payload, capability, selectedProvider, decision, routingMode)
+    // Persist actual execution route
+    await persistJobMetadata(payload.jobId, {
+      orchestraActualProvider: result.provider ?? selectedProvider,
+      orchestraActualModel: result.model ?? orchestraDecision.selectedModel,
+      orchestraActualOutcome: result.success ? 'completed' : 'failed',
+    }).catch(() => {})
+    return result
+  }
 
-    return {
-      success: false,
-      status: 'failed',
-      error: `Brain Router selected ${selectedProvider}/${decision.selectedModel} but no executor is implemented for '${capability}'. Truth: ${decision.truth}`,
-      metadata: {
-        brainRouter: {
-          routingMode,
-          selectedProvider,
-          selectedModel: decision.selectedModel,
-          executionAllowed: true,
-          executorImplemented: false,
-          truth: decision.truth,
-        },
-      },
+  // Try Orchestra fallback routes (each has its own provider/model)
+  for (const fallback of orchestraDecision.fallbackRoutes) {
+    if (canExecuteProviderForCapability(capability, fallback.provider as ProviderKey)) {
+      await persistJobMetadata(payload.jobId, {
+        orchestraFallbackProvider: fallback.provider,
+        orchestraFallbackModel: fallback.model,
+        orchestraFallbackReason: 'primary_executor_not_implemented',
+      }).catch(() => {})
+      const result = await executeWithSelectedProvider(payload, capability, fallback.provider as ProviderKey, decision, routingMode)
+      await persistJobMetadata(payload.jobId, {
+        orchestraActualProvider: result.provider ?? fallback.provider,
+        orchestraActualModel: result.model ?? fallback.model,
+        orchestraActualOutcome: result.success ? 'completed' : 'failed',
+      }).catch(() => {})
+      return result
     }
   }
 
-  return await executeWithSelectedProvider(payload, capability, selectedProvider, decision, routingMode)
+  return {
+    success: false,
+    status: 'failed',
+    error: `Orchestra selected ${selectedProvider}/${orchestraDecision.selectedModel} but no executor is implemented for '${capability}'.`,
+    metadata: {
+      orchestra: {
+        routingMode: orchestraDecision.routingMode,
+        selectedProvider,
+        selectedModel: orchestraDecision.selectedModel,
+        executionAllowed: true,
+        executorImplemented: false,
+      },
+    },
+  }
 }

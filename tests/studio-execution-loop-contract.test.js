@@ -42,7 +42,8 @@ describe('studio execution loop contract', () => {
   it('admin Studio route rejects provider override', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
-    expect(content).toContain('Provider/model override not allowed')
+    expect(content).toContain('Orchestra selects provider and model')
+    expect(content).toContain('validateOrchestraRequest')
   })
 
   it('admin Studio route rejects unproven capabilities', () => {

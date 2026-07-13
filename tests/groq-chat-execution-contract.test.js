@@ -14,6 +14,16 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     update: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+    ]),
+  },
 }))
 
 const credentialMocks = vi.hoisted(() => {

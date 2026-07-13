@@ -186,6 +186,29 @@ export {
   type FallbackEntry,
 } from './brain-router.js'
 
+// Orchestra routing engine
+export {
+  ORCHESTRA_ROUTING_MODES,
+  evaluateOrchestra,
+  checkCandidateEligibility,
+  normalizeDbCandidates,
+  validateOrchestraRequest,
+  ORCHESTRA_BLOCKED_REQUEST_FIELDS,
+  CAPABILITY_FIELD_MAP,
+  EXECUTOR_CAPABILITY_MAP,
+  HEALTHY_PROVIDER_STATUSES,
+  BLOCKED_PROVIDER_STATUSES,
+  CODING_TOOL_CAPABILITIES,
+  type OrchestraRoutingMode,
+  type OrchestraRequest,
+  type OrchestraCandidate,
+  type OrchestraDecision,
+  type OrchestraFallbackRoute,
+  type ScoringWeights,
+  type DbModelRecord,
+  type DbProviderRecord,
+} from './orchestra.js'
+
 // Canonical runtime truth
 export {
   RUNTIME_EXECUTION_PROVIDERS,

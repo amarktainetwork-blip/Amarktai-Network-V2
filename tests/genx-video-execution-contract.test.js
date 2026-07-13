@@ -42,6 +42,9 @@ const artifactMocks = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
   aiProvider: {
     findUnique: vi.fn(),
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'genx', enabled: true, healthStatus: 'live' },
+    ]),
   },
   job: {
     findUnique: vi.fn(),
@@ -50,6 +53,11 @@ const prismaMock = vi.hoisted(() => ({
   },
   usageMeter: {
     upsert: vi.fn(),
+  },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'genx', modelId: 'seedance-v1-fast', displayName: 'Seedance', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsVideoGeneration: true },
+    ]),
   },
 }))
 
@@ -227,12 +235,14 @@ describe('GenX video executor', () => {
   })
 
   it('resumes an existing GenX remote job without submitting a duplicate provider request', async () => {
-    prismaMock.job.findUnique.mockResolvedValueOnce({
-      metadataJson: JSON.stringify({
-        genxProviderJobId: 'genx-remote-resume-001',
-        genxProviderModel: 'grok-imagine-video',
-      }),
-    })
+    prismaMock.job.findUnique
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
+      .mockResolvedValueOnce({
+        metadataJson: JSON.stringify({
+          genxProviderJobId: 'genx-remote-resume-001',
+          genxProviderModel: 'grok-imagine-video',
+        }),
+      })
 
     const result = await executeWithProvider(makePayload())
 
@@ -257,8 +267,9 @@ describe('GenX video executor', () => {
 
   it('blocks provider submission when cancellation wins before the provider claim', async () => {
     prismaMock.job.findUnique
-      .mockResolvedValueOnce({ metadataJson: '{}' })
-      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' })
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // claimMusicExecution stale check
+      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' }) // claim check
     prismaMock.job.updateMany.mockResolvedValueOnce({ count: 0 })
 
     const result = await executeWithProvider(makePayload())

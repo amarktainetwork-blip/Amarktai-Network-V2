@@ -112,6 +112,16 @@ const prismaMock = vi.hoisted(() => ({
   usageMeter: {
     upsert: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'genx', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsMusicGeneration: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'genx', enabled: true, healthStatus: 'live' },
+    ]),
+  },
 }))
 
 vi.mock('@amarktai/db', () => ({
@@ -541,7 +551,8 @@ describe('GenX music executor', () => {
       status: 'pending',
       model: 'lyria-3-clip-preview',
     })
-    prismaMock.job.update.mockRejectedValueOnce(new Error('DB write failed'))
+    // Orchestra and music executor both call persistJobMetadata
+    prismaMock.job.update.mockRejectedValue(new Error('DB write failed'))
 
     const result = await executeWithProvider(makePayload())
 
@@ -621,10 +632,13 @@ describe('GenX music executor', () => {
     // Worker 2: claim fails (already claimed), resumes from persisted remote ID
     prismaMock.job.updateMany.mockReset()
     prismaMock.job.updateMany.mockResolvedValue({ count: 0 })
+    prismaMock.job.update.mockReset()
+    prismaMock.job.update.mockResolvedValue({})
     prismaMock.job.findUnique
       .mockReset()
+      .mockResolvedValueOnce({ providerClaimAt: new Date(), metadataJson: '{}' }) // Orchestra metadata call
       .mockResolvedValueOnce({ providerClaimAt: new Date(), metadataJson: '{}' }) // claim stale check
-      .mockResolvedValueOnce({ metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }) }) // resume metadata
+      .mockResolvedValue({ metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }) }) // resume and any additional calls
 
     const r2 = await executeWithProvider(makePayload())
     expect(r2.success).toBe(true)

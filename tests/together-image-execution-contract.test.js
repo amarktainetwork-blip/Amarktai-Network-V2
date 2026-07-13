@@ -15,6 +15,18 @@ const prismaMock = vi.hoisted(() => ({
     findUnique: vi.fn(),
     update: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.003, pricingConfidence: 'known', supportsImageGeneration: true },
+      { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'together', enabled: true, healthStatus: 'live' },
+      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+    ]),
+  },
 }))
 
 const credentialMocks = vi.hoisted(() => {

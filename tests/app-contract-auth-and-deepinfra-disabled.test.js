@@ -482,21 +482,22 @@ describe('MiMo coding_tools_only', () => {
   })
 
   it('runtime-selector rejects MiMo', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain("mimo")
-    expect(content).toContain("coding_tool_only")
+    expect(content).toContain("mimo_coding_tool_only")
   })
 
   it('runtime-selector rejects runtime_restricted providers', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain('runtime_restricted')
+    expect(content).toContain('provider_runtime_restricted')
   })
 
   it('runtime-selector rejects disabled providers', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain('provider_health_disabled')
   })
 })

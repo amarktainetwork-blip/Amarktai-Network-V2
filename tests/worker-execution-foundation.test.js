@@ -15,6 +15,16 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+    ]),
+  },
 }))
 
 const credentialMocks = vi.hoisted(() => {
@@ -579,7 +589,7 @@ describe('Worker does not call providers', () => {
   it('does not import or call Mimo adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'code' }))
 
-    await expect(processJob(makePayload({ capability: 'code' }))).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload({ capability: 'code' }))).rejects.toThrow(/not implemented|Orchestra blocked/)
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
