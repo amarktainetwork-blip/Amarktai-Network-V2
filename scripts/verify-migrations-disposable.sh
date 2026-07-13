@@ -4,13 +4,13 @@
 # ═══════════════════════════════════════════════════════════════
 # This script validates migrations against disposable MariaDB containers.
 # It does NOT touch the production database.
-# Requires: docker, node, npm, npx (prisma)
+# Requires: docker (with daemon), openssl, node, npx (prisma)
 # ═══════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 PREFIX="amarktai-migration-proof-$(date +%s)-$$"
-MARIADB_IMAGE="mariadb:11"
+MARIADB_IMAGE="${MARIADB_IMAGE:-mariadb:11}"
 FRESH_CONTAINER="${PREFIX}-fresh"
 UNMANAGED_CONTAINER="${PREFIX}-unmanaged"
 FRESH_DB="proof_fresh_${PREFIX##*-}"
@@ -20,6 +20,7 @@ FRESH_PORT=0
 UNMANAGED_PORT=0
 ROOT_PASS="${PREFIX}_root_pass_$(openssl rand -hex 8)"
 CLEANED=0
+MARIADB_IMAGE_ID=""
 
 cleanup() {
   if [ "$CLEANED" -eq 1 ]; then return; fi
@@ -42,6 +43,16 @@ if ! command -v docker &>/dev/null; then
   exit 1
 fi
 
+if ! docker info &>/dev/null; then
+  echo "ERROR: docker daemon is not reachable"
+  exit 1
+fi
+
+if ! command -v openssl &>/dev/null; then
+  echo "ERROR: openssl is required but not found"
+  exit 1
+fi
+
 if ! command -v node &>/dev/null; then
   echo "ERROR: node is required but not found"
   exit 1
@@ -51,6 +62,24 @@ if ! command -v npx &>/dev/null; then
   echo "ERROR: npx is required but not found"
   exit 1
 fi
+
+if [ ! -f prisma/schema.prisma ]; then
+  echo "ERROR: prisma/schema.prisma not found — run from repository root"
+  exit 1
+fi
+
+if [ ! -f prisma/migrations/20250701_baseline_fc21a6e/migration.sql ]; then
+  echo "ERROR: baseline migration SQL not found"
+  exit 1
+fi
+
+if [ ! -f prisma/migrations/20260711_add_job_orchestration/migration.sql ]; then
+  echo "ERROR: additive migration SQL not found"
+  exit 1
+fi
+
+# Record image identity for reproducibility
+MARIADB_IMAGE_ID=$(docker image inspect --format='{{.Id}}' "$MARIADB_IMAGE" 2>/dev/null | sed 's/sha256://' || echo "unavailable")
 
 echo "[preflight] All prerequisites met"
 
@@ -165,12 +194,19 @@ fi
 echo "[fresh]   ✓ jobs_parent_job_id_fkey"
 
 echo "[fresh] Running prisma migrate diff..."
+FRESH_DIFF_EXIT=0
 FRESH_DIFF=$(DATABASE_URL="$FRESH_DATABASE_URL" npx prisma migrate diff \
+  --exit-code \
   --from-url "$FRESH_DATABASE_URL" \
   --to-schema-datamodel ./prisma/schema.prisma \
-  --script 2>&1 || true)
-if [ -n "$FRESH_DIFF" ]; then
+  --script 2>&1) || FRESH_DIFF_EXIT=$?
+
+if [ "$FRESH_DIFF_EXIT" -eq 2 ]; then
   echo "ERROR: Schema diff is not empty:"
+  echo "$FRESH_DIFF"
+  exit 1
+elif [ "$FRESH_DIFF_EXIT" -ne 0 ]; then
+  echo "ERROR: prisma migrate diff failed with exit code $FRESH_DIFF_EXIT"
   echo "$FRESH_DIFF"
   exit 1
 fi
@@ -312,12 +348,19 @@ echo "[unmanaged] Checking migration status..."
 DATABASE_URL="$UNMANAGED_DATABASE_URL" npx prisma migrate status --schema=./prisma/schema.prisma
 
 echo "[unmanaged] Running prisma migrate diff..."
+UNMANAGED_DIFF_EXIT=0
 UNMANAGED_DIFF=$(DATABASE_URL="$UNMANAGED_DATABASE_URL" npx prisma migrate diff \
+  --exit-code \
   --from-url "$UNMANAGED_DATABASE_URL" \
   --to-schema-datamodel ./prisma/schema.prisma \
-  --script 2>&1 || true)
-if [ -n "$UNMANAGED_DIFF" ]; then
+  --script 2>&1) || UNMANAGED_DIFF_EXIT=$?
+
+if [ "$UNMANAGED_DIFF_EXIT" -eq 2 ]; then
   echo "ERROR: Schema diff is not empty:"
+  echo "$UNMANAGED_DIFF"
+  exit 1
+elif [ "$UNMANAGED_DIFF_EXIT" -ne 0 ]; then
+  echo "ERROR: prisma migrate diff failed with exit code $UNMANAGED_DIFF_EXIT"
   echo "$UNMANAGED_DIFF"
   exit 1
 fi
@@ -325,6 +368,40 @@ fi
 echo ""
 echo "UNMANAGED_DATABASE_PROOF=PASS"
 echo "SAMPLE_DATA_SURVIVAL=PASS"
+
+# ════════════════════════════════════════════════════════════════
+# CLEANUP VERIFICATION
+# ════════════════════════════════════════════════════════════════
+
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo "CLEANUP VERIFICATION"
+echo "═══════════════════════════════════════════════════════════"
+
+# Explicitly call cleanup before printing overall success
+cleanup
+
+CLEANUP_OK=1
+
+if docker inspect "$FRESH_CONTAINER" &>/dev/null; then
+  echo "ERROR: Fresh container still exists after cleanup"
+  CLEANUP_OK=0
+fi
+
+if docker inspect "$UNMANAGED_CONTAINER" &>/dev/null; then
+  echo "ERROR: Unmanaged container still exists after cleanup"
+  CLEANUP_OK=0
+fi
+
+if docker network inspect "$NETWORK" &>/dev/null; then
+  echo "ERROR: Temporary network still exists after cleanup"
+  CLEANUP_OK=0
+fi
+
+if [ "$CLEANUP_OK" -ne 1 ]; then
+  echo "TEMPORARY_RESOURCES_CLEANED=FAIL"
+  exit 1
+fi
 
 # ════════════════════════════════════════════════════════════════
 # SUMMARY
@@ -336,6 +413,7 @@ echo "MIGRATION PROOF SUMMARY"
 echo "═══════════════════════════════════════════════════════════"
 echo "MIGRATION_PROOF_VERSION=1"
 echo "MARIADB_IMAGE=$MARIADB_IMAGE"
+echo "MARIADB_IMAGE_ID=$MARIADB_IMAGE_ID"
 echo "BASELINE_MIGRATION=20250701_baseline_fc21a6e"
 echo "ADDITIVE_MIGRATION=20260711_add_job_orchestration"
 echo "FRESH_DATABASE_PROOF=PASS"
@@ -343,6 +421,6 @@ echo "UNMANAGED_DATABASE_PROOF=PASS"
 echo "SAMPLE_DATA_SURVIVAL=PASS"
 echo "FRESH_SCHEMA_DIFF=EMPTY"
 echo "UNMANAGED_SCHEMA_DIFF=EMPTY"
-echo "TEMPORARY_RESOURCES_CLEANED=PENDING"
+echo "TEMPORARY_RESOURCES_CLEANED=PASS"
 echo "OVERALL_MIGRATION_PROOF=PASS"
 echo "═══════════════════════════════════════════════════════════"

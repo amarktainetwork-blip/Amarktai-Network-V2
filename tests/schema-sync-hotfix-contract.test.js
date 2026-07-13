@@ -67,6 +67,82 @@ describe('Docker entrypoint safety contract', () => {
     expect(script).not.toContain('--accept-data-loss')
   })
 
+  it('disposable proof script performs explicit cleanup before overall PASS', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    // Must not print TEMPORARY_RESOURCES_CLEANED=PENDING
+    expect(script).not.toContain('TEMPORARY_RESOURCES_CLEANED=PENDING')
+    // TEMPORARY_RESOURCES_CLEANED=PASS must appear
+    expect(script).toContain('TEMPORARY_RESOURCES_CLEANED=PASS')
+    // Explicit cleanup call must exist after tests and before summary
+    const overallPassPos = script.indexOf('OVERALL_MIGRATION_PROOF=PASS')
+    expect(overallPassPos).toBeGreaterThan(-1)
+    // Cleanup verification section must exist before overall PASS
+    const cleanupVerifyPos = script.indexOf('CLEANUP VERIFICATION')
+    expect(cleanupVerifyPos).toBeGreaterThan(-1)
+    expect(cleanupVerifyPos).toBeLessThan(overallPassPos)
+    // Cleanup verification must check containers and network
+    expect(script).toContain('docker inspect')
+    expect(script).toContain('TEMPORARY_RESOURCES_CLEANED=FAIL')
+  })
+
+  it('disposable proof script does not discard prisma diff exit status', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    // Must use --exit-code flag
+    expect(script).toContain('--exit-code')
+    // Must capture exit status
+    expect(script).toContain('FRESH_DIFF_EXIT=$?')
+    expect(script).toContain('UNMANAGED_DIFF_EXIT=$?')
+    // Must handle exit code 2 (schema drift)
+    expect(script).toContain('-eq 2')
+    // prisma migrate diff lines must not use || true
+    const diffLines = script.split('\n').filter((line) => line.includes('prisma migrate diff'))
+    for (const line of diffLines) {
+      expect(line).not.toContain('|| true')
+    }
+  })
+
+  it('disposable proof script has complete preflight checks', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    // Must check openssl
+    expect(script).toContain('command -v openssl')
+    // Must check docker daemon reachability
+    expect(script).toContain('docker info')
+    // Must check migration files exist
+    expect(script).toContain('prisma/migrations/20250701_baseline_fc21a6e/migration.sql')
+    expect(script).toContain('prisma/migrations/20260711_add_job_orchestration/migration.sql')
+    // Must check schema.prisma exists
+    expect(script).toContain('prisma/schema.prisma')
+    // Must not print passwords
+    expect(script).not.toMatch(/echo.*ROOT_PASS/)
+  })
+
+  it('disposable proof script records MariaDB image identity', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    // Must allow image override
+    expect(script).toContain('MARIADB_IMAGE="${MARIADB_IMAGE:-mariadb:11}"')
+    // Must record image ID
+    expect(script).toContain('MARIADB_IMAGE_ID')
+    // Must print image in summary
+    expect(script).toContain('MARIADB_IMAGE=$MARIADB_IMAGE')
+    expect(script).toContain('MARIADB_IMAGE_ID=$MARIADB_IMAGE_ID')
+  })
+
+  it('disposable proof script preserves both test paths', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    // TEST A — Fresh database
+    expect(script).toContain('TEST A — FRESH DATABASE')
+    expect(script).toContain('FRESH_DATABASE_PROOF=PASS')
+    // TEST B — Unmanaged database
+    expect(script).toContain('TEST B — UNMANAGED FC21A6E-LIKE DATABASE')
+    expect(script).toContain('UNMANAGED_DATABASE_PROOF=PASS')
+    // Both must use isolated containers
+    expect(script).toContain('FRESH_CONTAINER')
+    expect(script).toContain('UNMANAGED_CONTAINER')
+    // Must not reference production names or volumes
+    expect(script).not.toContain('amarktai-network-v2_mariadb_data')
+    expect(script).not.toContain('amarktai-network-v2_redis_data')
+  })
+
   it('disposable proof script does not expose credentials', () => {
     const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
     // Should not print DATABASE_URL or passwords
