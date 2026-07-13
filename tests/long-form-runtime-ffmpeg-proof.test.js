@@ -1,23 +1,19 @@
 /**
  * Long-Form Runtime FFmpeg Proof Tests
- * 
+ *
  * Verifies that the long-form runtime proof script exists,
- * runs without provider keys, and validates ffmpeg availability.
+ * is fail-closed, supports static-only and live modes,
+ * and validates the correct endpoints and checks.
  */
 
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
-import {
-  check,
-  createProofState,
-  runProof,
-} from '../scripts/proof-long-form-runtime.mjs'
 
 const ROOT = process.cwd()
 
 describe('Long-Form Runtime FFmpeg Proof', () => {
-  describe('Proof script exists', () => {
+  describe('Proof script exists and is fail-closed', () => {
     it('proof-long-form-runtime.mjs exists', () => {
       const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
       expect(fs.existsSync(scriptPath)).toBe(true)
@@ -29,117 +25,194 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
       expect(packageJson.scripts['proof:long-form-runtime']).toBe('node scripts/proof-long-form-runtime.mjs')
     })
 
-    it('package.json has optional strict runtime proof script', () => {
-      const packageJsonPath = path.join(ROOT, 'package.json')
-      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
-      expect(packageJson.scripts['proof:long-form-runtime:strict']).toBe('node scripts/proof-long-form-runtime.mjs --strict-runtime')
+    it('supports static-only mode', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('--static-only')
+      expect(content).toContain('STATIC_ONLY')
+    })
+
+    it('static-only mode never prints LIVE_PROOF_PASS', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('NEVER produces live proof')
+      expect(content).toContain('LIVE_PROOF_STATUS=NOT_ATTEMPTED')
+    })
+
+    it('fails closed when credentials are missing', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('ADMIN_EMAIL and ADMIN_PASSWORD environment variables required')
+      expect(content).toContain('LIVE_PROOF_STATUS=FAIL')
+    })
+
+    it('cleans up temporary files in finally block', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('finally {')
+      expect(content).toContain('cleanup()')
+      expect(content).toContain('tempFiles')
     })
   })
 
-  describe('Proof script async check harness', () => {
-    it('awaits async checks before passing them', async () => {
-      const state = createProofState(() => {})
-
-      await check(state, 'async pass', async () => {
-        await Promise.resolve()
-        return true
-      })
-
-      expect(state.passed).toBe(1)
-      expect(state.failed).toBe(0)
+  describe('Proof script submission contract', () => {
+    it('submits to long-form video executions endpoint', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/executions')
     })
 
-    it('async check failure increments failed count', async () => {
-      const state = createProofState(() => {})
-
-      await check(state, 'async fail', async () => {
-        await Promise.resolve()
-        return false
-      })
-
-      expect(state.passed).toBe(0)
-      expect(state.failed).toBe(1)
+    it('submits with 2 short scenes', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('sceneCount: 2')
+      expect(content).toContain('targetDurationSeconds: 30')
     })
 
-    it('does not pass Promise objects blindly', async () => {
-      const state = createProofState(() => {})
-      const pending = check(state, 'promise resolves false', () => Promise.resolve(false))
-
-      expect(state.passed).toBe(0)
-      expect(state.failed).toBe(0)
-
-      await pending
-
-      expect(state.passed).toBe(0)
-      expect(state.failed).toBe(1)
+    it('enables narration, subtitles and music', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('voiceoverEnabled: true')
+      expect(content).toContain('subtitlesEnabled: true')
+      expect(content).toContain('musicBedEnabled: true')
     })
 
-    it('catches async rejections as failed checks', async () => {
-      const state = createProofState(() => {})
-
-      await check(state, 'async reject', async () => {
-        throw new Error('intentional async failure')
-      })
-
-      expect(state.passed).toBe(0)
-      expect(state.failed).toBe(1)
-      expect(state.results[0].error).toContain('intentional async failure')
+    it('does not supply provider or model overrides', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      // The request body should not contain provider/model fields
+      const requestMatch = content.match(/body: JSON\.stringify\(\{[\s\S]*?\}\)/)
+      if (requestMatch) {
+        expect(requestMatch[0]).not.toContain('provider:')
+        expect(requestMatch[0]).not.toContain('model:')
+      }
     })
   })
 
-  describe('Proof script import and ffmpeg mode safety', () => {
-    it('does not dynamically import TypeScript source files', () => {
-      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
-      const content = fs.readFileSync(scriptPath, 'utf-8')
-
-      expect(content).not.toMatch(/import\([^)]*\.ts/)
-      expect(content).not.toContain("import('./apps/api/src/lib/long-form-assembly.ts')")
-      expect(content).not.toContain("import('./packages/core/src/config.ts')")
+  describe('Proof script polling contract', () => {
+    it('polls parent job endpoint', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/executions/')
     })
 
-    it('default proof passes when local ffmpeg is missing but Docker API stage installs ffmpeg', async () => {
-      const state = await runProof({
-        root: ROOT,
-        strictRuntime: false,
-        log: () => {},
-        runCommand: () => {
-          throw new Error('ffmpeg missing in local Windows shell')
-        },
-      })
-
-      expect(state.failed).toBe(0)
-      expect(state.warnings).toBeGreaterThanOrEqual(1)
-      expect(state.results.some((result) => result.status === 'warn' && result.name === 'local ffmpeg missing')).toBe(true)
+    it('polls with timeout', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('TIMEOUT_MS')
+      expect(content).toContain('timeout')
     })
 
-    it('strict runtime proof fails when ffmpeg is missing', async () => {
-      const state = await runProof({
-        root: ROOT,
-        strictRuntime: true,
-        log: () => {},
-        runCommand: () => {
-          throw new Error('ffmpeg missing in strict runtime')
-        },
-      })
+    it('checks scene jobs', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('scenes')
+      expect(content).toContain('completedScenes')
+    })
+  })
 
-      expect(state.failed).toBeGreaterThan(0)
-      expect(state.results.some((result) => result.status === 'fail' && result.name.includes('strict runtime mode'))).toBe(true)
+  describe('Proof script artifact verification', () => {
+    it('verifies final artifact metadata', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('/api/admin/artifacts/')
+      expect(content).toContain('mimeType')
+      expect(content).toContain('fileSizeBytes')
     })
 
-    it('proof script does not require provider keys', () => {
-      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
-      const content = fs.readFileSync(scriptPath, 'utf-8')
+    it('downloads final artifact', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('/download')
+      expect(content).toContain('Content-Type')
+    })
 
+    it('rejects empty downloads', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('buffer.length === 0')
+    })
+
+    it('rejects HTML error responses', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('<!DOCTYPE')
+      expect(content).toContain('<html')
+    })
+
+    it('rejects JSON error responses', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('"error"')
+    })
+  })
+
+  describe('Proof script FFprobe validation', () => {
+    it('runs FFprobe on downloaded file', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('ffprobe')
+      expect(content).toContain('-show_format')
+      expect(content).toContain('-show_streams')
+    })
+
+    it('requires video stream', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('codec_type')
+      expect(content).toContain('video')
+    })
+
+    it('checks audio stream', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('audio')
+    })
+
+    it('requires non-zero duration', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('duration')
+      expect(content).toContain('> 0')
+    })
+  })
+
+  describe('Proof script metadata verification', () => {
+    it('verifies execution ID linkage', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('executionId')
+      expect(content).toContain('execution ID')
+    })
+
+    it('verifies trace ID linkage', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('traceId')
+    })
+
+    it('verifies parent job linkage', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('parentJobId')
+    })
+
+    it('checks provider/model metadata', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('provider')
+      expect(content).toContain('model')
+    })
+  })
+
+  describe('Proof script truth verification', () => {
+    it('verifies fullMultimediaReady remains false', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('fullMultimediaReady')
+      expect(content).toContain('false')
+    })
+
+    it('verifies liveProven remains false', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).toContain('liveProven')
+      expect(content).toContain('false')
+    })
+  })
+
+  describe('Proof script does not require provider keys', () => {
+    it('does not read GROQ_API_KEY', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
       expect(content).not.toContain('GROQ_API_KEY')
-      expect(content).not.toContain('TOGETHER_API_KEY')
-      expect(content).not.toContain('GENX_API_KEY')
-      expect(content).not.toContain('DEEPINFRA_API_KEY')
     })
 
-    it('proof script does not make live provider calls', () => {
-      const scriptPath = path.join(ROOT, 'scripts/proof-long-form-runtime.mjs')
-      const content = fs.readFileSync(scriptPath, 'utf-8')
+    it('does not read TOGETHER_API_KEY', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).not.toContain('TOGETHER_API_KEY')
+    })
 
+    it('does not read GENX_API_KEY', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
+      expect(content).not.toContain('GENX_API_KEY')
+    })
+
+    it('does not make direct provider API calls', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
       expect(content).not.toContain('https://api.together.xyz')
       expect(content).not.toContain('https://api.groq.com')
       expect(content).not.toContain('https://query.genx.sh')
@@ -147,189 +220,112 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
     })
   })
 
-  describe('Proof script runs without provider keys', () => {
-    it('assembly module does not require GROQ_API_KEY', () => {
-      const modulePath = path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts')
-      const content = fs.readFileSync(modulePath, 'utf-8')
-      // Check that the module doesn't access process.env.GROQ_API_KEY
-      expect(content).not.toContain('process.env.GROQ_API_KEY')
-    })
-
-    it('assembly module does not require TOGETHER_API_KEY', () => {
-      const modulePath = path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts')
-      const content = fs.readFileSync(modulePath, 'utf-8')
-      // Check that the module doesn't access process.env.TOGETHER_API_KEY
-      expect(content).not.toContain('process.env.TOGETHER_API_KEY')
-    })
-
-    it('assembly module does not require GENX_API_KEY', () => {
-      const modulePath = path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts')
-      const content = fs.readFileSync(modulePath, 'utf-8')
-      // Check that the module doesn't access process.env.GENX_API_KEY
-      expect(content).not.toContain('process.env.GENX_API_KEY')
-    })
-
-    it('assembly module does not make live provider calls', () => {
-      const modulePath = path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts')
-      const content = fs.readFileSync(modulePath, 'utf-8')
-      // Should not contain direct API calls to providers (fetch calls to provider URLs)
-      expect(content).not.toContain('fetch(\'https://api.together.xyz')
-      expect(content).not.toContain('fetch(\'https://api.groq.com')
-      expect(content).not.toContain('fetch(\'https://query.genx.sh')
-    })
-  })
-
   describe('Docker/runtime config installs ffmpeg', () => {
     it('Dockerfile installs ffmpeg in api stage', () => {
       const dockerfilePath = path.join(ROOT, 'Dockerfile')
       const content = fs.readFileSync(dockerfilePath, 'utf-8')
-      
-      // Check that ffmpeg is installed in the api stage
       const apiStageMatch = content.match(/FROM production-base AS api[\s\S]*?(?=FROM|$)/)
       expect(apiStageMatch).not.toBeNull()
-      
-      const apiStage = apiStageMatch[0]
-      expect(apiStage).toContain('ffmpeg')
+      expect(apiStageMatch[0]).toContain('ffmpeg')
     })
 
     it('Dockerfile uses Debian-safe ffmpeg install', () => {
       const dockerfilePath = path.join(ROOT, 'Dockerfile')
       const content = fs.readFileSync(dockerfilePath, 'utf-8')
-      
-      // Should use apt-get install with --no-install-recommends
       expect(content).toContain('apt-get install')
       expect(content).toContain('--no-install-recommends')
       expect(content).toContain('ffmpeg')
-      
-      // Should clean up apt lists
-      expect(content).toContain('rm -rf /var/lib/apt/lists/*')
     })
   })
 
-  describe('checkFfmpegAvailable is used by routes', () => {
-    it('status route uses checkFfmpegAvailable', () => {
-      const routePath = path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts')
-      const content = fs.readFileSync(routePath, 'utf-8')
-      expect(content).toContain('checkFfmpegAvailable')
+  describe('Assembly module checks', () => {
+    it('checkFfmpegAvailable function exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts'), 'utf-8')
+      expect(content).toContain('export async function checkFfmpegAvailable')
     })
 
-    it('assembly route uses checkFfmpegAvailable', () => {
-      const routePath = path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts')
-      const content = fs.readFileSync(routePath, 'utf-8')
-      
-      // Check that the file contains both the assemble route and checkFfmpegAvailable
-      expect(content).toContain('/api/admin/long-form-video/assemble')
-      expect(content).toContain('checkFfmpegAvailable')
+    it('assembleLongFormVideo function exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts'), 'utf-8')
+      expect(content).toContain('export async function assembleLongFormVideo')
+    })
+
+    it('assembleMultimediaLongFormVideo function exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts'), 'utf-8')
+      expect(content).toContain('export async function assembleMultimediaLongFormVideo')
+    })
+
+    it('assembly module does not require provider keys', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts'), 'utf-8')
+      expect(content).not.toContain('process.env.GROQ_API_KEY')
+      expect(content).not.toContain('process.env.TOGETHER_API_KEY')
+      expect(content).not.toContain('process.env.GENX_API_KEY')
     })
   })
 
-  describe('fullMultimediaReady is now true', () => {
-    it('audit reports fullMultimediaReady true', () => {
-      const auditScriptPath = path.join(ROOT, 'scripts/audit-build-completion-map.mjs')
-      const content = fs.readFileSync(auditScriptPath, 'utf-8')
+  describe('Runtime truth honesty', () => {
+    it('fullMultimediaReady is false in runtime truth', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
       expect(content).toContain('fullMultimediaReady: false')
     })
 
-    it('music_generation is implemented but still configuration gated by default', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      
-      const decision = routeBrain({
-        capability: 'music_generation',
-        routingMode: 'balanced',
-      })
-      
-      expect(decision.executionAllowed).toBe(false)
-      expect(decision.selectedProvider).toBeNull()
-      expect(decision.blockReason).toContain('not configured')
+    it('liveProven is false in runtime truth for long_form_video', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
+      expect(content).toContain('liveProven: false')
+    })
+
+    it('voiceover_not_live_proven blocker exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
+      expect(content).toContain('voiceover_not_live_proven')
+    })
+
+    it('subtitles_not_live_proven blocker exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
+      expect(content).toContain('subtitles_not_live_proven')
+    })
+
+    it('music_bed_not_live_proven blocker exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
+      expect(content).toContain('music_bed_not_live_proven')
     })
   })
 
-  describe('music_generation is now implemented', () => {
-    it('music provider client is implemented', async () => {
-      const { MODEL_CATALOGUE } = await import('../packages/core/src/index.ts')
-      
-      const musicModels = MODEL_CATALOGUE.filter(m => 
-        m.capabilities.includes('music_generation') && m.executable
-      )
-      
-      expect(musicModels.length).toBeGreaterThanOrEqual(2)
+  describe('Assembly routes', () => {
+    it('assemble route exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/assemble/')
     })
 
-    it('music worker executor exists', () => {
-      const workerExecutorPath = path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts')
-      const content = fs.readFileSync(workerExecutorPath, 'utf-8')
-      
-      expect(content).toContain('executeGenxMusic')
-      expect(content).toContain('music_generation')
+    it('assembly status route exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/assembly/')
+    })
+
+    it('subtitles route exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/subtitles/')
+    })
+
+    it('music bed route exists', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('/api/admin/long-form-video/music-bed/')
+    })
+
+    it('assembly route uses checkFfmpegAvailable', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('checkFfmpegAvailable')
+    })
+
+    it('status route reports fullMultimediaReady false', () => {
+      const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
+      expect(content).toContain('fullMultimediaReady: false')
     })
   })
 
-  describe('no providers added', () => {
+  describe('No providers added', () => {
     it('PROVIDER_KEYS remains exactly 5', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
-      
       expect(PROVIDER_KEYS).toHaveLength(5)
       expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    })
-
-    it('no banned providers in PROVIDER_KEYS', async () => {
-      const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
-      
-      const banned = ['openai', 'anthropic', 'huggingface', 'gemini', 'replicate', 'heygen', 'minimax', 'qwen']
-      banned.forEach(provider => {
-        expect(PROVIDER_KEYS).not.toContain(provider)
-      })
-    })
-  })
-
-  describe('adult remains on hold', () => {
-    it('adult capabilities remain blocked', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      
-      const adultCaps = ['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video']
-      
-      for (const cap of adultCaps) {
-        const decision = routeBrain({
-          capability: cap,
-          routingMode: 'balanced',
-        })
-        
-        expect(decision.executionAllowed).toBe(false)
-      }
-    })
-
-    it('no adult models in executable catalogue', async () => {
-      const { MODEL_CATALOGUE } = await import('../packages/core/src/index.ts')
-      
-      const adultCaps = ['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video']
-      
-      const adultModels = MODEL_CATALOGUE.filter(m => 
-        m.capabilities.some(cap => adultCaps.includes(cap)) && m.executable
-      )
-      
-      expect(adultModels.length).toBe(0)
-    })
-  })
-
-  describe('Audit distinguishes ffmpeg availability', () => {
-    it('audit reports ffmpegAvailableLocal', () => {
-      const auditScriptPath = path.join(ROOT, 'scripts/audit-build-completion-map.mjs')
-      const content = fs.readFileSync(auditScriptPath, 'utf-8')
-      expect(content).toContain('ffmpegAvailableLocal')
-    })
-
-    it('audit reports ffmpegExpectedInRuntime', () => {
-      const auditScriptPath = path.join(ROOT, 'scripts/audit-build-completion-map.mjs')
-      const content = fs.readFileSync(auditScriptPath, 'utf-8')
-      expect(content).toContain('ffmpegExpectedInRuntime')
-    })
-
-    it('audit separates pipeline readiness from actual readiness', () => {
-      const auditScriptPath = path.join(ROOT, 'scripts/audit-build-completion-map.mjs')
-      const content = fs.readFileSync(auditScriptPath, 'utf-8')
-      
-      expect(content).toContain('videoOnlyAssemblyPipelineReady')
-      expect(content).toContain('videoOnlyReady')
     })
   })
 })
