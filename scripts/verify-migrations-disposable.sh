@@ -18,7 +18,7 @@ UNMANAGED_DB="proof_unmanaged_${PREFIX##*-}"
 NETWORK="${PREFIX}-net"
 FRESH_PORT=0
 UNMANAGED_PORT=0
-ROOT_PASS="${PREFIX}_root_pass_$(openssl rand -hex 8)"
+ROOT_PASS=""
 CLEANED=0
 MARIADB_IMAGE_ID=""
 
@@ -33,6 +33,79 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
+
+# ── Stable MariaDB readiness helper ───────────────────────────
+# Waits for the MariaDB container to complete initialization and
+# become stably ready with two authenticated SQL checks separated
+# by a delay. The official MariaDB image starts a temporary server
+# during init, shuts it down, then starts the permanent server.
+# A single ping is insufficient.
+
+wait_for_mariadb_stable() {
+  local CONTAINER="$1"
+  local DATABASE="$2"
+  local PASSWORD="$3"
+  local LABEL="$4"
+  local TIMEOUT=120
+
+  echo "[$LABEL] Waiting for MariaDB to become stably ready..."
+
+  # 1. Confirm container is still running
+  if ! docker inspect --format='{{.State.Running}}' "$CONTAINER" 2>/dev/null | grep -q true; then
+    echo "ERROR: [$LABEL] Container $CONTAINER is not running"
+    docker logs --tail 20 "$CONTAINER" 2>&1 || true
+    return 1
+  fi
+
+  # 2. Wait for initialization completion marker in container logs
+  echo "[$LABEL] Waiting for initialization to complete..."
+  for i in $(seq 1 "$TIMEOUT"); do
+    if docker logs "$CONTAINER" 2>&1 | grep -q "MariaDB init process done. Ready for start up."; then
+      echo "[$LABEL] Initialization marker found after ${i}s"
+      break
+    fi
+    if [ "$i" -eq "$TIMEOUT" ]; then
+      echo "ERROR: [$LABEL] Initialization did not complete within ${TIMEOUT}s"
+      echo "[$LABEL] Recent container logs:"
+      docker logs --tail 30 "$CONTAINER" 2>&1 || true
+      return 1
+    fi
+    sleep 1
+  done
+
+  # 3. First authenticated SQL check
+  echo "[$LABEL] Running first stability check..."
+  local SQL_OK=0
+  for i in $(seq 1 "$TIMEOUT"); do
+    if docker exec "$CONTAINER" mariadb -u root -p"$PASSWORD" "$DATABASE" -N -s -e "SELECT 1" 2>/dev/null | grep -q 1; then
+      SQL_OK=1
+      echo "[$LABEL] First SQL check passed after ${i}s"
+      break
+    fi
+    if [ "$i" -eq "$TIMEOUT" ]; then
+      echo "ERROR: [$LABEL] First SQL check failed within ${TIMEOUT}s"
+      echo "[$LABEL] Recent container logs:"
+      docker logs --tail 30 "$CONTAINER" 2>&1 || true
+      return 1
+    fi
+    sleep 1
+  done
+
+  # 4. Wait at least two seconds for stability
+  sleep 2
+
+  # 5. Second authenticated SQL check
+  echo "[$LABEL] Running second stability check..."
+  if ! docker exec "$CONTAINER" mariadb -u root -p"$PASSWORD" "$DATABASE" -N -s -e "SELECT 1" 2>/dev/null | grep -q 1; then
+    echo "ERROR: [$LABEL] Second SQL check failed — server is not stably ready"
+    echo "[$LABEL] Recent container logs:"
+    docker logs --tail 30 "$CONTAINER" 2>&1 || true
+    return 1
+  fi
+
+  echo "[$LABEL] MariaDB stably ready"
+  return 0
+}
 
 # ── Preflight checks ───────────────────────────────────────────
 
@@ -78,6 +151,9 @@ if [ ! -f prisma/migrations/20260711_add_job_orchestration/migration.sql ]; then
   exit 1
 fi
 
+# Generate password AFTER all command checks pass
+ROOT_PASS="${PREFIX}_root_pass_$(openssl rand -hex 8)"
+
 # Record image identity for reproducibility
 MARIADB_IMAGE_ID=$(docker image inspect --format='{{.Id}}' "$MARIADB_IMAGE" 2>/dev/null | sed 's/sha256://' || echo "unavailable")
 
@@ -119,18 +195,7 @@ docker run -d \
   -e MYSQL_DATABASE="$FRESH_DB" \
   "$MARIADB_IMAGE"
 
-echo "[fresh] Waiting for MariaDB to be ready..."
-for i in $(seq 1 60); do
-  if docker exec "$FRESH_CONTAINER" mariadb-admin ping -h localhost -u root -p"$ROOT_PASS" --silent 2>/dev/null; then
-    echo "[fresh] MariaDB ready after ${i}s"
-    break
-  fi
-  if [ "$i" -eq 60 ]; then
-    echo "ERROR: MariaDB did not become ready within 60s"
-    exit 1
-  fi
-  sleep 1
-done
+wait_for_mariadb_stable "$FRESH_CONTAINER" "$FRESH_DB" "$ROOT_PASS" "fresh"
 
 FRESH_DATABASE_URL="mysql://root:${ROOT_PASS}@127.0.0.1:${FRESH_PORT}/${FRESH_DB}"
 
@@ -234,18 +299,7 @@ docker run -d \
   -e MYSQL_DATABASE="$UNMANAGED_DB" \
   "$MARIADB_IMAGE"
 
-echo "[unmanaged] Waiting for MariaDB to be ready..."
-for i in $(seq 1 60); do
-  if docker exec "$UNMANAGED_CONTAINER" mariadb-admin ping -h localhost -u root -p"$ROOT_PASS" --silent 2>/dev/null; then
-    echo "[unmanaged] MariaDB ready after ${i}s"
-    break
-  fi
-  if [ "$i" -eq 60 ]; then
-    echo "ERROR: MariaDB did not become ready within 60s"
-    exit 1
-  fi
-  sleep 1
-done
+wait_for_mariadb_stable "$UNMANAGED_CONTAINER" "$UNMANAGED_DB" "$ROOT_PASS" "unmanaged"
 
 UNMANAGED_DATABASE_URL="mysql://root:${ROOT_PASS}@127.0.0.1:${UNMANAGED_PORT}/${UNMANAGED_DB}"
 

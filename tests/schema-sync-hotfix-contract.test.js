@@ -164,3 +164,105 @@ describe('Docker entrypoint safety contract', () => {
     expect(runbook).toContain('20260711_add_job_orchestration')
   })
 })
+
+describe('Migration BOM safety contract', () => {
+  it('all migration SQL files are BOM-free', () => {
+    const migrationsDir = path.join(ROOT, 'prisma/migrations')
+    const entries = fs.readdirSync(migrationsDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const subDir = path.join(migrationsDir, entry.name)
+      const files = fs.readdirSync(subDir)
+      for (const file of files) {
+        if (file.endsWith('.sql') || file === 'migration_lock.toml') {
+          const filePath = path.join(subDir, file)
+          const buf = fs.readFileSync(filePath)
+          if (buf.length >= 3) {
+            expect(
+              !(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf),
+              `BOM found in ${filePath}`
+            ).toBe(true)
+          }
+        }
+      }
+    }
+  })
+
+  it('baseline migration exists and does not contain orchestration fields', () => {
+    const baselinePath = path.join(ROOT, 'prisma/migrations/20250701_baseline_fc21a6e/migration.sql')
+    expect(fs.existsSync(baselinePath)).toBe(true)
+    const content = fs.readFileSync(baselinePath, 'utf8')
+    expect(content).not.toContain('`execution_id`')
+    expect(content).not.toContain('`parent_job_id`')
+    expect(content).not.toContain('`provider_claim_at`')
+    expect(content).not.toContain('`queue_job_id`')
+    expect(content).not.toContain('`queued_at`')
+    expect(content).not.toContain('`retry_count`')
+    expect(content).not.toContain('`scene_number`')
+    expect(content).not.toContain('`workflow_phase`')
+  })
+
+  it('additive migration exists and contains orchestration fields, indexes, and FK', () => {
+    const additivePath = path.join(ROOT, 'prisma/migrations/20260711_add_job_orchestration/migration.sql')
+    expect(fs.existsSync(additivePath)).toBe(true)
+    const content = fs.readFileSync(additivePath, 'utf8')
+    for (const col of ['execution_id', 'parent_job_id', 'provider_claim_at', 'queue_job_id', 'queued_at', 'retry_count', 'scene_number', 'workflow_phase']) {
+      expect(content).toContain(col)
+    }
+    for (const idx of ['jobs_parent_job_id_idx', 'jobs_execution_id_idx', 'jobs_app_slug_execution_id_idx', 'jobs_parent_job_id_scene_number_idx']) {
+      expect(content).toContain(idx)
+    }
+    expect(content).toContain('jobs_parent_job_id_fkey')
+  })
+})
+
+describe('Disposable proof stable readiness contract', () => {
+  it('uses wait_for_mariadb_stable helper for both tests', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).toContain('wait_for_mariadb_stable "$FRESH_CONTAINER"')
+    expect(script).toContain('wait_for_mariadb_stable "$UNMANAGED_CONTAINER"')
+  })
+
+  it('waits for initialization completion marker', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).toContain('MariaDB init process done. Ready for start up.')
+  })
+
+  it('performs two authenticated SELECT 1 checks with delay', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    const selectCount = (script.match(/SELECT 1/g) || []).length
+    expect(selectCount).toBeGreaterThanOrEqual(2)
+    expect(script).toContain('sleep 2')
+  })
+
+  it('checks container running state', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).toContain('State.Running')
+  })
+
+  it('outputs recent logs on failure', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).toContain('docker logs --tail')
+  })
+
+  it('does not use ping-only readiness', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).not.toContain('mariadb-admin ping')
+  })
+
+  it('openssl rand occurs only after openssl preflight', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    const opensslPreflightPos = script.indexOf('command -v openssl')
+    const opensslRandPos = script.indexOf('openssl rand')
+    expect(opensslPreflightPos).toBeGreaterThan(-1)
+    expect(opensslRandPos).toBeGreaterThan(opensslPreflightPos)
+  })
+
+  it('ROOT_PASS is initialized empty before preflight', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts/verify-migrations-disposable.sh'), 'utf8')
+    expect(script).toContain('ROOT_PASS=""')
+    const emptyPos = script.indexOf('ROOT_PASS=""')
+    const randPos = script.indexOf('openssl rand')
+    expect(emptyPos).toBeLessThan(randPos)
+  })
+})
