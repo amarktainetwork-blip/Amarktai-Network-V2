@@ -21,7 +21,7 @@ vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
 const { stringifyMetadataSafely, updateGenXPricingMetadata, upsertDiscoveredModels } = await import('../apps/api/src/lib/model-registry.ts')
 const { selectRuntimeModel } = await import('../apps/api/src/lib/runtime-selector.ts')
-const { getCapabilityGroupSummary } = await import('../apps/api/src/lib/capability-groups.ts')
+const { buildCapabilityGroupSummary } = await import('../apps/api/src/lib/capability-groups.ts')
 
 const ROOT = process.cwd()
 
@@ -497,19 +497,26 @@ describe('real provider model discovery and catalog truth', () => {
   })
 
   it('capability grouping reports pricing blockers and separates catalog from executable/proven truth', async () => {
-    prismaMock.modelRegistryEntry.findMany.mockResolvedValue([
+    const allModels = [
       modelRow({ provider: 'genx', modelId: 'grok-imagine-video', estimatedUnitCost: null, pricingSource: 'provider_api', pricingConfidence: 'unknown', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'together', modelId: 'priced-video-a', estimatedUnitCost: 75, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'together', modelId: 'priced-video-b', estimatedUnitCost: 80, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'mimo', modelId: 'mimo-coder', estimatedUnitCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', source: 'curated_seed', isLiveDiscovered: false }),
-    ])
-    prismaMock.aiProvider.findMany.mockResolvedValue([
+    ]
+    const providers = [
       { providerKey: 'genx', enabled: true, healthStatus: 'live' },
       { providerKey: 'together', enabled: true, healthStatus: 'live' },
       { providerKey: 'mimo', enabled: false, healthStatus: 'runtime_restricted' },
-    ])
+    ]
+    const proofStatus = {
+      providers: ['genx', 'groq', 'together', 'mimo', 'deepinfra'],
+      provenCapabilities: [{ capability: 'video_generation', status: 'proven', provider: 'genx', model: 'grok-imagine-video', artifactRequired: true, proofLevel: 'live_external_app_job_with_artifact_download', readyForDashboardExecution: true, description: 'test' }],
+      unprovenCapabilities: [],
+      evidenceAvailable: true,
+      summary: { provenCount: 1, providerCount: 5, lastUpdatedFrom: 'canonical-truth', source: 'backend-runtime-proof-status' },
+    }
 
-    const summary = await getCapabilityGroupSummary('video_generation')
+    const summary = buildCapabilityGroupSummary('video_generation', allModels, providers, proofStatus)
 
     expect(summary).toMatchObject({
       totalAvailableModels: 4,

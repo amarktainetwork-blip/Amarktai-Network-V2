@@ -2,8 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { QUEUE_NAMES } from '@amarktai/core'
-import { getRuntimeProofStatus } from '../lib/runtime-proof-status.js'
+import { CAPABILITY_KEYS, QUEUE_NAMES } from '@amarktai/core'
+import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
 
 const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
   'text.chat': 'chat',
@@ -17,6 +17,8 @@ const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
   'image.generate': 'image_generation',
   'video.generate': 'video_generation',
 }
+
+const KNOWN_CAPABILITY_SET = new Set<string>(CAPABILITY_KEYS)
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -37,20 +39,18 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
   }
 }
 
-function getProvenCapabilities(): string[] {
-  return getRuntimeProofStatus()
-    .provenCapabilities
-    .filter((c) => c.readyForDashboardExecution)
-    .map((c) => c.capability)
-}
-
-function normalizeStudioCapability(capability: unknown): string | null {
+function normalizeStudioCapability(capability: unknown, proofStatus: RuntimeProofStatusPayload): string | null {
   if (typeof capability !== 'string' || !capability.trim()) return null
   const value = capability.trim()
   if (STUDIO_CAPABILITY_ALIASES[value]) return STUDIO_CAPABILITY_ALIASES[value]
-  const provenOrKnown = getRuntimeProofStatus().provenCapabilities.some((item) => item.capability === value)
-    || getRuntimeProofStatus().unprovenCapabilities.some((item) => item.capability === value)
+  if (KNOWN_CAPABILITY_SET.has(value)) return value
+  const provenOrKnown = proofStatus.provenCapabilities.some((item) => item.capability === value)
+    || proofStatus.unprovenCapabilities.some((item) => item.capability === value)
   return provenOrKnown ? value : null
+}
+
+function isCapabilityProven(capability: string, proofStatus: RuntimeProofStatusPayload): boolean {
+  return proofStatus.provenCapabilities.some((c) => c.capability === capability && c.readyForDashboardExecution)
 }
 
 export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
@@ -68,8 +68,11 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/admin/studio/jobs', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
+    // Load canonical truth once per request
+    const proofStatus = await getRuntimeProofStatus(app)
+
     const body = request.body as Record<string, unknown>
-    const capability = normalizeStudioCapability(body.capability)
+    const capability = normalizeStudioCapability(body.capability, proofStatus)
     const inputObj = (body.input || body) as Record<string, unknown>
     const prompt = String(body.prompt || inputObj.prompt || inputObj.text || '')
     const metadata = (body.metadata || {}) as Record<string, unknown>
@@ -83,9 +86,8 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: true, message: 'Provider/model override not allowed. Runtime selects provider/model.' })
     }
 
-    // Evaluate runtime proof per request
-    const provenCapabilities = getProvenCapabilities()
-    if (!provenCapabilities.includes(capability)) {
+    // Evaluate runtime proof from the single snapshot
+    if (!isCapabilityProven(capability, proofStatus)) {
       return reply.status(400).send({ error: true, message: `Capability "${capability}" is not proven or not ready for dashboard execution` })
     }
 

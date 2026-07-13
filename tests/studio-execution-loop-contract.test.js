@@ -124,7 +124,7 @@ describe('studio execution loop contract', () => {
     expect(content).toContain("'image.generate': 'image_generation'")
     expect(content).toContain("'video.generate': 'video_generation'")
     expect(content).toContain("'text.chat': 'chat'")
-    expect(content).toContain('normalizeStudioCapability(body.capability)')
+    expect(content).toContain('normalizeStudioCapability(body.capability, proofStatus)')
     expect(content).toContain('capability: capability as never')
   })
 
@@ -138,8 +138,9 @@ describe('studio execution loop contract', () => {
   it('admin Studio route evaluates runtime proof per request', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
-    // Should call getRuntimeProofStatus() inside handler, not at module level
-    expect(content).toContain('getProvenCapabilities()')
+    // Should load proof status once per request via getRuntimeProofStatus(app)
+    expect(content).toContain('getRuntimeProofStatus(app)')
+    expect(content).toContain('isCapabilityProven(capability, proofStatus)')
     expect(content).not.toContain('const PROVEN_CAPABILITIES = getRuntimeProofStatus()')
   })
 

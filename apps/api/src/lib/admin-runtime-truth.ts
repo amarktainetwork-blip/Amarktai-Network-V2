@@ -152,7 +152,7 @@ function isValidArtifactProof(job: ProofJob, artifact: ProofArtifact | undefined
 export function selectCapabilityProofStates(
   jobs: readonly ProofJob[],
   artifacts: readonly ProofArtifact[],
-): RuntimeTruthInput['capabilities'] {
+): { capabilities: RuntimeTruthInput['capabilities']; evidenceAvailable: boolean } {
   const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
   const capabilities: RuntimeTruthInput['capabilities'] = {}
   const sortedJobs = [...jobs].sort((a, b) => {
@@ -178,58 +178,73 @@ export function selectCapabilityProofStates(
     }
   }
 
-  return capabilities
+  return { capabilities, evidenceAvailable: true }
 }
 
-export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth> {
-  const [providerStatuses, completedJobs] = await Promise.all([
-    listProviderCredentialStatuses().catch(() => []),
-    prisma.job.findMany({
-      where: { status: 'completed' },
-      orderBy: { completedAt: 'desc' },
-      select: {
-        id: true,
-        appSlug: true,
-        capability: true,
-        status: true,
-        completedAt: true,
-        artifactId: true,
-        provider: true,
-        model: true,
-        output: true,
-        traceId: true,
-        metadataJson: true,
-      },
-      take: 500,
-    }).catch(() => []),
-  ])
+export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth & { evidenceAvailable: boolean }> {
+  let providerStatuses: Awaited<ReturnType<typeof listProviderCredentialStatuses>> = []
+  let completedJobs: ProofJob[] = []
+  let evidenceAvailable = true
 
-  // Batch-fetch artifact records for jobs that reference them
-  const artifactIds = completedJobs
-    .map((job) => job.artifactId)
-    .filter((id): id is string => id != null && id.length > 0)
-  const artifactRecords = artifactIds.length > 0
-    ? await prisma.artifact.findMany({
-        where: { id: { in: artifactIds } },
+  try {
+    ;[providerStatuses, completedJobs] = await Promise.all([
+      listProviderCredentialStatuses(),
+      prisma.job.findMany({
+        where: { status: 'completed' },
+        orderBy: { completedAt: 'desc' },
         select: {
           id: true,
           appSlug: true,
-          type: true,
-          subType: true,
+          capability: true,
           status: true,
+          completedAt: true,
+          artifactId: true,
           provider: true,
           model: true,
+          output: true,
           traceId: true,
-          mimeType: true,
-          fileSizeBytes: true,
-          storagePath: true,
-          storageUrl: true,
-          metadata: true,
-          description: true,
-          errorMessage: true,
+          metadataJson: true,
         },
-      }).catch(() => [])
-    : []
+        take: 500,
+      }),
+    ])
+  } catch {
+    evidenceAvailable = false
+  }
+
+  // Batch-fetch artifact records for jobs that reference them
+  let artifactRecords: ProofArtifact[] = []
+  if (evidenceAvailable) {
+    const artifactIds = completedJobs
+      .map((job) => job.artifactId)
+      .filter((id): id is string => id != null && id.length > 0)
+    try {
+      artifactRecords = artifactIds.length > 0
+        ? await prisma.artifact.findMany({
+            where: { id: { in: artifactIds } },
+            select: {
+              id: true,
+              appSlug: true,
+              type: true,
+              subType: true,
+              status: true,
+              provider: true,
+              model: true,
+              traceId: true,
+              mimeType: true,
+              fileSizeBytes: true,
+              storagePath: true,
+              storageUrl: true,
+              metadata: true,
+              description: true,
+              errorMessage: true,
+            },
+          })
+        : []
+    } catch {
+      evidenceAvailable = false
+    }
+  }
 
   const providers: RuntimeTruthInput['providers'] = {}
   for (const status of providerStatuses) {
@@ -247,7 +262,10 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
     }
   }
 
-  const capabilities = selectCapabilityProofStates(completedJobs, artifactRecords) ?? {}
+  const proofResult = evidenceAvailable
+    ? selectCapabilityProofStates(completedJobs, artifactRecords)
+    : { capabilities: {} as RuntimeTruthInput['capabilities'], evidenceAvailable: false }
+  const capabilities = proofResult.capabilities ?? {}
 
   const queueInfrastructureReady = Boolean(app.redis)
   for (const capability of ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation', 'music_generation', 'long_form_video'] as CapabilityKey[]) {
@@ -257,5 +275,6 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
     }
   }
 
-  return getRuntimeTruth({ providers, capabilities })
+  const truth = getRuntimeTruth({ providers, capabilities })
+  return { ...truth, evidenceAvailable: proofResult.evidenceAvailable && evidenceAvailable }
 }

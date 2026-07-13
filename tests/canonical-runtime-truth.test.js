@@ -251,37 +251,41 @@ describe('canonical runtime truth', () => {
   })
 
   it('valid media proof requires a completed matching artifact trace', () => {
-    const proofs = selectCapabilityProofStates([proofJob()], [proofArtifact()])
+    const result = selectCapabilityProofStates([proofJob()], [proofArtifact()])
 
-    expect(proofs.image_generation.liveProven).toBe(true)
-    expect(proofs.image_generation.lastProofAt).toEqual(newerProofAt)
+    expect(result.capabilities.image_generation.liveProven).toBe(true)
+    expect(result.capabilities.image_generation.lastProofAt).toEqual(newerProofAt)
+    expect(result.evidenceAvailable).toBe(true)
   })
 
   it('rejects media proof when artifact is missing, failed, or not linked to the job trace', () => {
-    expect(selectCapabilityProofStates([proofJob()], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ status: 'failed' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ traceId: 'trace-other-job' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ appSlug: 'other-app' })])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob()], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ status: 'failed' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ traceId: 'trace-other-job' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ appSlug: 'other-app' })])).toEqual(empty)
   })
 
   it('rejects media proof when artifact type, subtype, provider, model, or output id do not match', () => {
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ type: 'document', mimeType: 'application/json' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ subType: 'video_generation' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ provider: 'genx' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ model: 'other-model' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ output: JSON.stringify({ artifactId: 'other-artifact' }) })], [proofArtifact()])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ type: 'document', mimeType: 'application/json' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ subType: 'video_generation' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ provider: 'genx' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ model: 'other-model' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ output: JSON.stringify({ artifactId: 'other-artifact' }) })], [proofArtifact()])).toEqual(empty)
   })
 
   it('rejects placeholder media artifacts and failed jobs', () => {
-    expect(selectCapabilityProofStates([proofJob({ status: 'failed' })], [proofArtifact()])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob({ status: 'failed' })], [proofArtifact()])).toEqual(empty)
     expect(selectCapabilityProofStates(
       [proofJob()],
       [proofArtifact({ metadata: JSON.stringify({ source: 'mock fixture' }) })],
-    )).toEqual({})
+    )).toEqual(empty)
     expect(selectCapabilityProofStates(
       [proofJob({ output: 'Backend integration pending. Real previews will appear here.' })],
       [proofArtifact()],
-    )).toEqual({})
+    )).toEqual(empty)
   })
 
   it('uses the newest valid proof and skips newer invalid proof records', () => {
@@ -299,9 +303,9 @@ describe('canonical runtime truth', () => {
       storageUrl: '/api/v1/artifacts/artifact-old-valid/file',
     })
 
-    const proofs = selectCapabilityProofStates([newerInvalid, olderValid], [artifact])
-    expect(proofs.image_generation.liveProven).toBe(true)
-    expect(proofs.image_generation.lastProofAt).toEqual(olderProofAt)
+    const result = selectCapabilityProofStates([newerInvalid, olderValid], [artifact])
+    expect(result.capabilities.image_generation.liveProven).toBe(true)
+    expect(result.capabilities.image_generation.lastProofAt).toEqual(olderProofAt)
   })
 
   it('text proof requires runtime provider, model, trace, and non-placeholder output', () => {
@@ -315,16 +319,17 @@ describe('canonical runtime truth', () => {
       traceId: 'trace-chat-valid',
     })
 
-    const proofs = selectCapabilityProofStates([validText], [])
-    expect(proofs.chat.liveProven).toBe(true)
-    expect(proofs.chat.lastProofAt).toEqual(newerProofAt)
+    const result = selectCapabilityProofStates([validText], [])
+    expect(result.capabilities.chat.liveProven).toBe(true)
+    expect(result.capabilities.chat.lastProofAt).toEqual(newerProofAt)
   })
 
   it('text proof rejects placeholders and missing trusted execution provenance', () => {
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: '', artifactId: null, output: 'real output' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: '', artifactId: null, output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual(empty)
   })
 
   it('music proof requires a valid audio artifact path before liveProven is true', () => {
@@ -348,8 +353,9 @@ describe('canonical runtime truth', () => {
       storageUrl: '/api/v1/artifacts/artifact-music-valid/file',
     })
 
-    expect(selectCapabilityProofStates([job], [validArtifact]).music_generation.liveProven).toBe(true)
-    expect(selectCapabilityProofStates([job], [proofArtifact({ ...validArtifact, mimeType: 'application/json', type: 'document' })])).toEqual({})
+    const result = selectCapabilityProofStates([job], [validArtifact])
+    expect(result.capabilities.music_generation.liveProven).toBe(true)
+    expect(selectCapabilityProofStates([job], [proofArtifact({ ...validArtifact, mimeType: 'application/json', type: 'document' })]).capabilities).toEqual({})
   })
 
   it('music remains false without explicit live proof evidence', () => {

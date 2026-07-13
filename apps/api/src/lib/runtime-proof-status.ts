@@ -1,9 +1,13 @@
+import type { FastifyInstance } from 'fastify'
 import {
   CAPABILITY_KEYS,
+  CAPABILITY_CATALOG,
   PROVIDER_KEYS,
   type CapabilityKey,
   type ProviderKey,
+  type RuntimeTruth,
 } from '@amarktai/core'
+import { buildAdminRuntimeTruth } from './admin-runtime-truth.js'
 
 export type RuntimeProofStatus = 'proven' | 'unproven'
 export type RuntimeProofLevel =
@@ -26,132 +30,79 @@ export interface RuntimeProofStatusPayload {
   providers: readonly ProviderKey[]
   provenCapabilities: RuntimeProofCapability[]
   unprovenCapabilities: RuntimeProofCapability[]
+  evidenceAvailable: boolean
   summary: {
     provenCount: number
     providerCount: number
-    lastUpdatedFrom: 'runtime-proof-code'
+    lastUpdatedFrom: 'canonical-truth'
     source: 'backend-runtime-proof-status'
   }
 }
 
-const PROVEN_CAPABILITIES: readonly RuntimeProofCapability[] = [
-  {
-    capability: 'chat',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq chat runtime.',
-  },
-  {
-    capability: 'reasoning',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq reasoning runtime.',
-  },
-  {
-    capability: 'code',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq code runtime.',
-  },
-  {
-    capability: 'summarization',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq summarization runtime.',
-  },
-  {
-    capability: 'translation',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq translation runtime.',
-  },
-  {
-    capability: 'classification',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq classification runtime.',
-  },
-  {
-    capability: 'extraction',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq extraction runtime.',
-  },
-  {
-    capability: 'structured_output',
-    status: 'proven',
-    provider: 'groq',
-    artifactRequired: false,
-    proofLevel: 'live_external_app_job',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Groq structured_output runtime with JSON validation.',
-  },
-  {
-    capability: 'image_generation',
-    status: 'proven',
-    provider: 'together',
-    model: 'black-forest-labs/FLUX.1-schnell',
-    artifactRequired: true,
-    proofLevel: 'live_external_app_job_with_artifact_download',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through Together image runtime and artifact download returned 200.',
-  },
-  {
-    capability: 'video_generation',
-    status: 'proven',
-    provider: 'genx',
-    model: 'grok-imagine-video',
-    artifactRequired: true,
-    proofLevel: 'live_external_app_job_with_artifact_download',
-    readyForDashboardExecution: true,
-    description: 'External app job completed through GenX video runtime and artifact download returned 200.',
-  },
-]
+export function projectProofStatusFromTruth(truth: RuntimeTruth & { evidenceAvailable?: boolean }): RuntimeProofStatusPayload {
+  const provenCapabilities: RuntimeProofCapability[] = []
+  const unprovenCapabilities: RuntimeProofCapability[] = []
+  const evidenceAvailable = truth.evidenceAvailable !== false
 
-export function getRuntimeProofStatus(): RuntimeProofStatusPayload {
-  const provenKeys = new Set(PROVEN_CAPABILITIES.map((item) => item.capability))
-  const unprovenCapabilities = CAPABILITY_KEYS
-    .filter((capability) => !provenKeys.has(capability))
-    .map((capability): RuntimeProofCapability => ({
-      capability,
-      status: 'unproven',
-      provider: null,
-      artifactRequired: false,
-      proofLevel: 'not_proven',
-      readyForDashboardExecution: false,
-      description: 'No completed live external app runtime proof is recorded for this capability.',
-    }))
+  for (const capability of CAPABILITY_KEYS) {
+    const capabilityTruth = truth.capabilities.find((c) => c.capability === capability)
+    const isProven = capabilityTruth?.liveProven === true
+    const capabilityDef = CAPABILITY_CATALOG.find((c) => c.key === capability)
+
+    if (isProven) {
+      const eligibleModel = capabilityTruth?.eligibleModels?.find((m) => m.liveProven) ?? capabilityTruth?.eligibleModels?.[0]
+      provenCapabilities.push({
+        capability,
+        status: 'proven',
+        provider: eligibleModel?.provider ?? null,
+        model: eligibleModel?.modelId,
+        artifactRequired: capabilityDef?.artifactRequired === true,
+        proofLevel: capabilityDef?.artifactRequired === true
+          ? 'live_external_app_job_with_artifact_download'
+          : 'live_external_app_job',
+        readyForDashboardExecution: true,
+        description: `Completed ${capability} job with valid runtime proof.`,
+      })
+    } else {
+      unprovenCapabilities.push({
+        capability,
+        status: 'unproven',
+        provider: null,
+        artifactRequired: capabilityDef?.artifactRequired === true,
+        proofLevel: 'not_proven',
+        readyForDashboardExecution: false,
+        description: evidenceAvailable
+          ? 'No completed live external app runtime proof is recorded for this capability.'
+          : 'Runtime evidence unavailable — cannot determine proof status.',
+      })
+    }
+  }
 
   return {
     providers: PROVIDER_KEYS,
-    provenCapabilities: [...PROVEN_CAPABILITIES],
+    provenCapabilities,
     unprovenCapabilities,
+    evidenceAvailable,
     summary: {
-      provenCount: PROVEN_CAPABILITIES.length,
+      provenCount: provenCapabilities.length,
       providerCount: PROVIDER_KEYS.length,
-      lastUpdatedFrom: 'runtime-proof-code',
+      lastUpdatedFrom: 'canonical-truth',
       source: 'backend-runtime-proof-status',
     },
   }
+}
+
+export async function getRuntimeProofStatus(app?: FastifyInstance): Promise<RuntimeProofStatusPayload> {
+  if (!app) {
+    return projectProofStatusFromTruth({
+      generatedAt: new Date(0).toISOString(),
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'] as const, codingOnlyProviders: ['mimo'] as const, qwenRuntimeEligible: false as const },
+      providers: [],
+      capabilities: [],
+      countsByClassification: {} as never,
+      evidenceAvailable: false,
+    })
+  }
+  const truth = await buildAdminRuntimeTruth(app)
+  return projectProofStatusFromTruth(truth)
 }

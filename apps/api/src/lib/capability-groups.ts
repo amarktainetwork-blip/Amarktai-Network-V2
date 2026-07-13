@@ -1,5 +1,4 @@
-import { prisma } from '@amarktai/db'
-import { getRuntimeProofStatus } from './runtime-proof-status.js'
+import type { RuntimeProofStatusPayload } from './runtime-proof-status.js'
 
 export interface CapabilityGroupSummary {
   capabilityKey: string
@@ -87,19 +86,38 @@ const CAPABILITY_TO_MODEL_FIELD: Record<string, string> = {
   moderation: 'supportsText',
 }
 
+interface ModelRecord {
+  provider: string
+  costTier: string
+  isLiveDiscovered: boolean
+  source: string
+  estimatedUnitCost: number | null
+  pricingSource: string | null
+  pricingConfidence: string | null
+  enabled: boolean
+  [key: string]: unknown
+}
+
+interface ProviderRecord {
+  providerKey: string
+  enabled: boolean
+  healthStatus: string | null
+}
+
 function providerIsHealthyForRuntime(health: { enabled?: boolean; status?: string } | undefined): boolean {
   if (!health) return false
   if (health.enabled === false) return false
   return HEALTHY_PROVIDER_STATUSES.has(health.status || 'unconfigured')
 }
 
-export async function getCapabilityGroupSummary(capabilityKey: string): Promise<CapabilityGroupSummary> {
+export function buildCapabilityGroupSummary(
+  capabilityKey: string,
+  allModels: ModelRecord[],
+  providers: ProviderRecord[],
+  proofStatus: RuntimeProofStatusPayload,
+): CapabilityGroupSummary {
   const meta = CAPABILITY_LABELS[capabilityKey] || { label: capabilityKey, category: 'text' }
   const modelField = CAPABILITY_TO_MODEL_FIELD[capabilityKey] || 'supportsText'
-
-  const allModels = await prisma.modelRegistryEntry.findMany({
-    where: { enabled: true },
-  })
 
   const eligible = allModels.filter((m) => {
     const record = m as Record<string, unknown>
@@ -140,8 +158,6 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
     .filter((c): c is number => c !== null && c > 0)
     .sort((a, b) => a - b)
 
-  // Check provider health for blockers
-  const providers = await prisma.aiProvider.findMany()
   const providerHealth: Record<string, { enabled: boolean; status: string }> = {}
   for (const p of providers) {
     providerHealth[p.providerKey] = { enabled: p.enabled, status: p.healthStatus || 'unconfigured' }
@@ -183,8 +199,7 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
     missingExecutorBlockers.push(`${capabilityKey}: ${blockedUnknownPricingCount} media model(s) blocked by unknown pricing`)
   }
 
-  const runtimeProof = getRuntimeProofStatus()
-  const proof = runtimeProof.provenCapabilities.find((item) => item.capability === capabilityKey)
+  const proof = proofStatus.provenCapabilities.find((item) => item.capability === capabilityKey)
   const isLiveJobProven = proof?.status === 'proven'
   const isDashboardReady = proof?.readyForDashboardExecution === true
   const liveJobProvenCount = isLiveJobProven ? 1 : 0
@@ -222,6 +237,12 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
   }
 }
 
-export async function getAllCapabilityGroupSummaries(): Promise<CapabilityGroupSummary[]> {
-  return Promise.all(Object.keys(CAPABILITY_LABELS).map(getCapabilityGroupSummary))
+export async function getAllCapabilityGroupSummaries(
+  allModels: ModelRecord[],
+  providers: ProviderRecord[],
+  proofStatus: RuntimeProofStatusPayload,
+): Promise<CapabilityGroupSummary[]> {
+  return Object.keys(CAPABILITY_LABELS).map((key) =>
+    buildCapabilityGroupSummary(key, allModels, providers, proofStatus),
+  )
 }
