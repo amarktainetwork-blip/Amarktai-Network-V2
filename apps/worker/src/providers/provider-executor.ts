@@ -1214,7 +1214,8 @@ function canExecuteProviderForCapability(
     return imageCaps.includes(capability) || audioCaps.includes(capability)
   }
   if (provider === 'genx') {
-    return capability === 'video_generation' || capability === 'music_generation' || capability === 'song_generation'
+    const videoCaps: CapabilityKey[] = ['video_generation', 'image_to_video', 'video_to_video', 'long_form_video', 'music_generation', 'song_generation']
+    return videoCaps.includes(capability)
   }
   return false
 }
@@ -1274,7 +1275,7 @@ async function executeWithSelectedProvider(
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    if (provider === 'genx' && capability === 'video_generation') {
+    if (provider === 'genx' && ['video_generation', 'image_to_video', 'video_to_video', 'long_form_video'].includes(capability)) {
       const result = await executeGenxVideo(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
