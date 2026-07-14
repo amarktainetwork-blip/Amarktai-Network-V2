@@ -37,6 +37,9 @@ export interface ModelCatalogEntry {
   pricingRawMetadata?: Record<string, unknown>
   lastPricingSyncedAt?: string | null
   pricingBlocker?: string
+  rawMetadata?: Record<string, unknown>
+  providerRawType?: string
+  providerRawCategory?: string
 }
 
 export interface ModelCatalogRefreshSummary {
@@ -354,7 +357,59 @@ function modelRecordToCatalogEntry(model: ModelRecord): ModelCatalogEntry {
     pricingRawMetadata: {},
     lastPricingSyncedAt: null,
     pricingBlocker: 'pricing_unknown',
+    providerRawType: model.category ?? '',
+    providerRawCategory: model.providerCategory ?? model.category ?? '',
+    rawMetadata: {
+      ...(model.rawMetadata ?? {}),
+      compatibility: compatibilityMetadata(model),
+    },
   }
+}
+
+function compatibilityMetadata(model: ModelRecord): Record<string, unknown> {
+  return {
+    category: model.category ?? null,
+    capabilities: model.capabilities,
+    modalitiesIn: model.modalitiesIn ?? [],
+    modalitiesOut: model.modalitiesOut ?? [],
+    transportProfile: model.transportProfile ?? null,
+    endpointFamily: model.endpointFamily ?? null,
+    endpointShapeKnown: model.endpointShapeKnown === true,
+    requestShapeKnown: model.requestShapeKnown === true,
+    responseShapeKnown: model.responseShapeKnown === true,
+    providerClientExists: model.providerClientExists === true,
+    workerExecutorExists: model.workerExecutorExists === true,
+  }
+}
+
+function canonicalCapabilitiesFromFlags(flags: Record<string, boolean>): CapabilityKey[] {
+  return Object.entries(CAPABILITY_FIELD_MAP)
+    .filter(([, field]) => flags[field] === true)
+    .map(([capability]) => capability as CapabilityKey)
+}
+
+function discoveredCompatibility(model: DiscoveryResult['models'][number], capabilities: CapabilityKey[]): Record<string, unknown> | null {
+  const category = (model.providerRawCategory || model.category).toLowerCase()
+  const identifier = model.modelId.toLowerCase()
+  if (model.provider === 'genx' && category === 'video') {
+    const sourceAware = /(?:^|[-_/])(i2v|r2v|videoedit)(?:$|[-_/])/.test(identifier)
+    if (sourceAware) return null
+    return {
+      category: 'video', capabilities, modalitiesIn: ['text'], modalitiesOut: ['video'],
+      transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true,
+    }
+  }
+  if (model.provider === 'genx' && (category === 'audio' || category === 'music')) {
+    return {
+      category: 'audio', capabilities, modalitiesIn: ['text'], modalitiesOut: ['audio'],
+      transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true,
+    }
+  }
+  return null
 }
 
 export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<ModelCatalogRefreshSummary> {
@@ -369,7 +424,12 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         where: { provider_modelId: { provider: model.provider, modelId: model.modelId } },
       })
 
-      const rawMetadata = stringifyMetadataSafely(model.rawMetadata, 'raw_metadata')
+      const canonicalCapabilities = canonicalCapabilitiesFromFlags(model.capabilities)
+      const compatibility = discoveredCompatibility(model, canonicalCapabilities)
+      const rawMetadata = stringifyMetadataSafely({
+        ...model.rawMetadata,
+        ...(compatibility ? { compatibility } : {}),
+      }, 'raw_metadata')
       const pricingRawMetadata = stringifyMetadataSafely(model.pricingRawMetadata, 'pricing_raw_metadata')
       const metadataWarning = [rawMetadata.warning, pricingRawMetadata.warning].filter(Boolean).join(';')
 
@@ -399,7 +459,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
         pricingBlocker: appendBlocker(model.pricingBlocker, metadataWarning),
         notes: appendNote(model.notes, metadataWarning),
-        capabilitiesJson: existing?.capabilitiesJson ?? '[]',
+        capabilitiesJson: JSON.stringify(canonicalCapabilities),
         ...model.capabilities,
       }
 
@@ -459,6 +519,9 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
+          providerRawType: model.providerRawType ?? '',
+          providerRawCategory: model.providerRawCategory ?? model.category,
+          rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
           capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
           ...model.capabilities,
@@ -489,6 +552,9 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
+          providerRawType: model.providerRawType ?? '',
+          providerRawCategory: model.providerRawCategory ?? model.category,
+          rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
           capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
           ...model.capabilities,

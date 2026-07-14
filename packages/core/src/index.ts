@@ -193,6 +193,8 @@ export {
   isExecutorModelCompatible,
   type ExecutorId,
   type ExecutorRegistration,
+  type ExecutorCompatibilityProfile,
+  type ExecutorModelMetadata,
 } from './executor-registry.js'
 
 // Direct provider capability contracts and normalized execution evidence
@@ -217,6 +219,7 @@ export {
   evaluateOrchestra,
   checkCandidateEligibility,
   normalizeDbCandidates,
+  executorModelMetadataFromDbRecord,
   validateOrchestraRequest,
   ORCHESTRA_BLOCKED_REQUEST_FIELDS,
   HEALTHY_PROVIDER_STATUSES,

@@ -46,6 +46,7 @@ export interface ProcessorResult {
 
 export interface ProcessorDeps {
   executeCapability?: (payload: WorkerJobData) => Promise<ProcessorResult>
+  advanceLongFormWorkflow?: (parentJobId: string) => Promise<unknown>
 }
 
 type PartialWorkerJobData = Partial<WorkerJobData> & { jobId?: string }
@@ -112,10 +113,11 @@ async function markJobFailed(jobId: string, error: string): Promise<void> {
   })
 }
 
-async function refreshParentFromPayload(payload: WorkerJobData): Promise<void> {
+async function refreshParentFromPayload(payload: WorkerJobData, advance?: (parentJobId: string) => Promise<unknown>): Promise<void> {
   const parentJobId = typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : null
   if (parentJobId) {
     await refreshLongFormParentState(parentJobId).catch(() => {})
+    if (advance) await advance(parentJobId)
   }
 }
 
@@ -158,6 +160,10 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
 // Together image generation, and GenX video generation.
 
 async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  if (payload.capability === 'long_form_video' && payload.metadata?.longFormAssembly === true && payload.metadata.internalLocalExecution === true) {
+    const { executeLongFormAssembly } = await import('../long-form-assembly.js')
+    return executeLongFormAssembly(payload)
+  }
   const { executeWithProvider } = await import('../providers/provider-executor.js')
   return executeWithProvider(payload)
 }
@@ -166,6 +172,7 @@ async function defaultExecuteCapability(payload: WorkerJobData): Promise<Process
 
 export function createJobProcessor(deps: ProcessorDeps = {}) {
   const executeCapability = deps.executeCapability ?? defaultExecuteCapability
+  const advanceWorkflow = deps.advanceLongFormWorkflow
 
   return async function processJob(rawPayload: WorkerJobData): Promise<ProcessorResult> {
     const rawJobId = (rawPayload as PartialWorkerJobData).jobId
@@ -211,6 +218,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
     // 5. Atomically claim an execution-eligible queued job.
     if (TERMINAL_JOB_STATUSES.has(job.status)) {
       console.info('[worker] skipping terminal job', { dbJobId: jobId, appSlug, capability, status: job.status })
+      await refreshParentFromPayload(payload, advanceWorkflow)
       return {
         success: false,
         status: 'failed',
@@ -283,7 +291,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
               jobStatus: latest?.status,
               lateArtifactId: result.artifactId ?? null,
             })
-            await refreshParentFromPayload(payload)
+            await refreshParentFromPayload(payload, advanceWorkflow)
             return {
               ...result,
               metadata: {
@@ -293,14 +301,14 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
               },
             }
           }
-          await refreshParentFromPayload(payload)
+          await refreshParentFromPayload(payload, advanceWorkflow)
           return {
             ...result,
             metadata: { ...result.metadata, skippedTerminalOverwrite: true },
           }
         }
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'completed' })
-        await refreshParentFromPayload(payload)
+        await refreshParentFromPayload(payload, advanceWorkflow)
         return result
       }
 
@@ -326,11 +334,11 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
             dbJobId: jobId,
             jobStatus: latest?.status,
           })
-          await refreshParentFromPayload(payload)
+          await refreshParentFromPayload(payload, advanceWorkflow)
         }
       } else {
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
-        await refreshParentFromPayload(payload)
+        await refreshParentFromPayload(payload, advanceWorkflow)
       }
 
       // Throw so BullMQ records the queue job as failed too
@@ -356,7 +364,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       }).catch(() => {
         // If DB update fails, the original error is more important
       })
-      await refreshParentFromPayload(payload)
+      await refreshParentFromPayload(payload, advanceWorkflow)
 
       // Re-throw so BullMQ records the failure
       throw err

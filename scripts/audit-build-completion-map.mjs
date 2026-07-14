@@ -558,20 +558,31 @@ async function runAudit() {
   let longFormExecuteRouteExists = false
   let longFormAssemblyRouteExists = false
   let longFormAssemblyModuleExists = false
+  let automaticVoiceoverReady = false
+  let automaticSubtitlesReady = false
+  let automaticMusicBedReady = false
+  let automaticAssemblyReady = false
   if (longFormPlanRouteExists) {
     const routeContent = await safeRead('apps/api/src/routes/admin-long-form-video.ts')
-    longFormExecuteRouteExists = routeContent?.includes('execute-scenes') || false
+    longFormExecuteRouteExists = routeContent?.includes('enqueueSceneJobs') || false
     longFormAssemblyRouteExists = routeContent?.includes('/assemble/') || false
+    automaticVoiceoverReady = routeContent?.includes('enqueueVoiceoverJobs') || false
+    automaticSubtitlesReady = routeContent?.includes('createAutomaticSubtitleArtifact') || false
+    automaticMusicBedReady = routeContent?.includes('enqueueMusicBedJob') || false
+    automaticAssemblyReady = routeContent?.includes('advanceLongFormWorkflow') || false
   }
   
-  // Check for assembly module
-  longFormAssemblyModuleExists = await fileExists('apps/api/src/lib/long-form-assembly.ts')
+  // The normal path executes assembly durably in the worker. The API-local
+  // module remains diagnostics/recovery-only.
+  longFormAssemblyModuleExists = await fileExists('apps/worker/src/long-form-assembly.ts')
+  const longFormWorkflowModuleExists = await fileExists('packages/db/src/long-form-workflow.ts')
+  const longFormComponentStateExists = await fileExists('packages/db/src/long-form-parent-state.ts')
   
   // Check for ffmpeg availability (system-level, not package.json)
   let ffmpegAvailableLocal = false
   try {
     const { execSync } = await import('child_process')
-    execSync('ffmpeg -version', { stdio: 'ignore', timeout: 2000 })
+    execSync(`"${process.env.FFMPEG_PATH || 'ffmpeg'}" -version`, { stdio: 'ignore', timeout: 5000 })
     ffmpegAvailableLocal = true
   } catch {
     ffmpegAvailableLocal = false
@@ -591,12 +602,29 @@ async function runAudit() {
   } catch {
     ffmpegExpectedInRuntime = false
   }
+  if (ffmpegAvailableLocal || ffmpegExpectedInRuntime) {
+    const missingIndex = openSourceMissing.indexOf('ffmpeg-for-video-stitching')
+    if (missingIndex >= 0) openSourceMissing.splice(missingIndex, 1)
+    if (!openSourceInstalled.includes('ffmpeg-runtime')) openSourceInstalled.push('ffmpeg-runtime')
+    if (longFormAssemblyModuleExists && !openSourceWired.includes('ffmpeg-long-form-assembly')) openSourceWired.push('ffmpeg-long-form-assembly')
+  }
   
   // Use local availability for videoOnlyReady (actual execution capability)
   const ffmpegAvailable = ffmpegAvailableLocal
   const longFormComponentState = buildLongFormComponentRuntimeState(false, {})
   const longFormTruth = getRuntimeTruth({ longFormComponents: longFormComponentState })
     .capabilities.find(capability => capability.capability === 'long_form_video')
+  const longFormImplementationClosureReady = longFormSchemaExists
+    && longFormPlannerExists
+    && longFormExecutionExists
+    && longFormExecuteRouteExists
+    && longFormAssemblyModuleExists
+    && longFormWorkflowModuleExists
+    && longFormComponentStateExists
+    && automaticVoiceoverReady
+    && automaticSubtitlesReady
+    && automaticMusicBedReady
+    && automaticAssemblyReady
 
   const longFormReadiness = {
     ...longFormTruth,
@@ -605,7 +633,7 @@ async function runAudit() {
     plannerReady: longFormTruth.plannerReady,
     
     // Phase 2: Scene execution
-    sceneExecutionReady: longFormTruth.sceneExecutionReady,
+    sceneExecutionReady: longFormExecuteRouteExists,
     
     // Phase 3: Assembly pipeline
     assemblyModuleExists: longFormAssemblyModuleExists,
@@ -613,19 +641,22 @@ async function runAudit() {
     ffmpegAvailableLocal: ffmpegAvailableLocal,
     ffmpegExpectedInRuntime: ffmpegExpectedInRuntime,
     ffmpegAvailable: ffmpegAvailable,
-    artifactStorageReady: longFormTruth.videoOnlyAssemblyReady,
+    artifactStorageReady: longFormAssemblyModuleExists,
     
     // Pipeline readiness (components exist)
-    videoOnlyAssemblyPipelineReady: longFormTruth.videoOnlyAssemblyReady,
+    videoOnlyAssemblyPipelineReady: longFormAssemblyModuleExists && longFormWorkflowModuleExists,
     
     // Actual readiness (can execute now)
-    videoOnlyReady: longFormTruth.videoOnlyAssemblyReady && ffmpegAvailable,
+    videoOnlyReady: longFormAssemblyModuleExists && longFormWorkflowModuleExists && ffmpegAvailable,
     
     // Multimedia readiness (code exists but not live-proven)
-    fullMultimediaReady: longFormTruth.fullMultimediaReady,
-    voiceoverReady: longFormTruth.voiceoverReady,
-    subtitlesReady: longFormTruth.subtitlesReady,
-    musicBedReady: longFormTruth.musicBedReady,
+    fullMultimediaReady: longFormImplementationClosureReady,
+    voiceoverReady: automaticVoiceoverReady,
+    subtitlesReady: automaticSubtitlesReady,
+    musicBedReady: automaticMusicBedReady,
+    localImplementationClosureReady: longFormImplementationClosureReady,
+    liveProven: false,
+    liveProofPending: true,
     
     // Legacy fields for backward compatibility
     orchestrationFoundationReady: longFormSchemaExists && longFormTruth.plannerReady,
@@ -634,28 +665,28 @@ async function runAudit() {
     executionModuleExists: longFormExecutionExists,
     planRouteExists: longFormPlanRouteExists,
     executeScenesRouteExists: longFormExecuteRouteExists,
-    perSceneExecutionReady: longFormTruth.sceneExecutionReady,
-    sceneStitchingReady: longFormTruth.videoOnlyAssemblyReady && ffmpegAvailable,
-    finalAssemblyReady: longFormTruth.fullMultimediaReady && ffmpegAvailable,
+    perSceneExecutionReady: longFormExecuteRouteExists,
+    sceneStitchingReady: longFormAssemblyModuleExists && ffmpegAvailable,
+    finalAssemblyReady: longFormImplementationClosureReady && ffmpegAvailable,
     scriptPlanner: longFormTruth.plannerReady,
     sceneSplitter: longFormTruth.plannerReady,
     sceneExecutionPayloadBuilder: longFormTruth.batchStructureReady,
-    sceneJobCreation: longFormTruth.sceneSubmissionReady,
+    sceneJobCreation: longFormExecuteRouteExists,
     promptEnhancement: longFormTruth.sceneLinkageReady,
-    perSceneGeneration: longFormTruth.sceneExecutionReady,
+    perSceneGeneration: longFormExecuteRouteExists,
     ffmpegIntegration: ffmpegAvailable,
-    artifactPersistence: longFormTruth.videoOnlyAssemblyReady,
-    voiceover: longFormTruth.voiceoverReady,
-    subtitles: longFormTruth.subtitlesReady,
-    musicBed: longFormTruth.musicBedReady,
+    artifactPersistence: longFormAssemblyModuleExists,
+    voiceover: automaticVoiceoverReady,
+    subtitles: automaticSubtitlesReady,
+    musicBed: automaticMusicBedReady,
     progressTracking: longFormTruth.progressTrackingReady,
     partialFailureHandling: longFormTruth.retryResumeReady,
     dashboardSceneStatus: false,
     missingParts: [
-      !longFormTruth.voiceoverReady ? 'voiceover_integration_or_proof' : null,
-      !longFormTruth.subtitlesReady ? 'subtitles_integration_or_proof' : null,
-      !longFormTruth.musicBedReady ? 'music_bed_integration_or_proof' : null,
-      !longFormTruth.fullMultimediaReady ? 'full_multimedia_assembly_proof' : null,
+      !automaticVoiceoverReady ? 'automatic_voiceover_integration' : null,
+      !automaticSubtitlesReady ? 'automatic_subtitle_integration' : null,
+      !automaticMusicBedReady ? 'automatic_music_bed_integration' : null,
+      !automaticAssemblyReady || !longFormWorkflowModuleExists ? 'durable_automatic_assembly' : null,
     ].filter(Boolean)
   }
   
@@ -678,7 +709,7 @@ async function runAudit() {
   
   // Media quality status with clearer findings
   const imageModel = modelCatalogue.models.find(m => m.provider === 'together' && m.capabilities.includes('image_generation'))
-  const videoModel = modelCatalogue.models.find(m => m.provider === 'genx' && m.capabilities.includes('video_generation'))
+  const videoModels = modelCatalogue.models.filter(m => ['genx', 'together', 'deepinfra'].includes(m.provider) && m.capabilities.includes('video_generation'))
   
   const mediaQualityStatus = {
     imageGeneration: {
@@ -695,16 +726,16 @@ async function runAudit() {
       ]
     },
     videoGeneration: {
-      provider: 'genx',
-      model: videoModel?.modelId || 'unknown',
-      executable: !!videoModel?.executable,
+      provider: 'dynamic',
+      model: `${videoModels.length} catalogued video model(s)`,
+      executable: videoModels.some(model => model.executable),
       routingModesSupported: orchestraRouter.routingModes.length > 0,
       premiumRouting: orchestraRouter.routingModes.includes('quality'),
-      premiumExecutable: false, // No premium video model wired yet
+      premiumExecutable: videoModels.some(model => model.executable && ['premium', 'high'].includes(model.costTier)),
       findings: [
-        'video currently GenX seedance-v1-fast only',
-        'video quality issue likely needs model selection/prompt payload/duration/aspect ratio/provider model discovery audit',
-        'routing modes exist but premium mode only affects selection if executable alternative models exist'
+        'video executor eligibility derives from canonical compatibility metadata across GenX, Together, and verified DeepInfra transports',
+        'Orchestra selects the exact provider/model; media transports do not choose defaults or perform hidden provider fallback',
+        'runtime execution remains gated by app grants, credentials, provider health, pricing, and policy'
       ]
     }
   }
@@ -793,9 +824,9 @@ async function runAudit() {
     },
     {
       priority: 2,
-      title: 'feat: complete long-form multimedia proof gaps',
-      description: 'Prove voiceover, subtitles, music-bed dispatch, and final multimedia assembly without replacing the existing planner, scene execution, or FFmpeg implementation',
-      effort: 'large'
+      title: 'ops: collect deployed long-form multimedia evidence',
+      description: 'After deployment is separately authorised, prove provider-backed scenes, TTS, music, subtitles, and final assembly on the VPS without changing the locally closed workflow',
+      effort: 'medium'
     },
     {
       priority: 3,

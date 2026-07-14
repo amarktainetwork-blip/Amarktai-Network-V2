@@ -5,7 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  DEFAULT_GENX_VIDEO_MODEL,
   GENX_POLL_TRANSIENT_MAX_RETRIES,
   genxDownloadVideo,
   genxGenerateVideo,
@@ -72,64 +71,24 @@ describe('GenX video model resolution', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses seedance-v1-fast as the repo default instead of veo-3.1', async () => {
+  it('forwards the exact Orchestra-selected model', async () => {
     globalThis.fetch.mockResolvedValueOnce(jsonResponse({ job_id: 'job-1', status: 'pending' }))
 
     const result = await genxSubmitVideo({
       prompt: 'A calm proof clip',
+      model: 'newly-discovered-video-model',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
 
     const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
-    expect(DEFAULT_GENX_VIDEO_MODEL).toBe('seedance-v1-fast')
-    expect(resolveGenxVideoModel()).toBe('seedance-v1-fast')
-    expect(requestBody.model).toBe('seedance-v1-fast')
-    expect(requestBody.model).not.toBe('veo-3.1')
-    expect(result.model).toBe('seedance-v1-fast')
+    expect(resolveGenxVideoModel({ model: 'newly-discovered-video-model' })).toBe('newly-discovered-video-model')
+    expect(requestBody.model).toBe('newly-discovered-video-model')
+    expect(result.model).toBe('newly-discovered-video-model')
   })
 
-  it('prefers an explicit model and then DB provider defaultModel', async () => {
-    globalThis.fetch
-      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-explicit', status: 'pending' }))
-      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-db', status: 'pending' }))
-
-    await genxSubmitVideo({
-      prompt: 'Explicit model proof',
-      model: 'explicit-video-model',
-      providerDefaultModel: 'db-video-model',
-      apiKey: 'genx-secret',
-      baseUrl: 'https://query.genx.sh',
-    })
-    await genxSubmitVideo({
-      prompt: 'DB model proof',
-      providerDefaultModel: 'db-video-model',
-      apiKey: 'genx-secret',
-      baseUrl: 'https://query.genx.sh',
-    })
-
-    expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body).model).toBe('explicit-video-model')
-    expect(JSON.parse(globalThis.fetch.mock.calls[1][1].body).model).toBe('db-video-model')
-  })
-
-  it('does not use an unsupported stale DB default when Router models expose usable video models', async () => {
-    const model = resolveGenxVideoModel({
-      providerDefaultModel: 'seedance-v1-fast',
-      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
-    })
-
-    expect(model).toBe('grok-imagine-video')
-    expect(model).not.toBe('seedance-v1-fast')
-    expect(model).not.toContain('avatar')
-  })
-
-  it('uses a supported DB default when the Router model list includes it', async () => {
-    const model = resolveGenxVideoModel({
-      providerDefaultModel: 'kling-v2.5-turbo',
-      providerAvailableModels: ['grok-imagine-video', 'kling-v2.5-turbo'],
-    })
-
-    expect(model).toBe('kling-v2.5-turbo')
+  it('fails closed instead of choosing a client-side default', () => {
+    expect(() => resolveGenxVideoModel()).toThrow('exact Orchestra-selected model')
   })
 })
 
@@ -154,6 +113,7 @@ describe('GenX authenticated downloads', () => {
 
     const resultPromise = genxGenerateVideo({
       prompt: 'A short seedance proof clip',
+      model: 'seedance-v1-fast',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
@@ -176,6 +136,7 @@ describe('GenX authenticated downloads', () => {
     await genxDownloadVideo('https://signed-results.example/video.mp4', {
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
+      model: 'seedance-v1-fast',
     })
 
     expect(globalThis.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined()
@@ -203,9 +164,9 @@ describe('GenX polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateVideo({
       prompt: 'A short resilient proof clip',
+      model: 'grok-imagine-video',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
-      providerAvailableModels: ['grok-imagine-video', 'kling-v2.5-turbo'],
     })
 
     await vi.advanceTimersByTimeAsync(10_000)
@@ -229,6 +190,7 @@ describe('GenX polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateVideo({
       prompt: 'A short auth proof clip',
+      model: 'seedance-v1-fast',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
@@ -261,10 +223,9 @@ describe('GenX polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateVideo({
       prompt: 'A short failing proof clip',
+      model: 'grok-imagine-video',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
-      providerDefaultModel: 'seedance-v1-fast',
-      providerAvailableModels: ['grok-imagine-video', 'kling-v2.5-turbo'],
     })
     const failure = resultPromise.catch((err) => err)
 

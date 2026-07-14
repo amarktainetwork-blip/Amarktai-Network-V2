@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
-import { prisma, refreshLongFormParentState } from '@amarktai/db'
+import { advanceLongFormWorkflow, prisma, refreshLongFormParentState, type LongFormComponentState } from '@amarktai/db'
 import { saveArtifact } from '@amarktai/artifacts'
 import {
   BLOCKED_OVERRIDE_FIELDS,
@@ -18,15 +18,7 @@ import {
   type LongFormVideoPlan,
   type LongFormVideoRequest,
 } from '@amarktai/core'
-import {
-  assembleLongFormVideo,
-  assembleMultimediaLongFormVideo,
-  checkFfmpegAvailable,
-  createAssemblyPlan,
-  resolveSceneArtifacts,
-  resolveComponentArtifacts,
-  validateSceneArtifactsForAssembly,
-} from '../lib/long-form-assembly.js'
+import { checkFfmpegAvailable, resolveSceneArtifacts, validateSceneArtifactsForAssembly } from '../lib/long-form-assembly.js'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
@@ -99,55 +91,6 @@ function parentMetadata(request: LongFormVideoRequest, plan: LongFormVideoPlan, 
       index: 1,
       batchReady: true,
     },
-    assemblyHandoff: buildAssemblyHandoff({
-      parentJobId: '',
-      executionId,
-      request,
-      plan,
-      sceneJobs: [],
-    }),
-  }
-}
-
-function buildAssemblyHandoff({
-  parentJobId,
-  executionId,
-  request,
-  plan,
-  sceneJobs,
-}: {
-  parentJobId: string
-  executionId: string
-  request: LongFormVideoRequest
-  plan: LongFormVideoPlan
-  sceneJobs: DbJob[]
-}) {
-  const orderedCompleted = sceneJobs
-    .filter((job) => job.status === 'completed' && job.artifactId)
-    .sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
-  const orderedSceneArtifactIds = orderedCompleted.map((job) => job.artifactId as string)
-  const expectedSceneCount = plan.storyboard.scenes.length
-  const missingDependencies = [
-    ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(request.voiceoverEnabled ? ['voiceover_not_live_proven'] : []),
-    ...(request.subtitlesEnabled ? ['subtitles_not_live_proven'] : []),
-    ...(request.musicBedEnabled ? ['music_bed_not_live_proven'] : []),
-    'full_multimedia_assembly_pending',
-  ]
-
-  return {
-    parentJobId,
-    executionId,
-    orderedSceneArtifactIds,
-    expectedSceneCount,
-    expectedDurationSeconds: request.targetDurationSeconds,
-    aspectRatio: request.aspectRatio,
-    outputTitle: `Long-form video ${executionId}`,
-    requestedVoiceover: request.voiceoverEnabled,
-    requestedSubtitles: request.subtitlesEnabled,
-    requestedMusic: request.musicBedEnabled,
-    assemblyStatus: orderedSceneArtifactIds.length === expectedSceneCount ? 'ready_for_video_only' : 'waiting_for_scenes',
-    missingDependencies,
   }
 }
 
@@ -162,23 +105,24 @@ function parseParent(job: DbJob): { request: LongFormVideoRequest; plan: LongFor
 
 function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
   const { request, plan, metadata } = parseParent(parent)
-  const totalScenes = sceneJobs.length || plan.storyboard.scenes.length
-  const queuedScenes = sceneJobs.filter((job) => job.status === 'queued').length
-  const processingScenes = sceneJobs.filter((job) => job.status === 'processing').length
-  const completedScenes = sceneJobs.filter((job) => job.status === 'completed').length
-  const failedScenes = sceneJobs.filter((job) => job.status === 'failed').length
-  const cancelledScenes = sceneJobs.filter((job) => job.status === 'cancelled').length
-  const retryableFailures = sceneJobs
-    .filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES)
-    .map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber, retryCount: job.retryCount, error: job.error }))
-  const progress = totalScenes > 0 ? Math.round((completedScenes / totalScenes) * 100) : 0
+  const state = metadata.componentState as LongFormComponentState
+  const scenes = state?.scenes
+  const totalScenes = scenes?.requestedCount ?? sceneJobs.length ?? plan.storyboard.scenes.length
+  const queuedScenes = scenes?.queuedCount ?? sceneJobs.filter((job) => job.status === 'queued').length
+  const processingScenes = scenes?.processingCount ?? sceneJobs.filter((job) => job.status === 'processing').length
+  const completedScenes = scenes?.completedCount ?? sceneJobs.filter((job) => job.status === 'completed').length
+  const failedScenes = scenes?.failedCount ?? sceneJobs.filter((job) => job.status === 'failed').length
+  const cancelledScenes = scenes?.cancelledCount ?? sceneJobs.filter((job) => job.status === 'cancelled').length
+  const retryableFailures = scenes?.retryableFailures ?? sceneJobs.filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES).map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber, retryCount: job.retryCount, error: job.error }))
+  const progress = state ? parent.progress : totalScenes > 0 ? Math.round(completedScenes / totalScenes * 100) : 0
   const parentIsCancelled = parent.status === 'cancelled'
   const parentIsCancelling = parent.status === 'cancelling'
   const parentIsTerminal = parentIsCancelled || parent.status === 'completed' || parent.status === 'failed'
-  const finalAssemblyReadiness = !parentIsCancelled && !parentIsCancelling && completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0 && cancelledScenes === 0
+  const finalAssemblyReadiness = state
+    ? state.readyToQueueAssembly === true || state.assembly.assemblyQueued === true || state.assembly.assemblyProcessing === true
+    : completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0 && cancelledScenes === 0
   const partialFailure = failedScenes > 0 && completedScenes < totalScenes
   const phase = parent.workflowPhase || (finalAssemblyReadiness ? 'assembly_handoff_ready' : partialFailure ? 'partial_failure' : 'scene_execution')
-  const handoff = buildAssemblyHandoff({ parentJobId: parent.id, executionId: parent.executionId, request, plan, sceneJobs })
   const locallyCancelled = parentIsCancelled || parentIsCancelling
   const remoteExecutionMayFinish = locallyCancelled && sceneJobs.some(
     (job) => (job.status === 'cancelled' || job.status === 'cancelling') && (job.providerClaimAt || !!(safeJson(job.metadataJson).genxProviderJobId))
@@ -237,16 +181,22 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
     lateArtifactLinked: false,
     resumable: !locallyCancelled && !parentIsTerminal,
     assemblyAllowed: finalAssemblyReadiness && !locallyCancelled,
-    blockedReasons: [
-      ...(failedScenes > 0 ? ['scene_failure'] : []),
-      ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
-      ...((metadata.blockedReasons as string[] | undefined) ?? []),
-      'voiceover_not_live_proven',
-      'subtitles_not_live_proven',
-      'music_bed_not_live_proven',
-      'full_multimedia_not_ready',
-    ],
-    assemblyHandoff: locallyCancelled ? { ...handoff, assemblyStatus: 'cancelled' } : handoff,
+    blockedReasons: state?.blockedReasons ?? [],
+    componentState: state,
+    assemblyHandoff: {
+      parentJobId: parent.id,
+      executionId: parent.executionId,
+      orderedSceneArtifactIds: scenes?.artifactIds ?? sceneJobs.filter((job) => job.status === 'completed' && job.artifactId).sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0)).map((job) => job.artifactId),
+      expectedSceneCount: totalScenes,
+      expectedDurationSeconds: request.targetDurationSeconds,
+      aspectRatio: request.aspectRatio,
+      outputTitle: `Long-form video ${parent.executionId}`,
+      requestedVoiceover: request.voiceoverEnabled,
+      requestedSubtitles: request.subtitlesEnabled,
+      requestedMusic: request.musicBedEnabled,
+      assemblyStatus: locallyCancelled ? 'cancelled' : state?.assembly.ready ? 'completed' : finalAssemblyReadiness ? 'ready' : 'waiting',
+      missingDependencies: state?.blockedReasons ?? [],
+    },
   }
 }
 
@@ -259,11 +209,14 @@ async function loadParentAndScenes(id: string, appSlug: string) {
     },
   })
   if (!parent) return null
-  const sceneJobs = await prisma.job.findMany({
+  const refreshed = await refreshLongFormParentState(parent.id)
+  const refreshedParent = await prisma.job.findUnique({ where: { id: parent.id } }) ?? parent
+  const childJobs = await prisma.job.findMany({
     where: { appSlug, parentJobId: parent.id },
     orderBy: { sceneNumber: 'asc' },
   })
-  return { parent, sceneJobs }
+  const sceneJobs = (refreshed?.sceneJobs ?? childJobs.filter((job) => job.capability === 'video_generation' && safeJson(job.metadataJson).longFormVideo === true)) as DbJob[]
+  return { parent: refreshedParent, sceneJobs, childJobs }
 }
 
 async function removeQueueJob(q: Queue, sceneJob: DbJob): Promise<string[]> {
@@ -461,20 +414,68 @@ async function enqueueVoiceoverJobs(q: Queue, voiceoverJobs: DbJob[]) {
   return { queued, skipped, failed }
 }
 
+async function enqueueMusicBedJob(q: Queue, musicJob: DbJob): Promise<{ queued: boolean; skipped: boolean; error?: string }> {
+  if (musicJob.status === 'completed' && musicJob.artifactId) return { queued: false, skipped: true }
+  if ((musicJob.status === 'queued' || musicJob.status === 'processing') && musicJob.queueJobId) return { queued: false, skipped: true }
+  const metadata = safeJson(musicJob.metadataJson)
+  const queueJobId = musicJob.retryCount > 0 ? `${musicJob.id}:attempt:${musicJob.retryCount}` : musicJob.id
+  await q.add('process', {
+    jobId: musicJob.id,
+    appSlug: musicJob.appSlug,
+    capability: 'music_generation',
+    prompt: musicJob.prompt,
+    input: safeJson(musicJob.inputJson),
+    metadata,
+    traceId: musicJob.traceId,
+    routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
+  } satisfies JobPayload, { ...DEFAULT_JOB_OPTIONS, jobId: queueJobId })
+  await prisma.job.update({ where: { id: musicJob.id }, data: { status: 'queued', queueJobId, queuedAt: new Date(), workflowPhase: 'music_bed_queued', error: null } })
+  return { queued: true, skipped: false }
+}
+
+async function createAutomaticSubtitleArtifact(parent: DbJob, plan: LongFormVideoPlan): Promise<string> {
+  const scenes = plan.storyboard.scenes
+    .filter((scene) => Boolean(scene.subtitleText?.trim()))
+    .map((scene) => ({ sceneNumber: scene.sceneNumber, subtitleText: scene.subtitleText!, durationSeconds: scene.durationSeconds }))
+  const content = generateSubtitles({ scenes, format: 'srt' })
+  if (!content.trim()) throw new Error('subtitle_generation_failed: no subtitle text was generated')
+  const artifact = await saveArtifact({
+    input: {
+      appSlug: parent.appSlug, type: 'transcript', subType: 'subtitles_srt',
+      title: `long-form-${parent.executionId}-subtitles.srt`, description: 'Automatically generated long-form subtitles',
+      provider: 'local', model: 'subtitle-generator', traceId: `trace_longform_${parent.executionId}_subtitles_srt`,
+      mimeType: getSubtitleMimeType('srt'),
+      metadata: { executionId: parent.executionId, parentJobId: parent.id, format: 'srt', sceneCount: scenes.length, automatic: true },
+    },
+    data: Buffer.from(content, 'utf8'),
+    explicitMimeType: getSubtitleMimeType('srt'),
+  })
+  const current = await prisma.job.findUnique({ where: { id: parent.id }, select: { metadataJson: true } })
+  await prisma.job.update({ where: { id: parent.id }, data: { metadataJson: JSON.stringify({
+    ...safeJson(current?.metadataJson), subtitleArtifactId: artifact.id, subtitleFormat: 'srt', subtitlesReady: true,
+  }) } })
+  return artifact.id
+}
+
 async function createDurableLongFormExecution(appSlug: string, input: LongFormVideoRequest, routingMode: string, q: Queue, dryRun = false) {
   const plan = createLongFormVideoPlan(input)
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
-  const [longFormGrant, videoGrant, voiceGrant] = await Promise.all([
+  const [longFormGrant, videoGrant, voiceGrant, musicGrant] = await Promise.all([
     resolveAppCapabilityGrantSnapshot(appSlug, 'long_form_video'),
     resolveAppCapabilityGrantSnapshot(appSlug, 'video_generation'),
     input.voiceoverEnabled ? resolveAppCapabilityGrantSnapshot(appSlug, 'tts') : Promise.resolve(null),
+    input.musicBedEnabled ? resolveAppCapabilityGrantSnapshot(appSlug, 'music_generation') : Promise.resolve(null),
   ])
   if (!longFormGrant?.grant.enabled || !videoGrant?.grant.enabled) {
     throw new Error('Long-form execution requires enabled long_form_video and video_generation AppCapabilityGrant records')
   }
   if (input.voiceoverEnabled && !voiceGrant?.grant.enabled) {
     throw new Error('Voiceover execution requires an enabled tts AppCapabilityGrant record')
+  }
+  if (input.musicBedEnabled && !musicGrant?.grant.enabled) {
+    throw new Error('Music-bed execution requires an enabled music_generation AppCapabilityGrant record')
   }
   const snapshotAt = new Date().toISOString()
   const parentGrantMetadata = {
@@ -488,7 +489,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
     appGrantSnapshotAt: snapshotAt,
   }
 
-  const { parent, sceneJobs, voiceoverJobs } = await prisma.$transaction(async (tx) => {
+  const { parent, sceneJobs, voiceoverJobs, musicJob } = await prisma.$transaction(async (tx) => {
     const parent = await tx.job.create({
       data: {
         appSlug,
@@ -571,6 +572,22 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       }
     }
 
+    let musicJob: DbJob | null = null
+    if (input.musicBedEnabled) {
+      const musicPrompt = `${plan.tone} ${plan.style} instrumental background music for: ${input.prompt}`
+      musicJob = await tx.job.create({ data: {
+        appSlug, capability: 'music_generation', prompt: musicPrompt,
+        inputJson: JSON.stringify({ duration: Math.min(plan.totalDurationSeconds, 300), instrumentalOnly: true, style: plan.style }),
+        metadataJson: JSON.stringify({
+          longFormVideo: true, longFormMusicBed: true, longFormExecutionId: executionId, parentJobId: parent.id,
+          planId: plan.id, routingMode, retryGeneration: 0, appGrantSnapshot: musicGrant!.grant,
+          appGrantSnapshotSource: musicGrant!.source, appGrantSnapshotAt: snapshotAt,
+        }),
+        traceId: `trace_longform_${executionId}_music_bed`, status: dryRun ? 'planned' : 'queued',
+        parentJobId: parent.id, executionId, workflowPhase: dryRun ? 'music_bed_planned' : 'music_bed_created',
+      } })
+    }
+
     await tx.job.update({
       where: { id: parent.id },
       data: {
@@ -578,22 +595,25 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
           ...parentMetadata(input, plan, executionId),
           ...parentGrantMetadata,
           voiceoverJobIds: voiceoverJobs.map((j) => j.id),
-          assemblyHandoff: buildAssemblyHandoff({ parentJobId: parent.id, executionId, request: input, plan, sceneJobs }),
+          musicBedJobId: musicJob?.id ?? null,
         }),
       },
     })
 
-    return { parent, sceneJobs, voiceoverJobs }
+    return { parent, sceneJobs, voiceoverJobs, musicJob }
   })
 
+  let subtitleArtifactId: string | null = null
+  if (input.subtitlesEnabled && !dryRun) subtitleArtifactId = await createAutomaticSubtitleArtifact(parent, plan)
   await refreshLongFormParentState(parent.id)
   const queueResult = dryRun ? { queued: [], skipped: [], failed: [] } : await enqueueSceneJobs(q, parent, sceneJobs)
   let voiceoverQueueResult = { queued: [] as string[], skipped: [] as string[], failed: [] as Array<{ jobId: string; error: string }> }
   if (input.voiceoverEnabled && !dryRun && voiceoverJobs.length > 0) {
     voiceoverQueueResult = await enqueueVoiceoverJobs(q, voiceoverJobs)
   }
+  const musicQueueResult = musicJob && !dryRun ? await enqueueMusicBedJob(q, musicJob) : { queued: false, skipped: true }
   const latest = await loadParentAndScenes(parent.id, appSlug)
-  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, voiceoverJobs, queueResult, voiceoverQueueResult, plan, executionId }
+  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, voiceoverJobs, musicJob, subtitleArtifactId, queueResult, voiceoverQueueResult, musicQueueResult, plan, executionId }
 }
 
 export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<void> {
@@ -920,6 +940,16 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (!plan) {
       return reply.status(409).send({ error: true, message: 'No plan found in parent metadata' })
     }
+    const existingMusic = loaded.childJobs.find((job) => job.capability === 'music_generation' && safeJson(job.metadataJson).longFormMusicBed === true)
+    if (existingMusic) {
+      return reply.status(200).send({
+        success: existingMusic.status !== 'failed',
+        musicJobId: existingMusic.id,
+        status: existingMusic.status,
+        artifactId: existingMusic.artifactId,
+        message: 'Canonical long-form music-bed child already exists; no duplicate was created.',
+      })
+    }
 
     const override = blockedOverrideField(body)
     if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
@@ -1029,64 +1059,30 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       return reply.status(409).send({ error: true, message: 'Cannot assemble: parent execution is already completed', parentStatus: loaded.parent.status })
     }
 
-    const status = deriveStatus(loaded.parent, loaded.sceneJobs)
-    if (!status.finalAssemblyReady) {
+    const refreshed = await refreshLongFormParentState(loaded.parent.id)
+    if (!refreshed?.componentState.readyToQueueAssembly) {
       return reply.status(409).send({
         error: true,
-        message: 'Cannot assemble: not all scenes are completed',
-        completedScenes: status.completedScenes,
-        totalScenes: status.totalScenes,
-        cancelledScenes: status.cancelledScenes,
+        message: 'Cannot queue assembly: requested components are not ready',
+        blockedReasons: refreshed?.componentState.blockedReasons ?? ['component_state_unavailable'],
+        componentState: refreshed?.componentState ?? null,
       })
     }
 
-    const sceneArtifacts = await resolveSceneArtifacts(loaded.parent.executionId)
-    const validation = validateSceneArtifactsForAssembly(sceneArtifacts, status.totalScenes)
-    if (!validation.valid) return reply.status(422).send({ error: true, message: 'Scene artifacts validation failed', errors: validation.errors, warnings: validation.warnings })
     const ffmpeg = await checkFfmpegAvailable()
-    const plan = await createAssemblyPlan(loaded.parent.executionId, status.totalScenes)
-
-    // Check if multimedia components are available
-    const components = await resolveComponentArtifacts(loaded.parent.executionId)
-    const hasMultimediaComponents = components.voiceoverArtifactIds.length > 0 || !!components.subtitleArtifactId || !!components.musicBedArtifactId
-
-    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, plan, ffmpegAvailable: ffmpeg.available, multimediaMode: hasMultimediaComponents, components })
+    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, ffmpegAvailable: ffmpeg.available, componentState: refreshed.componentState })
     if (!ffmpeg.available) return reply.status(422).send({ error: true, message: 'Cannot assemble: ffmpeg is not available', ffmpegError: ffmpeg.error })
 
-    const result = hasMultimediaComponents
-      ? await assembleMultimediaLongFormVideo({
-          executionId: loaded.parent.executionId,
-          sceneArtifacts,
-          outputTitle,
-          aspectRatio: status.request.aspectRatio,
-        })
-      : await assembleLongFormVideo({
-          executionId: loaded.parent.executionId,
-          sceneArtifacts,
-          outputTitle,
-          aspectRatio: status.request.aspectRatio,
-        })
-
-    if (!result.success) return reply.status(500).send({ error: true, message: 'Assembly failed', details: result.error })
-    await prisma.job.update({
-      where: { id: loaded.parent.id },
-      data: {
-        status: 'completed',
-        artifactId: result.artifactId,
-        progress: 100,
-        workflowPhase: result.assemblyMode === 'multimedia' ? 'multimedia_assembly_completed' : 'video_only_assembly_completed',
-        completedAt: new Date(),
-        output: JSON.stringify(result),
-      },
-    })
-    await refreshLongFormParentState(loaded.parent.id)
-    return reply.status(200).send({
-      ...result,
+    const result = await advanceLongFormWorkflow(loaded.parent.id, getQueue())
+    return reply.status(202).send({
       success: true,
       executionId: loaded.parent.executionId,
-      note: result.assemblyMode === 'multimedia'
-        ? `Multimedia assembly complete. Voiceover: ${result.voiceoverIncluded}, Subtitles: ${result.subtitlesIncluded}, Music bed: ${result.musicBedIncluded}.`
-        : 'Video-only assembly complete. No multimedia components found.',
+      assemblyJobId: result.assemblyJobId,
+      scheduled: result.scheduled,
+      outputTitle: outputTitle ?? null,
+      note: result.scheduled
+        ? 'Canonical worker assembly queued.'
+        : 'Canonical assembly job already exists or is already running.',
     })
   })
 

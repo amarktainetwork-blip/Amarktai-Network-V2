@@ -113,8 +113,8 @@ export async function resolveSceneArtifacts(executionId: string): Promise<SceneA
 
   for (const job of jobs) {
     const metadata = JSON.parse(job.metadataJson)
-    
-    if (job.status !== 'completed' || !job.artifactId) {
+
+    if (metadata.longFormVideo !== true || !Number.isInteger(metadata.sceneNumber) || metadata.sceneNumber < 1 || job.status !== 'completed' || !job.artifactId) {
       continue
     }
 
@@ -394,27 +394,25 @@ export async function resolveComponentArtifacts(executionId: string): Promise<{
   if (!parentJob) return { voiceoverArtifactIds: [] }
 
   const metadata = JSON.parse(parentJob.metadataJson || '{}')
-  const voiceoverArtifactIds: string[] = []
-
-  // Find voiceover child jobs
-  const voiceoverJobs = await prisma.job.findMany({
+  const children = await prisma.job.findMany({
     where: {
       executionId,
-      capability: 'tts',
       parentJobId: parentJob.id,
       status: 'completed',
     },
     orderBy: { sceneNumber: 'asc' },
   })
-
-  for (const job of voiceoverJobs) {
-    if (job.artifactId) voiceoverArtifactIds.push(job.artifactId)
-  }
+  const classified = children.map((job) => ({ job, metadata: JSON.parse(job.metadataJson || '{}') }))
+  const voiceoverArtifactIds = classified
+    .filter(({ job, metadata: childMetadata }) => job.capability === 'tts' && childMetadata.longFormVoiceover === true && Number.isInteger(childMetadata.sceneNumber))
+    .sort((a, b) => Number(a.metadata.sceneNumber) - Number(b.metadata.sceneNumber))
+    .flatMap(({ job }) => job.artifactId ? [job.artifactId] : [])
+  const musicJobs = classified.filter(({ job, metadata: childMetadata }) => job.capability === 'music_generation' && childMetadata.longFormMusicBed === true && !!job.artifactId)
 
   return {
     voiceoverArtifactIds,
     subtitleArtifactId: metadata.subtitleArtifactId || undefined,
-    musicBedArtifactId: metadata.musicBedArtifactId || undefined,
+    musicBedArtifactId: musicJobs.length === 1 ? musicJobs[0]!.job.artifactId! : undefined,
   }
 }
 

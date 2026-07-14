@@ -9,7 +9,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  DEFAULT_GENX_MUSIC_MODEL,
   GENX_MUSIC_POLL_TRANSIENT_MAX_RETRIES,
   genxDownloadMusic,
   genxGenerateMusic,
@@ -59,43 +58,24 @@ describe('GenX music model resolution', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses lyria-3-clip-preview as the repo default', async () => {
+  it('forwards the exact Orchestra-selected model', async () => {
     globalThis.fetch.mockResolvedValueOnce(jsonResponse({ job_id: 'job-1', status: 'pending' }))
 
     const result = await genxSubmitMusic({
       prompt: 'A calm ambient loop',
+      model: 'newly-discovered-music-model',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
 
     const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
-    expect(DEFAULT_GENX_MUSIC_MODEL).toBe('lyria-3-clip-preview')
-    expect(resolveGenxMusicModel()).toBe('lyria-3-clip-preview')
-    expect(requestBody.model).toBe('lyria-3-clip-preview')
-    expect(result.model).toBe('lyria-3-clip-preview')
+    expect(resolveGenxMusicModel({ model: 'newly-discovered-music-model' })).toBe('newly-discovered-music-model')
+    expect(requestBody.model).toBe('newly-discovered-music-model')
+    expect(result.model).toBe('newly-discovered-music-model')
   })
 
-  it('prefers an explicit model and then DB provider defaultModel', async () => {
-    globalThis.fetch
-      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-explicit', status: 'pending' }))
-      .mockResolvedValueOnce(jsonResponse({ job_id: 'job-db', status: 'pending' }))
-
-    await genxSubmitMusic({
-      prompt: 'Explicit model proof',
-      model: 'lyria-3-pro-preview',
-      providerDefaultModel: 'lyria-3-clip-preview',
-      apiKey: 'genx-secret',
-      baseUrl: 'https://query.genx.sh',
-    })
-    await genxSubmitMusic({
-      prompt: 'DB model proof',
-      providerDefaultModel: 'lyria-3-clip-preview',
-      apiKey: 'genx-secret',
-      baseUrl: 'https://query.genx.sh',
-    })
-
-    expect(JSON.parse(globalThis.fetch.mock.calls[0][1].body).model).toBe('lyria-3-pro-preview')
-    expect(JSON.parse(globalThis.fetch.mock.calls[1][1].body).model).toBe('lyria-3-clip-preview')
+  it('fails closed instead of choosing a client-side default', () => {
+    expect(() => resolveGenxMusicModel()).toThrow('exact Orchestra-selected model')
   })
 
   it('sends only proven GenX Lyria native fields in the submit payload', async () => {
@@ -103,6 +83,7 @@ describe('GenX music model resolution', () => {
 
     await genxSubmitMusic({
       prompt: 'Original bright electronic instrumental, 118 BPM',
+      model: 'lyria-3-pro-preview',
       duration: 30,
       instrumental: true,
       genre: 'electronic',
@@ -115,7 +96,7 @@ describe('GenX music model resolution', () => {
 
     const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
     expect(requestBody).toEqual({
-      model: 'lyria-3-clip-preview',
+      model: 'lyria-3-pro-preview',
       params: {
         prompt: 'Original bright electronic instrumental, 118 BPM',
       },
@@ -129,31 +110,6 @@ describe('GenX music model resolution', () => {
     expect(requestBody.params).not.toHaveProperty('tempo')
   })
 
-  it('uses a supported DB default when the Router model list includes it', async () => {
-    const model = resolveGenxMusicModel({
-      providerDefaultModel: 'lyria-3-pro-preview',
-      providerAvailableModels: ['lyria-3-clip-preview', 'lyria-3-pro-preview'],
-    })
-
-    expect(model).toBe('lyria-3-pro-preview')
-  })
-
-  it('falls back to preference list when DB default is not in available models', async () => {
-    const model = resolveGenxMusicModel({
-      providerDefaultModel: 'unknown-music-model',
-      providerAvailableModels: ['lyria-3-clip-preview', 'lyria-3-pro-preview'],
-    })
-
-    expect(model).toBe('lyria-3-clip-preview')
-  })
-
-  it('filters out non-music models from available list', async () => {
-    const model = resolveGenxMusicModel({
-      providerAvailableModels: ['seedance-v1-fast', 'grok-imagine-video', 'lyria-3-pro-preview'],
-    })
-
-    expect(model).toBe('lyria-3-pro-preview')
-  })
 })
 
 describe('GenX music authenticated downloads', () => {
@@ -177,6 +133,7 @@ describe('GenX music authenticated downloads', () => {
 
     const resultPromise = genxGenerateMusic({
       prompt: 'A short ambient proof clip',
+      model: 'lyria-3-clip-preview',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
@@ -199,6 +156,7 @@ describe('GenX music authenticated downloads', () => {
     await genxDownloadMusic('https://signed-results.example/audio.mp3', {
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
+      model: 'lyria-3-clip-preview',
     })
 
     expect(globalThis.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined()
@@ -226,6 +184,7 @@ describe('GenX music polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateMusic({
       prompt: 'A short resilient proof clip',
+      model: 'lyria-3-clip-preview',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
@@ -251,6 +210,7 @@ describe('GenX music polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateMusic({
       prompt: 'A short auth proof clip',
+      model: 'lyria-3-clip-preview',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })
@@ -283,10 +243,9 @@ describe('GenX music polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateMusic({
       prompt: 'A short failing proof clip',
+      model: 'lyria-3-clip-preview',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
-      providerDefaultModel: 'lyria-3-clip-preview',
-      providerAvailableModels: ['lyria-3-clip-preview', 'lyria-3-pro-preview'],
     })
     const failure = resultPromise.catch((err) => err)
 
@@ -311,6 +270,7 @@ describe('GenX music polling robustness and diagnostics', () => {
 
     const resultPromise = genxGenerateMusic({
       prompt: 'A short prefix proof clip',
+      model: 'lyria-3-clip-preview',
       apiKey: 'genx-secret',
       baseUrl: 'https://query.genx.sh',
     })

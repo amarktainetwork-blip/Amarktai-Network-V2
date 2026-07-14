@@ -25,7 +25,8 @@ const EXPECTED_CAPABILITIES = [
   'question_answering', 'classification', 'zero_shot_classification', 'extraction',
   'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
   'table_qa', 'structured_output', 'tool_use', 'tts', 'stt', 'embeddings',
-  'reranking', 'image_generation', 'video_generation', 'music_generation',
+  'reranking', 'image_generation', 'video_generation', 'image_to_video',
+  'video_to_video', 'music_generation',
 ] as const
 
 afterEach(() => {
@@ -34,7 +35,7 @@ afterEach(() => {
 })
 
 describe('canonical direct-provider contracts and registrations', () => {
-  it('defines exactly the 24 phase capabilities with request, output, and executable registrations', () => {
+  it('defines the complete direct-provider capabilities with request, output, and executable registrations', () => {
     expect(DIRECT_PROVIDER_CAPABILITIES).toEqual(EXPECTED_CAPABILITIES)
     for (const capability of EXPECTED_CAPABILITIES) {
       expect(DIRECT_PROVIDER_REQUEST_SCHEMAS[capability]).toBeDefined()
@@ -42,9 +43,13 @@ describe('canonical direct-provider contracts and registrations', () => {
       const registrations = EXECUTOR_REGISTRATIONS.filter((entry) => entry.capability === capability)
       expect(registrations.length, capability).toBeGreaterThan(0)
       for (const entry of registrations) {
-        expect(entry.compatibleModels.length, `${capability}:${entry.provider}`).toBeGreaterThan(0)
-        expect(entry.compatibleModels).not.toContain('*')
-        expect(entry.modelCompatibility).toBe('exact_model_allowlist')
+        if (entry.modelCompatibility === 'metadata_profile') {
+          expect(entry.compatibleModels).toEqual([])
+          expect(entry.compatibilityProfile).not.toBeNull()
+        } else {
+          expect(entry.compatibleModels.length, `${capability}:${entry.provider}`).toBeGreaterThan(0)
+          expect(entry.compatibleModels).not.toContain('*')
+        }
       }
     }
   })
@@ -55,6 +60,10 @@ describe('canonical direct-provider contracts and registrations', () => {
       'together.image-generation',
       'genx.video-generation',
       'genx.music-generation',
+      'together.video-generation',
+      'together.image-to-video',
+      'together.video-to-video',
+      'deepinfra.video-generation',
     ])
     for (const id of new Set(EXECUTOR_REGISTRATIONS.map((entry) => entry.id))) {
       if (!externallyDispatched.has(id)) expect(DIRECT_EXECUTOR_HANDLERS[id]).toBeTypeOf('function')

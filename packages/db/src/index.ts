@@ -22,4 +22,17 @@ export {
   type UpdateProviderHealthInput,
 } from './provider-credentials.js'
 
-export { refreshLongFormParentState } from './long-form-parent-state.js'
+export {
+  refreshLongFormParentState,
+  classifyLongFormChildJobs,
+  deriveLongFormComponentState,
+  type ClassifiedLongFormJobs,
+  type LongFormComponentState,
+  type LongFormJobLike,
+  type LongFormArtifactLike,
+} from './long-form-parent-state.js'
+
+export {
+  advanceLongFormWorkflow,
+  longFormAssemblyJobId,
+} from './long-form-workflow.js'

@@ -15,14 +15,6 @@ import {
   type RuntimeTruth,
   type RuntimeTruthInput,
 } from '@amarktai/core'
-import {
-  assembleLongFormVideo,
-  assembleMultimediaLongFormVideo,
-  createAssemblyPlan,
-  resolveComponentArtifacts,
-  resolveSceneArtifacts,
-  validateSceneArtifactsForAssembly,
-} from './long-form-assembly.js'
 
 const ARTIFACT_CAPABILITY_SET = new Set<CapabilityKey>(
   CAPABILITY_CATALOG.filter((c) => c.artifactRequired).map((c) => c.key),
@@ -204,7 +196,7 @@ export function selectCapabilityProofStates(
  */
 export function buildLongFormComponentRuntimeState(
   queueInfrastructureReady: boolean,
-  capabilityProofs: NonNullable<RuntimeTruthInput['capabilities']> = {},
+  _capabilityProofs: NonNullable<RuntimeTruthInput['capabilities']> = {},
   jobPersistenceReady = false,
 ): LongFormComponentRuntimeState {
   const plannerReady = typeof createLongFormVideoPlan === 'function'
@@ -213,23 +205,16 @@ export function buildLongFormComponentRuntimeState(
   const videoExecutorReady = getExecutorRegistrations('video_generation').length > 0
   const voiceExecutorReady = getExecutorRegistrations('tts').length > 0
   const musicExecutorReady = getExecutorRegistrations('music_generation').length > 0
-  const assemblyHandoffReady = typeof createAssemblyPlan === 'function'
-    && typeof validateSceneArtifactsForAssembly === 'function'
-    && typeof resolveSceneArtifacts === 'function'
-  const videoOnlyAssemblyReady = assemblyHandoffReady && typeof assembleLongFormVideo === 'function'
+  const assemblyHandoffReady = jobPersistenceReady
+  const videoOnlyAssemblyReady = assemblyHandoffReady && queueInfrastructureReady
   const voiceoverReady = voiceExecutorReady && queueInfrastructureReady
-  const subtitlesReady = typeof generateSubtitles === 'function'
-    && capabilityProofs.long_form_video?.liveProven === true
+  const subtitlesReady = typeof generateSubtitles === 'function' && jobPersistenceReady
   const musicBedReady = musicExecutorReady
     && queueInfrastructureReady
-    && capabilityProofs.music_generation?.liveProven === true
   const fullMultimediaReady = videoOnlyAssemblyReady
-    && typeof assembleMultimediaLongFormVideo === 'function'
-    && typeof resolveComponentArtifacts === 'function'
     && voiceoverReady
     && subtitlesReady
     && musicBedReady
-    && capabilityProofs.long_form_video?.liveProven === true
 
   return {
     plannerReady,

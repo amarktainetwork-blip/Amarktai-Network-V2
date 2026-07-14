@@ -6,10 +6,34 @@
  */
 
 import type { FastifyInstance } from 'fastify'
-import { getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'
+import { getArtifactFile, getArtifactRecord, verifyProviderMediaToken } from '@amarktai/artifacts'
 import { authenticateArtifactAccess, canAccessArtifact } from '../lib/auth-context.js'
 
+const getProviderArtifactRecord = getArtifactRecord
+
 export async function artifactRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/api/v1/provider-media/:id', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const query = request.query as { expires?: string; signature?: string }
+    const expires = Number(query.expires)
+    if (!verifyProviderMediaToken({
+      artifactId: id,
+      expires,
+      signature: query.signature ?? '',
+      secret: process.env.JWT_SECRET ?? '',
+    })) return reply.status(403).send({ error: true, message: 'Provider media token is invalid or expired' })
+
+    const artifact = await getProviderArtifactRecord(id)
+    if (!artifact || artifact.status !== 'completed') return reply.status(404).send({ error: true, message: 'Artifact not found' })
+    const file = await getArtifactFile(id).catch(() => null)
+    if (!file) return reply.status(404).send({ error: true, message: 'Artifact file not found' })
+    return reply
+      .header('Content-Type', file.mimeType)
+      .header('Content-Disposition', `inline; filename="${file.filename}"`)
+      .header('Cache-Control', 'private, no-store')
+      .send(file.buffer)
+  })
+
   app.get('/api/v1/artifacts/:id/file', async (request, reply) => {
     const { id } = request.params as { id: string }
 

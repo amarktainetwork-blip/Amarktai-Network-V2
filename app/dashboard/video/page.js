@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import { getRuntimeCapabilityProof, runtimeProofStatusClasses, runtimeProofStatusLabel } from '@/lib/runtime-proof-status'
-import { Video, Zap, AlertTriangle, Clock, Film, Loader2, Download, Send } from 'lucide-react'
+import { Video, Zap, Clock, Film, Loader2, Download, Send } from 'lucide-react'
 
 const QUALITY_MODES = ['Balanced', 'Premium', 'Fast', 'Budget']
 const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4']
@@ -21,14 +21,17 @@ export default function VideoStudioPage() {
   const [duration, setDuration] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [jobResult, setJobResult] = useState(null)
+  const [longResult, setLongResult] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [longOptions, setLongOptions] = useState({ targetDurationSeconds: 60, sceneCount: 5, voiceoverEnabled: true, subtitlesEnabled: true, musicBedEnabled: true })
   const pollRef = useRef(null)
   const { status: runtimeProofStatus } = useRuntimeProofStatus()
   const shortProof = getRuntimeCapabilityProof(runtimeProofStatus, 'video_generation')
   const shortReady = shortProof.readyForDashboardExecution === true
 
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [])
+    return () => { if (pollRef.current) clearInterval(pollRef.current); if (previewUrl) URL.revokeObjectURL(previewUrl) }
+  }, [previewUrl])
 
   const handleSubmit = async () => {
     if (!prompt.trim() || !shortReady || submitting) return
@@ -59,9 +62,54 @@ export default function VideoStudioPage() {
     }
   }
 
+  const loadPreview = async (artifactId) => {
+    const token = localStorage.getItem('amarktai_token')
+    const response = await fetch(`/api/v1/artifacts/${artifactId}/file`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!response.ok) throw new Error('Final video preview could not be loaded')
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(URL.createObjectURL(await response.blob()))
+  }
+
+  const handleLongSubmit = async () => {
+    if (!prompt.trim() || submitting) return
+    setSubmitting(true); setLongResult(null)
+    try {
+      const token = localStorage.getItem('amarktai_token')
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      const response = await fetch('/api/admin/long-form-video/executions', { method: 'POST', headers, body: JSON.stringify({ request: {
+        prompt: prompt.trim(), aspectRatio: '16:9', style: 'cinematic', tone: 'professional', count: 1, routingMode: 'balanced', ...longOptions,
+      } }) })
+      const created = await response.json()
+      if (!response.ok || !created.executionId) throw new Error(created.details || created.message || 'Long-form submission failed')
+      setLongResult(created.status)
+      for (let attempt = 0; attempt < 600; attempt++) {
+        const statusResponse = await fetch(`/api/admin/long-form-video/executions/${created.executionId}`, { headers })
+        const body = await statusResponse.json()
+        if (!statusResponse.ok) throw new Error(body.message || 'Long-form status failed')
+        const status = body.execution
+        setLongResult(status)
+        if (status.parent?.status === 'completed' && status.finalArtifactId) { await loadPreview(status.finalArtifactId); break }
+        if (status.parent?.status === 'cancelled' || status.componentState?.assembly?.jobId && status.blockedReasons?.includes('assembly_failed')) break
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+    } catch (error) {
+      setLongResult({ parent: { status: 'failed', error: error.message }, blockedReasons: [error.message] })
+    } finally { setSubmitting(false) }
+  }
+
+  const downloadFinal = async () => {
+    if (!longResult?.finalArtifactId) return
+    const token = localStorage.getItem('amarktai_token')
+    const response = await fetch(`/api/v1/artifacts/${longResult.finalArtifactId}/file`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!response.ok) return
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a'); link.href = url; link.download = `long-form-${longResult.executionId}.mp4`; link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <PageTransition className="space-y-6">
-      <PageHeader title="Video Studio" subtitle="Create video content. Short video uses the proven video_generation worker flow (GenX). Platform handles provider routing." />
+      <PageHeader title="Video Studio" subtitle="Create short or automatic long-form video. Orchestra handles provider and model routing." />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
@@ -71,31 +119,31 @@ export default function VideoStudioPage() {
               <Film className="mr-1 h-2.5 w-2.5" /> Live
             </Badge>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">GenX video_generation endpoint</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Orchestra-routed approved provider transport</p>
         </Card>
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Image-to-Video</span>
             <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
-              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+              <Zap className="mr-1 h-2.5 w-2.5" /> Routed
             </Badge>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">Backend endpoint not wired</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Together source-aware transport; artifact permission required</p>
         </Card>
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Long-Form Video</span>
             <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[9px]">
-              <Zap className="mr-1 h-2.5 w-2.5" /> Phase 1 Ready
+              <Zap className="mr-1 h-2.5 w-2.5" /> Automatic
             </Badge>
           </div>
-              <p className="mt-1 text-[10px] text-muted-foreground">Durable orchestration and scene recovery ready. Multimedia render pending.</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Scenes, narration, subtitles, music, and final assembly progress automatically.</p>
         </Card>
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Storyboard</span>
             <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
-              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+              <Zap className="mr-1 h-2.5 w-2.5" /> Automatic
             </Badge>
           </div>
           <p className="mt-1 text-[10px] text-muted-foreground">Scene planning and outline</p>
@@ -103,11 +151,11 @@ export default function VideoStudioPage() {
         <Card className="border-white/[0.07] bg-white/[0.02] p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Voiceover / Subtitles</span>
-            <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
-              <Clock className="mr-1 h-2.5 w-2.5" /> Pending
+            <Badge variant="outline" className="border-cyan-500/30 text-cyan-300 text-[9px]">
+              <Zap className="mr-1 h-2.5 w-2.5" /> Automatic
             </Badge>
           </div>
-          <p className="mt-1 text-[10px] text-muted-foreground">TTS and subtitle overlay</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">Canonical TTS, deterministic subtitles, and FFmpeg burn-in</p>
         </Card>
       </div>
 
@@ -182,13 +230,25 @@ export default function VideoStudioPage() {
           )}
 
           {mode === 'long' && (
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
-                <AlertTriangle className="h-3.5 w-3.5" /> Durable Orchestration Ready
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium">Video brief</label>
+                <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Describe the long-form video..." className="min-h-[100px] bg-white/[0.04] text-sm" />
               </div>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Long-form can persist a parent job, plan, linked scene jobs, and recovery state. Full multimedia assembly is pending.
-              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input type="number" min="30" max="600" value={longOptions.targetDurationSeconds} onChange={(event) => setLongOptions((value) => ({ ...value, targetDurationSeconds: Number(event.target.value) }))} aria-label="Target duration seconds" className="bg-white/[0.04] text-sm" />
+                <Input type="number" min="2" max="20" value={longOptions.sceneCount} onChange={(event) => setLongOptions((value) => ({ ...value, sceneCount: Number(event.target.value) }))} aria-label="Scene count" className="bg-white/[0.04] text-sm" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[['voiceoverEnabled', 'Voiceover'], ['subtitlesEnabled', 'Subtitles'], ['musicBedEnabled', 'Music bed']].map(([key, label]) => (
+                  <button key={key} onClick={() => setLongOptions((value) => ({ ...value, [key]: !value[key] }))} className={`rounded-md border px-3 py-1.5 text-xs ${longOptions[key] ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' : 'border-white/[0.06] text-muted-foreground'}`}>{label}</button>
+                ))}
+              </div>
+              <Button onClick={handleLongSubmit} disabled={!prompt.trim() || submitting} className="bg-gradient-to-r from-cyan-400 to-violet-500 text-black text-xs">
+                {submitting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Send className="mr-1.5 h-3 w-3" />}
+                {submitting ? 'Building video...' : 'Create long-form video'}
+              </Button>
+              <p className="text-[10px] text-muted-foreground">One request creates and advances every enabled component. Provider and model selection remain hidden.</p>
             </div>
           )}
         </div>
@@ -234,55 +294,22 @@ export default function VideoStudioPage() {
 
       {mode === 'long' && (
         <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Video Phase 3</h3>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-cyan-300" /> Long-Form Workflow</h3>
           <div className="space-y-3">
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-cyan-200">Durable Scene Workflow Ready</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Parent orchestration, scene linkage, retry/resume, progress tracking, and video-only handoff are durable.
-              </p>
-            </div>
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-emerald-200">What Works Now</p>
-              <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground list-disc list-inside">
-                <li>Plan creation with scene splitting</li>
-                <li>Per-scene video generation via GenX</li>
-                <li>Scene job queuing and tracking</li>
-                <li>Durable parent job and exact scene linkage</li>
-                <li>Scene retry/resume without duplicate queue submission</li>
-                <li>Brain Router provider/model selection</li>
-                <li>Enhanced cinematic prompts per scene</li>
-                <li>Video-only assembly handoff preparation</li>
-              </ul>
-            </div>
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-4">
-              <p className="text-xs font-semibold text-amber-200">Multimedia Assembly Pending</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Video-only long-form is ready. Voiceover, subtitles, and music bed are not yet implemented.
-              </p>
-              <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-                <p className="font-semibold text-amber-300">Not Yet Implemented:</p>
-                <ul className="list-disc list-inside space-y-0.5">
-                  <li>Voiceover backend (if enabled)</li>
-                  <li>Subtitle backend (if enabled)</li>
-                  <li>Music bed backend (if enabled)</li>
-                  <li>Full multimedia assembly</li>
-                </ul>
+            {!longResult && <p className="text-xs text-muted-foreground">Submit one request to start scenes, voiceover, subtitles, music, and final assembly.</p>}
+            {longResult?.componentState && (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                <ComponentProgress label="Scenes" value={`${longResult.componentState.scenes.completedCount}/${longResult.componentState.scenes.requestedCount}`} ready={longResult.componentState.scenes.ready} />
+                <ComponentProgress label="Voiceover" value={longResult.componentState.voiceover.requested ? `${longResult.componentState.voiceover.completedCount}/${longResult.componentState.voiceover.expectedCount}` : 'Off'} ready={longResult.componentState.voiceover.ready} />
+                <ComponentProgress label="Subtitles" value={longResult.componentState.subtitles.generated ? longResult.componentState.subtitles.format?.toUpperCase() : 'Pending'} ready={longResult.componentState.subtitles.ready} />
+                <ComponentProgress label="Music" value={longResult.componentState.musicBed.status} ready={longResult.componentState.musicBed.ready} />
+                <ComponentProgress label="Assembly" value={longResult.componentState.assembly.ready ? 'Completed' : longResult.componentState.assembly.assemblyProcessing ? 'Processing' : longResult.componentState.assembly.assemblyQueued ? 'Queued' : 'Waiting'} ready={longResult.componentState.assembly.ready} />
               </div>
-            </div>
-            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
-              <p className="text-[10px] text-muted-foreground">
-                <span className="font-semibold text-cyan-300">Admin API:</span>
-              </p>
-              <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground/80">
-                <li>POST /api/admin/long-form-video/plan</li>
-                <li>POST /api/admin/long-form-video/execute-scenes</li>
-                <li>GET /api/admin/long-form-video/executions/:id</li>
-                <li>POST /api/admin/long-form-video/assemble/:executionId</li>
-                <li>GET /api/admin/long-form-video/assembly/:executionId</li>
-                <li>GET /api/admin/long-form-video/status</li>
-              </ul>
-            </div>
+            )}
+            {longResult?.blockedReasons?.length > 0 && <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3 text-[10px] text-amber-200">{longResult.blockedReasons.join(' · ')}</div>}
+            {longResult?.parent?.error && <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.04] p-3 text-[10px] text-rose-200">{longResult.parent.error}</div>}
+            {previewUrl && <video src={previewUrl} controls className="w-full rounded-lg border border-white/[0.08]" />}
+            {longResult?.finalArtifactId && <Button onClick={downloadFinal} variant="outline" className="text-xs"><Download className="mr-1.5 h-3 w-3" /> Download final video</Button>}
           </div>
         </Card>
       )}
@@ -374,5 +401,14 @@ export default function VideoStudioPage() {
         </p>
       </div>
     </PageTransition>
+  )
+}
+
+function ComponentProgress({ label, value, ready }) {
+  return (
+    <div className={`rounded-lg border p-3 ${ready ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-white/[0.06] bg-black/20'}`}>
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-xs font-semibold ${ready ? 'text-emerald-200' : 'text-amber-200'}`}>{value}</p>
+    </div>
   )
 }

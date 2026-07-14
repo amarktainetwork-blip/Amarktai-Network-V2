@@ -169,13 +169,13 @@ describe('dashboard polish and routing map contract', () => {
       expect(content).toContain('Live')
     })
 
-    it('Video page shows long-form durable orchestration as ready while multimedia remains pending', () => {
+    it('Video page shows automatic durable multimedia orchestration', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
       expect(content).toContain('Long-Form Video')
-      expect(content).toContain('Phase 1 Ready')
-      expect(content).toContain('Durable Orchestration Ready')
-      expect(content).toContain('Full multimedia assembly is pending')
+      expect(content).toContain('Automatic')
+      expect(content).toContain('Long-Form Workflow')
+      expect(content).toContain('final assembly progress automatically')
     })
 
     it('Video page shows image-to-video as pending', () => {
@@ -218,10 +218,10 @@ describe('dashboard polish and routing map contract', () => {
       expect(fs.existsSync(mapPath)).toBe(false)
     })
 
-    it('canonical registrations map image_generation to Together and video_generation to GenX', async () => {
+    it('canonical registrations map verified video transports without changing Orchestra authority', async () => {
       const { getExecutorRegistrations } = await import('../packages/core/src/index.ts')
       expect(getExecutorRegistrations('image_generation').map(entry => entry.provider)).toEqual(['together'])
-      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx', 'together', 'deepinfra'])
     })
 
     it('public job contracts block provider/model overrides', async () => {

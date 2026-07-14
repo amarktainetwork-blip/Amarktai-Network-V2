@@ -146,13 +146,13 @@ describe('dashboard creation workspace redesign', () => {
       expect(video).toContain('pollJob')
     })
 
-    it('video page distinguishes short video vs long-form durable Phase 1 status', () => {
+    it('video page distinguishes short video vs automatic long-form status', () => {
       const video = read('app/dashboard/video/page.js')
       expect(video).toContain('Short Video')
       expect(video).toContain('Long-Form Video')
-      expect(video).toContain('Phase 1 Ready')
-      expect(video).toContain('Durable Orchestration Ready')
-      expect(video).toContain('Full multimedia assembly is pending')
+      expect(video).toContain('Automatic')
+      expect(video).toContain('Long-Form Workflow')
+      expect(video).toContain('final assembly progress automatically')
     })
 
     it('video page does not claim Live unless using real job flow', () => {

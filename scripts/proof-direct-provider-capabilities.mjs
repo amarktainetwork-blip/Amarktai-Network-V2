@@ -37,11 +37,12 @@ function safeError(error) {
 
 async function loadCore() {
   try {
+    await import('tsx/esm')
     const [contracts, registry, orchestra, jobs] = await Promise.all([
-      import('../packages/core/dist/direct-provider-contracts.js'),
-      import('../packages/core/dist/executor-registry.js'),
-      import('../packages/core/dist/orchestra.js'),
-      import('../packages/core/dist/jobs.js'),
+      import('../packages/core/src/direct-provider-contracts.ts'),
+      import('../packages/core/src/executor-registry.ts'),
+      import('../packages/core/src/orchestra.ts'),
+      import('../packages/core/src/jobs.ts'),
     ])
     return { ...contracts, ...registry, ...orchestra, ...jobs }
   } catch (error) {
@@ -65,9 +66,10 @@ async function runStatic(core) {
     'question_answering', 'classification', 'zero_shot_classification', 'extraction',
     'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
     'table_qa', 'structured_output', 'tool_use', 'tts', 'stt', 'embeddings',
-    'reranking', 'image_generation', 'video_generation', 'music_generation',
+    'reranking', 'image_generation', 'video_generation', 'image_to_video',
+    'video_to_video', 'music_generation',
   ]
-  check(JSON.stringify(DIRECT_PROVIDER_CAPABILITIES) === JSON.stringify(expected), 'exact 24-capability phase scope')
+  check(JSON.stringify(DIRECT_PROVIDER_CAPABILITIES) === JSON.stringify(expected), 'exact 26-capability direct-provider scope')
   if (options.capability && !expected.includes(options.capability)) throw new Error(`Unknown direct capability '${options.capability}'`)
   const registrations = EXECUTOR_REGISTRATIONS.filter((registration) =>
     expected.includes(registration.capability)
@@ -79,8 +81,8 @@ async function runStatic(core) {
 
   const providerSources = {
     groq: ['packages/providers/src/groq-client.ts', 'packages/providers/src/openai-transport.ts'],
-    deepinfra: ['packages/providers/src/deepinfra-client.ts', 'packages/providers/src/deepinfra-task-client.ts', 'packages/providers/src/retrieval-client.ts'],
-    together: ['packages/providers/src/together-client.ts', 'packages/providers/src/retrieval-client.ts'],
+    deepinfra: ['packages/providers/src/deepinfra-client.ts', 'packages/providers/src/deepinfra-task-client.ts', 'packages/providers/src/retrieval-client.ts', 'packages/providers/src/deepinfra-video-client.ts'],
+    together: ['packages/providers/src/together-client.ts', 'packages/providers/src/retrieval-client.ts', 'packages/providers/src/together-video-client.ts'],
     genx: ['packages/providers/src/genx-client.ts'],
   }
   const worker = read('apps/worker/src/providers/provider-executor.ts')
@@ -99,24 +101,30 @@ async function runStatic(core) {
     check(handlerExists, `${key} real handler exists`, registration.handlerName)
     check(Boolean(DIRECT_PROVIDER_REQUEST_SCHEMAS[registration.capability]), `${key} request schema exists`)
     check(Boolean(DIRECT_PROVIDER_OUTPUT_SCHEMAS[registration.capability]), `${key} output schema exists`)
-    check(registration.modelCompatibility === 'exact_model_allowlist' && registration.compatibleModels.length > 0, `${key} exact model contract exists`)
+    const modelContractKnown = registration.modelCompatibility === 'exact_model_allowlist'
+      ? registration.compatibleModels.length > 0
+      : registration.modelCompatibility === 'metadata_profile' && registration.compatibleModels.length === 0 && Boolean(registration.compatibilityProfile)
+    check(modelContractKnown, `${key} canonical model compatibility contract exists`)
 
     const candidate = readyCandidate(registration)
     const decision = evaluateOrchestra({ capability: registration.capability, appGrant: proofGrant(registration.capability), executionId: 'static-proof' }, [candidate])
-    check(decision.executionAllowed && decision.selectedExecutorId === registration.id && decision.selectedModel === registration.compatibleModels[0], `${key} Orchestra candidate is eligible`)
+    check(decision.executionAllowed && decision.selectedExecutorId === registration.id && decision.selectedModel === proofModel(registration), `${key} Orchestra candidate is eligible`)
 
     const model = {
       provider: registration.provider,
-      modelId: registration.compatibleModels[0],
+      modelId: proofModel(registration),
       displayName: 'Static proof model',
       status: 'active',
       capabilitiesJson: JSON.stringify([registration.capability]),
+      rawMetadata: JSON.stringify({ compatibility: proofCompatibilityMetadata(registration) }),
     }
     const healthyProvider = { providerKey: registration.provider, enabled: true, healthStatus: 'live', apiKey: 'encrypted-static-proof-key' }
     const noCredential = normalizeDbCandidates([model], [{ ...healthyProvider, apiKey: '' }], registration.capability, { databaseReady: true, queueReady: true })[0]
     const noHealth = normalizeDbCandidates([model], [{ ...healthyProvider, healthStatus: 'configured' }], registration.capability, { databaseReady: true, queueReady: true })[0]
     const noDatabase = normalizeDbCandidates([model], [healthyProvider], registration.capability, { databaseReady: false, queueReady: true })[0]
-    const incompatible = normalizeDbCandidates([{ ...model, modelId: 'unregistered-model' }], [healthyProvider], registration.capability, { databaseReady: true, queueReady: true })[0]
+    const incompatible = normalizeDbCandidates([registration.modelCompatibility === 'metadata_profile'
+      ? { ...model, modelId: 'transport-incompatible-model', rawMetadata: JSON.stringify({ compatibility: { ...proofCompatibilityMetadata(registration), endpointFamily: 'unsupported_endpoint' } }) }
+      : { ...model, modelId: 'unregistered-model' }], [healthyProvider], registration.capability, { databaseReady: true, queueReady: true })[0]
     check(noCredential && !noCredential.executionReady && !noCredential.providerConfigured, `${key} missing credential fails closed`)
     check(noHealth && !noHealth.executionReady && !noHealth.providerHealthReady, `${key} unproven health fails closed`)
     check(noDatabase && !noDatabase.executionReady && !noDatabase.databaseReady, `${key} missing database evidence fails closed`)
@@ -142,7 +150,7 @@ async function runStatic(core) {
 function readyCandidate(registration) {
   return {
     provider: registration.provider,
-    model: registration.compatibleModels[0],
+    model: proofModel(registration),
     displayName: 'Static proof',
     capability: registration.capability,
     executorId: registration.id,
@@ -167,6 +175,28 @@ function readyCandidate(registration) {
     estimatedCost: null,
     costTier: 'low', qualityTier: 'balanced', latencyTier: 'low', pricingConfidence: 'unknown',
     score: 0, scoreBreakdown: {}, blockers: [],
+  }
+}
+
+function proofModel(registration) {
+  return registration.compatibleModels[0] || `${registration.provider}-proof-${registration.capability}-model`
+}
+
+function proofCompatibilityMetadata(registration) {
+  const profile = registration.compatibilityProfile
+  if (!profile) return {}
+  return {
+    category: profile.categories[0],
+    capabilities: [registration.capability],
+    modalitiesIn: profile.requiredInputModalities,
+    modalitiesOut: [profile.outputModality],
+    transportProfile: profile.transportProfiles[0],
+    endpointFamily: profile.endpointFamilies[0],
+    endpointShapeKnown: true,
+    requestShapeKnown: true,
+    responseShapeKnown: true,
+    providerClientExists: true,
+    workerExecutorExists: true,
   }
 }
 

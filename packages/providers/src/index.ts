@@ -40,8 +40,6 @@ export {
 
 // GenX — video generation with long-polling
 export {
-  DEFAULT_GENX_VIDEO_MODEL,
-  GENX_ROUTER_VIDEO_MODEL_PREFERENCE,
   genxSubmitVideo,
   genxPollVideo,
   genxDownloadVideo,
@@ -60,8 +58,6 @@ export {
 
 // GenX — music generation with submit/poll/download
 export {
-  DEFAULT_GENX_MUSIC_MODEL,
-  GENX_ROUTER_MUSIC_MODEL_PREFERENCE,
   genxSubmitMusic,
   genxPollMusic,
   genxDownloadMusic,
@@ -134,6 +130,22 @@ export {
   type InspectedImage,
   type InspectedTimedMedia,
 } from './media-inspection.js'
+export {
+  togetherSubmitVideo,
+  togetherPollVideo,
+  togetherDownloadVideo,
+  togetherGenerateVideo,
+  TOGETHER_VIDEO_POLL_INTERVAL_MS,
+  TOGETHER_VIDEO_POLL_MAX_ATTEMPTS,
+  type TogetherVideoRequest,
+  type TogetherVideoJob,
+  type TogetherVideoResult,
+} from './together-video-client.js'
+export {
+  deepinfraGenerateVideo,
+  type DeepInfraVideoRequest,
+  type DeepInfraVideoResult,
+} from './deepinfra-video-client.js'
 
 // Provider model discovery — model-list/catalogue only, no generation calls.
 export {

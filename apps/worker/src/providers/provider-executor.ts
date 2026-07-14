@@ -9,6 +9,8 @@ import {
   evaluateOrchestra,
   normalizeDbCandidates,
   getExecutorRegistration,
+  executorModelMetadataFromDbRecord,
+  isExecutorModelCompatible,
   type CapabilityKey,
   type ProviderKey,
   type ExecutorId,
@@ -75,16 +77,6 @@ function readBool(input: Record<string, unknown> | undefined, key: string): bool
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function parseGenxDiscoveredModels(healthMessage: string): string[] {
-  const match = healthMessage.match(/Models seen:\s*(.+)$/i)
-  if (!match?.[1]) return []
-
-  return match[1]
-    .split(',')
-    .map((model) => model.trim().replace(/\.$/, ''))
-    .filter(Boolean)
 }
 
 function safeParseJsonObject(value: unknown): Record<string, unknown> {
@@ -233,7 +225,6 @@ async function resumeGenxVideoProviderJob(input: {
   apiKey: string
   baseUrl?: string
   model: string
-  providerAvailableModels: string[]
   providers: Pick<ProvidersModule, 'genxPollVideo' | 'genxDownloadVideo' | 'GENX_POLL_INTERVAL_MS' | 'GENX_POLL_MAX_ATTEMPTS'>
 }): Promise<{
   videoBuffer: Buffer
@@ -277,7 +268,6 @@ async function resumeGenxVideoProviderJob(input: {
           apiKey: input.apiKey,
           baseUrl: input.baseUrl,
           model: input.model,
-          providerAvailableModels: input.providerAvailableModels,
         })
         return {
           ...video,
@@ -414,8 +404,6 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
     const {
       genxSubmitMusic,
     } = await import('@amarktai/providers')
-    const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
-
     const vocalsRequested = readBool(payload.input, 'vocalsRequested') === true
       || readBool(payload.input, 'instrumentalOnly') === false
       || typeof payload.input?.lyrics === 'string'
@@ -469,7 +457,9 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       )
       const resumeRemoteId = typeof resumeMeta.genxProviderJobId === 'string' ? resumeMeta.genxProviderJobId : ''
       if (resumeRemoteId) {
-        return await pollAndDownloadMusic(resumeRemoteId, apiKey, providerStatus, model, payload, providerAvailableModels)
+        const resumeModel = readString(resumeMeta, 'genxProviderModel')
+        if (resumeModel && resumeModel !== model) throw new Error(`Persisted GenX music model '${resumeModel}' does not match Orchestra-selected model '${model}'`)
+        return await pollAndDownloadMusic(resumeRemoteId, apiKey, providerStatus, model, payload)
       }
       return {
         success: false,
@@ -485,6 +475,8 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       (await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }))?.metadataJson,
     )
     let remoteJobId = typeof jobMeta.genxProviderJobId === 'string' ? jobMeta.genxProviderJobId : ''
+    const remoteModel = readString(jobMeta, 'genxProviderModel')
+    if (remoteJobId && remoteModel && remoteModel !== model) throw new Error(`Persisted GenX music model '${remoteModel}' does not match Orchestra-selected model '${model}'`)
 
     // ── 4. Submit once if no remote job exists ─────────────────────────────
     if (!remoteJobId) {
@@ -496,7 +488,6 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
         model,
-        providerAvailableModels,
       })
       if (!submitResult.jobId) {
         return {
@@ -531,7 +522,7 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       }
     }
 
-    return await pollAndDownloadMusic(remoteJobId, apiKey, providerStatus, model, payload, providerAvailableModels)
+    return await pollAndDownloadMusic(remoteJobId, apiKey, providerStatus, model, payload)
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown GenX music error'
@@ -551,7 +542,6 @@ async function pollAndDownloadMusic(
   providerStatus: { baseUrl: string; defaultModel: string; fallbackModel: string; healthMessage: string },
   model: string,
   payload: WorkerJobData,
-  providerAvailableModels: string[],
 ): Promise<ProcessorResult> {
   const {
     genxPollMusic,
@@ -609,7 +599,6 @@ async function pollAndDownloadMusic(
             apiKey,
             baseUrl: providerStatus.baseUrl || undefined,
             model,
-            providerAvailableModels,
           })
 
           if (!musicResult.audioBuffer || musicResult.audioBuffer.length === 0) {
@@ -736,7 +725,6 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
     const providers = await import('@amarktai/providers')
     const { genxGenerateVideo } = providers
     const { saveArtifact } = await import('@amarktai/artifacts')
-    const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
     const job = await prisma.job.findUnique({
       where: { id: payload.jobId },
       select: { metadataJson: true },
@@ -744,7 +732,9 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
     const jobMetadata = safeParseJsonObject(job?.metadataJson)
     const existingRemoteJobId = readProviderJobIdFromMetadata(jobMetadata)
     const existingRemoteModel = readString(jobMetadata, 'genxProviderModel')
-    if (existingRemoteModel) model = existingRemoteModel
+    if (existingRemoteJobId && existingRemoteModel && existingRemoteModel !== model) {
+      throw new Error(`Persisted GenX video model '${existingRemoteModel}' does not match Orchestra-selected model '${model}'`)
+    }
 
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
     if (existingArtifact) {
@@ -796,7 +786,6 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
         model,
-        providerAvailableModels,
         providers,
       })
       : await genxGenerateVideo({
@@ -804,7 +793,6 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
         model,
-        providerAvailableModels,
         duration: readNumber(payload.input, 'duration'),
         aspectRatio: readString(payload.input, 'aspectRatio'),
         style: readString(payload.input, 'style'),
@@ -908,6 +896,191 @@ function normalizeRoutingMode(payload: WorkerJobData): OrchestraRoutingMode {
   if (raw === 'economy' || raw === 'budget') return 'economy'
   if (raw === 'fast') return 'fast'
   return 'balanced'
+}
+
+async function executeTogetherVideo(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  const model = selectedModel?.trim() ?? ''
+  let apiKey = ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact Together video model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'together', model, error: 'AppCapabilityGrant denies video artifact write.' }
+    const validation = validateMediaInput(payload)
+    if (!validation.success) return { success: false, status: 'failed', provider: 'together', model, error: validation.error }
+
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, payload.capability)
+    if (existing) {
+      const meta = safeParseJsonObject(existing.metadata)
+      const duration = readPositiveNumber(meta.duration)
+      const width = readPositiveNumber(meta.width)
+      const height = readPositiveNumber(meta.height)
+      if (duration && width && height) return mediaArtifactResult(existing, 'together', model, duration, width, height, true)
+    }
+
+    let sourceArtifactId: string | null = null
+    let sourceImageDataUrl: string | undefined
+    let referenceVideoUrl: string | undefined
+    if (payload.capability === 'image_to_video' || payload.capability === 'video_to_video') {
+      if (!grant.artifactRead) return { success: false, status: 'failed', provider: 'together', model, error: 'AppCapabilityGrant denies source-artifact read.' }
+      sourceArtifactId = readSourceArtifactId(payload)
+      if (!sourceArtifactId) return { success: false, status: 'failed', provider: 'together', model, error: 'Source-aware video request omitted its source artifact.' }
+      const { getArtifactRecord, getArtifactFile, createProviderMediaUrl } = await import('@amarktai/artifacts')
+      const source = await getArtifactRecord(sourceArtifactId)
+      if (!source || source.appSlug !== payload.appSlug || source.status !== 'completed') return artifactFailure('together', model, 'Authorised source artifact was not found')
+      const expectedPrefix = payload.capability === 'image_to_video' ? 'image/' : 'video/'
+      if (!source.mimeType.startsWith(expectedPrefix)) return artifactFailure('together', model, `Source artifact must have MIME type ${expectedPrefix}*`)
+      const file = await getArtifactFile(sourceArtifactId)
+      if (!file?.buffer.length) return artifactFailure('together', model, 'Source artifact bytes are missing')
+      if (payload.capability === 'image_to_video') {
+        sourceImageDataUrl = `data:${file.mimeType};base64,${file.buffer.toString('base64')}`
+      } else {
+        const publicApiUrl = process.env.PUBLIC_API_URL?.trim() ?? ''
+        const secret = process.env.JWT_SECRET?.trim() ?? ''
+        if (!publicApiUrl || !secret) return artifactFailure('together', model, 'PUBLIC_API_URL and JWT_SECRET are required for provider-readable source video')
+        referenceVideoUrl = createProviderMediaUrl({ artifactId: sourceArtifactId, publicApiUrl, secret })
+      }
+    }
+
+    const persisted = safeParseJsonObject((await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }))?.metadataJson)
+    const persistedProviderJobId = readString(persisted, 'togetherProviderJobId')
+    const persistedProviderModel = readString(persisted, 'togetherProviderModel')
+    if (persistedProviderJobId && persistedProviderModel && persistedProviderModel !== model) {
+      throw new Error(`Persisted Together video model '${persistedProviderModel}' does not match Orchestra-selected model '${model}'`)
+    }
+    if (!persistedProviderJobId) {
+      const claim = await claimProviderExecution(payload.jobId)
+      if (!claim.claimed) return { success: false, status: 'failed', provider: 'together', model, error: claim.error }
+    }
+    const credential = await resolveProviderApiKey('together')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('together')
+    const { togetherGenerateVideo } = await import('@amarktai/providers')
+    const result = await togetherGenerateVideo({
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+      model,
+      prompt: payload.prompt,
+      width: readNumber(payload.input, 'width'),
+      height: readNumber(payload.input, 'height'),
+      seconds: readNumber(payload.input, 'duration'),
+      fps: readNumber(payload.input, 'fps'),
+      steps: readNumber(payload.input, 'steps'),
+      seed: readNumber(payload.input, 'seed'),
+      guidanceScale: readNumber(payload.input, 'guidanceScale'),
+      negativePrompt: readString(payload.input, 'negativePrompt'),
+      generateAudio: readBool(payload.input, 'generateAudio'),
+      sourceImageDataUrl,
+      referenceVideoUrl,
+      providerJobId: persistedProviderJobId,
+      onSubmitted: async (providerJobId) => persistJobMetadata(payload.jobId, {
+        togetherProviderJobId: providerJobId,
+        togetherProviderModel: model,
+        togetherSubmittedAt: new Date().toISOString(),
+      }),
+    })
+    const { saveArtifact } = await import('@amarktai/artifacts')
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'video', subType: payload.capability,
+        title: `${payload.capability} output for ${payload.appSlug}`,
+        description: 'Together managed video API output', provider: 'together', model, traceId: payload.traceId,
+        mimeType: result.mimeType,
+        metadata: {
+          capability: payload.capability, provider: 'together', model, duration: result.duration,
+          width: result.width, height: result.height, providerJobId: result.providerJobId,
+          sourceArtifactId, sourceArtifactIncluded: sourceArtifactId !== null,
+          longFormVideo: payload.metadata?.longFormVideo === true,
+          parentJobId: payload.metadata?.parentJobId, sceneNumber: payload.metadata?.sceneNumber,
+        },
+      },
+      data: result.videoBuffer,
+      explicitMimeType: result.mimeType,
+    })
+    await persistJobMetadata(payload.jobId, { togetherArtifactId: artifact.id, togetherCompletedAt: new Date().toISOString() })
+    return mediaArtifactResult(artifact, 'together', model, result.duration, result.width, result.height, false, {
+      providerJobId: result.providerJobId,
+      sourceArtifactId,
+      providerReportedCost: result.cost,
+    })
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    return providerMediaFailure('together', model, err, apiKey)
+  }
+}
+
+async function executeDeepInfraVideo(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  const model = selectedModel?.trim() ?? ''
+  let apiKey = ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact DeepInfra video model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'deepinfra', model, error: 'AppCapabilityGrant denies video artifact write.' }
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
+    if (existing) {
+      const meta = safeParseJsonObject(existing.metadata)
+      const duration = readPositiveNumber(meta.duration); const width = readPositiveNumber(meta.width); const height = readPositiveNumber(meta.height)
+      if (duration && width && height) return mediaArtifactResult(existing, 'deepinfra', model, duration, width, height, true)
+    }
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) return { success: false, status: 'failed', provider: 'deepinfra', model, error: claim.error }
+    const credential = await resolveProviderApiKey('deepinfra')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('deepinfra')
+    const { deepinfraGenerateVideo } = await import('@amarktai/providers')
+    const result = await deepinfraGenerateVideo({ apiKey, baseUrl: providerStatus.baseUrl || undefined, model, prompt: payload.prompt })
+    const { saveArtifact } = await import('@amarktai/artifacts')
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'video', subType: 'video_generation', title: `video_generation output for ${payload.appSlug}`,
+        description: 'DeepInfra video inference output', provider: 'deepinfra', model, traceId: payload.traceId, mimeType: result.mimeType,
+        metadata: { capability: 'video_generation', provider: 'deepinfra', model, duration: result.duration, width: result.width, height: result.height,
+          longFormVideo: payload.metadata?.longFormVideo === true, parentJobId: payload.metadata?.parentJobId, sceneNumber: payload.metadata?.sceneNumber },
+      }, data: result.videoBuffer, explicitMimeType: result.mimeType,
+    })
+    return mediaArtifactResult(artifact, 'deepinfra', model, result.duration, result.width, result.height, false)
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    return providerMediaFailure('deepinfra', model, err, apiKey)
+  }
+}
+
+function validateMediaInput(payload: WorkerJobData): { success: true } | { success: false; error: string } {
+  if (!payload.prompt.trim()) return { success: false, error: 'Video prompt is required.' }
+  return { success: true }
+}
+
+function readSourceArtifactId(payload: WorkerJobData): string | null {
+  const keys = payload.capability === 'image_to_video' ? ['sourceImageArtifactId', 'sourceImage'] : ['sourceVideoArtifactId', 'sourceVideo']
+  for (const key of keys) { const value = payload.input?.[key]; if (typeof value === 'string' && value.trim()) return value.trim() }
+  return null
+}
+
+function artifactFailure(provider: ProviderKey, model: string, error: string): ProcessorResult {
+  return { success: false, status: 'failed', provider, model, error, metadata: { errorClassification: 'artifact_validation', retryable: false } }
+}
+
+function mediaArtifactResult(
+  artifact: { id: string; storageUrl: string; mimeType: string; fileSizeBytes: number },
+  provider: ProviderKey,
+  model: string,
+  duration: number,
+  width: number,
+  height: number,
+  reused: boolean,
+  extra: Record<string, unknown> = {},
+): ProcessorResult {
+  const output = { artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration, width, height, reused, ...extra }
+  return { success: true, status: 'completed', provider, model, artifactId: artifact.id, output: JSON.stringify(output), metadata: {
+    ...output,
+    usage: createCanonicalProviderUsage({ provider, model, videoSeconds: duration, providerReportedCost: typeof extra.providerReportedCost === 'number' ? extra.providerReportedCost : null }),
+    outputValidation: { valid: true, contract: reused ? 'reused_video_artifact' : 'validated_video_artifact_signature' },
+  } }
+}
+
+function providerMediaFailure(provider: ProviderKey, model: string, err: unknown, apiKey: string): ProcessorResult {
+  const canonical = err instanceof Error ? err : new Error('Unknown provider media failure')
+  const code = 'code' in canonical && typeof canonical.code === 'string' ? canonical.code : 'provider_unavailable'
+  return { success: false, status: 'failed', provider, model, error: `${provider} ${code}: ${redactProviderSecrets(canonical.message, [apiKey])}`, metadata: { errorClassification: code } }
 }
 
 function readAppGrantSnapshot(payload: WorkerJobData): AppCapabilityGrantContext | null {
@@ -1030,6 +1203,10 @@ export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
   'together.image-generation': executeTogetherImage,
   'genx.video-generation': executeGenxVideo,
   'genx.music-generation': executeGenxMusic,
+  'together.video-generation': executeTogetherVideo,
+  'together.image-to-video': executeTogetherVideo,
+  'together.video-to-video': executeTogetherVideo,
+  'deepinfra.video-generation': executeDeepInfraVideo,
 }
 
 export async function executeRegisteredRoute(
@@ -1058,7 +1235,19 @@ export async function executeRegisteredRoute(
     }
   }
 
-  if (!registration.compatibleModels.includes(route.model)) {
+  let modelCompatible = registration.modelCompatibility === 'exact_model_allowlist'
+    ? registration.compatibleModels.includes(route.model)
+    : false
+  if (registration.modelCompatibility === 'metadata_profile') {
+    const findUnique = (prisma.modelRegistryEntry as typeof prisma.modelRegistryEntry & { findUnique?: typeof prisma.modelRegistryEntry.findUnique }).findUnique
+    const modelRecord = typeof findUnique === 'function'
+      ? await findUnique.call(prisma.modelRegistryEntry, { where: { provider_modelId: { provider: route.provider, modelId: route.model } } }).catch(() => null)
+      : null
+    const compatibility = executorModelMetadataFromDbRecord(modelRecord ?? { provider: route.provider, modelId: route.model })
+    modelCompatible = (modelRecord ? modelRecord.enabled === true : true)
+      && isExecutorModelCompatible(registration, route.model, compatibility)
+  }
+  if (!modelCompatible) {
     return {
       success: false,
       status: 'failed',

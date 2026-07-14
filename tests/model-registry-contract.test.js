@@ -524,8 +524,8 @@ describe('real provider model discovery and catalog truth', () => {
       curatedFallbackCount: 1,
       pricingKnownCount: 2,
       pricingUnknownCount: 2,
-      executorAdapterImplementedCount: 1,
-      executableModels: 1,
+      executorAdapterImplementedCount: 0,
+      executableModels: 0,
       liveJobProvenCount: 1,
       provenModels: 1,
       dashboardReadyCount: 1,
@@ -535,8 +535,9 @@ describe('real provider model discovery and catalog truth', () => {
       blockedUnknownPricingCount: 1,
     })
     expect(summary.missingExecutorBlockers).toContain('video_generation: 1 media model(s) blocked by unknown pricing')
-    expect(summary.missingExecutorBlockers).toContain('together: catalogued but no executor registration for video_generation (2 model(s))')
-    expect(summary.missingExecutorBlockers).toContain('mimo: catalogued but no executor registration for video_generation (1 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('genx: catalogued but no compatible executable adapter for video_generation (1 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('together: catalogued but no compatible executable adapter for video_generation (2 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('mimo: catalogued but no compatible executable adapter for video_generation (1 model(s))')
     expect(summary.providerHealthBlockers).toContain('mimo: not runtime ready')
   })
 

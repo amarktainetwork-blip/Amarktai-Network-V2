@@ -16,8 +16,34 @@ export type ExecutorId =
   | 'together.embeddings'
   | 'together.reranking'
   | 'together.image-generation'
+  | 'together.video-generation'
+  | 'together.image-to-video'
+  | 'together.video-to-video'
+  | 'deepinfra.video-generation'
   | 'genx.video-generation'
   | 'genx.music-generation'
+
+export interface ExecutorCompatibilityProfile {
+  categories: readonly string[]
+  transportProfiles: readonly string[]
+  endpointFamilies: readonly string[]
+  requiredInputModalities: readonly string[]
+  outputModality: string
+}
+
+export interface ExecutorModelMetadata {
+  category?: string | null
+  capabilities?: readonly string[]
+  modalitiesIn?: readonly string[]
+  modalitiesOut?: readonly string[]
+  transportProfile?: string | null
+  endpointFamily?: string | null
+  endpointShapeKnown?: boolean
+  requestShapeKnown?: boolean
+  responseShapeKnown?: boolean
+  providerClientExists?: boolean
+  workerExecutorExists?: boolean
+}
 
 export interface ExecutorRegistration {
   id: ExecutorId
@@ -26,8 +52,9 @@ export interface ExecutorRegistration {
   handlerName: string
   acceptedRequestContract: string
   outputContract: string
-  modelCompatibility: 'exact_model_allowlist'
+  modelCompatibility: 'exact_model_allowlist' | 'metadata_profile'
   compatibleModels: readonly string[]
+  compatibilityProfile: ExecutorCompatibilityProfile | null
   sourceArtifactRequired: boolean
   artifactOutput: string | null
   executionMode: 'sync' | 'queued' | 'stream'
@@ -80,10 +107,77 @@ function registration(
     outputContract: definition.outputContractReference,
     modelCompatibility: 'exact_model_allowlist',
     compatibleModels,
+    compatibilityProfile: null,
     sourceArtifactRequired: definition.requiresSourceArtifact || capability === 'stt',
     artifactOutput: definition.artifactType,
     executionMode,
   }
+}
+
+function mediaRegistration(
+  id: ExecutorId,
+  provider: ProviderKey,
+  capability: CapabilityKey,
+  handlerName: string,
+  profile: ExecutorCompatibilityProfile,
+): ExecutorRegistration {
+  const definition = CAPABILITY_BY_KEY[capability]
+  return {
+    id,
+    provider,
+    capability,
+    handlerName,
+    acceptedRequestContract: definition.inputContractReference,
+    outputContract: definition.outputContractReference,
+    modelCompatibility: 'metadata_profile',
+    compatibleModels: [],
+    compatibilityProfile: profile,
+    sourceArtifactRequired: definition.requiresSourceArtifact,
+    artifactOutput: definition.artifactType,
+    executionMode: 'queued',
+  }
+}
+
+const GENX_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['video'],
+  transportProfiles: ['async_job_poll'],
+  endpointFamilies: ['genx_generation_v1'],
+  requiredInputModalities: ['text'],
+  outputModality: 'video',
+}
+
+const GENX_MUSIC_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['audio', 'music', 'text-to-music'],
+  transportProfiles: ['async_job_poll'],
+  endpointFamilies: ['genx_generation_v1'],
+  requiredInputModalities: ['text'],
+  outputModality: 'audio',
+}
+
+const TOGETHER_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['video', 'text-to-video'],
+  transportProfiles: ['async_job_poll'],
+  endpointFamilies: ['together_v2_videos'],
+  requiredInputModalities: ['text'],
+  outputModality: 'video',
+}
+
+const TOGETHER_IMAGE_TO_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
+  ...TOGETHER_VIDEO_PROFILE,
+  requiredInputModalities: ['text', 'image'],
+}
+
+const TOGETHER_VIDEO_TO_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
+  ...TOGETHER_VIDEO_PROFILE,
+  requiredInputModalities: ['text', 'video'],
+}
+
+const DEEPINFRA_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['video', 'text-to-video'],
+  transportProfiles: ['native_inference_json'],
+  endpointFamilies: ['deepinfra_v1_inference'],
+  requiredInputModalities: ['text'],
+  outputModality: 'video',
 }
 
 /**
@@ -118,8 +212,12 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   registration('together.reranking', 'together', 'reranking', 'executeRerankingCapability', ['Salesforce/Llama-Rank-v1']),
   registration('together.image-generation', 'together', 'image_generation', 'executeTogetherImage', ['black-forest-labs/FLUX.1-schnell']),
 
-  registration('genx.video-generation', 'genx', 'video_generation', 'executeGenxVideo', ['seedance-v1-fast']),
-  registration('genx.music-generation', 'genx', 'music_generation', 'executeGenxMusic', ['lyria-3-clip-preview', 'lyria-3-pro-preview']),
+  mediaRegistration('genx.video-generation', 'genx', 'video_generation', 'executeGenxVideo', GENX_VIDEO_PROFILE),
+  mediaRegistration('genx.music-generation', 'genx', 'music_generation', 'executeGenxMusic', GENX_MUSIC_PROFILE),
+  mediaRegistration('together.video-generation', 'together', 'video_generation', 'executeTogetherVideo', TOGETHER_VIDEO_PROFILE),
+  mediaRegistration('together.image-to-video', 'together', 'image_to_video', 'executeTogetherVideo', TOGETHER_IMAGE_TO_VIDEO_PROFILE),
+  mediaRegistration('together.video-to-video', 'together', 'video_to_video', 'executeTogetherVideo', TOGETHER_VIDEO_TO_VIDEO_PROFILE),
+  mediaRegistration('deepinfra.video-generation', 'deepinfra', 'video_generation', 'executeDeepInfraVideo', DEEPINFRA_VIDEO_PROFILE),
 ] as const
 
 export function getExecutorRegistrations(capability?: CapabilityKey, provider?: ProviderKey): ExecutorRegistration[] {
@@ -136,6 +234,23 @@ export function hasExecutorRegistration(capability: CapabilityKey, provider: Pro
   return getExecutorRegistration(capability, provider) !== undefined
 }
 
-export function isExecutorModelCompatible(registration: ExecutorRegistration, model: string): boolean {
-  return registration.compatibleModels.includes(model)
+export function isExecutorModelCompatible(
+  registration: ExecutorRegistration,
+  model: string,
+  metadata?: ExecutorModelMetadata,
+): boolean {
+  if (registration.modelCompatibility === 'exact_model_allowlist') {
+    return registration.compatibleModels.includes(model)
+  }
+
+  const profile = registration.compatibilityProfile
+  if (!profile || !metadata) return false
+  if (!metadata.endpointShapeKnown || !metadata.requestShapeKnown || !metadata.responseShapeKnown) return false
+  if (!metadata.providerClientExists || !metadata.workerExecutorExists) return false
+  if (!metadata.capabilities?.includes(registration.capability)) return false
+  if (!profile.categories.includes(metadata.category ?? '')) return false
+  if (!profile.transportProfiles.includes(metadata.transportProfile ?? '')) return false
+  if (!profile.endpointFamilies.includes(metadata.endpointFamily ?? '')) return false
+  if (!profile.requiredInputModalities.every((modality) => metadata.modalitiesIn?.includes(modality))) return false
+  return metadata.modalitiesOut?.includes(profile.outputModality) === true
 }

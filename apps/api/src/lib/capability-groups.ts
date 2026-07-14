@@ -3,6 +3,11 @@ import {
   CAPABILITY_CATALOG,
   CAPABILITY_FIELD_MAP,
   isValidCapability,
+  getExecutorRegistration,
+  isExecutorModelCompatible,
+  executorModelMetadataFromDbRecord,
+  type CapabilityKey,
+  type ProviderKey,
   type RuntimeTruth,
 } from '@amarktai/core'
 
@@ -86,15 +91,19 @@ export function buildCapabilityGroupSummary(
   const capabilityTruth = validCapability
     ? runtimeTruth.capabilities.find((capability) => capability.capability === validCapability)
     : undefined
-  const implementedProviders = new Set(capabilityTruth?.eligibleProviders ?? [])
+  const executableModels = validCapability ? eligible.filter((model) => {
+    const registration = getExecutorRegistration(validCapability as CapabilityKey, model.provider as ProviderKey)
+    return Boolean(registration && isExecutorModelCompatible(registration, String(model.modelId ?? ''), executorModelMetadataFromDbRecord(model as never)))
+  }) : []
+  const executableProviders = new Set(executableModels.map((model) => model.provider))
   const providerHealthBlockers: string[] = []
   const missingExecutorBlockers: string[] = []
 
   for (const [provider, count] of Object.entries(modelsByProvider)) {
     const providerTruth = runtimeTruth.providers.find((entry) => entry.provider === provider)
     if (providerTruth?.configured !== true) providerHealthBlockers.push(`${provider}: not runtime ready`)
-    if (!implementedProviders.has(provider as never)) {
-      missingExecutorBlockers.push(`${provider}: catalogued but no executor registration for ${capabilityKey} (${count} model(s))`)
+    if (!executableProviders.has(provider)) {
+      missingExecutorBlockers.push(`${provider}: catalogued but no compatible executable adapter for ${capabilityKey} (${count} model(s))`)
     }
   }
 
@@ -107,7 +116,7 @@ export function buildCapabilityGroupSummary(
   }
 
   const executable = capabilityTruth?.executableNow
-    ? eligible.filter((model) => implementedProviders.has(model.provider as never))
+    ? executableModels
     : []
   const standardEligibleCount = executable.filter((model) =>
     pricingIsKnown(model) && model.costTier !== 'premium' && model.costTier !== 'high',
@@ -139,7 +148,7 @@ export function buildCapabilityGroupSummary(
     standardEligibleCount,
     premiumEligibleCount,
     blockedUnknownPricingCount,
-    executorAdapterImplementedCount: implementedProviders.size,
+    executorAdapterImplementedCount: executableProviders.size,
     liveJobProvenCount,
     dashboardReadyCount,
     executableModels: executable.length,

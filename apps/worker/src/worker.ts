@@ -12,9 +12,10 @@
  *            or: tsx apps/worker/src/worker.ts
  */
 
-import { Worker } from 'bullmq'
+import { Queue, Worker } from 'bullmq'
 import { getRedisUrl, QUEUE_NAMES, WORKER_CONCURRENCY } from '@amarktai/core'
-import { processJob, type WorkerJobData } from './processors/job-processor.js'
+import { createJobProcessor, type WorkerJobData } from './processors/job-processor.js'
+import { advanceLongFormWorkflow } from './long-form-workflow.js'
 import { createServer, type Server } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -74,6 +75,9 @@ async function main(): Promise<void> {
   console.log(`[worker] Queue: ${QUEUE_NAMES.JOBS}`)
   console.log(`[worker] Concurrency: ${WORKER_CONCURRENCY}`)
 
+  const connection = { url: redisUrl, maxRetriesPerRequest: null }
+  const queue = new Queue(QUEUE_NAMES.JOBS, { connection })
+  const processJob = createJobProcessor({ advanceLongFormWorkflow: (parentJobId) => advanceLongFormWorkflow(parentJobId, queue) })
   const worker = new Worker(
     QUEUE_NAMES.JOBS,
     async (job) => {
@@ -81,10 +85,7 @@ async function main(): Promise<void> {
       return processJob(payload)
     },
     {
-      connection: {
-        url: redisUrl,
-        maxRetriesPerRequest: null,
-      },
+      connection,
       concurrency: WORKER_CONCURRENCY,
       limiter: {
         max: 50,
@@ -117,6 +118,7 @@ async function main(): Promise<void> {
     queueReady = false
     await new Promise<void>((resolve) => healthServer.close(() => resolve()))
     await worker.close()
+    await queue.close()
     process.exit(0)
   }
 

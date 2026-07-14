@@ -26,6 +26,8 @@ export const DIRECT_PROVIDER_CAPABILITIES = [
   'reranking',
   'image_generation',
   'video_generation',
+  'image_to_video',
+  'video_to_video',
   'music_generation',
 ] as const satisfies readonly CapabilityKey[]
 
@@ -172,6 +174,20 @@ export const DIRECT_PROVIDER_REQUEST_SCHEMAS: Record<DirectProviderCapability, z
     aspectRatio: z.string().max(20).optional(),
     style: z.string().max(200).optional(),
   }),
+  image_to_video: z.object({
+    sourceImageArtifactId: z.string().uuid().optional(),
+    sourceImage: z.string().uuid().optional(),
+    duration: z.number().min(1).max(60).optional(),
+    width: z.number().int().min(64).max(2_048).optional(),
+    height: z.number().int().min(64).max(2_048).optional(),
+  }).refine((value) => Boolean(value.sourceImageArtifactId || value.sourceImage), 'source image artifact is required'),
+  video_to_video: z.object({
+    sourceVideoArtifactId: z.string().uuid().optional(),
+    sourceVideo: z.string().uuid().optional(),
+    duration: z.number().min(1).max(60).optional(),
+    width: z.number().int().min(64).max(2_048).optional(),
+    height: z.number().int().min(64).max(2_048).optional(),
+  }).refine((value) => Boolean(value.sourceVideoArtifactId || value.sourceVideo), 'source video artifact is required'),
   music_generation: z.object({
     duration: z.number().min(1).max(300).optional(),
     style: z.string().max(200).optional(),
@@ -222,6 +238,8 @@ export const DIRECT_PROVIDER_OUTPUT_SCHEMAS: Record<DirectProviderCapability, Re
   reranking: outputObject({ results: { type: 'array', minItems: 1, items: outputObject({ index: { type: 'integer', minimum: 0 }, score: finiteNumberSchema }, ['index', 'score']) } }, ['results']),
   image_generation: artifactOutput({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 } }, ['width', 'height']),
   video_generation: artifactOutput({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, duration: { type: 'number', exclusiveMinimum: 0 } }, ['width', 'height', 'duration']),
+  image_to_video: artifactOutput({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, duration: { type: 'number', exclusiveMinimum: 0 } }, ['width', 'height', 'duration']),
+  video_to_video: artifactOutput({ width: { type: 'integer', minimum: 1 }, height: { type: 'integer', minimum: 1 }, duration: { type: 'number', exclusiveMinimum: 0 } }, ['width', 'height', 'duration']),
   music_generation: artifactOutput({ duration: { type: 'number', exclusiveMinimum: 0 } }, ['duration']),
 }
 

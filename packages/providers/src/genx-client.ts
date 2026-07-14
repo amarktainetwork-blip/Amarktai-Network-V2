@@ -23,9 +23,6 @@ export interface GenxVideoRequest {
   negativePrompt?: string
   apiKey?: string
   baseUrl?: string
-  providerDefaultModel?: string
-  providerFallbackModel?: string
-  providerAvailableModels?: string[]
 }
 
 export interface GenxVideoSubmitResponse {
@@ -54,13 +51,6 @@ export interface GenxVideoResult {
   metadata: Record<string, unknown>
 }
 
-export const DEFAULT_GENX_VIDEO_MODEL = 'seedance-v1-fast'
-export const GENX_ROUTER_VIDEO_MODEL_PREFERENCE = [
-  'grok-imagine-video',
-  'kling-v2.5-turbo',
-  DEFAULT_GENX_VIDEO_MODEL,
-]
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveGenxApiKey(requestApiKey?: string): string {
@@ -82,36 +72,11 @@ function resolveOptionalGenxApiKey(requestApiKey?: string): string {
 }
 
 export function resolveGenxVideoModel(
-  request: Pick<GenxVideoRequest, 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxVideoRequest, 'model'> = {},
 ): string {
   const explicitModel = request.model?.trim()
   if (explicitModel) return explicitModel
-
-  const availableModels = normalizeModelList(request.providerAvailableModels)
-  const providerDefaultModel = request.providerDefaultModel?.trim()
-  const providerFallbackModel = request.providerFallbackModel?.trim()
-
-  if (availableModels.length) {
-    if (providerDefaultModel && modelListIncludes(availableModels, providerDefaultModel) && isUsableTextToVideoModel(providerDefaultModel)) {
-      return providerDefaultModel
-    }
-
-    if (providerFallbackModel && modelListIncludes(availableModels, providerFallbackModel) && isUsableTextToVideoModel(providerFallbackModel)) {
-      return providerFallbackModel
-    }
-
-    const preferred = GENX_ROUTER_VIDEO_MODEL_PREFERENCE.find((candidate) => (
-      modelListIncludes(availableModels, candidate) && isUsableTextToVideoModel(candidate)
-    ))
-    if (preferred) return preferred
-
-    const discovered = availableModels.find(isUsableTextToVideoModel)
-    if (discovered) return discovered
-  }
-
-  return providerDefaultModel
-    || providerFallbackModel
-    || DEFAULT_GENX_VIDEO_MODEL
+  throw new Error('GenX video transport requires the exact Orchestra-selected model')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -146,27 +111,6 @@ function extractResultUrl(data: Record<string, unknown>): string | undefined {
   }
 
   return undefined
-}
-
-function normalizeModelList(models: string[] | undefined): string[] {
-  return (models ?? [])
-    .map((model) => model.trim())
-    .filter((model, index, all): model is string => !!model && all.indexOf(model) === index)
-}
-
-function modelListIncludes(models: string[], model: string): boolean {
-  return models.some((candidate) => candidate.toLowerCase() === model.toLowerCase())
-}
-
-function isUsableTextToVideoModel(model: string): boolean {
-  const lower = model.toLowerCase()
-  if (lower.includes('avatar')) return false
-  return lower.includes('video')
-    || lower.includes('imagine')
-    || lower.includes('kling')
-    || lower.includes('seedance')
-    || lower.includes('veo')
-    || lower.includes('wan')
 }
 
 function redactSecrets(message: string, secrets: string[]): string {
@@ -308,7 +252,7 @@ export async function genxPollVideo(
 
 export async function genxDownloadVideo(
   url: string,
-  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model'> = {},
 ): Promise<GenxVideoResult> {
   const apiKey = resolveOptionalGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
@@ -430,7 +374,6 @@ export async function genxGenerateVideo(
             apiKey,
             baseUrl,
             model,
-            providerAvailableModels: request.providerAvailableModels,
           })
           return {
             ...video,

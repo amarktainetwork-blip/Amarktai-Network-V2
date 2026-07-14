@@ -7,7 +7,13 @@
 
 import { PROVIDER_KEYS, getProviderDefinition, getProviderDefaultBaseUrl, type ProviderKey } from './providers.js'
 import { CAPABILITY_FIELD_MAP, type CapabilityKey } from './capabilities.js'
-import { getExecutorRegistration, isExecutorModelCompatible, type ExecutorId } from './executor-registry.js'
+import {
+  getExecutorRegistration,
+  isExecutorModelCompatible,
+  type ExecutorId,
+  type ExecutorModelMetadata,
+} from './executor-registry.js'
+import { getModelRecord } from './model-catalog.js'
 
 // ── Routing Modes ──────────────────────────────────────────────
 
@@ -527,6 +533,10 @@ export interface DbModelRecord {
   estimatedUnitCost?: number | null
   pricingConfidence?: string | null
   capabilitiesJson?: string | null
+  rawMetadata?: string | null
+  category?: string | null
+  providerRawCategory?: string | null
+  providerRawType?: string | null
   [key: string]: unknown
 }
 
@@ -584,9 +594,16 @@ export function normalizeDbCandidates(
     const executorRegistration = getExecutorRegistration(capability, model.provider as ProviderKey)
     const adapterSupported = executorRegistration !== undefined
     const executorSupported = executorRegistration !== undefined
-    const requestShapeKnown = executorRegistration !== undefined
-    const responseShapeKnown = executorRegistration !== undefined
-    const modelCompatible = executorRegistration !== undefined && isExecutorModelCompatible(executorRegistration, model.modelId)
+    const compatibilityMetadata = executorModelMetadataFromDbRecord(model, exactCapabilities)
+    const profileCompatibility = executorRegistration?.modelCompatibility === 'metadata_profile'
+    const requestShapeKnown = profileCompatibility
+      ? compatibilityMetadata.requestShapeKnown === true
+      : executorRegistration !== undefined
+    const responseShapeKnown = profileCompatibility
+      ? compatibilityMetadata.responseShapeKnown === true
+      : executorRegistration !== undefined
+    const modelCompatible = executorRegistration !== undefined
+      && isExecutorModelCompatible(executorRegistration, model.modelId, compatibilityMetadata)
     const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
     const defaultBaseUrl = getProviderDefaultBaseUrl(model.provider as ProviderKey)
     const endpointReady = evidence.endpointReadyByProvider?.[model.provider as ProviderKey]
@@ -646,6 +663,32 @@ export function normalizeDbCandidates(
   return candidates
 }
 
+export function executorModelMetadataFromDbRecord(
+  model: DbModelRecord,
+  parsedCapabilities: CapabilityKey[] = parseCapabilityList(model.capabilitiesJson),
+): ExecutorModelMetadata {
+  const raw = parseJsonRecord(model.rawMetadata)
+  const compatibility = isRecord(raw.compatibility) ? raw.compatibility : raw
+  const canonical = (PROVIDER_KEYS as readonly string[]).includes(model.provider)
+    ? getModelRecord(model.provider as ProviderKey, model.modelId)
+    : undefined
+  return {
+    category: stringValue(compatibility.category) ?? canonical?.category ?? model.providerRawCategory ?? model.category ?? model.providerRawType,
+    capabilities: stringArray(compatibility.capabilities).length > 0
+      ? stringArray(compatibility.capabilities)
+      : parsedCapabilities.length > 0 ? parsedCapabilities : canonical?.capabilities,
+    modalitiesIn: stringArray(compatibility.modalitiesIn).length ? stringArray(compatibility.modalitiesIn) : canonical?.modalitiesIn,
+    modalitiesOut: stringArray(compatibility.modalitiesOut).length ? stringArray(compatibility.modalitiesOut) : canonical?.modalitiesOut,
+    transportProfile: stringValue(compatibility.transportProfile) ?? canonical?.transportProfile,
+    endpointFamily: stringValue(compatibility.endpointFamily) ?? canonical?.endpointFamily,
+    endpointShapeKnown: compatibility.endpointShapeKnown === true || canonical?.endpointShapeKnown === true,
+    requestShapeKnown: compatibility.requestShapeKnown === true || canonical?.requestShapeKnown === true,
+    responseShapeKnown: compatibility.responseShapeKnown === true || canonical?.responseShapeKnown === true,
+    providerClientExists: compatibility.providerClientExists === true || canonical?.providerClientExists === true,
+    workerExecutorExists: compatibility.workerExecutorExists === true || canonical?.workerExecutorExists === true,
+  }
+}
+
 function isHttpEndpoint(value: string): boolean {
   try {
     const url = new URL(value)
@@ -665,4 +708,26 @@ function parseCapabilityList(value: string | null | undefined): CapabilityKey[] 
   } catch {
     return []
   }
+}
+
+function parseJsonRecord(value: string | null | undefined): Record<string, unknown> {
+  if (!value?.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return isRecord(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }

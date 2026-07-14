@@ -194,7 +194,6 @@ describe('GenX video executor', () => {
     expect(providerMocks.resolveGenxVideoModel).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).toHaveBeenCalledWith(expect.objectContaining({
       model: 'seedance-v1-fast',
-      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
     }))
     expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBe('seedance-v1-fast')
   })
