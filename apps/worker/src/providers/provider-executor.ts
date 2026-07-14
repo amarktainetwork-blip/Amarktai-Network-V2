@@ -1196,7 +1196,8 @@ function canExecuteProviderForCapability(
       'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
       'table_qa', 'structured_output', 'tool_use',
     ]
-    return textCaps.includes(capability)
+    const audioCaps: CapabilityKey[] = ['tts', 'stt', 'text_to_audio', 'audio_to_audio']
+    return textCaps.includes(capability) || audioCaps.includes(capability)
   }
   if (provider === 'deepinfra') {
     const textCaps: CapabilityKey[] = [
@@ -1209,10 +1210,11 @@ function canExecuteProviderForCapability(
   }
   if (provider === 'together') {
     const imageCaps: CapabilityKey[] = ['image_generation', 'image_edit', 'image_to_image', 'image_upscale']
-    return imageCaps.includes(capability)
+    const audioCaps: CapabilityKey[] = ['tts', 'stt', 'voice_clone', 'voice_conversion', 'text_to_audio', 'audio_to_audio']
+    return imageCaps.includes(capability) || audioCaps.includes(capability)
   }
   if (provider === 'genx') {
-    return capability === 'video_generation' || capability === 'music_generation'
+    return capability === 'video_generation' || capability === 'music_generation' || capability === 'song_generation'
   }
   return false
 }
