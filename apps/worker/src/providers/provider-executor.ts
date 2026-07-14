@@ -426,6 +426,24 @@ const TEXT_CAPABILITY_SYSTEM_PROMPTS: Partial<Record<CapabilityKey, (payload: Wo
     const schema = readString(payload.input, 'schema') || readString(payload.metadata, 'schema')
     return `You are a structured output assistant. Return valid JSON that matches this schema: ${schema || 'No schema provided - infer appropriate structure'}. Return ONLY valid JSON, no explanation.`
   },
+  question_answering: () => 'You are a question answering assistant. Answer the question based on the provided context. If the context does not contain the answer, say so clearly.',
+  zero_shot_classification: (payload) => {
+    const labels = readString(payload.input, 'labels') || readString(payload.metadata, 'labels')
+    return `You are a zero-shot classification assistant. Classify the text into one of these categories: ${labels || 'No labels provided'}. Return only the category name.`
+  },
+  token_classification: () => 'You are a token classification assistant. Identify and classify named entities, parts of speech, or other token-level annotations in the text. Return structured results.',
+  fill_mask: () => 'You are a fill-mask assistant. Predict the most likely word or phrase that fills the [MASK] token in the provided text. Return the prediction.',
+  feature_extraction: () => 'You are a feature extraction assistant. Extract key features, attributes, or characteristics from the provided text. Return structured results.',
+  sentence_similarity: (payload) => {
+    const sentences = readString(payload.input, 'sentences') || readString(payload.metadata, 'sentences')
+    return `You are a sentence similarity assistant. Compare the sentences and return a similarity score between 0 and 1. Sentences: ${sentences || 'No sentences provided'}`
+  },
+  table_qa: () => 'You are a table question answering assistant. Answer questions about the provided table data. Return clear, concise answers based on the table content.',
+  tool_use: (payload) => {
+    const tools = readString(payload.input, 'tools') || readString(payload.metadata, 'tools')
+    return `You are a tool-use assistant. You have access to these tools: ${tools || 'No tools provided'}. Use the appropriate tool to answer the question. Return the tool call in the correct format.`
+  },
+  streaming_chat: () => 'You are a helpful assistant. Provide clear, helpful responses.',
 }
 
 async function executeGroqTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
@@ -1172,11 +1190,21 @@ function canExecuteProviderForCapability(
   provider: ProviderKey,
 ): boolean {
   if (provider === 'groq') {
-    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
+    const textCaps: CapabilityKey[] = [
+      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
+      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
+      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
+      'table_qa', 'structured_output', 'tool_use',
+    ]
     return textCaps.includes(capability)
   }
   if (provider === 'deepinfra') {
-    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
+    const textCaps: CapabilityKey[] = [
+      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
+      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
+      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
+      'table_qa', 'structured_output', 'tool_use',
+    ]
     return textCaps.includes(capability)
   }
   if (provider === 'together') {
