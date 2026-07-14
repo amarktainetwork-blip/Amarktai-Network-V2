@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
+import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, getDashboardAppSlug, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
 import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
@@ -41,8 +41,9 @@ function normalizeStudioCapability(capability: unknown, proofStatus: RuntimeProo
   return provenOrKnown ? value : null
 }
 
-function isCapabilityProven(capability: string, proofStatus: RuntimeProofStatusPayload): boolean {
-  return proofStatus.provenCapabilities.some((c) => c.capability === capability && c.readyForDashboardExecution)
+function isCapabilityDashboardReady(capability: string, proofStatus: RuntimeProofStatusPayload): boolean {
+  return [...proofStatus.provenCapabilities, ...proofStatus.unprovenCapabilities]
+    .some((item) => item.capability === capability && item.readyForDashboardExecution)
 }
 
 export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
@@ -80,13 +81,13 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Evaluate runtime proof from the single snapshot
-    if (!isCapabilityProven(capability, proofStatus)) {
-      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not proven or not ready for dashboard execution` })
+    if (!isCapabilityDashboardReady(capability, proofStatus)) {
+      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
     }
 
     // Create job
-    const appSlug = 'dashboard-studio'
     const canonicalCapability = capability as CapabilityKey
+    const appSlug = getDashboardAppSlug(canonicalCapability)
     const grantResolution = await resolveAppCapabilityGrantSnapshot(appSlug, canonicalCapability)
     if (!grantResolution || !grantResolution.grant.enabled) {
       return reply.status(403).send({ error: true, message: `No enabled AppCapabilityGrant exists for ${appSlug}/${capability}` })

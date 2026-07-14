@@ -6,18 +6,19 @@ const ROOT = path.join(import.meta.dirname, '..')
 
 describe('dashboard polish and routing map contract', () => {
   describe('main nav remains simple', () => {
-    it('DASHBOARD_PAGES contains the 8 main sections', async () => {
+    it('DASHBOARD_PAGES contains the 9 release workspaces', async () => {
       const { DASHBOARD_PAGES } = await import('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
       expect(labels).toContain('Chat')
       expect(labels).toContain('Image')
       expect(labels).toContain('Video')
       expect(labels).toContain('Music')
+      expect(labels).toContain('Voice')
       expect(labels).toContain('Research')
       expect(labels).toContain('Library')
       expect(labels).toContain('Operations')
       expect(labels).toContain('Settings')
-      expect(DASHBOARD_PAGES.length).toBe(8)
+      expect(DASHBOARD_PAGES.length).toBe(9)
     })
   })
 
@@ -34,24 +35,20 @@ describe('dashboard polish and routing map contract', () => {
       expect(capLab.href).toBe('/dashboard/capability-lab')
     })
 
-    it('Capability Lab page contains canonical capability families', () => {
+    it('Capability Lab derives the callable release set from canonical truth', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/capability-lab/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Language')
-      expect(content).toContain('Image')
-      expect(content).toContain('Video')
-      expect(content).toContain('Audio')
-      expect(content).toContain('Knowledge')
-      expect(content).toContain('Marketing')
-      expect(content).toContain('Adult Governed')
+      expect(content).toContain('/api/admin/truth')
+      expect(content).toContain('releaseReadiness')
+      expect(content).toContain("item.appSlug === 'dashboard-capability-lab'")
     })
 
-    it('Capability Lab references platform architecture', () => {
+    it('Capability Lab executes through the canonical Studio job flow', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/capability-lab/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Platform Architecture')
-      expect(content).toContain('central capability platform')
-      expect(content).toContain('External apps')
+      expect(content).toContain('submitJob')
+      expect(content).toContain('pollJob')
+      expect(content).toContain('Orchestra owns routing')
     })
   })
 
@@ -117,20 +114,18 @@ describe('dashboard polish and routing map contract', () => {
     })
   })
 
-  describe('Image page shows Balanced/Premium/Fast/Budget but does not expose provider/model selectors', () => {
-    it('Image page contains quality mode controls', () => {
+  describe('Image page exposes only canonical image generation', () => {
+    it('Image page contains automatic canonical routing', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Balanced')
-      expect(content).toContain('Premium')
-      expect(content).toContain('Fast')
-      expect(content).toContain('Budget')
+      expect(content).toContain('Auto mode')
+      expect(content).toContain('image_generation')
     })
 
-    it('Image page quality mode controls are disabled', () => {
+    it('Image page gates execution from canonical readiness', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Routing backend pending')
+      expect(content).toContain('readyForDashboardExecution')
     })
 
     it('Image page does not expose provider/model selectors', () => {
@@ -141,53 +136,49 @@ describe('dashboard polish and routing map contract', () => {
       expect(content).toContain('Provider/model selection is handled by the platform runtime')
     })
 
-    it('Image page shows pending capabilities', () => {
+    it('Image page honestly excludes non-release image capabilities', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Image Edit')
-      expect(content).toContain('Upscale')
-      expect(content).toContain('Variations')
+      expect(content).toContain('Image editing, inpainting, upscaling, and variations remain outside')
     })
 
-    it('Image page has planned controls section', () => {
+    it('Image page has authenticated preview and download controls', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Planned Controls')
-      expect(content).toContain('Aspect Ratio')
-      expect(content).toContain('Style')
-      expect(content).toContain('Negative Prompt')
-      expect(content).toContain('Seed')
-      expect(content).toContain('Brand Mode')
+      expect(content).toContain('previewUrl')
+      expect(content).toContain('?download=1')
+      expect(content).toContain('URL.revokeObjectURL')
     })
   })
 
-  describe('Video page shows short/live and long-form durable Phase 1 honestly', () => {
-    it('Video page shows short video as live capability', () => {
+  describe('Video page exposes current source-aware and durable modes', () => {
+    it('Video page shows text-to-video through runtime readiness', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Short Video')
-      expect(content).toContain('Live')
+      expect(content).toContain('Text to video')
+      expect(content).toContain('readyForDashboardExecution')
     })
 
-    it('Video page shows automatic durable multimedia orchestration', () => {
+    it('Video page shows persistent durable multimedia orchestration', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Long-Form Video')
-      expect(content).toContain('Automatic')
-      expect(content).toContain('Long-Form Workflow')
-      expect(content).toContain('final assembly progress automatically')
+      expect(content).toContain('Long-form video')
+      expect(content).toContain('LONG_EXECUTION_KEY')
+      expect(content).toContain('componentState')
+      expect(content).toContain('Download final video')
     })
 
-    it('Video page shows image-to-video as pending', () => {
+    it('Video page shows image-to-video with source selection', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Image-to-Video')
+      expect(content).toContain('Image to video')
+      expect(content).toContain('sourceImageArtifactId')
     })
 
-    it('Video page shows storyboard as pending', () => {
+    it('Video page delegates storyboard planning to long-form execution', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Storyboard')
+      expect(content).toContain('/api/admin/long-form-video/executions')
     })
 
     it('Video page shows voiceover/subtitles as pending', () => {
@@ -197,18 +188,13 @@ describe('dashboard polish and routing map contract', () => {
       expect(content).toContain('Subtitles')
     })
 
-    it('Video page has planned controls', () => {
+    it('Video page has source provenance and component controls', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/video/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Quality Mode')
-      expect(content).toContain('Balanced')
-      expect(content).toContain('Premium')
-      expect(content).toContain('Fast')
-      expect(content).toContain('Budget')
-      expect(content).toContain('Aspect Ratio')
-      expect(content).toContain('Scene Count')
-      expect(content).toContain('Storyboard Outline')
-      expect(content).toContain('Brand Mode')
+      expect(content).toContain('Source provenance')
+      expect(content).toContain('Voiceover')
+      expect(content).toContain('Subtitles')
+      expect(content).toContain('Assembly')
     })
   })
 
@@ -267,41 +253,31 @@ describe('dashboard polish and routing map contract', () => {
       expect(content).toContain('Turn into Campaign Idea')
     })
 
-    it('Research page shows backend pending', () => {
+    it('Research page marks the capability excluded from this release', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/research/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Backend Pending')
+      expect(content).toContain('Excluded from this release')
     })
   })
 
-  describe('Operations page has all required metrics', () => {
-    it('Operations page contains all required metrics', () => {
+  describe('Operations page has real dependency health', () => {
+    it('Operations page contains all required health checks', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/operations/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Active Users')
-      expect(content).toContain('Logged-In Users')
-      expect(content).toContain('Jobs Queued')
-      expect(content).toContain('Jobs Running')
-      expect(content).toContain('Failed Jobs')
-      expect(content).toContain('Average Wait Time')
-      expect(content).toContain('P95 Wait Time')
-      expect(content).toContain('Worker Concurrency')
-      expect(content).toContain('Provider Spend')
-      expect(content).toContain('App Spend')
-      expect(content).toContain('Revenue')
-      expect(content).toContain('Margin')
-      expect(content).toContain('Storage')
-      expect(content).toContain('DB Health')
-      expect(content).toContain('Redis Health')
-      expect(content).toContain('Qdrant Health')
-      expect(content).toContain('Upgrade Warning')
+      expect(content).toContain('API process')
+      expect(content).toContain('MariaDB')
+      expect(content).toContain('Redis')
+      expect(content).toContain('Qdrant')
+      expect(content).toContain('Artifact storage')
+      expect(content).toContain('FFmpeg')
+      expect(content).toContain('Worker heartbeat')
     })
 
-    it('Operations page shows metrics as pending', () => {
+    it('Operations page distinguishes liveness from readiness', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/operations/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('metric pending')
-      expect(content).toContain('Metrics not wired yet')
+      expect(content).toContain('Process liveness is reported separately')
+      expect(content).toContain("health?.ready ? 'Ready'")
     })
   })
 })

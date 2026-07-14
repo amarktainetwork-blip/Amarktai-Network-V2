@@ -69,6 +69,16 @@ describe('app platform contract', () => {
     expect(content).toContain('requireAdmin')
   })
 
+  it('admin app connections persist explicit release-candidate grants', () => {
+    const routePath = path.join(ROOT, 'apps/api/src/routes/admin-app-connections.ts')
+    const content = fs.readFileSync(routePath, 'utf8')
+    expect(content).toContain('getReleaseCandidateCapabilityKeys')
+    expect(content).toContain('appCapabilityGrant.createMany')
+    expect(content).toContain('appCapabilityGrant.upsert')
+    expect(content).toContain('passthroughModelAllowed: false')
+    expect(content).toContain('adultPermission: false')
+  })
+
   it('admin app connections route has key lifecycle', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-app-connections.ts')
     const content = fs.readFileSync(routePath, 'utf8')
@@ -186,11 +196,9 @@ describe('app platform contract', () => {
     expect(APPROVED_PROVIDER_DEFINITIONS.find(provider => provider.key === 'mimo')).toMatchObject({ codingOnly: true, backendExecutionAllowed: false })
   })
 
-  it('adult generation remains on hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('adult generation remains policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 
   it('no provider/model selectors are exposed', () => {

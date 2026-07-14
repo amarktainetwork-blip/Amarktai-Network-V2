@@ -9,6 +9,7 @@ import {
   createSceneExecutionPayloads,
   generateSubtitles,
   getExecutorRegistrations,
+  getReleaseCandidateCapabilityKeys,
   hasExecutorRegistration,
   type CapabilityKey,
   type LongFormComponentRuntimeState,
@@ -238,12 +239,13 @@ export function buildLongFormComponentRuntimeState(
 export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth & { evidenceAvailable: boolean }> {
   let providerStatuses: Awaited<ReturnType<typeof listProviderCredentialStatuses>> = []
   let completedJobs: ProofJob[] = []
+  let appGrantRows: Array<{ appSlug: string; capability: string; enabled: boolean }> = []
   let evidenceAvailable = true
   let jobPersistenceReady = false
 
   try {
     jobPersistenceReady = typeof prisma.job.create === 'function' && typeof prisma.job.update === 'function'
-    ;[providerStatuses, completedJobs] = await Promise.all([
+    ;[providerStatuses, completedJobs, appGrantRows] = await Promise.all([
       listProviderCredentialStatuses(),
       prisma.job.findMany({
         where: { status: 'completed' },
@@ -262,6 +264,10 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
           metadataJson: true,
         },
         take: 500,
+      }),
+      prisma.appCapabilityGrant.findMany({
+        where: { capability: { in: getReleaseCandidateCapabilityKeys() } },
+        select: { appSlug: true, capability: true, enabled: true },
       }),
     ])
   } catch {
@@ -332,6 +338,13 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
   }
 
   const longFormComponents = buildLongFormComponentRuntimeState(queueInfrastructureReady, capabilities, jobPersistenceReady)
-  const truth = getRuntimeTruth({ providers, capabilities, longFormComponents })
+  const appGrants: NonNullable<RuntimeTruthInput['appGrants']> = {}
+  for (const grant of appGrantRows) {
+    if (!grant.enabled) continue
+    const existing = appGrants[grant.appSlug] ?? {}
+    existing[grant.capability as CapabilityKey] = true
+    appGrants[grant.appSlug] = existing
+  }
+  const truth = getRuntimeTruth({ providers, capabilities, longFormComponents, appGrants })
   return { ...truth, evidenceAvailable: proofResult.evidenceAvailable && evidenceAvailable }
 }

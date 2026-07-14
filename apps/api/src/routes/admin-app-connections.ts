@@ -1,6 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
+import { getReleaseCandidateCapabilityKeys } from '@amarktai/core'
 import { randomUUID, createHash } from 'crypto'
+
+const RELEASE_CAPABILITY_SET = new Set<string>(getReleaseCandidateCapabilityKeys())
+
+function parseReleaseCapabilities(value: unknown): { values: string[]; invalid: string[] } {
+  const values = Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()))]
+    : []
+  return { values, invalid: values.filter((capability) => !RELEASE_CAPABILITY_SET.has(capability)) }
+}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -64,13 +74,19 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
     if (!(await requireAdmin(app, request, reply))) return
 
     const body = request.body as Record<string, unknown>
-    const appSlug = body.appSlug as string
-    const appName = body.appName as string
-    const allowedCapabilities = body.allowedCapabilities as string[] | undefined
+    const appSlug = typeof body.appSlug === 'string' ? body.appSlug.trim() : ''
+    const appName = typeof body.appName === 'string' ? body.appName.trim() : ''
+    const allowedCapabilities = parseReleaseCapabilities(body.allowedCapabilities)
     const dailyBudgetCents = body.dailyBudgetCents as number | undefined
 
     if (!appSlug || !appName) {
       return reply.status(400).send({ error: true, message: 'appSlug and appName are required' })
+    }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(appSlug)) {
+      return reply.status(400).send({ error: true, message: 'appSlug must contain lowercase letters, numbers, and single hyphens only' })
+    }
+    if (allowedCapabilities.invalid.length > 0) {
+      return reply.status(400).send({ error: true, message: `Capabilities are not in the release-candidate set: ${allowedCapabilities.invalid.join(', ')}` })
     }
 
     const existing = await prisma.appConnection.findUnique({ where: { appSlug } })
@@ -78,13 +94,28 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
       return reply.status(409).send({ error: true, message: `App connection '${appSlug}' already exists` })
     }
 
-    const connection = await prisma.appConnection.create({
-      data: {
-        appSlug,
-        appName,
-        allowedCapabilities: JSON.stringify(allowedCapabilities || []),
-        dailyBudgetCents: dailyBudgetCents || 0,
-      },
+    const connection = await prisma.$transaction(async (transaction) => {
+      const created = await transaction.appConnection.create({
+        data: {
+          appSlug,
+          appName,
+          allowedCapabilities: JSON.stringify(allowedCapabilities.values),
+          dailyBudgetCents: Number.isSafeInteger(dailyBudgetCents) && Number(dailyBudgetCents) >= 0 ? Number(dailyBudgetCents) : 0,
+        },
+      })
+      if (allowedCapabilities.values.length > 0) {
+        await transaction.appCapabilityGrant.createMany({
+          data: allowedCapabilities.values.map((capability) => ({
+            appSlug,
+            capability,
+            enabled: true,
+            adultPermission: false,
+            passthroughModelAllowed: false,
+            policyProfile: 'standard',
+          })),
+        })
+      }
+      return created
     })
 
     return reply.status(201).send({
@@ -107,16 +138,30 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
       return reply.status(404).send({ error: true, message: 'App connection not found' })
     }
 
+    const requestedCapabilities = body.allowedCapabilities === undefined ? null : parseReleaseCapabilities(body.allowedCapabilities)
+    if (requestedCapabilities && requestedCapabilities.invalid.length > 0) {
+      return reply.status(400).send({ error: true, message: `Capabilities are not in the release-candidate set: ${requestedCapabilities.invalid.join(', ')}` })
+    }
     const updateData: Record<string, unknown> = {}
     if (body.appName !== undefined) updateData.appName = body.appName
     if (body.status !== undefined) updateData.status = body.status
-    if (body.allowedCapabilities !== undefined) updateData.allowedCapabilities = JSON.stringify(body.allowedCapabilities)
+    if (requestedCapabilities) updateData.allowedCapabilities = JSON.stringify(requestedCapabilities.values)
     if (body.dailyBudgetCents !== undefined) updateData.dailyBudgetCents = body.dailyBudgetCents
     if (body.tokenBalance !== undefined) updateData.tokenBalance = body.tokenBalance
 
-    const updated = await prisma.appConnection.update({
-      where: { appSlug },
-      data: updateData,
+    const updated = await prisma.$transaction(async (transaction) => {
+      const changed = await transaction.appConnection.update({ where: { appSlug }, data: updateData })
+      if (requestedCapabilities) {
+        await transaction.appCapabilityGrant.updateMany({ where: { appSlug }, data: { enabled: false } })
+        for (const capability of requestedCapabilities.values) {
+          await transaction.appCapabilityGrant.upsert({
+            where: { app_capability_grant_unique: { appSlug, capability } },
+            create: { appSlug, capability, enabled: true, adultPermission: false, passthroughModelAllowed: false, policyProfile: 'standard' },
+            update: { enabled: true, adultPermission: false, passthroughModelAllowed: false },
+          })
+        }
+      }
+      return changed
     })
 
     return reply.send({

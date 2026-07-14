@@ -506,11 +506,9 @@ describe('Adult generation remains on hold', () => {
     }
   })
 
-  it('dashboard shows adult generation as On Hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('canonical truth keeps adult generation policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 })
 

@@ -20,7 +20,9 @@ import {
   type MusicReferenceUploadRequest,
 } from '@amarktai/core'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
+const APP_SLUG = 'dashboard-music'
 const REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES = MAX_REFERENCE_AUDIO_BYTES
 
 async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
@@ -228,6 +230,10 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/admin/music/reference-audio', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+    if (!grantResolution?.grant.enabled || !grantResolution.grant.artifactWrite) {
+      return reply.status(403).send({ error: true, message: 'Music AppCapabilityGrant denies artifact upload' })
+    }
 
     try {
       if (!request.isMultipart()) {
@@ -246,7 +252,7 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
 
       const fields = file.fields as Record<string, unknown>
       const upload = validateMusicReferenceUploadRequest({
-        appSlug: fieldValue(fields, 'appSlug') ?? 'admin-music',
+        appSlug: APP_SLUG,
         filename: sanitizeFilename(file.filename || fieldValue(fields, 'filename') || 'reference-audio'),
         mimeType: file.mimetype || fieldValue(fields, 'mimeType') || 'application/octet-stream',
         durationSeconds: parseOptionalNumber(fieldValue(fields, 'durationSeconds')),
@@ -270,7 +276,7 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: true, message: `Unsupported reference audio MIME type: ${upload.mimeType}` })
       }
 
-      const appSlug = upload.appSlug || 'admin-music'
+      const appSlug = APP_SLUG
       const traceId = `trace_${randomUUID()}`
       const checksum = createHash('sha256').update(data).digest('hex')
       const uploader = await getAdminSubject(app, request)
@@ -358,10 +364,14 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/admin/music/reference-audio/:id/analyze', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+    if (!grantResolution?.grant.enabled || !grantResolution.grant.artifactRead) {
+      return reply.status(403).send({ error: true, message: 'Music AppCapabilityGrant denies artifact read' })
+    }
 
     const { id } = request.params as { id: string }
     try {
-      const profile = await loadReferenceProfile(id, 'admin-music')
+      const profile = await loadReferenceProfile(id, APP_SLUG)
       return reply.send({
         success: true,
         artifactId: id,
@@ -396,7 +406,7 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const status = await getAdminMusicCapabilityStatus(app)
       let inspirationProfile: MusicInspirationProfile | null = null
       if (musicRequest.referenceAudioArtifactId) {
-        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, 'admin-music')
+        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, APP_SLUG)
       }
       const plan = {
         ...rawPlan,
@@ -441,7 +451,7 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       const status = await getAdminMusicCapabilityStatus(app)
       let inspirationProfile: MusicInspirationProfile | null = null
       if (musicRequest.referenceAudioArtifactId) {
-        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, 'admin-music')
+        inspirationProfile = await loadReferenceProfile(musicRequest.referenceAudioArtifactId, APP_SLUG)
       }
       const plan = {
         ...rawPlan,
@@ -454,9 +464,9 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
       // Music may be queued only when implementation gates are present.
       // liveProven=true is NOT required to run the first proof.
       if (!status.executableNow || !plan.executionReady) {
-        const blockerMessage = !status.executableNow
-          ? status.blockedReason || plan.blockedReason
-          : plan.blockedReason || status.blockedReason
+        const blockerMessage = rawPlan.blockedReasons.length > 0
+          ? rawPlan.blockedReason
+          : status.blockedReason || plan.blockedReason
         return reply.status(409).send({
           error: true,
           success: false,
@@ -472,8 +482,13 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
         })
       }
 
+      const grantResolution = await resolveAppCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+      if (!grantResolution?.grant.enabled) {
+        return reply.status(403).send({ error: true, message: 'No enabled AppCapabilityGrant exists for dashboard-music/music_generation' })
+      }
+
       // Create canonical Job
-      const appSlug = 'admin-music'
+      const appSlug = APP_SLUG
       const traceId = `trace_${randomUUID()}`
       const safePrompt = plan.providerPrompt.substring(0, 10000)
       const inputObj = {
@@ -498,7 +513,12 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
           capability: 'music_generation',
           prompt: safePrompt,
           inputJson: JSON.stringify(inputObj),
-          metadataJson: JSON.stringify({ routingMode: musicRequest.routingMode }),
+          metadataJson: JSON.stringify({
+            routingMode: musicRequest.routingMode,
+            appGrantSnapshot: grantResolution.grant,
+            appGrantSnapshotSource: grantResolution.source,
+            appGrantSnapshotAt: new Date().toISOString(),
+          }),
           traceId,
           status: 'queued',
         },
@@ -518,8 +538,12 @@ export async function adminMusicRoutes(app: FastifyInstance): Promise<void> {
             originalPrompt: musicRequest.prompt,
             musicFeatureContract: rawPlan.derivedPromptOnlyFields,
             referenceAudioAnalysisMode: rawPlan.referenceAudioAnalysisMode,
+            appGrantSnapshot: grantResolution.grant,
+            appGrantSnapshotSource: grantResolution.source,
+            appGrantSnapshotAt: new Date().toISOString(),
           },
           traceId,
+          appGrantSnapshot: grantResolution.grant,
         }
         app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability: 'music_generation', traceId }, 'Enqueuing music generation job')
         await q.add('process-job', payload, { jobId: job.id })

@@ -109,7 +109,8 @@ describe('Docker entrypoint safety contract', () => {
     expect(script).toContain('docker info')
     // Must check migration files exist
     expect(script).toContain('prisma/migrations/20250701_baseline_fc21a6e/migration.sql')
-    expect(script).toContain('prisma/migrations/20260711_add_job_orchestration/migration.sql')
+    expect(script).toContain('for migration_dir in prisma/migrations/*')
+    expect(script).toContain('[ -f "$migration_dir/migration.sql" ]')
     // Must check schema.prisma exists
     expect(script).toContain('prisma/schema.prisma')
     // Must not print passwords

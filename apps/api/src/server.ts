@@ -30,8 +30,14 @@ import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
 import { appGrantRoutes } from './routes/admin-app-grants.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
+import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
+import { assertDatabaseSchemaCurrent } from '@amarktai/db'
+import { assertReleaseFixtureModeConfiguration, bootstrapReleaseFixtureProviders } from './lib/release-fixture-mode.js'
 
 async function main(): Promise<void> {
+  assertReleaseFixtureModeConfiguration()
+  await assertDatabaseSchemaCurrent()
+  await bootstrapReleaseFixtureProviders()
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
@@ -71,6 +77,7 @@ async function main(): Promise<void> {
   await app.register(artifactRoutes)
 
   await ensureDefaultAdminExists(app.log)
+  await bootstrapInternalDashboardApps(app.log)
 
   try {
     await app.listen({ port: API_PORT, host: API_HOST })

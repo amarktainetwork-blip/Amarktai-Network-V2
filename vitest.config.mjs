@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   test: {
+    exclude: ['tests/browser/**', 'node_modules/**'],
     environment: 'node',
     testTimeout: 30000,
     hookTimeout: 30000,

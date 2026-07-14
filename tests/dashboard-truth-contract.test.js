@@ -26,19 +26,19 @@ describe('dashboard truth contract', () => {
     expect(content).not.toContain("'route_pending'")
   })
 
-  it('Command Center shows Marketing-first platform roadmap', () => {
+  it('Command Center uses canonical System Monitoring', () => {
     const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
     const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('Marketing-First Platform Roadmap')
-    expect(content).toContain('Proven Capabilities')
-    expect(content).toContain('Marketing App MVP Dependencies')
+    expect(content).toContain("export { default } from '../operations/page'")
+    const operations = fs.readFileSync(path.join(ROOT, 'app/dashboard/operations/page.js'), 'utf8')
+    expect(operations).toContain('/api/system/health')
+    expect(operations).toContain('/api/admin/truth')
   })
 
   it('Command Center shows correct integration status', () => {
     const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
     const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('Studio job submission')
-    expect(content).toContain('Wired')
+    expect(content).toContain("export { default } from '../operations/page'")
     expect(content).not.toContain('UI not connected')
   })
 
@@ -67,10 +67,9 @@ describe('dashboard truth contract', () => {
     expect(content).not.toContain('SelectModel')
   })
 
-  it('adult generation remains on hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('adult generation remains policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    const adult = getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_'))
+    expect(adult.every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 })

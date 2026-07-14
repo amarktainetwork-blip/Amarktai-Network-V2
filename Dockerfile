@@ -99,6 +99,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Copy migration deploy script (used by migrate service, not by API/worker)
 COPY scripts/prisma-migrate-deploy.mjs scripts/prisma-migrate-deploy.mjs
+COPY scripts/release-fixture-queue-control.mjs scripts/release-fixture-queue-control.mjs
 
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
@@ -134,9 +135,10 @@ FROM production-base AS worker
 ENV SERVICE_NAME=amarktai-worker \
     WORKER_HEALTH_PORT=3002
 
-# Install Playwright Chromium and system dependencies
+# Install FFmpeg for durable long-form assembly, then Playwright Chromium.
 # This must happen in the production stage (not build) so the browsers persist
-RUN npx playwright install chromium --with-deps
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* && \
+    npx playwright install chromium --with-deps
 
 COPY --from=build /app/apps/worker/dist apps/worker/dist
 COPY apps/worker/package.json apps/worker/package.json

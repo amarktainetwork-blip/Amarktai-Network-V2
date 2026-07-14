@@ -453,7 +453,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsStreaming: false,
     supportsBatch: false,
     executable: false,
-    notes: 'GenX image generation. Not yet wired. Together remains primary for image.',
+    notes: 'GenX image execution is policy-disabled for this release; Together remains the callable image provider.',
   },
   {
     provider: 'genx',
@@ -468,7 +468,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsStreaming: false,
     supportsBatch: false,
     executable: false,
-    notes: 'Long-form video. Pending storyboard and multi-scene assembly.',
+    notes: 'Durable long-form workflow with storyboard planning, queued component execution, and idempotent FFmpeg assembly. Provider and infrastructure readiness are evaluated separately.',
   },
   {
     provider: 'genx',

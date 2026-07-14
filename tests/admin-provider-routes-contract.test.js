@@ -304,7 +304,7 @@ describe('Admin provider credential routes', () => {
 
     expect(res.statusCode).toBe(200)
     const update = dbMocks.updateProviderHealthStatus.mock.calls[0][0]
-    expect(update.healthStatus).toBe('failed')
+    expect(update.healthStatus).toBe('authentication_failed')
     expect(update.healthMessage).toContain('[redacted]')
     expect(update.healthMessage).not.toContain('gsk_live_secret_abcd')
     expect(update.healthMessage).not.toContain('jwt-secret-value')
@@ -480,7 +480,7 @@ describe('Admin provider credential routes', () => {
     expect(res.statusCode).toBe(200)
     const update = dbMocks.updateProviderHealthStatus.mock.calls[0][0]
     expect(update.providerKey).toBe('deepinfra')
-    expect(update.healthStatus).toBe('failed')
+    expect(update.healthStatus).toBe('authentication_failed')
     expect(update.healthMessage).not.toContain('deepinfra-secret-key')
     expect(update.healthMessage).not.toContain('v1:ciphertext')
     expect(res.body).not.toContain('deepinfra-secret-key')
@@ -578,7 +578,7 @@ describe('Admin provider credential routes', () => {
     expect(res.statusCode).toBe(200)
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
       providerKey: 'deepinfra',
-      healthStatus: 'failed',
+      healthStatus: 'insufficient_credit',
       healthMessage: 'DeepInfra account has insufficient balance for inference. Add balance/top-up before this provider can be marked live.',
     }))
     expect(res.body).not.toContain('deepinfra-secret-key')

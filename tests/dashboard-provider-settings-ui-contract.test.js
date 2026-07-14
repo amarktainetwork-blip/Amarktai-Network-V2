@@ -187,7 +187,6 @@ describe('Dashboard provider settings UI contract', () => {
       workerRuntimeAllowed: false,
       fallbackEligible: false,
       browserExposureAllowed: false,
-      requiresServerSideTerminal: true,
     })
   })
 

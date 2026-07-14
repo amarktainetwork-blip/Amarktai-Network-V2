@@ -21,6 +21,9 @@ APP_VERSION="${APP_VERSION:-1.0.0}"
 }
 : "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required for authenticated post-deploy proof}"
 
+export REPO_DIR DEPLOY_BRANCH BACKUP_DIR DEPLOY_SHA
+bash "$REPO_DIR/deploy/preflight.sh"
+
 cd "$REPO_DIR"
 git rev-parse --is-inside-work-tree >/dev/null
 
@@ -85,6 +88,25 @@ docker tag "$API_IMAGE_ID" "amarktai/api:$ROLLBACK_SHA"
 docker tag "$WORKER_IMAGE_ID" "amarktai/worker:$ROLLBACK_SHA"
 docker tag "$DASHBOARD_IMAGE_ID" "amarktai/dashboard:$ROLLBACK_SHA"
 
+DEPLOY_STARTED=false
+rollback_application() {
+  echo "[rollback] restoring immutable application images for $ROLLBACK_SHA" >&2
+  export GIT_SHA="$ROLLBACK_SHA"
+  export BUILD_TIME="rollback-$ROLLBACK_SHA"
+  docker compose up -d --no-build api worker dashboard || true
+  echo "[rollback] additive database migration was retained for backward compatibility" >&2
+}
+on_error() {
+  code=$?
+  echo "ERROR: deployment failed with exit code $code" >&2
+  if [[ "${DEPLOY_STARTED:-false}" == true ]]; then
+    rollback_application
+  fi
+  echo "Recovery: cd '$REPO_DIR' && GIT_SHA='$ROLLBACK_SHA' BUILD_TIME='rollback-$ROLLBACK_SHA' docker compose up -d --no-build api worker dashboard" >&2
+  exit "$code"
+}
+trap on_error ERR
+
 confirm_mount() {
   local service="$1"
   local destination="$2"
@@ -130,6 +152,14 @@ docker compose exec -T mariadb sh -c 'mariadb-dump -uroot -p"$MYSQL_ROOT_PASSWOR
 }
 echo "[preflight] MariaDB backup: $BACKUP_FILE"
 
+ARTIFACT_BACKUP_FILE="$BACKUP_DIR/artifacts-${ROLLBACK_SHA}-$(date -u +%Y%m%dT%H%M%SZ).tar"
+docker compose exec -T api tar -C /var/www/amarktai/storage -cf - . > "$ARTIFACT_BACKUP_FILE"
+[[ -s "$ARTIFACT_BACKUP_FILE" ]] || {
+  echo "ERROR: persistent artifact-volume backup is empty" >&2
+  exit 2
+}
+echo "[preflight] Artifact-volume backup: $ARTIFACT_BACKUP_FILE"
+
 # The worktree is clean and the remote branch head was pinned above. A detached
 # checkout prevents any implicit branch merge or reset while deploying that SHA.
 git switch --detach "$DEPLOY_SHA"
@@ -155,24 +185,6 @@ docker compose run --rm --entrypoint npx api prisma migrate deploy --schema=./pr
 docker compose run --rm --entrypoint npx api prisma migrate status --schema=./prisma/schema.prisma
 
 DEPLOY_STARTED=true
-rollback_application() {
-  echo "[rollback] restoring immutable application images for $ROLLBACK_SHA" >&2
-  export GIT_SHA="$ROLLBACK_SHA"
-  export BUILD_TIME="rollback-$ROLLBACK_SHA"
-  docker compose up -d --no-build api worker dashboard || true
-  echo "[rollback] additive database migration was retained for backward compatibility" >&2
-}
-on_error() {
-  code=$?
-  echo "ERROR: deployment failed with exit code $code" >&2
-  if [[ "${DEPLOY_STARTED:-false}" == true ]]; then
-    rollback_application
-  fi
-  echo "Recovery: cd '$REPO_DIR' && GIT_SHA='$ROLLBACK_SHA' BUILD_TIME='rollback-$ROLLBACK_SHA' docker compose up -d --no-build api worker dashboard" >&2
-  exit "$code"
-}
-trap on_error ERR
-
 docker compose up -d --no-build api worker dashboard
 
 wait_for_health() {
@@ -221,9 +233,19 @@ npm run proof
 npm run proof
 npm run proof
 
+PRODUCTION_PROOF_FILE="$BACKUP_DIR/release-proof-${DEPLOY_SHA}-$(date -u +%Y%m%dT%H%M%SZ).json"
+node scripts/proof-production-release-candidate.mjs \
+  --base-url http://127.0.0.1:3000 \
+  --strict \
+  --long-form \
+  --json-output "$PRODUCTION_PROOF_FILE"
+chmod 600 "$PRODUCTION_PROOF_FILE"
+
 trap - ERR
 echo "DEPLOYMENT_COMPLETE"
 echo "DEPLOY_SHA=$DEPLOY_SHA"
 echo "ROLLBACK_SHA=$ROLLBACK_SHA"
 echo "BACKUP_FILE=$BACKUP_FILE"
+echo "ARTIFACT_BACKUP_FILE=$ARTIFACT_BACKUP_FILE"
+echo "PRODUCTION_PROOF_FILE=$PRODUCTION_PROOF_FILE"
 rm -rf "$DISCOVERY_OUTPUT_ROOT"

@@ -4,31 +4,71 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { NAV, ADVANCED_NAV } from '@/lib/appdata'
 import { cn } from '@/lib/utils'
+import { clearAdminSession, getAdminToken, redirectToLogin } from '@/lib/admin-session'
 import {
-  MessageSquare, Image as ImageIcon, Video, Music, Search, Library, Activity, Settings, Zap, ArrowLeft, Menu, X, LogOut,
+  MessageSquare, Image as ImageIcon, Video, Music, Mic, Search, Library, Activity, Settings, Zap, ArrowLeft, Menu, X, LogOut,
   FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
-const ICONS = { MessageSquare, ImageIcon, Video, Music, Search, Library, Activity, Settings, FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package }
+const ICONS = { MessageSquare, ImageIcon, Video, Music, Mic, Search, Library, Activity, Settings, FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package }
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [user, setUser] = useState(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
   const studioRoute = pathname === '/dashboard/studio'
 
   useEffect(() => {
+    let cancelled = false
+    const verify = async () => {
+      const token = getAdminToken()
+      if (!token) {
+        clearAdminSession()
+        redirectToLogin()
+        return
+      }
+      try {
+        const response = await fetch('/api/auth/verify', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+        if (response.status === 401 || response.status === 403) {
+          clearAdminSession()
+          redirectToLogin()
+          return
+        }
+      } catch {
+        // A transient proxy/network failure is not evidence that the session is
+        // invalid. Keep the shell available and let page requests surface it.
+      } finally {
+        if (!cancelled) setSessionReady(true)
+      }
+    }
     try {
       const u = localStorage.getItem('amarktai_user')
       if (u) setUser(JSON.parse(u))
     } catch {}
-  }, [])
+    void verify()
+    const interval = window.setInterval(() => { void verify() }, 60_000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [pathname])
 
-  const handleLogout = () => {
-    localStorage.removeItem('amarktai_token')
-    localStorage.removeItem('amarktai_user')
-    window.location.href = '/login'
+  const handleLogout = async () => {
+    const token = getAdminToken()
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
+    clearAdminSession()
+    window.location.replace('/login')
+  }
+
+  if (!sessionReady) {
+    return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">Verifying session...</div>
   }
 
   return (

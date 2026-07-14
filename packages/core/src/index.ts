@@ -305,6 +305,7 @@ export {
 } from './long-form-planner.js'
 
 export {
+  DURABLE_WORKFLOW_REGISTRATIONS,
   buildSceneVideoPrompt,
   createSceneExecutionPayloads,
   createLongFormExecutionState,
@@ -316,6 +317,14 @@ export {
   type LongFormExecutionState,
   type LongFormAssemblyHandoff,
 } from './long-form-execution.js'
+
+export {
+  getReleaseCandidateCapabilityKeys,
+  getDashboardAppSlug,
+  getInternalDashboardApps,
+  canReadSourceArtifactForApp,
+  type InternalDashboardAppDefinition,
+} from './dashboard-apps.js'
 
 // Music generation foundation
 export {

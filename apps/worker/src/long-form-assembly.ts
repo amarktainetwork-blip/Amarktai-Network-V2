@@ -137,7 +137,7 @@ export async function executeLongFormAssembly(payload: WorkerJobData): Promise<P
         description: `Automatically assembled long-form video from ${classified.scenes.length} scenes`, provider: 'ffmpeg', model: 'durable-multimedia-assembly',
         traceId: payload.traceId, mimeType: 'video/mp4', metadata: {
           longFormVideo: true, executionId: parent.executionId, parentJobId: parent.id, sceneCount: classified.scenes.length,
-          totalDurationSeconds: validation.duration, expectedDurationSeconds: expectedDuration,
+          totalDurationSeconds: validation.duration, expectedDurationSeconds: expectedDuration, width: resolution.width, height: resolution.height,
           voiceoverIncluded: voiceRequested, subtitlesIncluded: subtitleRequested, musicBedIncluded: musicRequested,
           finalVideoValidated: validation.video, finalAudioValidated: validation.audio,
           componentArtifactIds: { scenes: state.scenes.artifactIds, voiceovers: state.voiceover.artifactIds, subtitle: state.subtitles.artifactId, musicBed: state.musicBed.artifactId },
@@ -145,7 +145,7 @@ export async function executeLongFormAssembly(payload: WorkerJobData): Promise<P
       }, data: outputBuffer, explicitMimeType: 'video/mp4',
     })
     return completed(artifact.id, artifact.storageUrl, artifact.mimeType, artifact.fileSizeBytes, {
-      finalVideoValidated: validation.video, finalAudioValidated: validation.audio, duration: validation.duration,
+      finalVideoValidated: validation.video, finalAudioValidated: validation.audio, duration: validation.duration, width: resolution.width, height: resolution.height,
       voiceoverIncluded: voiceRequested, subtitlesIncluded: subtitleRequested, musicBedIncluded: musicRequested,
       componentArtifactIds: { scenes: state.scenes.artifactIds, voiceovers: state.voiceover.artifactIds, subtitle: state.subtitles.artifactId, musicBed: state.musicBed.artifactId },
     }, false)

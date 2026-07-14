@@ -87,7 +87,13 @@ export const PROVIDER_ENV_VARS = Object.fromEntries(
 export const PROVIDER_HEALTH_STATUSES = [
   'unconfigured',
   'configured',
+  'untested',
   'live',
+  'unhealthy',
+  'insufficient_credit',
+  'authentication_failed',
+  'rate_limited',
+  'policy_restricted',
   'failed',
   'gated',
   'runtime_restricted',

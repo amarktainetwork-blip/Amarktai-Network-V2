@@ -8,6 +8,8 @@ import {
   type ProviderKey,
   type RuntimeExecutionProvider,
 } from './providers.js'
+import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
+import { getDashboardAppSlug, getReleaseCandidateCapabilityKeys } from './dashboard-apps.js'
 
 export { CODING_ONLY_PROVIDERS, RUNTIME_EXECUTION_PROVIDERS }
 export type { RuntimeExecutionProvider }
@@ -56,7 +58,26 @@ export interface RuntimeTruthInput {
   providers?: Partial<Record<ProviderKey, ProviderRuntimeStateInput>>
   capabilities?: Partial<Record<CapabilityKey, CapabilityRuntimeStateInput>>
   longFormComponents?: Partial<LongFormComponentRuntimeState>
+  appGrants?: Partial<Record<string, Partial<Record<CapabilityKey, boolean>>>>
+  localStaticEvidence?: Partial<Record<CapabilityKey, boolean>>
   generatedAt?: string
+}
+
+export interface ReleaseReadinessProjection {
+  capability: CapabilityKey
+  appSlug: string
+  releaseCandidate: boolean
+  catalogued: boolean
+  clientPresent: boolean
+  executorPresent: boolean
+  workflowPresent: boolean
+  schemaPresent: boolean
+  appGrantPresent: boolean
+  infrastructureRequired: string[]
+  locallyProven: boolean
+  liveProven: boolean
+  readyForDashboardExecution: boolean
+  blockedReasons: string[]
 }
 
 export interface LongFormComponentRuntimeState {
@@ -186,6 +207,8 @@ export interface RuntimeTruth {
   providers: ProviderRuntimeTruth[]
   capabilities: CapabilityRuntimeTruth[]
   countsByClassification: Record<CapabilityRuntimeClassification, number>
+  releaseReadiness: ReleaseReadinessProjection[]
+  releaseCandidateCapabilities: CapabilityKey[]
 }
 
 function toIso(value: string | Date | null | undefined): string | null {
@@ -424,6 +447,76 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
       capabilities.filter((capability) => capability.classification === classification).length,
     ]),
   ) as Record<CapabilityRuntimeClassification, number>
+  const releaseCandidateCapabilities = getReleaseCandidateCapabilityKeys()
+  const releaseCandidateSet = new Set(releaseCandidateCapabilities)
+  const capabilityMap = new Map(capabilities.map((capability) => [capability.capability, capability]))
+  const longFormDependencies = ['video_generation', 'tts', 'music_generation']
+    .map((capability) => capabilityMap.get(capability as CapabilityKey))
+    .filter((capability): capability is CapabilityRuntimeTruth => Boolean(capability))
+
+  const releaseReadiness: ReleaseReadinessProjection[] = capabilities.map((capability) => {
+    const releaseCandidate = releaseCandidateSet.has(capability.capability)
+    const workflowPresent = DURABLE_WORKFLOW_REGISTRATIONS.some((entry) => entry.capability === capability.capability)
+    const schemaPresent = Boolean(capability.inputContractReference && capability.outputContractReference && capability.schemaKey)
+    const clientPresent = capability.clientImplemented || workflowPresent
+    const executorPresent = capability.executorRegistered
+    const appSlug = getDashboardAppSlug(capability.capability)
+    const workflow = DURABLE_WORKFLOW_REGISTRATIONS.find((entry) => entry.capability === capability.capability)
+    const requiredGrantCapabilities: readonly CapabilityKey[] = workflow
+      ? [capability.capability, ...workflow.requiredCapabilities]
+      : [capability.capability]
+    const appGrantPresent = requiredGrantCapabilities.every((required) => input.appGrants?.[appSlug]?.[required] === true)
+    const infrastructureRequired = [
+      'mariadb',
+      ...(capability.requiresQueueExecution || workflowPresent ? ['redis', 'worker'] : []),
+      ...(capability.artifactRequired ? ['artifact_storage'] : []),
+      ...(workflowPresent ? ['ffmpeg'] : []),
+    ]
+    const workflowReady = workflowPresent
+      && input.longFormComponents?.fullMultimediaReady === true
+      && longFormDependencies.every((dependency) => dependency.configured && dependency.infrastructureReady)
+    const implementationReady = workflowPresent ? workflowReady : capability.implementationReady
+    const configured = workflowPresent
+      ? longFormDependencies.every((dependency) => dependency.configured)
+      : capability.configured
+    const infrastructureReady = workflowPresent
+      ? input.longFormComponents?.fullMultimediaReady === true
+      : capability.infrastructureReady
+    const locallyProven = input.localStaticEvidence?.[capability.capability] === true
+    const blockedReasons: string[] = []
+    if (!releaseCandidate) blockedReasons.push('no_callable_executor_or_durable_workflow')
+    if (!clientPresent) blockedReasons.push('client_missing')
+    if (!executorPresent && !workflowPresent) blockedReasons.push('executor_or_workflow_missing')
+    if (!schemaPresent) blockedReasons.push('schema_missing')
+    if (!appGrantPresent) blockedReasons.push('app_grant_missing')
+    if (!configured) blockedReasons.push('provider_configuration_missing')
+    if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
+    if (!capability.policyAllowed) blockedReasons.push('policy_restricted')
+    if (releaseCandidate && implementationReady && !capability.liveProven) blockedReasons.push('live_proof_missing')
+
+    return {
+      capability: capability.capability,
+      appSlug,
+      releaseCandidate,
+      catalogued: capability.catalogueKnown,
+      clientPresent,
+      executorPresent,
+      workflowPresent,
+      schemaPresent,
+      appGrantPresent,
+      infrastructureRequired: [...new Set(infrastructureRequired)],
+      locallyProven,
+      liveProven: capability.liveProven,
+      readyForDashboardExecution: releaseCandidate
+        && implementationReady
+        && schemaPresent
+        && appGrantPresent
+        && configured
+        && infrastructureReady
+        && capability.policyAllowed,
+      blockedReasons: [...new Set(blockedReasons)],
+    }
+  })
 
   return {
     generatedAt: input.generatedAt ?? new Date(0).toISOString(),
@@ -435,5 +528,7 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
     providers,
     capabilities,
     countsByClassification,
+    releaseReadiness,
+    releaseCandidateCapabilities,
   }
 }

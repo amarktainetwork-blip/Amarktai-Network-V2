@@ -717,6 +717,14 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling') {
       return reply.status(409).send({ error: true, message: 'Cancelled long-form executions cannot be resumed without an explicit supported transition' })
     }
+    if (loaded.parent.status === 'completed') {
+      return reply.status(200).send({
+        success: true,
+        alreadyCompleted: true,
+        queueResult: { queued: [], skipped: loaded.sceneJobs.map((job) => job.id), failed: [] },
+        execution: deriveStatus(loaded.parent, loaded.sceneJobs),
+      })
+    }
     const resumable = loaded.sceneJobs.filter((job) =>
       job.status === 'planned'
       || (job.status === 'queued' && !job.queueJobId)

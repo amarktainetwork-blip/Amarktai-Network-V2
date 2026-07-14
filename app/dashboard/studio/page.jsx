@@ -60,7 +60,7 @@ const MODE_META = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
 
 const PREVIEW_LABELS = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
   item.studioMode,
-  `${item.label} preview will appear here`,
+  `No ${item.label.toLowerCase()} output for this run`,
 ]))
 
 const ASSETS_LABELS = Object.fromEntries(TARGET_CAPABILITY_CATALOG.map((item) => [
@@ -426,8 +426,8 @@ function OptionsBlock({ mode, uxMode, values, setValues, runtimeProofStatus }) {
               ) : (
                 <div>
                   <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03]"><Eye className="h-6 w-6 opacity-20" /></div>
-                  <p className="text-sm font-medium text-foreground">{PREVIEW_LABELS[mode] || 'Output preview will appear here'}</p>
-                  <p className="mt-1 text-xs text-muted-foreground/70">Submit a job to see results here.</p>
+                  <p className="text-sm font-medium text-foreground">{PREVIEW_LABELS[mode] || 'No output for this run'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground/70">Run an enabled capability to populate this panel.</p>
                 </div>
               )}
             </div>

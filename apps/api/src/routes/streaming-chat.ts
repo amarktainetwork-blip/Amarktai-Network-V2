@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
   CreateJobRequestSchema,
   GROQ_BASE_URL,
@@ -13,10 +13,13 @@ import { openAiStreamingChat, type OpenAiTransportMessage } from '@amarktai/prov
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 import { loadOrchestraSnapshot } from '../lib/orchestra-loader.js'
 import { authenticateAppKey } from './jobs.js'
+import { isReleaseFixtureMode } from '../lib/release-fixture-mode.js'
 
 export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v1/streaming-chat', async (request, reply) => {
-    const auth = await authenticateAppKey(request.headers.authorization)
+  const handler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const auth = request.url.startsWith('/api/admin/')
+      ? await authenticateAdminStreaming(app, request.headers.authorization)
+      : await authenticateAppKey(request.headers.authorization)
     if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
     const body = request.body as Record<string, unknown>
@@ -59,13 +62,24 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
       transport: 'sse',
     }
 
-    const decision = await loadOrchestraSnapshot({
-      capability: 'streaming_chat',
-      routingMode: 'balanced',
-      executionId: jobId,
-      appSlug: auth.app!.slug,
-      appGrant: grantResolution.grant,
-    }, { databaseReady: true, queueReady: true })
+    const fixtureMode = isReleaseFixtureMode()
+    const decision = fixtureMode
+      ? {
+          executionAllowed: true,
+          executionId: jobId,
+          selectedProvider: 'groq' as const,
+          selectedModel: 'fixture/streaming_chat',
+          selectedExecutorId: 'groq.streaming-chat' as const,
+          fallbackRoutes: [],
+          blockReason: null,
+        }
+      : await loadOrchestraSnapshot({
+          capability: 'streaming_chat',
+          routingMode: 'balanced',
+          executionId: jobId,
+          appSlug: auth.app!.slug,
+          appGrant: grantResolution.grant,
+        }, { databaseReady: true, queueReady: true })
 
     if (!decision.executionAllowed || decision.selectedProvider !== 'groq' || !decision.selectedModel || decision.selectedExecutorId !== 'groq.streaming-chat') {
       return reply.status(503).send({ error: true, message: decision.blockReason ?? 'No streaming chat route is ready', orchestra: decision })
@@ -117,28 +131,37 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
     let upstreamChunks = 0
     let usage = createCanonicalProviderUsage({ provider: 'groq', model: decision.selectedModel })
     try {
-      const credential = await resolveProviderApiKey('groq')
-      const providerStatus = await getProviderCredentialStatus('groq')
-      for await (const chunk of openAiStreamingChat({
-        provider: 'groq',
-        baseUrl: providerStatus.baseUrl || GROQ_BASE_URL,
-        apiKey: credential.apiKey,
-        model: decision.selectedModel,
-        messages: buildMessages(parsed.data.prompt, input),
-        maxOutputTokens: numberValue(input.maxOutputTokens),
-        temperature: numberValue(input.temperature),
-        signal: controller.signal,
-      })) {
-        if (chunk.type === 'content' && chunk.content) {
+      if (fixtureMode) {
+        for (const delta of ['Deterministic ', 'fixture ', 'stream.']) {
           upstreamChunks++
-          content += chunk.content
-          send('chunk', { index: upstreamChunks, delta: chunk.content })
-        } else if (chunk.type === 'usage' && chunk.usage) {
-          usage = createCanonicalProviderUsage({
-            provider: 'groq', model: decision.selectedModel,
-            inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
-            providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
-          })
+          content += delta
+          send('chunk', { index: upstreamChunks, delta })
+        }
+        usage = createCanonicalProviderUsage({ provider: 'groq', model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
+      } else {
+        const credential = await resolveProviderApiKey('groq')
+        const providerStatus = await getProviderCredentialStatus('groq')
+        for await (const chunk of openAiStreamingChat({
+          provider: 'groq',
+          baseUrl: providerStatus.baseUrl || GROQ_BASE_URL,
+          apiKey: credential.apiKey,
+          model: decision.selectedModel,
+          messages: buildMessages(parsed.data.prompt, input),
+          maxOutputTokens: numberValue(input.maxOutputTokens),
+          temperature: numberValue(input.temperature),
+          signal: controller.signal,
+        })) {
+          if (chunk.type === 'content' && chunk.content) {
+            upstreamChunks++
+            content += chunk.content
+            send('chunk', { index: upstreamChunks, delta: chunk.content })
+          } else if (chunk.type === 'usage' && chunk.usage) {
+            usage = createCanonicalProviderUsage({
+              provider: 'groq', model: decision.selectedModel,
+              inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
+              providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
+            })
+          }
         }
       }
       if (!content.trim() || upstreamChunks === 0) throw new Error('Groq stream completed without content chunks')
@@ -166,6 +189,8 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           currency: usage.currency,
         },
         directProviderOutputValidation: { valid: true, contract: 'multiple_upstream_sse_chunks', multipleChunks: upstreamChunks > 1 },
+        evidenceSource: fixtureMode ? 'local_fixture' : 'live_provider',
+        liveProviderProof: !fixtureMode,
       }
       await prisma.job.update({
         where: { id: jobId },
@@ -183,7 +208,25 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
       }).catch(() => {})
       if (!reply.raw.destroyed) { send('error', { jobId, message }); reply.raw.end() }
     }
-  })
+  }
+  app.post('/api/v1/streaming-chat', handler)
+  app.post('/api/admin/streaming-chat', handler)
+}
+
+async function authenticateAdminStreaming(
+  app: FastifyInstance,
+  authorization: string | undefined,
+): Promise<Awaited<ReturnType<typeof authenticateAppKey>>> {
+  if (!authorization?.startsWith('Bearer ')) return { ok: false, statusCode: 401, error: 'Authorization required' }
+  const payload = await app.jwtVerify(authorization.slice(7)).catch(() => null)
+  if (!payload) return { ok: false, statusCode: 401, error: 'Invalid authorization' }
+  if (payload.role !== 'admin') return { ok: false, statusCode: 403, error: 'Admin access required' }
+  return {
+    ok: true,
+    statusCode: 200,
+    app: { id: 'internal-dashboard-studio', name: 'Dashboard Studio', slug: 'dashboard-studio' },
+    allowedCapabilities: [],
+  }
 }
 
 function buildMessages(prompt: string, input: Record<string, unknown>): OpenAiTransportMessage[] {

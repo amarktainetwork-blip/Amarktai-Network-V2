@@ -49,6 +49,7 @@ export function projectProofStatusFromTruth(truth: RuntimeTruth & { evidenceAvai
     const capabilityTruth = truth.capabilities.find((c) => c.capability === capability)
     const isProven = capabilityTruth?.liveProven === true
     const capabilityDef = CAPABILITY_CATALOG.find((c) => c.key === capability)
+    const releaseReadiness = truth.releaseReadiness?.find((item) => item.capability === capability)
 
     if (isProven) {
       const eligibleModel = capabilityTruth?.eligibleModels?.find((m) => m.liveProven) ?? capabilityTruth?.eligibleModels?.[0]
@@ -61,7 +62,7 @@ export function projectProofStatusFromTruth(truth: RuntimeTruth & { evidenceAvai
         proofLevel: capabilityDef?.artifactRequired === true
           ? 'live_external_app_job_with_artifact_download'
           : 'live_external_app_job',
-        readyForDashboardExecution: true,
+        readyForDashboardExecution: releaseReadiness?.readyForDashboardExecution === true,
         description: `Completed ${capability} job with valid runtime proof.`,
       })
     } else {
@@ -71,8 +72,10 @@ export function projectProofStatusFromTruth(truth: RuntimeTruth & { evidenceAvai
         provider: null,
         artifactRequired: capabilityDef?.artifactRequired === true,
         proofLevel: 'not_proven',
-        readyForDashboardExecution: false,
-        description: evidenceAvailable
+        readyForDashboardExecution: releaseReadiness?.readyForDashboardExecution === true,
+        description: releaseReadiness?.readyForDashboardExecution
+          ? 'Callable release candidate is ready for dashboard execution; deployed live proof is not yet recorded.'
+          : evidenceAvailable
           ? 'No completed live external app runtime proof is recorded for this capability.'
           : 'Runtime evidence unavailable — cannot determine proof status.',
       })

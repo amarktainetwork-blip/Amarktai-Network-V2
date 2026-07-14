@@ -146,10 +146,13 @@ if [ ! -f prisma/migrations/20250701_baseline_fc21a6e/migration.sql ]; then
   exit 1
 fi
 
-if [ ! -f prisma/migrations/20260711_add_job_orchestration/migration.sql ]; then
-  echo "ERROR: additive migration SQL not found"
-  exit 1
-fi
+EXPECTED_MIGRATION_COUNT=0
+for migration_dir in prisma/migrations/*; do
+  [ -d "$migration_dir" ] || continue
+  [ -f "$migration_dir/migration.sql" ] || { echo "ERROR: migration SQL missing in $migration_dir"; exit 1; }
+  EXPECTED_MIGRATION_COUNT=$((EXPECTED_MIGRATION_COUNT + 1))
+done
+[ "$EXPECTED_MIGRATION_COUNT" -gt 1 ] || { echo 'ERROR: migration history is incomplete'; exit 1; }
 
 # Generate password AFTER all command checks pass
 ROOT_PASS="${PREFIX}_root_pass_$(openssl rand -hex 8)"
@@ -208,10 +211,16 @@ DATABASE_URL="$FRESH_DATABASE_URL" npx prisma migrate status --schema=./prisma/s
 echo "[fresh] Verifying _prisma_migrations..."
 MIGRATION_COUNT=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations")
-if [ "$MIGRATION_COUNT" -ne 2 ]; then
-  echo "ERROR: Expected 2 migrations, got $MIGRATION_COUNT"
+if [ "$MIGRATION_COUNT" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
+  echo "ERROR: Expected $EXPECTED_MIGRATION_COUNT migrations, got $MIGRATION_COUNT"
   exit 1
 fi
+
+for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate; do
+  RECORDED=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
+    "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$MIGRATION'")
+  [ "$RECORDED" -eq 1 ] || { echo "ERROR: Migration not recorded: $MIGRATION"; exit 1; }
+done
 
 BASELINE_RECORDED=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '20250701_baseline_fc21a6e'")
@@ -237,6 +246,15 @@ for COL in execution_id parent_job_id provider_claim_at queue_job_id queued_at r
   fi
   echo "[fresh]   ✓ $COL"
 done
+
+for COL in enabled token_version; do
+  EXISTS=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
+    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$FRESH_DB' AND TABLE_NAME='admin_users' AND COLUMN_NAME='$COL'")
+  [ "$EXISTS" -eq 1 ] || { echo "ERROR: admin_users.$COL does not exist"; exit 1; }
+done
+BOOTSTRAP_TABLE=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$FRESH_DB' AND TABLE_NAME='platform_bootstrap_runs'")
+[ "$BOOTSTRAP_TABLE" -eq 1 ] || { echo 'ERROR: platform_bootstrap_runs does not exist'; exit 1; }
 
 echo "[fresh] Verifying four orchestration indexes..."
 for IDX in jobs_parent_job_id_idx jobs_execution_id_idx jobs_app_slug_execution_id_idx jobs_parent_job_id_scene_number_idx; do
@@ -343,13 +361,19 @@ DATABASE_URL="$UNMANAGED_DATABASE_URL" npx prisma migrate resolve \
 echo "[unmanaged] Running prisma migrate deploy..."
 DATABASE_URL="$UNMANAGED_DATABASE_URL" npx prisma migrate deploy --schema=./prisma/schema.prisma
 
-echo "[unmanaged] Verifying only additive migration was applied..."
+echo "[unmanaged] Verifying all post-baseline migrations were applied..."
 MIGRATION_COUNT=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations")
-if [ "$MIGRATION_COUNT" -ne 2 ]; then
-  echo "ERROR: Expected 2 migrations recorded, got $MIGRATION_COUNT"
+if [ "$MIGRATION_COUNT" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
+  echo "ERROR: Expected $EXPECTED_MIGRATION_COUNT migrations recorded, got $MIGRATION_COUNT"
   exit 1
 fi
+
+for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate; do
+  RECORDED=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
+    "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$MIGRATION'")
+  [ "$RECORDED" -eq 1 ] || { echo "ERROR: Migration not applied: $MIGRATION"; exit 1; }
+done
 
 ADDITIVE_APPLIED=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '20260711_add_job_orchestration'")
@@ -368,6 +392,15 @@ for COL in execution_id parent_job_id provider_claim_at queue_job_id queued_at r
   fi
   echo "[unmanaged]   ✓ $COL"
 done
+
+for COL in enabled token_version; do
+  EXISTS=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
+    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$UNMANAGED_DB' AND TABLE_NAME='admin_users' AND COLUMN_NAME='$COL'")
+  [ "$EXISTS" -eq 1 ] || { echo "ERROR: admin_users.$COL does not exist after migration"; exit 1; }
+done
+BOOTSTRAP_TABLE=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$UNMANAGED_DB' AND TABLE_NAME='platform_bootstrap_runs'")
+[ "$BOOTSTRAP_TABLE" -eq 1 ] || { echo 'ERROR: platform_bootstrap_runs does not exist after migration'; exit 1; }
 
 echo "[unmanaged] Verifying four indexes..."
 for IDX in jobs_parent_job_id_idx jobs_execution_id_idx jobs_app_slug_execution_id_idx jobs_parent_job_id_scene_number_idx; do
@@ -470,6 +503,8 @@ echo "MARIADB_IMAGE=$MARIADB_IMAGE"
 echo "MARIADB_IMAGE_ID=$MARIADB_IMAGE_ID"
 echo "BASELINE_MIGRATION=20250701_baseline_fc21a6e"
 echo "ADDITIVE_MIGRATION=20260711_add_job_orchestration"
+echo "RELEASE_CANDIDATE_MIGRATION=20260714_release_candidate"
+echo "MIGRATION_COUNT=$EXPECTED_MIGRATION_COUNT"
 echo "FRESH_DATABASE_PROOF=PASS"
 echo "UNMANAGED_DATABASE_PROOF=PASS"
 echo "SAMPLE_DATA_SURVIVAL=PASS"

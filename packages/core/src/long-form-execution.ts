@@ -1,8 +1,26 @@
 import { randomUUID } from 'node:crypto'
+import type { CapabilityKey } from './capabilities.js'
 import type {
   LongFormVideoPlan,
   LongFormScene,
 } from './long-form-video.js'
+
+/** Canonical durable workflow evidence; this is not a provider executor. */
+export const DURABLE_WORKFLOW_REGISTRATIONS = [{
+  id: 'long-form-video.durable-orchestration',
+  capability: 'long_form_video',
+  handlerName: 'createLongFormExecutionState',
+  persistence: 'prisma_job_parent_child_state',
+  assembly: 'bullmq_exactly_once_handoff',
+  requiredCapabilities: ['video_generation', 'tts', 'music_generation'],
+}] as const satisfies ReadonlyArray<{
+  id: string
+  capability: 'long_form_video'
+  handlerName: string
+  persistence: string
+  assembly: string
+  requiredCapabilities: readonly CapabilityKey[]
+}>
 
 // ── Scene Execution Payload ────────────────────────────────────────────────────
 

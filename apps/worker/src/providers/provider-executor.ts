@@ -6,9 +6,11 @@
 
 import {
   createCanonicalProviderUsage,
+  canReadSourceArtifactForApp,
   evaluateOrchestra,
   normalizeDbCandidates,
   getExecutorRegistration,
+  getExecutorRegistrations,
   executorModelMetadataFromDbRecord,
   isExecutorModelCompatible,
   type CapabilityKey,
@@ -23,6 +25,7 @@ import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey
 import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 import { DIRECT_EXECUTOR_HANDLERS } from './direct-provider-executor.js'
+import { executeReleaseFixture, isReleaseFixtureAdapterEnabled } from './release-fixture-executor.js'
 
 type ProvidersModule = typeof import('@amarktai/providers')
 
@@ -926,7 +929,7 @@ async function executeTogetherVideo(payload: WorkerJobData, selectedModel?: stri
       if (!sourceArtifactId) return { success: false, status: 'failed', provider: 'together', model, error: 'Source-aware video request omitted its source artifact.' }
       const { getArtifactRecord, getArtifactFile, createProviderMediaUrl } = await import('@amarktai/artifacts')
       const source = await getArtifactRecord(sourceArtifactId)
-      if (!source || source.appSlug !== payload.appSlug || source.status !== 'completed') return artifactFailure('together', model, 'Authorised source artifact was not found')
+      if (!source || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug) || source.status !== 'completed') return artifactFailure('together', model, 'Authorised source artifact was not found')
       const expectedPrefix = payload.capability === 'image_to_video' ? 'image/' : 'video/'
       if (!source.mimeType.startsWith(expectedPrefix)) return artifactFailure('together', model, `Source artifact must have MIME type ${expectedPrefix}*`)
       const file = await getArtifactFile(sourceArtifactId)
@@ -1318,6 +1321,34 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
       status: 'failed',
       error: `Execution denied for '${capability}': immutable AppCapabilityGrant snapshot is missing or invalid.`,
     }
+  }
+
+  if (isReleaseFixtureAdapterEnabled()) {
+    const registration = getExecutorRegistrations(capability)[0]
+    await persistJobMetadata(payload.jobId, {
+      evidenceSource: 'local_fixture',
+      fixtureAdapter: 'release-candidate-v1',
+      liveProviderProof: false,
+      orchestraSelectedProvider: registration?.provider ?? null,
+      orchestraSelectedExecutorId: registration?.id ?? null,
+      orchestraActualProvider: registration?.provider ?? null,
+      orchestraActualExecutorId: registration?.id ?? null,
+      directProviderExecutorId: registration?.id ?? null,
+      directProviderRouteType: 'fixture',
+    }).catch(() => {})
+    const result = await executeReleaseFixture(payload)
+    await persistJobMetadata(payload.jobId, {
+      orchestraActualModel: result.model ?? null,
+      orchestraActualOutcome: result.success ? 'completed' : 'failed',
+      directProviderUsage: result.metadata?.usage ?? null,
+      directProviderOutputValidation: result.metadata?.outputValidation ?? null,
+      fixtureEvidence: {
+        adapter: 'release-candidate-v1',
+        liveProviderProof: false,
+        ffmpegMedia: Boolean(result.artifactId),
+      },
+    }).catch(() => {})
+    return result
   }
 
   const orchestraDecision = await resolveOrchestraDecision(payload, appGrant)

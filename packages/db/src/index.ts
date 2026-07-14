@@ -4,6 +4,12 @@
 
 export { prisma } from './client.js'
 export {
+  REQUIRED_SCHEMA_MIGRATION,
+  getDatabaseSchemaStatus,
+  assertDatabaseSchemaCurrent,
+  type DatabaseSchemaStatus,
+} from './schema-guard.js'
+export {
   ProviderConfigError,
   MIMO_BACKEND_RUNTIME_BLOCKED_MESSAGE,
   MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE,

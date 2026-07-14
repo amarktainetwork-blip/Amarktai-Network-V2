@@ -25,6 +25,8 @@ vi.mock('../apps/api/src/lib/admin-runtime-truth.js', () => ({
       { capability: 'music_generation', liveProven: false, executableNow: false, classification: 'PARTIAL', eligibleModels: [] },
       { capability: 'long_form_video', liveProven: false, executableNow: false, classification: 'PARTIAL', eligibleModels: [] },
     ],
+    releaseReadiness: [],
+    releaseCandidateCapabilities: [],
     countsByClassification: { LIVE_PROVEN: 10, PARTIAL: 2, EXECUTABLE_NOT_LIVE_PROVEN: 0, IMPLEMENTED_NOT_CONFIGURED: 0, CATALOGUE_ONLY: 0, POLICY_RESTRICTED: 0, BLOCKED: 0, MISSING: 0 },
     evidenceAvailable: true,
   }),
@@ -123,6 +125,11 @@ describe('Admin runtime proof status route', () => {
         { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
         { capability: 'image_generation', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', liveProven: true }] },
       ],
+      releaseReadiness: [
+        { capability: 'chat', readyForDashboardExecution: true },
+        { capability: 'image_generation', readyForDashboardExecution: true },
+      ],
+      releaseCandidateCapabilities: ['chat', 'image_generation'],
       countsByClassification: {},
       evidenceAvailable: true,
     })
@@ -209,6 +216,8 @@ describe('Admin runtime proof status route', () => {
       providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
+      releaseReadiness: [],
+      releaseCandidateCapabilities: [],
       countsByClassification: {},
       evidenceAvailable: true,
     })
@@ -220,6 +229,8 @@ describe('Admin runtime proof status route', () => {
       providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
+      releaseReadiness: [],
+      releaseCandidateCapabilities: [],
       countsByClassification: {},
       evidenceAvailable: false,
     })

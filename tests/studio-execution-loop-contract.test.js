@@ -46,10 +46,10 @@ describe('studio execution loop contract', () => {
     expect(content).toContain('validateOrchestraRequest')
   })
 
-  it('admin Studio route rejects unproven capabilities', () => {
+  it('admin Studio route rejects capabilities that are not release-ready', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
-    expect(content).toContain('not proven or not ready for dashboard execution')
+    expect(content).toContain('is not ready for dashboard execution')
   })
 
   it.each([
@@ -140,7 +140,7 @@ describe('studio execution loop contract', () => {
     const content = fs.readFileSync(routePath, 'utf8')
     // Should load proof status once per request via getRuntimeProofStatus(app)
     expect(content).toContain('getRuntimeProofStatus(app)')
-    expect(content).toContain('isCapabilityProven(capability, proofStatus)')
+    expect(content).toContain('isCapabilityDashboardReady(capability, proofStatus)')
     expect(content).not.toContain('const PROVEN_CAPABILITIES = getRuntimeProofStatus()')
   })
 

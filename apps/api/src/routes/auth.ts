@@ -7,19 +7,12 @@
 
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@amarktai/db'
-import { timingSafeEqual } from 'crypto'
+import { compare } from 'bcryptjs'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  // bcrypt comparison using timing-safe approach
-  try {
-    const { compare } = await import('bcryptjs')
-    return await compare(plain, hash)
-  } catch {
-    // Fallback: direct comparison for non-bcrypt hashes (dev only)
-    return timingSafeEqual(Buffer.from(plain), Buffer.from(hash))
-  }
+  return compare(plain, hash)
 }
 
 // ── Route Registration ────────────────────────────────────────────────────────
@@ -30,7 +23,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/login', async (request, reply) => {
     try {
       const body = (request.body ?? {}) as Record<string, unknown>
-      const email = typeof body.email === 'string' ? body.email : undefined
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined
       const password = typeof body.password === 'string' ? body.password : undefined
 
       if (!email || !password) {
@@ -41,7 +34,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // Look up admin user
-      let user: { email: string; passwordHash: string } | null = null
+      let user: { email: string; passwordHash: string; enabled: boolean; tokenVersion: number } | null = null
       try {
         user = await prisma.adminUser.findUnique({
           where: { email },
@@ -59,6 +52,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           error: true,
           message: 'Invalid credentials',
         })
+      }
+
+      if (!user.enabled) {
+        return reply.status(403).send({ error: true, message: 'Administrator account is disabled' })
       }
 
       if (!user.passwordHash) {
@@ -94,6 +91,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         token = await app.jwtSign({
           sub: user.email,
           role: 'admin',
+          tokenVersion: user.tokenVersion,
         })
       } catch (jwtErr) {
         request.log.error({ err: jwtErr }, 'JWT signing error')
@@ -159,5 +157,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       request.log.error({ err }, 'Unexpected verify error')
       return reply.status(500).send({ error: true, message: 'Internal server error' })
     }
+  })
+
+  app.post('/api/v1/auth/logout', async (request, reply) => {
+    const authorization = request.headers.authorization
+    if (!authorization?.startsWith('Bearer ')) {
+      return reply.status(401).send({ error: true, message: 'Authorization required' })
+    }
+    const payload = await app.jwtVerify(authorization.slice(7)).catch(() => null)
+    if (!payload || payload.role !== 'admin') {
+      return reply.status(401).send({ error: true, message: 'Invalid or expired token' })
+    }
+    await prisma.adminUser.update({
+      where: { email: payload.sub },
+      data: { tokenVersion: { increment: 1 } },
+    })
+    return reply.send({ success: true })
   })
 }

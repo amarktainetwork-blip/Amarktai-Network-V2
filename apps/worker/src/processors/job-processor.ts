@@ -7,7 +7,7 @@
  * - Delegates execution to the provider executor
  * - Currently proven execution paths are Groq chat, Together image generation,
  *   and GenX video generation
- * - Fails all other capabilities honestly as not implemented
+ * - Fails closed when no canonical executor is registered
  * - Successful text jobs may store output
  * - Successful media jobs may store artifactId and safe output metadata
  * - Failed execution updates the DB and throws so BullMQ records queue failure
@@ -31,6 +31,7 @@ export interface WorkerJobData {
   callbackUrl?: string
   routingMode?: string
   appGrantSnapshot?: AppCapabilityGrantContext
+  queueRecoveryAttempt?: boolean
 }
 
 export interface ProcessorResult {
@@ -150,6 +151,7 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
       routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
       appGrantSnapshot: rawPayload.appGrantSnapshot
         ?? (safeParseJsonObject(dbJob.metadataJson).appGrantSnapshot as AppCapabilityGrantContext | undefined),
+      queueRecoveryAttempt: rawPayload.queueRecoveryAttempt === true,
     },
     dbJob,
   }
@@ -227,6 +229,12 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       }
     }
 
+    if (job.status === 'processing' && payload.queueRecoveryAttempt) {
+      await updateJobMany({
+        where: { id: jobId, status: 'processing', startedAt: job.startedAt },
+        data: { status: 'queued', retryCount: { increment: 1 }, queuedAt: new Date(), error: 'Recovered by BullMQ redelivery' },
+      })
+    }
     console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, from: job.status, to: 'processing' })
     const processingClaim = await updateJobMany({
       where: { id: jobId, status: 'queued' },

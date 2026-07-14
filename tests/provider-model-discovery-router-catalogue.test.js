@@ -570,7 +570,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(status.workerExecutorExists).toBe(true)
   })
 
-  it('admin API and dashboard expose discovery counts and blockers', () => {
+  it('admin API exposes discovery and the Capability Lab consumes canonical release readiness', () => {
     const apiSource = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-model-discovery.ts'), 'utf-8')
     expect(apiSource).toContain('/api/admin/models/discovery/status')
     expect(apiSource).toContain('/api/admin/models/discovery/run')
@@ -579,11 +579,10 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(apiSource).toContain('/api/admin/providers/:provider/models')
 
     const dashboard = fs.readFileSync(path.join(ROOT, 'app/dashboard/capability-lab/page.js'), 'utf-8')
-    expect(dashboard).toContain('Provider has model is not the same as AmarktAI can execute capability')
-    expect(dashboard).toContain('Catalogue-only')
-    expect(dashboard).toContain('Missing')
-    expect(dashboard).toContain('GenX music capability is known from official docs/catalogue')
-    expect(dashboard).toContain('MiMo backend allowed')
+    expect(dashboard).toContain('/api/admin/truth')
+    expect(dashboard).toContain('releaseReadiness')
+    expect(dashboard).toContain('readyForDashboardExecution')
+    expect(dashboard).toContain('Orchestra owns routing')
   })
 
   it('app-facing flows still expose no provider/model selectors', () => {

@@ -1,11 +1,10 @@
 /**
  * Groq voice adapter - live integration for voice.* capabilities.
  *
- * Handles: tts, stt, music_generation
+ * Handles: tts, stt
  *
  * - STT: Processes inbound binary audio through Groq whisper-large-v3
  * - TTS: Slices prompts into sub-200 char segments, concatenates WAV buffers
- * - Music: Requires a live backend provider before execution
  *
  * All WAV concatenation uses local buffer manipulation; no ffmpeg dependency required.
  */
@@ -25,8 +24,6 @@ export class GroqVoiceAdapter implements ProviderAdapter {
         return this.executeStt(context)
       case 'tts':
         return this.executeTts(context)
-      case 'music_generation':
-        throw new Error('music_generation requires a configured live music provider; backend integration is pending')
       default:
         throw new Error(`Groq voice adapter does not support capability: ${context.capability}`)
     }

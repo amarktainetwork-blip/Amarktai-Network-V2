@@ -14,6 +14,7 @@ export {
   getArtifactPublicUrl,
   getArtifactRecord,
   getArtifactFile,
+  getArtifactStream,
   findCompletedArtifactByTraceId,
   type SaveArtifactOptions,
   type SavedArtifact,

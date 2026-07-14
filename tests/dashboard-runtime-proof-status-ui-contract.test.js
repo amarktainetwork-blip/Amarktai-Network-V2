@@ -49,6 +49,7 @@ function makeTruthWithProof(provenCapabilities = []) {
       classification: 'LIVE_PROVEN',
       eligibleModels: [{ provider: 'groq', modelId: 'test-model', liveProven: true }],
     })),
+    releaseReadiness: provenCapabilities.map((capability) => ({ capability, readyForDashboardExecution: true })),
     countsByClassification: {},
     evidenceAvailable: true,
   }
@@ -65,7 +66,7 @@ describe('Dashboard runtime proof status UI contract', () => {
     expect(normalized.summary.source).toBe('backend-runtime-proof-status')
   })
 
-  it('marks only backend-proven capabilities dashboard-ready', () => {
+  it('keeps release readiness explicit and separate from proof status', () => {
     const truth = makeTruthWithProof(['chat', 'code'])
     const payload = projectProofStatusFromTruth(truth)
     const status = normalizeRuntimeProofStatus(payload)
@@ -105,8 +106,8 @@ describe('Dashboard runtime proof status UI contract', () => {
     expect(combined).not.toContain('Unknown connection')
   })
 
-  it('uses one runtime proof summary contract in overview, settings, and capabilities', () => {
-    expect(source('app/dashboard/command-center/page.js')).toContain('RuntimeProofSummary')
+  it('uses one runtime proof summary contract in settings and capabilities while command center delegates to health', () => {
+    expect(source('app/dashboard/command-center/page.js')).toContain("export { default } from '../operations/page'")
     expect(source('app/dashboard/settings/page.js')).toContain('RuntimeProofSummary')
     expect(source('app/dashboard/capabilities/page.js')).toContain('RuntimeProofSummary')
     expect(source('components/dashboard/runtime-proof-summary.jsx')).toContain('Approved providers')
@@ -120,12 +121,13 @@ describe('Dashboard runtime proof status UI contract', () => {
     expect(source('lib/capability-catalog.js')).toContain('../packages/core/src/capabilities.ts')
   })
 
-  it('disables unproven dashboard and Studio capability UI instead of implying readiness', () => {
+  it('gates dashboard and Studio UI on canonical release readiness', () => {
     const capabilitiesSource = source('app/dashboard/capabilities/page.js')
     const studioSource = source('app/dashboard/studio/page.jsx')
 
     expect(capabilitiesSource).toContain('aria-disabled={!ready}')
-    expect(capabilitiesSource).toContain('Disabled until backend proof passes')
+    expect(capabilitiesSource).toContain('readyForDashboardExecution')
+    expect(capabilitiesSource).toContain('deployed live proof remains separate')
     expect(studioSource).toContain('disabled={!ready}')
     expect(studioSource).toContain('disabled={!input.trim() || !backendReady}')
     expect(studioSource).toContain('backend-runtime-proof-status')

@@ -74,12 +74,12 @@ export function EmptyState({ icon: Icon, title, description, action, className }
 
 export function DropZone({ label = 'Drop files or click to browse', kind = 'asset' }) {
   return (
-    <div className="group flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-white/12 bg-white/[0.015] px-6 py-8 text-center transition hover:border-cyan-500/40 hover:bg-cyan-500/[0.03]">
+    <div aria-disabled="true" className="flex cursor-not-allowed flex-col items-center justify-center rounded-lg border border-dashed border-white/12 bg-white/[0.015] px-6 py-8 text-center opacity-70">
       <div className="mb-2 rounded-full border border-white/10 bg-white/5 p-2.5 text-cyan-300 transition group-hover:scale-110">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
       </div>
       <p className="text-sm text-foreground/80">{label}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{kind} · backend upload pending</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{kind} · file input is unavailable in Legacy Studio</p>
     </div>
   )
 }

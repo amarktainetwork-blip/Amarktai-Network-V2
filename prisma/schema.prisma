@@ -12,10 +12,22 @@ model AdminUser {
   id           Int      @id @default(autoincrement())
   email        String   @unique
   passwordHash String   @map("password_hash")
+  enabled      Boolean  @default(true)
+  tokenVersion Int      @default(0) @map("token_version")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("admin_users")
+}
+
+model PlatformBootstrapRun {
+  id           String   @id @default(uuid())
+  bootstrapKey String   @map("bootstrap_key")
+  insertedJson String   @map("inserted_json") @db.LongText
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([bootstrapKey])
+  @@map("platform_bootstrap_runs")
 }
 
 model Product {

@@ -79,6 +79,8 @@ export async function adminJobRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string }
     const job = await prisma.job.findUnique({ where: { id } })
     if (!job) return reply.status(404).send({ error: true, message: 'Job not found' })
+    const metadata = safeParseJsonObject(job.metadataJson)
+    const attempts = Array.isArray(metadata.orchestraRouteAttempts) ? metadata.orchestraRouteAttempts : []
 
     return reply.send({
       id: job.id,
@@ -90,6 +92,15 @@ export async function adminJobRoutes(app: FastifyInstance): Promise<void> {
       artifactId: job.artifactId || null,
       progress: job.progress,
       output: job.output || null,
+      executionEvidence: {
+        grantSnapshot: metadata.appGrantSnapshot ?? null,
+        grantSnapshotSource: metadata.appGrantSnapshotSource ?? null,
+        executorId: metadata.directProviderExecutorId ?? metadata.orchestraActualExecutorId ?? metadata.orchestraSelectedExecutorId ?? null,
+        fallbackAttempts: attempts,
+        usage: metadata.directProviderUsage ?? null,
+        cost: metadata.directProviderCostEvidence ?? null,
+        outputValidation: metadata.directProviderOutputValidation ?? null,
+      },
       error: job.error || null,
       createdAt: job.createdAt?.toISOString(),
       startedAt: job.startedAt?.toISOString() || null,
@@ -103,17 +114,26 @@ export async function adminJobRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string }
     const job = await prisma.job.findUnique({ where: { id } })
     if (!job) return reply.status(404).send({ error: true, message: 'Job not found' })
+    if (job.status !== 'failed') {
+      return reply.status(409).send({ error: true, message: 'Only failed jobs may be explicitly requeued' })
+    }
 
     const traceId = job.traceId || `trace_${randomUUID()}`
+    const metadata = safeParseJsonObject(job.metadataJson)
+    const appGrantSnapshot = metadata.appGrantSnapshot as Record<string, unknown> | undefined
+    if (!appGrantSnapshot || appGrantSnapshot.enabled !== true) {
+      return reply.status(403).send({ error: true, message: 'Requeue denied because the immutable AppCapabilityGrant snapshot is missing or disabled' })
+    }
     const payload = {
       jobId: job.id,
       appSlug: job.appSlug,
       capability: job.capability,
       prompt: job.prompt,
       input: safeParseJsonObject(job.inputJson),
-      metadata: safeParseJsonObject(job.metadataJson),
+      metadata,
       traceId,
       callbackUrl: job.callbackUrl || undefined,
+      appGrantSnapshot: appGrantSnapshot as never,
     }
 
     await prisma.job.update({

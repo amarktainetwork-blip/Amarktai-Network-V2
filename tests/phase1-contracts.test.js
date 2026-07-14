@@ -30,29 +30,28 @@ describe('Phase 1 provider source of truth', () => {
     }
   })
 
-  it('DeepInfra exists as an approved but unproven backend-controlled lane', () => {
+  it('DeepInfra exists as an approved runtime lane without fabricated live proof', () => {
     const deepinfra = PROVIDER_CONTRACTS.find((provider) => provider.id === 'deepinfra')
     expect(deepinfra).toMatchObject({
       finalProvider: true,
-      role: 'backend_text_fallback',
-      status: 'backend_text_fallback',
-      proofStatus: 'live_testable_not_capability_proof',
+      role: 'language_runtime',
+      status: 'runtime_policy_allowed',
+      proofStatus: 'not_live_proven',
+      backendRuntimeAllowed: true,
     })
   })
 
-  it('MiMo exists as a final coding and reasoning provider with policy restriction', () => {
+  it('MiMo exists as a final coding-agent-only provider with policy restriction', () => {
     const mimo = PROVIDER_CONTRACTS.find((provider) => provider.id === 'mimo')
     expect(mimo).toMatchObject({
       finalProvider: true,
-      role: 'coding_reasoning',
+      role: 'coding_agent_only',
       status: 'runtime_disabled',
-      integrationType: 'coding_tool',
       runtimeUse: 'coding_tools_only',
       backendRuntimeAllowed: false,
       workerRuntimeAllowed: false,
       fallbackEligible: false,
       browserExposureAllowed: false,
-      requiresServerSideTerminal: true,
       credentialUsagePolicy: 'coding_tools_only',
     })
   })
@@ -223,15 +222,17 @@ describe('Dashboard truth cleanup', () => {
     expect(storeText).toContain('submitDraft')
   })
 
-  it('Apps page does not render fake app cards', () => {
+  it('Apps page consumes the real authenticated connection API', () => {
     const appText = fs.readFileSync(path.join(ROOT, 'app/dashboard/app-gateway/page.js'), 'utf8')
     expect(appText).not.toContain('APP_TEMPLATES')
     expect(appText).not.toContain('Ready to configure')
     expect(appText).not.toContain('Requires backend connection')
     expect(appText).not.toContain('Connect after backend')
-    expect(appText).toContain('No apps connected yet')
-    expect(appText).toContain('Backend connection required')
-    expect(appText).toContain('Supported app types')
+    expect(appText).toContain("fetch('/api/admin/app-connections'")
+    expect(appText).toContain("fetch('/api/admin/truth'")
+    expect(appText).toContain("method: 'POST'")
+    expect(appText).toContain('releaseCandidateCapabilities')
+    expect(appText).toContain('Empty capability grants deny execution by default')
   })
 
   it('Work Library fetches real backend data', () => {
@@ -244,11 +245,11 @@ describe('Dashboard truth cleanup', () => {
     expect(jobsText).toContain('Loading jobs')
   })
 
-  it('Capability Library uses backend proof status instead of blanket Studio readiness', () => {
+  it('Capability Library uses canonical readiness separately from live proof', () => {
     const capText = fs.readFileSync(path.join(ROOT, 'app/dashboard/capabilities/page.js'), 'utf8')
     expect(capText).toContain('RuntimeProofSummary')
-    expect(capText).toContain('runtimeProofStatusLabel')
-    expect(capText).toContain('Disabled until backend proof passes')
+    expect(capText).toContain('useRuntimeProofStatus')
+    expect(capText).toContain('readyForDashboardExecution')
     expect(capText).not.toContain('Visible in Studio')
     expect(capText).not.toContain('Studio UI ready')
   })
@@ -279,7 +280,8 @@ describe('Dashboard truth cleanup', () => {
     expect(agentsText).not.toContain('No backend agents loaded')
     expect(agentsText).not.toContain('contract_ready')
     expect(agentsText).not.toContain('backend_pending')
-    expect(agentsText).toContain('No agents created yet')
+    expect(agentsText).toContain('Excluded from this release')
+    expect(agentsText).toContain('No agent executor or administration route is exposed')
   })
 
   it('Brand Library does not show fake section cards', () => {
@@ -287,7 +289,8 @@ describe('Dashboard truth cleanup', () => {
     expect(brandText).not.toContain('ui_ready')
     expect(brandText).not.toContain('Brand Details Panel')
     expect(brandText).not.toContain('Awaiting real BrandPack artifact data')
-    expect(brandText).toContain('No BrandPacks yet')
+    expect(brandText).toContain('Excluded from this release')
+    expect(brandText).toContain('No BrandPack execution or upload route is exposed')
   })
 
   it('Store does not create fake app IDs', () => {
@@ -341,12 +344,12 @@ describe('Dashboard truth cleanup', () => {
     expect(dashboardSection).not.toContain('curl')
   })
 
-  it('Command Center fetches provider status from backend', () => {
+  it('Command Center delegates to canonical System Monitoring', () => {
     const cmdText = fs.readFileSync(path.join(ROOT, 'app/dashboard/command-center/page.js'), 'utf8')
-    expect(cmdText).toContain('/api/admin/providers')
-    expect(cmdText).toContain('getHealthStatusLabel')
-    // Should not show static provider.status from contracts
-    expect(cmdText).not.toContain('{provider.status}')
+    expect(cmdText).toContain("export { default } from '../operations/page'")
+    const operations = fs.readFileSync(path.join(ROOT, 'app/dashboard/operations/page.js'), 'utf8')
+    expect(operations).toContain('/api/admin/truth')
+    expect(operations).toContain('/api/system/health')
   })
 
   it('Provider Settings uses backend status contract', () => {

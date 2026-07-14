@@ -137,6 +137,27 @@ export async function getArtifactFile(artifactId: string): Promise<{
   return { buffer, mimeType: artifact.mimeType, filename }
 }
 
+export async function getArtifactStream(artifactId: string, range?: { start: number; end: number }): Promise<{
+  stream: NodeJS.ReadableStream
+  mimeType: string
+  filename: string
+  sizeBytes: number
+} | null> {
+  const artifact = await prisma.artifact.findUnique({ where: { id: artifactId } })
+  if (!artifact || artifact.status !== 'completed') return null
+
+  const storage = getArtifactStorage()
+  const info = await storage.getInfo(artifact.storagePath)
+  if (!info.exists || info.sizeBytes <= 0) return null
+  const filename = artifact.storagePath.split('/').pop()?.replace(/["\r\n]/g, '_') ?? 'artifact'
+  return {
+    stream: storage.createReadStream(artifact.storagePath, range),
+    mimeType: artifact.mimeType,
+    filename,
+    sizeBytes: info.sizeBytes,
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getExtension(mimeType: string): string {

@@ -12,7 +12,7 @@ import {
 /**
  * Creates a deterministic long-form video plan from a request.
  * 
- * This is Phase 1: orchestration foundation only.
+ * Produces the durable plan consumed by the production long-form workflow.
  * - Splits duration across scenes
  * - Creates scene prompts
  * - Identifies render steps and dependencies

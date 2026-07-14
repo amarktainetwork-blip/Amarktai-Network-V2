@@ -22,8 +22,6 @@ export default function LoginPage() {
     setLoading(true)
 
     const loginUrl = '/api/auth/login'
-    console.log('Attempting login via:', loginUrl)
-
     try {
       const res = await fetch(loginUrl, {
         method: 'POST',
@@ -31,9 +29,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       })
 
-      console.log('Login response status:', res.status)
       const data = await res.json()
-      console.log('Login response data:', data)
 
       if (!res.ok) {
         setError(data.message || 'Invalid credentials')
@@ -43,9 +39,9 @@ export default function LoginPage() {
 
       localStorage.setItem('amarktai_token', data.token)
       localStorage.setItem('amarktai_user', JSON.stringify(data.user))
-      router.push('/dashboard/command-center')
-    } catch (err) {
-      console.error('Login error:', err)
+      const next = new URLSearchParams(window.location.search).get('next')
+      router.replace(next?.startsWith('/dashboard') ? next : '/dashboard/command-center')
+    } catch {
       setError('Network error. Please try again.')
       setLoading(false)
     }

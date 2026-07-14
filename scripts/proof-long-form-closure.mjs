@@ -60,7 +60,7 @@ function runStaticProof() {
   check(assembly.includes('-stream_loop') && assembly.includes('amix') && assembly.includes('subtitles='), 'worker assembly loops music, mixes narration, and burns subtitles')
   check(assembly.includes('ffprobe') && assembly.includes("codec_type === 'video'") && assembly.includes("codec_type === 'audio'"), 'worker assembly validates final video and audio streams')
   check(assembly.includes('finally') && assembly.includes('rm(workDir'), 'worker assembly cleans temporary files')
-  check(dashboard.includes("fetch('/api/admin/long-form-video/executions'") && dashboard.includes('fetch(`/api/admin/long-form-video/executions/${created.executionId}`'), 'dashboard submits once and polls one canonical execution')
+  check(dashboard.includes("adminFetch('/api/admin/long-form-video/executions'") && dashboard.includes('fetch(`/api/admin/long-form-video/executions/${id}`') && dashboard.includes('pollLong(data.executionId)'), 'dashboard submits once and polls one canonical execution')
   check(!dashboard.includes('/subtitles/') && !dashboard.includes('/music-bed/') && !dashboard.includes('/assemble/'), 'dashboard happy path has no manual component calls')
   check(existsSync(join(root, 'tests/genx-video-contract.test.js')) && existsSync(join(root, 'tests/genx-music-contract.test.js')), 'standalone GenX video and music regression tests remain')
   check(existsSync(join(root, 'tests/media-dynamic-routing.test.ts')) && existsSync(join(root, 'tests/long-form-workflow-advance.test.ts')), 'dynamic routing and idempotent workflow tests exist')

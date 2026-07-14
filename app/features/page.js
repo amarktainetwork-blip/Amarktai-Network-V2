@@ -6,26 +6,24 @@ import { ParticleField } from '@/components/amarkt/particles'
 import { SiteNav, SiteFooter } from '@/components/amarkt/site-nav'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowRight, Type, Image, Film, Music, Mic, User, Globe, BookOpen,
+  ArrowRight, Type, Image, Film, Music, Mic,
   Shield, Workflow, Database, Cpu, Layers, Server, Zap,
 } from 'lucide-react'
 
 const CAPABILITIES = [
   { icon: Type, title: 'Text & Language', category: 'Natural Language', desc: 'Chat completions, reasoning chains, code generation, structured output, embeddings, and reranking — all routed through a unified text engine with automatic provider selection.' },
   { icon: Image, title: 'Image Generation', category: 'Visual Creation', desc: 'Image generation and editing controls with provider/runtime routing contracts, artifact storage plans, and proof requirements.' },
-  { icon: Film, title: 'Video Generation', category: 'Motion & Film', desc: 'Short-form and planned long-form video workflows with async job contracts, provider attempts, and artifact retrieval states.' },
-  { icon: Music, title: 'Music & Audio', category: 'Audio Engine', desc: 'Music drafting controls for genre, mood, vocal style, instrumentation, duration, and backend-pending stem export.' },
+  { icon: Film, title: 'Video Generation', category: 'Motion & Film', desc: 'Short-form, source-driven, and durable long-form video workflows with queued execution, component progress, assembly, and authorised artifact delivery.' },
+  { icon: Music, title: 'Instrumental Music', category: 'Audio Engine', desc: 'Queued instrumental music generation with genre, mood, tempo, duration, reference-audio conditioning, playback, and authorised download.' },
   { icon: Mic, title: 'Voice — TTS & STT', category: 'Speech Pipeline', desc: 'Text-to-speech with voice persona customization and speech-to-text transcription. Supports multiple languages, accents, and real-time streaming.' },
-  { icon: User, title: 'Avatar Generation', category: 'Digital Presence', desc: 'AI-powered avatar creation with style, framing, and gesture controls. Paired with voice personas for complete digital presenter pipelines.' },
-  { icon: Globe, title: 'Brand Scraping', category: 'Intelligence Gathering', desc: 'Automated corporate website extraction: typography matrices, color palettes, taglines, and content walls. Structured JSON output for brand intelligence profiles.' },
-  { icon: BookOpen, title: 'RAG & Knowledge', category: 'Retrieval Engine', desc: 'Retrieval-Augmented Generation with vector embeddings, Qdrant-powered similarity search, and citation-backed responses. Ingest once, query forever.' },
+  { icon: Database, title: 'Embeddings & Reranking', category: 'Retrieval Primitives', desc: 'Vector generation, semantic similarity, feature extraction, and reranking through the same governed capability runtime.' },
 ]
 
 const ENGINE_FEATURES = [
   { icon: Workflow, title: 'Intelligent Routing', desc: 'The engine selects optimal providers based on capability, cost, latency, and availability. Fallback chains activate automatically.' },
   { icon: Shield, title: 'Tenant Isolation', desc: 'Absolute data isolation between connected apps. Per-connection API keys, capability scopes, and daily budget enforcement.' },
-  { icon: Database, title: 'Artifact Lineage', desc: 'Artifact contracts describe persistence, retrieval, trace, cost, and proof fields before backend integration begins.' },
-  { icon: Cpu, title: 'Provider Abstraction', desc: 'Swap final provider lanes without touching client code once backend routing and proof are wired.' },
+  { icon: Database, title: 'Artifact Lineage', desc: 'Authorised artifact storage, range streaming, download, trace, cost, and proof fields follow each queued request through delivery.' },
+  { icon: Cpu, title: 'Provider Abstraction', desc: 'Orchestra selects approved provider and model lanes without exposing provider controls to connected apps.' },
   { icon: Layers, title: 'Capability Contracts', desc: 'Strict typed input/output schemas per capability. Connected apps request capabilities — never models or providers.' },
   { icon: Server, title: 'Background Processing', desc: 'Durable BullMQ job queue with worker pipelines, progress tracking, automatic retries, and full artifact lineage.' },
 ]
@@ -53,7 +51,7 @@ export default function FeaturesPage() {
             Every AI capability. <span className="text-gradient">One engine.</span>
           </h1>
           <p className="animate-fade-up mt-6 max-w-2xl text-lg text-muted-foreground" style={{ animationDelay: '0.18s' }}>
-            AmarktAI Network is a modular AI capability engine that scales with your product. Text, image, video, voice, music, avatar, scraping, and retrieval — all accessible through a single API.
+            AmarktAI Network is a modular AI capability runtime for text, image, video, voice, instrumental music, embeddings, and reranking through one governed API.
           </p>
         </div>
       </section>
@@ -113,7 +111,7 @@ export default function FeaturesPage() {
               <div className="pointer-events-none absolute inset-0 aurora opacity-70" />
               <div className="relative">
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ready to integrate?</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Connect your app to one capability contract layer, then wire backend routes for execution, artifacts, and proof.</p>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Connect your app to one capability contract layer for governed execution, queues, artifacts, and runtime proof.</p>
                 <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                   <Link href="/pricing">
                     <Button size="lg" className="h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-7 text-black">View Pricing <ArrowRight className="ml-2 h-4 w-4" /></Button>

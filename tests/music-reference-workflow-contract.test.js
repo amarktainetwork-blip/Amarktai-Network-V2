@@ -13,6 +13,9 @@ const dbMocks = vi.hoisted(() => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    appCapabilityGrant: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -112,6 +115,15 @@ describe('music reference-track workflow contract', () => {
       fileSizeBytes: 4,
     })
     dbMocks.prisma.artifact.update.mockResolvedValue({})
+    dbMocks.prisma.appCapabilityGrant.findUnique.mockResolvedValue({
+      appSlug: 'dashboard-music',
+      capability: 'music_generation',
+      enabled: true,
+      artifactRead: true,
+      artifactWrite: true,
+      ragNamespaces: '[]',
+      providerResidencyConstraints: '[]',
+    })
   })
 
   it('uploads legal reference audio through artifact storage with rights and checksum metadata', async () => {
@@ -136,7 +148,7 @@ describe('music reference-track workflow contract', () => {
     expect(body).not.toHaveProperty('storagePath')
     expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({
-        appSlug: 'admin-music',
+        appSlug: 'dashboard-music',
         type: 'audio',
         subType: 'music_reference',
         metadata: expect.objectContaining({

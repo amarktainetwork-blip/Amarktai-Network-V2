@@ -1,0 +1,193 @@
+import { test, expect } from 'playwright/test'
+
+const baseURL = process.env.RELEASE_FIXTURE_BASE_URL || 'http://127.0.0.1:3210'
+const email = process.env.ADMIN_EMAIL || 'fixture-admin@invalid.example'
+const password = process.env.ADMIN_PASSWORD || ''
+
+test.describe.configure({ mode: 'serial', timeout: 12 * 60_000 })
+
+let page
+let token = ''
+let imageArtifactId = ''
+let videoArtifactId = ''
+const consoleErrors = []
+const stylesheetFailures = []
+
+test.beforeAll(async ({ browser }) => {
+  expect(password, 'ADMIN_PASSWORD must be supplied by the fixture runner').not.toBe('')
+  page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
+  page.on('response', (response) => {
+    if (response.request().resourceType() === 'stylesheet' && !response.ok()) stylesheetFailures.push(`${response.status()} ${response.url()}`)
+  })
+})
+
+test.afterAll(async () => {
+  await page?.close()
+})
+
+test('styled login establishes the verified dashboard shell', async () => {
+  await page.goto(`${baseURL}/login`, { waitUntil: 'networkidle' })
+  await expect(page.getByRole('heading', { name: 'AmarktAI Network' })).toBeVisible()
+  await expect(page.locator('form')).toBeVisible()
+  const formBackground = await page.locator('form').evaluate((form) => getComputedStyle(form.parentElement).backgroundColor)
+  expect(formBackground).not.toBe('rgba(0, 0, 0, 0)')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign In' }).click()
+  await page.waitForURL('**/dashboard/command-center')
+  await expect(page.locator('aside')).toBeVisible()
+  await expect(page.getByText('AmarktAI Network', { exact: true }).first()).toBeVisible()
+  token = await page.evaluate(() => localStorage.getItem('amarktai_token') || '')
+  expect(token.length).toBeGreaterThan(20)
+  expect(stylesheetFailures).toEqual([])
+
+  const layout = await page.locator('aside').evaluate((aside) => {
+    const box = aside.getBoundingClientRect()
+    return { display: getComputedStyle(aside).display, left: box.left, right: box.right, width: box.width }
+  })
+  expect(layout.display).not.toBe('none')
+  expect(layout.left).toBe(0)
+  expect(layout.width).toBeGreaterThan(200)
+})
+
+test('provider settings and canonical truth are consistent without browser keys', async () => {
+  const [truthResponse, providersResponse] = await Promise.all([
+    adminRequest('/api/admin/truth'),
+    adminRequest('/api/admin/providers'),
+  ])
+  expect(truthResponse.status()).toBe(200)
+  expect(providersResponse.status()).toBe(200)
+  const truth = (await truthResponse.json()).truth
+  const providers = (await providersResponse.json()).providers
+  expect(truth.releaseCandidateCapabilities).toHaveLength(27)
+  expect(providers).toHaveLength(5)
+  for (const provider of providers) {
+    expect(provider.apiKey).toBeUndefined()
+    const canonical = truth.providers.find((item) => item.provider === provider.providerKey)
+    expect(canonical?.credentialConfigured).toBe(provider.configured)
+    expect(canonical?.healthStatus).toBe(provider.healthStatus)
+  }
+  expect(truth.providers.find((item) => item.provider === 'mimo')?.codingOnly).toBe(true)
+})
+
+test('chat renders a multi-chunk SSE response with execution evidence', async () => {
+  await page.goto(`${baseURL}/dashboard/chat`)
+  await expect(page.getByRole('heading', { name: 'Chat' })).toBeVisible()
+  await page.getByPlaceholder('Message AmarktAI...').fill('Stream the fixture response.')
+  await page.getByRole('button', { name: 'Send message' }).click()
+  await expect(page.getByText('Deterministic fixture stream.', { exact: true })).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('3 chunks', { exact: true })).toBeVisible()
+})
+
+test('image result is rendered, range-readable, and downloadable', async () => {
+  await page.goto(`${baseURL}/dashboard/image`)
+  await page.getByPlaceholder('Describe the image you want to generate...').fill('A deterministic green release fixture')
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const image = page.getByAltText('Generated image')
+  await expect(image).toBeVisible({ timeout: 90_000 })
+  const download = page.getByRole('link', { name: 'Download' })
+  await expect(download).toBeVisible()
+  imageArtifactId = artifactIdFromHref(await download.getAttribute('href'))
+  await expectArtifact(imageArtifactId, 'image/')
+})
+
+test('music result has playable audio and an authenticated download', async () => {
+  await page.goto(`${baseURL}/dashboard/music`)
+  const prompt = page.getByPlaceholder('Describe the instrumental music you want to create...')
+  await expect(prompt).toBeEnabled({ timeout: 30_000 })
+  await prompt.fill('A deterministic instrumental fixture')
+  await page.getByRole('button', { name: 'Generate Instrumental Music' }).click()
+  const audio = page.locator('audio')
+  await expect(audio).toBeVisible({ timeout: 90_000 })
+  await expect(page.getByRole('link', { name: 'Download Audio' })).toBeVisible()
+  const source = await audio.getAttribute('src')
+  await expectArtifact(artifactIdFromHref(source), 'audio/')
+})
+
+test('source-artifact video flow renders provenance, preview, and download', async () => {
+  await page.goto(`${baseURL}/dashboard/video`)
+  await page.getByRole('button', { name: /Image to video/ }).click()
+  const sourceSelect = page.locator('select')
+  await expect(sourceSelect.locator(`option[value="${imageArtifactId}"]`)).toHaveCount(1, { timeout: 30_000 })
+  await sourceSelect.selectOption(imageArtifactId)
+  await expect(page.getByText(new RegExp(`Source provenance: .*${imageArtifactId}`))).toBeVisible()
+  await page.getByPlaceholder('Describe the video').fill('Animate the selected fixture image')
+  await page.getByRole('button', { name: 'Generate video' }).click()
+  const download = page.getByRole('link', { name: 'Download video' })
+  await expect(download).toBeVisible({ timeout: 120_000 })
+  videoArtifactId = artifactIdFromHref(await download.getAttribute('href'))
+  await expectArtifact(videoArtifactId, 'video/')
+
+  await page.getByRole('button', { name: /Video to video/ }).click()
+  await expect(sourceSelect.locator(`option[value="${videoArtifactId}"]`)).toHaveCount(1, { timeout: 30_000 })
+  await sourceSelect.selectOption(videoArtifactId)
+  await expect(page.locator('video').first()).toBeVisible()
+})
+
+test('long-form execution survives reload and renders component/final evidence', async () => {
+  const submitted = await adminRequest('/api/admin/long-form-video/executions', {
+    method: 'POST',
+    data: {
+      request: {
+        prompt: 'A deterministic release fixture story', targetDurationSeconds: 15, sceneCount: 3,
+        aspectRatio: '16:9', style: 'cinematic', tone: 'professional', voiceoverEnabled: true,
+        subtitlesEnabled: true, musicBedEnabled: true, count: 1, routingMode: 'balanced',
+      },
+    },
+  })
+  expect(submitted.status()).toBe(200)
+  const { executionId } = await submitted.json()
+  expect(executionId).toBeTruthy()
+  await page.goto(`${baseURL}/dashboard/video`)
+  await page.getByRole('button', { name: /Long-form video/ }).click()
+  await page.evaluate((id) => localStorage.setItem('amarktai_long_form_execution_id', id), executionId)
+  await page.reload()
+  await expect(page.getByText(executionId, { exact: true })).toBeVisible({ timeout: 30_000 })
+  for (const component of ['Scenes', 'Voiceover', 'Subtitles', 'Music', 'Assembly']) {
+    await expect(page.getByText(component, { exact: true })).toBeVisible()
+  }
+  const finalDownload = page.getByRole('link', { name: 'Download final video' })
+  await expect(finalDownload).toBeVisible({ timeout: 8 * 60_000 })
+  const finalId = artifactIdFromHref(await finalDownload.getAttribute('href'))
+  await expectArtifact(finalId, 'video/')
+})
+
+test('dashboards expose no provider/model override controls and navigation has no console errors', async () => {
+  for (const route of ['chat', 'image', 'video', 'music', 'voice', 'capability-lab']) {
+    await page.goto(`${baseURL}/dashboard/${route}`)
+    await expect(page.locator('input[name="provider"],select[name="provider"],input[name="model"],select[name="model"]')).toHaveCount(0)
+    await expect(page.getByLabel('Provider', { exact: true })).toHaveCount(0)
+    await expect(page.getByLabel('Model', { exact: true })).toHaveCount(0)
+  }
+  expect(stylesheetFailures).toEqual([])
+  expect(consoleErrors).toEqual([])
+})
+
+test('expired token is cleared and redirected to login', async () => {
+  await page.evaluate(() => localStorage.setItem('amarktai_token', 'expired-fixture-token'))
+  await page.goto(`${baseURL}/dashboard/chat`)
+  await page.waitForURL('**/login?next=%2Fdashboard%2Fchat', { timeout: 30_000 })
+  expect(await page.evaluate(() => localStorage.getItem('amarktai_token'))).toBeNull()
+})
+
+async function adminRequest(path, options = {}) {
+  return page.request.fetch(`${baseURL}${path}`, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
+  })
+}
+
+async function expectArtifact(id, mimePrefix) {
+  expect(id).toBeTruthy()
+  const response = await adminRequest(`/api/admin/artifacts/${id}/file`, { headers: { Range: 'bytes=0-31' } })
+  expect([200, 206]).toContain(response.status())
+  expect(response.headers()['content-type']?.startsWith(mimePrefix)).toBe(true)
+  expect(Number(response.headers()['content-length'] || 0)).toBeGreaterThan(0)
+  const unauthorisedStatus = await page.evaluate(async (url) => (await fetch(url, { credentials: 'omit' })).status, `${baseURL}/api/admin/artifacts/${id}/file`)
+  expect(unauthorisedStatus).toBe(401)
+}
+
+function artifactIdFromHref(href) {
+  return String(href || '').match(/artifacts\/([^/]+)\/file/)?.[1] || ''
+}

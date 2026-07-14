@@ -5,8 +5,9 @@ const source = readFileSync(new URL('../app/dashboard/video/page.js', import.met
 
 describe('long-form dashboard one-request contract', () => {
   it('submits and polls one parent execution without provider/model or manual component calls', () => {
-    expect(source).toContain("fetch('/api/admin/long-form-video/executions'")
-    expect(source).toContain('/api/admin/long-form-video/executions/${created.executionId}')
+    expect(source).toContain("adminFetch('/api/admin/long-form-video/executions'")
+    expect(source).toContain('/api/admin/long-form-video/executions/${id}')
+    expect(source).toContain("localStorage.setItem(LONG_EXECUTION_KEY, data.executionId)")
     expect(source).not.toContain("fetch('/api/admin/long-form-video/subtitles")
     expect(source).not.toContain("fetch('/api/admin/long-form-video/music-bed")
     expect(source).not.toContain("fetch('/api/admin/long-form-video/assemble")
@@ -15,8 +16,8 @@ describe('long-form dashboard one-request contract', () => {
   })
 
   it('shows independent component progress and final preview/download', () => {
-    for (const field of ['componentState.scenes', 'componentState.voiceover', 'componentState.subtitles', 'componentState.musicBed', 'componentState.assembly']) expect(source).toContain(field)
-    expect(source).toContain('<video src={previewUrl} controls')
+    for (const field of ['componentState?.scenes', 'componentState?.voiceover', 'componentState?.subtitles', 'componentState?.musicBed', 'componentState?.assembly']) expect(source).toContain(field)
+    expect(source).toContain('/api/admin/artifacts/${finalArtifactId}/file')
     expect(source).toContain('Download final video')
   })
 })

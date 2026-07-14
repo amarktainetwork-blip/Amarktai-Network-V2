@@ -1,5 +1,6 @@
 import {
   createCanonicalProviderUsage,
+  canReadSourceArtifactForApp,
   DIRECT_PROVIDER_OUTPUT_SCHEMAS,
   validateDirectProviderRequest,
   validateJsonSchemaValue,
@@ -392,7 +393,7 @@ async function executeGroqStt(payload: WorkerJobData, selectedModel: string): Pr
   if (!grant?.artifactRead) return failure('AppCapabilityGrant denies artifact read for STT', 'groq', selectedModel)
   try {
     const source = await getArtifactRecord(String(input.artifactId))
-    if (!source || source.appSlug !== payload.appSlug) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source artifact was not found' })
+    if (!source || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source artifact was not found' })
     if (source.status !== 'completed' || (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/'))) {
       throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source must be a completed audio or video artifact' })
     }

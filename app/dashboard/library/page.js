@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import { getRuntimeCapabilityProof } from '@/lib/runtime-proof-status'
-import { MessageSquare, Image as ImageIcon, Video, Music, FileText, FileArchive, FolderOpen, ExternalLink } from 'lucide-react'
+import { MessageSquare, Image as ImageIcon, Video, Music, FileText, FolderOpen, ExternalLink } from 'lucide-react'
 
 export default function LibraryPage() {
   const { status: runtimeProofStatus } = useRuntimeProofStatus()
@@ -15,13 +15,12 @@ export default function LibraryPage() {
   const videoReady = videoProof.readyForDashboardExecution === true
 
   const librarySections = [
-    { label: 'Images', icon: ImageIcon, status: imageReady ? 'live' : 'pending', href: '/dashboard/artifacts', description: 'Generated image artifacts' },
-    { label: 'Videos', icon: Video, status: videoReady ? 'live' : 'pending', href: '/dashboard/artifacts', description: 'Generated video artifacts' },
-    { label: 'All Artifacts', icon: FolderOpen, status: 'live', href: '/dashboard/artifacts', description: 'Complete artifact listing with preview and download' },
-    { label: 'Chats', icon: MessageSquare, status: 'pending', href: '/dashboard/chat', description: 'Conversation history (backend pending)' },
-    { label: 'Music', icon: Music, status: 'pending', href: '/dashboard/music', description: 'Generated audio artifacts (backend pending)' },
-    { label: 'Research Reports', icon: FileText, status: 'pending', href: '/dashboard/research', description: 'Saved research reports (backend pending)' },
-    { label: 'Uploaded Files', icon: FileArchive, status: 'pending', href: null, description: 'User-uploaded documents (backend pending)' },
+    { label: 'Images', icon: ImageIcon, status: imageReady ? 'ready' : 'blocked', href: '/dashboard/artifacts', description: 'Canonical generated image artifacts' },
+    { label: 'Videos', icon: Video, status: videoReady ? 'ready' : 'blocked', href: '/dashboard/artifacts', description: 'Short, source-aware, and long-form video artifacts' },
+    { label: 'Music & Voice', icon: Music, status: 'ready', href: '/dashboard/artifacts', description: 'Generated instrumental music and speech artifacts' },
+    { label: 'All Artifacts', icon: FolderOpen, status: 'ready', href: '/dashboard/artifacts', description: 'Authenticated listing with preview, range playback, and download' },
+    { label: 'Chats', icon: MessageSquare, status: 'browser', href: '/dashboard/chat', description: 'Multi-turn history stored in this authenticated browser' },
+    { label: 'Research Reports', icon: FileText, status: 'excluded', href: '/dashboard/research', description: 'Research is outside this release candidate' },
   ]
 
   return (
@@ -31,8 +30,8 @@ export default function LibraryPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {librarySections.map((section) => {
           const Icon = section.icon
-          const statusLabel = section.status === 'live' ? 'Live' : 'Pending'
-          const statusClass = section.status === 'live' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-400'
+          const statusLabel = section.status === 'ready' ? 'Ready' : section.status === 'browser' ? 'Browser local' : section.status === 'excluded' ? 'Excluded' : 'Blocked by runtime truth'
+          const statusClass = section.status === 'ready' || section.status === 'browser' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-400'
           return (
             <Card key={section.label} className="border-white/[0.07] bg-white/[0.02] p-4">
               <div className="flex items-center justify-between">
