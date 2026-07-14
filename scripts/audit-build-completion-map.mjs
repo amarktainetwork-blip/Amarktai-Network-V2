@@ -328,8 +328,10 @@ async function runAudit() {
   
   // Text capabilities supported by Groq/DeepInfra text executor
   const textRouterCapabilities = [
-    'chat', 'reasoning', 'code', 'summarization', 
-    'translation', 'classification', 'extraction', 'structured_output'
+    'chat', 'streaming_chat', 'reasoning', 'code', 'summarization',
+    'translation', 'question_answering', 'classification', 'zero_shot_classification',
+    'extraction', 'token_classification', 'fill_mask', 'feature_extraction',
+    'sentence_similarity', 'table_qa', 'structured_output', 'tool_use'
   ]
   
   // Media capabilities supported by Together/GenX

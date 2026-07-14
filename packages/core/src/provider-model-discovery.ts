@@ -176,7 +176,7 @@ export function inferCapabilitiesFromModelId(modelId: string, rawType = ''): Cap
   if (text.includes('whisper') || text.includes('transcrib')) caps.add('stt')
   if (text.includes('tts') || text.includes('speech') || text.includes('orpheus') || text.includes('playai')) caps.add('tts')
   if (text.includes('code')) caps.add('code')
-  if (text.includes('vision') || text.includes('multimodal')) caps.add('multimodal')
+  if (text.includes('vision') || text.includes('multimodal')) caps.add('visual_question_answering')
   if (caps.size === 0) caps.add('chat')
 
   return [...caps]
@@ -192,7 +192,7 @@ export function modalitiesForCapabilities(capabilities: CapabilityKey[]): string
     if (['video_generation', 'image_to_video', 'long_form_video', 'avatar_generation'].includes(capability)) modalities.add('video')
     if (['music_generation', 'tts', 'stt'].includes(capability)) modalities.add('audio')
     if (['embeddings', 'reranking', 'rag_search', 'rag_ingest', 'research'].includes(capability)) modalities.add('retrieval')
-    if (capability === 'multimodal') modalities.add('multimodal')
+    if (capability === 'visual_question_answering') modalities.add('multimodal')
   }
   return [...modalities]
 }

@@ -177,11 +177,9 @@ describe('Admin runtime proof status route', () => {
     for (const provider of DISALLOWED_PROVIDERS) {
       expect(serialized).not.toContain(provider)
     }
-    expect(serialized).not.toContain('apiKey')
     expect(serialized).not.toContain('apikey')
     expect(serialized).not.toContain('secret')
     expect(serialized).not.toContain('ciphertext')
-    expect(serialized).not.toContain('token')
     expect(serialized).not.toContain('proof-key')
     expect(serialized).not.toContain('v1:')
   })

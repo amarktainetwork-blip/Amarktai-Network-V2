@@ -162,10 +162,22 @@ describe('Worker payload validation', () => {
 
   it('accepts all valid capability keys', () => {
     const validCaps = [
-      'chat', 'reasoning', 'code', 'image_generation', 'image_edit',
-      'tts', 'stt', 'video_generation', 'music_generation', 'avatar_generation',
-      'embeddings', 'reranking', 'research', 'multimodal', 'tool_use',
-      'structured_output', 'brand_scrape', 'rag_ingest', 'rag_search',
+      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
+      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
+      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
+      'table_qa', 'structured_output', 'tool_use',
+      'image_generation', 'image_edit', 'image_to_image', 'image_upscale',
+      'image_classification', 'object_detection', 'image_segmentation', 'depth_estimation',
+      'keypoint_detection', 'visual_question_answering', 'document_qa', 'ocr',
+      'zero_shot_object_detection', 'mask_generation', 'visual_document_retrieval',
+      'video_generation', 'image_to_video', 'video_to_video', 'long_form_video',
+      'video_understanding', 'video_classification', 'storyboard_generation',
+      'subtitle_generation', 'lip_sync', 'avatar_generation', 'text_to_3d', 'image_to_3d',
+      'tts', 'stt', 'voice_clone', 'voice_conversion', 'text_to_audio', 'audio_to_audio',
+      'audio_classification', 'voice_activity_detection', 'music_generation', 'song_generation',
+      'embeddings', 'reranking', 'rag_ingest', 'rag_search', 'research', 'brand_scrape',
+      'document_ingest', 'campaign_generation', 'social_content_generation',
+      'adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video',
     ]
     for (const cap of validCaps) {
       expect(validatePayload(makePayload({ capability: cap })), `${cap} should be valid`).toBeNull()

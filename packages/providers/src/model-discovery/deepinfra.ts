@@ -18,7 +18,7 @@ function deepinfraCapabilities(modelId: string, rawType: string, record: Record<
   if (/embedding/.test(text)) capabilities.add('embeddings')
   if (/rerank/.test(text)) capabilities.add('reranking')
   if (/ocr/.test(text)) capabilities.add('ocr')
-  if (/vision|multimodal|image/.test(text)) capabilities.add('multimodal')
+  if (/vision|multimodal|image/.test(text)) capabilities.add('visual_question_answering')
   if (/text-generation|chat|llama|qwen|mistral|deepseek|claude/.test(text)) capabilities.add('chat')
   if (/reasoning/.test(text)) capabilities.add('reasoning')
   if (/tools|structured-output|json/.test(text)) capabilities.add('structured_output')

@@ -175,8 +175,8 @@ describe('Build Completion Audit', () => {
 
   it('audit console output shows correct executable capability count', () => {
     const output = auditConsoleOutput
-    expect(output).toContain('Total executable: 10')
-    expect(output).toContain('Via text router (Groq/DeepInfra): 8')
+    expect(output).toContain('Total executable: 11')
+    expect(output).toContain('Via text router (Groq/DeepInfra): 9')
     expect(output).toContain('Via media worker (Together/GenX): 2')
   })
 
