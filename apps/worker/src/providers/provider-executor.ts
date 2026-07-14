@@ -1195,6 +1195,8 @@ function canExecuteProviderForCapability(
       'question_answering', 'classification', 'zero_shot_classification', 'extraction',
       'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
       'table_qa', 'structured_output', 'tool_use',
+      'rag_ingest', 'rag_search', 'research', 'brand_scrape', 'document_ingest',
+      'campaign_generation', 'social_content_generation',
     ]
     const audioCaps: CapabilityKey[] = ['tts', 'stt', 'text_to_audio', 'audio_to_audio']
     return textCaps.includes(capability) || audioCaps.includes(capability)
@@ -1205,13 +1207,17 @@ function canExecuteProviderForCapability(
       'question_answering', 'classification', 'zero_shot_classification', 'extraction',
       'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
       'table_qa', 'structured_output', 'tool_use',
+      'embeddings', 'reranking',
+      'rag_ingest', 'rag_search', 'research', 'brand_scrape', 'document_ingest',
+      'campaign_generation', 'social_content_generation',
     ]
     return textCaps.includes(capability)
   }
   if (provider === 'together') {
     const imageCaps: CapabilityKey[] = ['image_generation', 'image_edit', 'image_to_image', 'image_upscale']
     const audioCaps: CapabilityKey[] = ['tts', 'stt', 'voice_clone', 'voice_conversion', 'text_to_audio', 'audio_to_audio']
-    return imageCaps.includes(capability) || audioCaps.includes(capability)
+    const knowledgeCaps: CapabilityKey[] = ['embeddings', 'reranking']
+    return imageCaps.includes(capability) || audioCaps.includes(capability) || knowledgeCaps.includes(capability)
   }
   if (provider === 'genx') {
     const videoCaps: CapabilityKey[] = ['video_generation', 'image_to_video', 'video_to_video', 'long_form_video', 'music_generation', 'song_generation']
