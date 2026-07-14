@@ -133,6 +133,31 @@ export const CODING_TOOL_CAPABILITIES = new Set<CapabilityKey>([
 
 // ── Request Contract ───────────────────────────────────────────
 
+export interface AppCapabilityGrantContext {
+  appSlug: string
+  capability: CapabilityKey
+  enabled: boolean
+  qualityFloor: string
+  budgetPolicy: string
+  maxCostPerRequest: number
+  maxCostPerWorkflow: number
+  latencyPreference: string
+  allowFallback: boolean
+  maxFallbackAttempts: number
+  liveProofRequired: boolean
+  approvalRequired: boolean
+  artifactRead: boolean
+  artifactWrite: boolean
+  memoryRead: boolean
+  memoryWrite: boolean
+  ragNamespaces: string[]
+  policyProfile: string
+  adultPermission: boolean
+  dataRetentionPolicy: string
+  passthroughModelAllowed: boolean
+  providerResidencyConstraints: string[]
+}
+
 export interface OrchestraRequest {
   capability: CapabilityKey
   routingMode?: OrchestraRoutingMode
@@ -142,6 +167,7 @@ export interface OrchestraRequest {
   latencyPreference?: 'low' | 'medium' | 'high'
   budgetLimit?: number
   executionId?: string
+  appGrant?: AppCapabilityGrantContext
 }
 
 // ── Request Validation ─────────────────────────────────────────
@@ -242,8 +268,34 @@ function isCodingCapability(capability: CapabilityKey): boolean {
 export function checkCandidateEligibility(
   candidate: OrchestraCandidate,
   capability: CapabilityKey,
+  appGrant?: AppCapabilityGrantContext,
 ): string[] {
   const blockers: string[] = []
+
+  // App grant checks
+  if (appGrant) {
+    if (!appGrant.enabled) {
+      blockers.push('app_capability_disabled')
+      return blockers
+    }
+
+    if (appGrant.approvalRequired) {
+      blockers.push('app_approval_required')
+    }
+
+    if (appGrant.liveProofRequired && !candidate.liveProven) {
+      blockers.push('app_live_proof_required')
+    }
+
+    if (!appGrant.adultPermission && capability.startsWith('adult_')) {
+      blockers.push('app_adult_permission_required')
+    }
+
+    if (appGrant.providerResidencyConstraints.length > 0 &&
+        !appGrant.providerResidencyConstraints.includes(candidate.provider)) {
+      blockers.push('app_provider_residency_constraint')
+    }
+  }
 
   if (!isProviderApproved(candidate.provider)) {
     blockers.push('provider_not_approved')
@@ -459,12 +511,13 @@ export function evaluateOrchestra(
   const routingMode = request.routingMode ?? 'balanced'
   const executionId = request.executionId ?? `exec_${Date.now()}`
   const weights = getWeights(routingMode)
+  const appGrant = request.appGrant
 
   const eligible: OrchestraCandidate[] = []
   const blockersRejected: Array<{ provider: string; model: string; blockers: string[] }> = []
 
   for (const candidate of candidates) {
-    const blockers = checkCandidateEligibility(candidate, capability)
+    const blockers = checkCandidateEligibility(candidate, capability, appGrant)
     if (blockers.length > 0) {
       blockersRejected.push({
         provider: candidate.provider,
@@ -472,6 +525,18 @@ export function evaluateOrchestra(
         blockers,
       })
       continue
+    }
+
+    // Budget check if app grant specifies cost limits
+    if (appGrant && appGrant.maxCostPerRequest > 0 && candidate.estimatedCost !== null) {
+      if (candidate.estimatedCost > appGrant.maxCostPerRequest) {
+        blockersRejected.push({
+          provider: candidate.provider,
+          model: candidate.model,
+          blockers: ['exceeds_app_cost_limit'],
+        })
+        continue
+      }
     }
 
     const { score, breakdown } = scoreCandidate(candidate, weights)
@@ -482,8 +547,10 @@ export function evaluateOrchestra(
 
   eligible.sort(compareCandidates)
 
+  // Respect app grant fallback limits
+  const maxFallbacks = appGrant?.allowFallback === false ? 0 : (appGrant?.maxFallbackAttempts ?? 3)
   const selected = eligible[0] ?? null
-  const fallbackRoutes: OrchestraFallbackRoute[] = eligible.slice(1, 4).map((c) => ({
+  const fallbackRoutes: OrchestraFallbackRoute[] = eligible.slice(1, 1 + maxFallbacks).map((c) => ({
     provider: c.provider,
     model: c.model,
     score: c.score,

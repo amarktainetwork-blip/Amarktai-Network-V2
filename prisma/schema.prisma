@@ -1013,6 +1013,46 @@ model AppBudgetConfig {
   @@map("app_budget_configs")
 }
 
+/// Per-app capability grant — controls which capabilities an app can use and with what constraints.
+model AppCapabilityGrant {
+  id                      Int      @id @default(autoincrement())
+  appSlug                 String   @map("app_slug")
+  capability              String   // chat, image_generation, video_generation, tts, etc.
+
+  enabled                 Boolean  @default(true)
+
+  qualityFloor            String   @default("balanced") @map("quality_floor") // budget, balanced, premium
+  budgetPolicy            String   @default("balanced") @map("budget_policy") // premium, budget, mix
+  maxCostPerRequest       Int      @default(0) @map("max_cost_per_request") // USD cents, 0 = unlimited
+  maxCostPerWorkflow      Int      @default(0) @map("max_cost_per_workflow") // USD cents, 0 = unlimited
+  latencyPreference       String   @default("medium") @map("latency_preference") // low, medium, high
+
+  allowFallback           Boolean  @default(true) @map("allow_fallback")
+  maxFallbackAttempts     Int      @default(3) @map("max_fallback_attempts")
+  liveProofRequired       Boolean  @default(false) @map("live_proof_required")
+  approvalRequired        Boolean  @default(false) @map("approval_required")
+
+  artifactRead            Boolean  @default(true) @map("artifact_read")
+  artifactWrite           Boolean  @default(true) @map("artifact_write")
+  memoryRead              Boolean  @default(false) @map("memory_read")
+  memoryWrite             Boolean  @default(false) @map("memory_write")
+  ragNamespaces           String   @default("[]") @map("rag_namespaces") // JSON array of allowed namespaces
+
+  policyProfile           String   @default("standard") @map("policy_profile")
+  adultPermission         Boolean  @default(false) @map("adult_permission")
+  dataRetentionPolicy     String   @default("default") @map("data_retention_policy")
+  passthroughModelAllowed Boolean  @default(false) @map("passthrough_model_allowed")
+  providerResidencyConstraints String @default("[]") @map("provider_residency_constraints") // JSON array
+
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@unique([appSlug, capability], name: "app_capability_grant_unique")
+  @@index([appSlug])
+  @@index([capability])
+  @@map("app_capability_grants")
+}
+
 /// Usage metering record — one row per app per day per capability per provider.
 model UsageMeter {
   id              Int      @id @default(autoincrement())

@@ -207,7 +207,21 @@ export {
   type ScoringWeights,
   type DbModelRecord,
   type DbProviderRecord,
+  type AppCapabilityGrantContext,
 } from './orchestra.js'
+
+// Budget policy
+export {
+  PUBLIC_BUDGET_POLICIES,
+  QUALITY_FLOORS,
+  mapBudgetPolicyToRoutingMode,
+  getMixPolicyStepMode,
+  checkBudgetConstraints,
+  meetsQualityFloor,
+  type PublicBudgetPolicy,
+  type QualityFloor,
+  type BudgetCheckResult,
+} from './budget-policy.js'
 
 // Canonical runtime truth
 export {
