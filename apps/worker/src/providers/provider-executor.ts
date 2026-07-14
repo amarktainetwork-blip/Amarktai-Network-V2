@@ -1208,7 +1208,8 @@ function canExecuteProviderForCapability(
     return textCaps.includes(capability)
   }
   if (provider === 'together') {
-    return capability === 'image_generation'
+    const imageCaps: CapabilityKey[] = ['image_generation', 'image_edit', 'image_to_image', 'image_upscale']
+    return imageCaps.includes(capability)
   }
   if (provider === 'genx') {
     return capability === 'video_generation' || capability === 'music_generation'
@@ -1266,7 +1267,7 @@ async function executeWithSelectedProvider(
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    if (provider === 'together' && capability === 'image_generation') {
+    if (provider === 'together' && ['image_generation', 'image_edit', 'image_to_image', 'image_upscale'].includes(capability)) {
       const result = await executeTogetherImage(payload, selectedModel)
       return attachBrainRouterMetadata(result, decision, routingMode)
     }
