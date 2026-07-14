@@ -26,6 +26,7 @@ import { adminLongFormVideoRoutes } from './routes/admin-long-form-video.js'
 import { adminMusicRoutes } from './routes/admin-music.js'
 import { adminModelDiscoveryRoutes } from './routes/admin-model-discovery.js'
 import { modelRegistryRoutes } from './routes/model-registry.js'
+import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
 import { appGrantRoutes } from './routes/admin-app-grants.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
   await app.register(adminMusicRoutes)
   await app.register(adminModelDiscoveryRoutes)
   await app.register(modelRegistryRoutes)
+  await app.register(streamingChatRoutes)
   await app.register(adminAppConnectionRoutes)
   await app.register(appGrantRoutes)
   await app.register(jobRoutes)

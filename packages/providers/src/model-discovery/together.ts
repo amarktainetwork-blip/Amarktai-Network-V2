@@ -21,7 +21,8 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
   const timestamp = discoveryTimestamp(options)
   const staticModels = [
     modelFromProviderRecord({ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1 Schnell', rawProviderType: 'image', category: 'image', endpointSource: 'repo_static_together_client', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'native_inference_json', batchSupported: true }),
-    modelFromProviderRecord({ provider: 'together', modelId: 'togethercomputer/m2-bert-80M-32k-retrieval', displayName: 'M2-BERT 80M 32K Retrieval', rawProviderType: 'embedding', category: 'embedding', endpointSource: 'Together official docs fallback /models', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: false, transportProfile: 'native_inference_json', batchSupported: true }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'intfloat/multilingual-e5-large-instruct', displayName: 'Multilingual E5 Large Instruct', rawProviderType: 'embedding', category: 'embedding', endpointSource: 'Together official embeddings docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, transportProfile: 'native_inference_json', batchSupported: true }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'Salesforce/Llama-Rank-v1', displayName: 'Llama Rank V1', rawProviderType: 'rerank', category: 'rerank', endpointSource: 'Together official rerank docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, transportProfile: 'native_inference_json', batchSupported: true }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -36,6 +37,13 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
         const rawType = stringField(record, ['type', 'object', 'display_type'])
         const modelId = stringField(record, ['id', 'model', 'name'])
         const capabilities = togetherCapabilities(modelId, rawType)
+        const implementedModels = new Set([
+          'black-forest-labs/FLUX.1-schnell',
+          'intfloat/multilingual-e5-large-instruct',
+          'togethercomputer/m2-bert-80M-32k-retrieval',
+          'Salesforce/Llama-Rank-v1',
+        ])
+        const implemented = implementedModels.has(modelId)
         const isExecutableImage = capabilities.includes('image_generation') && modelId === 'black-forest-labs/FLUX.1-schnell'
         return modelFromProviderRecord({
           provider: 'together',
@@ -51,10 +59,10 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
           lastDiscoveredAt: timestamp,
           source: 'live_endpoint',
           discoverySource: 'live_endpoint',
-          providerClientExists: isExecutableImage,
-          workerExecutorExists: isExecutableImage,
-          requestShapeKnown: isExecutableImage,
-          responseShapeKnown: isExecutableImage,
+          providerClientExists: implemented,
+          workerExecutorExists: implemented,
+          requestShapeKnown: implemented,
+          responseShapeKnown: implemented,
           artifactPersistenceExists: isExecutableImage || !capabilities.some((capability) => ['image_generation', 'video_generation', 'tts', 'music_generation'].includes(capability)),
           contextWindow: numberField(record, ['context_length', 'contextWindow']),
           rawMetadata: {

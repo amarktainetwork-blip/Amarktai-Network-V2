@@ -1,5 +1,11 @@
 import { prisma } from '@amarktai/db'
-import { APPROVED_PROVIDER_DEFINITIONS } from '@amarktai/core'
+import {
+  APPROVED_PROVIDER_DEFINITIONS,
+  CAPABILITY_FIELD_MAP,
+  MODEL_CATALOGUE,
+  type CapabilityKey,
+  type ModelRecord,
+} from '@amarktai/core'
 import type { DiscoveryResult, GenXPricingResult } from './provider-discovery.js'
 
 const MAX_METADATA_CHARS = 500_000
@@ -16,6 +22,7 @@ export interface ModelCatalogEntry {
   latencyTier: string
   contextWindow: number
   capabilities: Record<string, boolean>
+  canonicalCapabilities?: CapabilityKey[]
   estimatedUnitCost: number | null
   qualityTier: string
   source: string
@@ -87,6 +94,7 @@ interface GenXPricingCatalogData {
   supportsImageGeneration: boolean
   supportsImageEditing: boolean
   supportsVideoGeneration: boolean
+  supportsMusicGeneration: boolean
   supportsStt: boolean
   supportsTts: boolean
   supportsEmbeddings: boolean
@@ -204,7 +212,7 @@ function mapGenXPricingCapabilities(rawCategoryInput: string, modelId: string): 
   }
 
   if (text.includes('audio') || text.includes('music')) {
-    return { category: 'audio', primaryRole: 'music_generation', capabilities: {} }
+    return { category: 'audio', primaryRole: 'music_generation', capabilities: { supportsMusicGeneration: true } }
   }
 
   if (text.includes('text') || text.includes('chat') || text.includes('reason')) {
@@ -223,6 +231,7 @@ function defaultCapabilityFlags(): Pick<
   | 'supportsImageGeneration'
   | 'supportsImageEditing'
   | 'supportsVideoGeneration'
+  | 'supportsMusicGeneration'
   | 'supportsStt'
   | 'supportsTts'
   | 'supportsEmbeddings'
@@ -240,6 +249,7 @@ function defaultCapabilityFlags(): Pick<
     supportsImageGeneration: false,
     supportsImageEditing: false,
     supportsVideoGeneration: false,
+    supportsMusicGeneration: false,
     supportsStt: false,
     supportsTts: false,
     supportsEmbeddings: false,
@@ -310,36 +320,42 @@ function buildGenXPricingCatalogData(
   }
 }
 
-// Curated seed catalog — source = curated_seed, catalogCompleteness = curated_fallback_only
-export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = [
-  // ── MiMo: coding-tool only ───────────────────────────────────────────────
-  {
-    provider: 'mimo',
-    modelId: 'mimo-coding-agent',
-    displayName: 'MiMo Coding Agent',
-    family: 'mimo',
-    category: 'code',
-    primaryRole: 'coding_tool',
-    costTier: 'medium',
-    latencyTier: 'medium',
-    contextWindow: 128000,
-    capabilities: { supportsCode: true, supportsToolUse: true },
-    estimatedUnitCost: 0.00001,
+// Curated DB projection is derived from the canonical core model catalogue.
+export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = MODEL_CATALOGUE
+  .filter((model) => model.discoveredModel !== true)
+  .map(modelRecordToCatalogEntry)
+
+function modelRecordToCatalogEntry(model: ModelRecord): ModelCatalogEntry {
+  const capabilities: Record<string, boolean> = {}
+  for (const capability of model.capabilities) capabilities[CAPABILITY_FIELD_MAP[capability]] = true
+  return {
+    provider: model.provider,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    family: model.modelId.split('/')[0] ?? model.provider,
+    category: model.category ?? (model.capabilities.includes('embeddings') ? 'embeddings' : model.capabilities.includes('reranking') ? 'reranking' : 'text'),
+    primaryRole: model.capabilities[0] ?? 'chat',
+    costTier: model.costTier,
+    latencyTier: model.latencyTier,
+    contextWindow: 0,
+    capabilities,
+    canonicalCapabilities: [...model.capabilities],
+    estimatedUnitCost: null,
+    qualityTier: model.qualityTier,
+    source: model.source ?? 'curated_seed',
+    catalogCompleteness: 'curated_fallback_only',
+    isLiveDiscovered: model.liveDiscovered === true,
+    modelOwner: model.upstreamProvider ?? model.provider,
+    notes: model.notes,
     pricingSource: 'unknown',
     pricingConfidence: 'unknown',
     pricingUnit: '',
     pricingCurrency: '',
     pricingRawMetadata: {},
     lastPricingSyncedAt: null,
-    pricingBlocker: 'coding_tool_only_not_backend_runtime',
-    qualityTier: 'premium',
-    source: 'curated_seed',
-    catalogCompleteness: 'curated_fallback_only',
-    isLiveDiscovered: false,
-    modelOwner: 'mimo',
-    notes: 'CODING_TOOL_ONLY. Not backend runtime. Not Studio. Requires server-side terminal.',
-  },
-]
+    pricingBlocker: 'pricing_unknown',
+  }
+}
 
 export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<ModelCatalogRefreshSummary> {
   let created = 0
@@ -383,6 +399,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
         pricingBlocker: appendBlocker(model.pricingBlocker, metadataWarning),
         notes: appendNote(model.notes, metadataWarning),
+        capabilitiesJson: existing?.capabilitiesJson ?? '[]',
         ...model.capabilities,
       }
 
@@ -443,6 +460,7 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
           notes: model.notes,
+          capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
           ...model.capabilities,
         },
       })
@@ -472,6 +490,7 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
           notes: model.notes,
+          capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
           ...model.capabilities,
         },
       })
@@ -625,7 +644,7 @@ export async function getCatalogSummary() {
       }
 
       // Count capabilities
-      const capFields = ['supportsChat', 'supportsText', 'supportsReasoning', 'supportsCode', 'supportsImageGeneration', 'supportsVideoGeneration', 'supportsStt', 'supportsTts', 'supportsEmbeddings', 'supportsReranking', 'supportsMultimodal']
+      const capFields = ['supportsChat', 'supportsText', 'supportsReasoning', 'supportsCode', 'supportsImageGeneration', 'supportsVideoGeneration', 'supportsMusicGeneration', 'supportsStt', 'supportsTts', 'supportsEmbeddings', 'supportsReranking', 'supportsMultimodal']
       for (const field of capFields) {
         if ((m as Record<string, unknown>)[field]) {
           const capKey = field.replace('supports', '').toLowerCase()

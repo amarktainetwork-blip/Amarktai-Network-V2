@@ -22,7 +22,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+      { providerKey: 'groq', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))

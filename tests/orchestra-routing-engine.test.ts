@@ -19,7 +19,8 @@ function makeCandidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCa
     executorId: 'groq.chat',
     providerConfigured: true,
     providerEnabled: true,
-    providerHealth: 'configured',
+    providerHealth: 'live',
+    providerHealthReady: true,
     providerAccountAllowed: true,
     providerPolicyAllowed: true,
     modelLifecycleAllowed: true,
@@ -29,6 +30,10 @@ function makeCandidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCa
     responseShapeKnown: true,
     infrastructureReady: true,
     executionReady: true,
+    endpointReady: true,
+    databaseReady: true,
+    queueReady: true,
+    modelCompatible: true,
     liveProven: false,
     estimatedCost: 0.0001,
     costTier: 'low',
@@ -112,9 +117,16 @@ describe('Orchestra routing engine', () => {
     })
 
     it('rejects provider with runtime_restricted health', () => {
-      const candidate = makeCandidate({ providerHealth: 'runtime_restricted' })
+      const candidate = makeCandidate({ providerHealth: 'runtime_restricted', providerHealthReady: false })
       const blockers = checkCandidateEligibility(candidate, 'chat')
       expect(blockers).toContain('provider_runtime_restricted')
+    })
+
+    it('fails closed when endpoint, database, queue, or exact model evidence is absent', () => {
+      expect(checkCandidateEligibility(makeCandidate({ endpointReady: false }), 'chat')).toContain('provider_endpoint_not_ready')
+      expect(checkCandidateEligibility(makeCandidate({ databaseReady: false }), 'chat')).toContain('database_not_ready')
+      expect(checkCandidateEligibility(makeCandidate({ queueReady: false }), 'chat')).toContain('queue_not_ready')
+      expect(checkCandidateEligibility(makeCandidate({ modelCompatible: false }), 'chat')).toContain('executor_model_incompatible')
     })
   })
 

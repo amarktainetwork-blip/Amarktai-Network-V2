@@ -56,7 +56,9 @@ export async function selectRuntimeModel(
     qualityTier: options?.qualityTier,
     maxCostCents: options?.maxCostCents,
     executionId: options?.executionId,
-    infrastructureReady: options?.infrastructureReady === true,
+  }, {
+    databaseReady: true,
+    queueReady: options?.infrastructureReady === true,
   })
 
   const selected: RuntimeCandidate | null = decision.selectedProvider

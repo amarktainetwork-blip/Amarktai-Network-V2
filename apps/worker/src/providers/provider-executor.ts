@@ -1,13 +1,11 @@
 /**
  * Provider executor - routes execution to implemented provider clients.
  *
- * Groq chat, Together image_generation, and GenX video_generation are implemented.
- * All other capabilities return "not implemented".
- *
- * This module is the only active worker path that calls provider APIs.
+ * Canonical queued runtime for direct provider capabilities and media jobs.
  */
 
 import {
+  createCanonicalProviderUsage,
   evaluateOrchestra,
   normalizeDbCandidates,
   getExecutorRegistration,
@@ -22,6 +20,7 @@ import {
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
 import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
+import { DIRECT_EXECUTOR_HANDLERS } from './direct-provider-executor.js'
 
 type ProvidersModule = typeof import('@amarktai/providers')
 
@@ -33,6 +32,30 @@ function redactProviderSecrets(message: string, extraKeys: string[] = []): strin
     }
   }
   return safe
+}
+
+function assertMediaSignature(buffer: Buffer, mimeType: string): void {
+  const ascii = (start: number, end: number) => buffer.subarray(start, end).toString('ascii')
+  const valid = mimeType === 'image/png'
+    ? buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    : mimeType === 'image/jpeg'
+      ? buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+      : mimeType === 'image/webp'
+        ? buffer.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP'
+        : mimeType === 'video/mp4' || mimeType === 'video/quicktime'
+          ? buffer.length >= 12 && ascii(4, 8) === 'ftyp'
+          : mimeType === 'video/webm'
+            ? buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+            : mimeType === 'audio/wav' || mimeType === 'audio/x-wav'
+              ? buffer.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE'
+              : mimeType === 'audio/flac'
+                ? buffer.length >= 4 && ascii(0, 4) === 'fLaC'
+                : mimeType === 'audio/ogg'
+                  ? buffer.length >= 4 && ascii(0, 4) === 'OggS'
+                  : mimeType === 'audio/mpeg'
+                    ? buffer.length >= 3 && (ascii(0, 3) === 'ID3' || (buffer[0] === 0xff && (buffer[1]! & 0xe0) === 0xe0))
+                    : false
+  if (!valid) throw new Error(`Artifact bytes do not match declared MIME type '${mimeType}'`)
 }
 
 function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
@@ -282,182 +305,7 @@ async function resumeGenxVideoProviderJob(input: {
   throw new Error(`GenX video generation timed out after ${input.providers.GENX_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${input.remoteJobId}; model=${input.model}`)
 }
 
-async function recordMusicUsage(appSlug: string, model: string): Promise<void> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  await prisma.usageMeter.upsert({
-    where: {
-      usage_meter_unique: {
-        appSlug,
-        date: today,
-        capability: 'music_generation',
-        provider: 'genx',
-        model,
-      },
-    },
-    update: {
-      requestCount: { increment: 1 },
-      successCount: { increment: 1 },
-      artifactCount: { increment: 1 },
-    },
-    create: {
-      appSlug,
-      date: today,
-      capability: 'music_generation',
-      provider: 'genx',
-      model,
-      requestCount: 1,
-      successCount: 1,
-      artifactCount: 1,
-    },
-  })
-}
-
-async function executeGroqChat(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    apiKey = credential.apiKey
-    const { groqChat } = await import('@amarktai/providers')
-    const result = await groqChat({
-      prompt: payload.prompt,
-      apiKey,
-      model: selectedModel,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return {
-        success: false,
-        status: 'failed',
-        error: 'Groq returned empty response',
-      }
-    }
-
-    return {
-      success: true,
-      status: 'completed',
-      output: result.content,
-      provider: 'groq',
-      model: result.model,
-    }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown Groq error'
-    return {
-      success: false,
-      status: 'failed',
-      error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}`,
-    }
-  }
-}
-
 // ── Groq Text Capabilities ───────────────────────────────────────────────────
-
-const TEXT_CAPABILITY_SYSTEM_PROMPTS: Partial<Record<CapabilityKey, (payload: WorkerJobData) => string>> = {
-  reasoning: () => 'You are a reasoning engine. Think step by step. Show your reasoning process clearly before giving a final answer.',
-  code: () => 'You are a code generation assistant. Write clean, well-documented code. Include comments explaining your approach.',
-  summarization: () => 'You are a text summarization assistant. Provide clear, concise summaries that capture the key points.',
-  translation: () => 'You are a translation assistant. Translate the provided text accurately while preserving meaning and tone.',
-  classification: () => 'You are a text classification assistant. Classify the provided text into the given categories. Return the classification result clearly.',
-  extraction: () => 'You are a data extraction assistant. Extract structured information from the provided text. Return JSON when possible.',
-  structured_output: (payload) => {
-    const schema = readString(payload.input, 'schema') || readString(payload.metadata, 'schema')
-    return `You are a structured output assistant. Return valid JSON that matches this schema: ${schema || 'No schema provided - infer appropriate structure'}. Return ONLY valid JSON, no explanation.`
-  },
-  question_answering: () => 'You are a question answering assistant. Answer the question based on the provided context. If the context does not contain the answer, say so clearly.',
-  zero_shot_classification: (payload) => {
-    const labels = readString(payload.input, 'labels') || readString(payload.metadata, 'labels')
-    return `You are a zero-shot classification assistant. Classify the text into one of these categories: ${labels || 'No labels provided'}. Return only the category name.`
-  },
-  token_classification: () => 'You are a token classification assistant. Identify and classify named entities, parts of speech, or other token-level annotations in the text. Return structured results.',
-  fill_mask: () => 'You are a fill-mask assistant. Predict the most likely word or phrase that fills the [MASK] token in the provided text. Return the prediction.',
-  feature_extraction: () => 'You are a feature extraction assistant. Extract key features, attributes, or characteristics from the provided text. Return structured results.',
-  sentence_similarity: (payload) => {
-    const sentences = readString(payload.input, 'sentences') || readString(payload.metadata, 'sentences')
-    return `You are a sentence similarity assistant. Compare the sentences and return a similarity score between 0 and 1. Sentences: ${sentences || 'No sentences provided'}`
-  },
-  table_qa: () => 'You are a table question answering assistant. Answer questions about the provided table data. Return clear, concise answers based on the table content.',
-  tool_use: (payload) => {
-    const tools = readString(payload.input, 'tools') || readString(payload.metadata, 'tools')
-    return `You are a tool-use assistant. You have access to these tools: ${tools || 'No tools provided'}. Use the appropriate tool to answer the question. Return the tool call in the correct format.`
-  },
-  streaming_chat: () => 'You are a helpful assistant. Provide clear, helpful responses.',
-}
-
-async function executeGroqTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    apiKey = credential.apiKey
-    const { groqChat } = await import('@amarktai/providers')
-
-    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
-    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
-
-    const result = await groqChat({
-      prompt: payload.prompt,
-      apiKey,
-      model: selectedModel,
-      systemPrompt,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return { success: false, status: 'failed', error: 'Groq returned empty response' }
-    }
-
-    if (payload.capability === 'structured_output') {
-      try { JSON.parse(result.content) } catch {
-        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
-      }
-    }
-
-    return { success: true, status: 'completed', output: result.content, provider: 'groq', model: result.model }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown Groq error'
-    return { success: false, status: 'failed', error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}` }
-  }
-}
-
-async function executeDeepInfraTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('deepinfra')
-    apiKey = credential.apiKey
-    const providerStatus = await getProviderCredentialStatus('deepinfra')
-    const { deepinfraChat } = await import('@amarktai/providers')
-
-    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
-    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
-
-    const result = await deepinfraChat({
-      prompt: payload.prompt,
-      apiKey,
-      baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: selectedModel || providerStatus.defaultModel,
-      systemPrompt,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return { success: false, status: 'failed', error: 'DeepInfra returned empty response' }
-    }
-
-    if (payload.capability === 'structured_output') {
-      try { JSON.parse(result.content) } catch {
-        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
-      }
-    }
-
-    return { success: true, status: 'completed', output: result.content, provider: 'deepinfra', model: result.model }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown DeepInfra error'
-    return { success: false, status: 'failed', error: `DeepInfra execution failed: ${redactProviderSecrets(message, [apiKey])}` }
-  }
-}
 
 // ── Together Image Generation ────────────────────────────────────────────────
 
@@ -491,6 +339,7 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
         error: 'Together returned empty image data',
       }
     }
+    assertMediaSignature(image.buffer, image.mimeType)
 
     const artifact = await saveArtifact({
       input: {
@@ -532,7 +381,15 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
       model: result.model,
       artifactId: artifact.id,
       output: JSON.stringify(output),
-      metadata: output,
+      metadata: {
+        ...output,
+        usage: createCanonicalProviderUsage({
+          provider: 'together', model: result.model,
+          inputTokens: result.usage.promptTokens, outputTokens: result.usage.completionTokens,
+          totalTokens: result.usage.totalTokens, imageCount: 1,
+        }),
+        outputValidation: { valid: true, contract: 'validated_image_artifact_signature' },
+      },
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
@@ -575,21 +432,30 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
     // ── 1. Check for existing completed artifact (idempotency) ────────────
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'music_generation')
     if (existingArtifact) {
-      const output = {
-        artifactId: existingArtifact.id,
-        artifactUrl: existingArtifact.storageUrl,
-        mimeType: existingArtifact.mimeType,
-        fileSizeBytes: existingArtifact.fileSizeBytes,
-        reused: true,
-      }
-      return {
-        success: true,
-        status: 'completed',
-        provider: 'genx',
-        model,
-        artifactId: existingArtifact.id,
-        output: JSON.stringify(output),
-        metadata: output,
+      const existingMetadata = safeParseJsonObject(existingArtifact.metadata)
+      const duration = readPositiveNumber(existingMetadata.duration)
+      if (duration) {
+        const output = {
+          artifactId: existingArtifact.id,
+          artifactUrl: existingArtifact.storageUrl,
+          mimeType: existingArtifact.mimeType,
+          fileSizeBytes: existingArtifact.fileSizeBytes,
+          duration,
+          reused: true,
+        }
+        return {
+          success: true,
+          status: 'completed',
+          provider: 'genx',
+          model,
+          artifactId: existingArtifact.id,
+          output: JSON.stringify(output),
+          metadata: {
+            ...output,
+            usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: duration }),
+            outputValidation: { valid: true, contract: 'reused_music_artifact' },
+          },
+        }
       }
     }
 
@@ -765,6 +631,7 @@ async function pollAndDownloadMusic(
               model,
             }
           }
+          assertMediaSignature(musicResult.audioBuffer, musicResult.mimeType)
 
           // ── Save artifact ───────────────────────────────────────────
           const artifact = await saveArtifact({
@@ -800,8 +667,6 @@ async function pollAndDownloadMusic(
           })
 
           // ── Record usage ────────────────────────────────────────────
-          await recordMusicUsage(payload.appSlug, musicResult.model || model).catch(() => {})
-
           const output = {
             artifactId: artifact.id,
             artifactUrl: artifact.storageUrl,
@@ -819,7 +684,11 @@ async function pollAndDownloadMusic(
             model: musicResult.model || model,
             artifactId: artifact.id,
             output: JSON.stringify(output),
-            metadata: output,
+            metadata: {
+              ...output,
+              usage: createCanonicalProviderUsage({ provider: 'genx', model: musicResult.model || model, audioSeconds: musicResult.duration }),
+              outputValidation: { valid: true, contract: 'validated_music_artifact_signature' },
+            },
           }
         } catch (err) {
           lastDownloadError = err
@@ -879,21 +748,34 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
 
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
     if (existingArtifact) {
-      const output = {
-        artifactId: existingArtifact.id,
-        artifactUrl: existingArtifact.storageUrl,
-        mimeType: existingArtifact.mimeType,
-        fileSizeBytes: existingArtifact.fileSizeBytes,
-        reused: true,
-      }
-      return {
-        success: true,
-        status: 'completed',
-        provider: 'genx',
-        model,
-        artifactId: existingArtifact.id,
-        output: JSON.stringify(output),
-        metadata: output,
+      const existingMetadata = safeParseJsonObject(existingArtifact.metadata)
+      const duration = readPositiveNumber(existingMetadata.duration)
+      const width = readPositiveNumber(existingMetadata.width)
+      const height = readPositiveNumber(existingMetadata.height)
+      if (duration && width && height) {
+        const output = {
+          artifactId: existingArtifact.id,
+          artifactUrl: existingArtifact.storageUrl,
+          mimeType: existingArtifact.mimeType,
+          fileSizeBytes: existingArtifact.fileSizeBytes,
+          duration,
+          width,
+          height,
+          reused: true,
+        }
+        return {
+          success: true,
+          status: 'completed',
+          provider: 'genx',
+          model,
+          artifactId: existingArtifact.id,
+          output: JSON.stringify(output),
+          metadata: {
+            ...output,
+            usage: createCanonicalProviderUsage({ provider: 'genx', model, videoSeconds: duration }),
+            outputValidation: { valid: true, contract: 'reused_video_artifact' },
+          },
+        }
       }
     }
 
@@ -944,6 +826,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         error: 'GenX returned empty video data',
       }
     }
+    assertMediaSignature(result.videoBuffer, result.mimeType)
 
     const artifact = await saveArtifact({
       input: {
@@ -1000,7 +883,11 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       model: result.model || model,
       artifactId: artifact.id,
       output: JSON.stringify(output),
-      metadata: output,
+      metadata: {
+        ...output,
+        usage: createCanonicalProviderUsage({ provider: 'genx', model: result.model || model, videoSeconds: result.duration }),
+        outputValidation: { valid: true, contract: 'validated_video_artifact_signature' },
+      },
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
@@ -1045,7 +932,14 @@ async function resolveOrchestraDecision(
       prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
       prisma.aiProvider.findMany(),
     ])
-    orchestraCandidates = normalizeDbCandidates(models, providers, capability, { infrastructureReady: true })
+    // Reaching this point proves the worker has both its DB connection and its
+    // BullMQ delivery. Provider readiness is still derived per provider by the
+    // core normalizer from credential, enabled, health, endpoint, registry, and
+    // exact model compatibility facts.
+    orchestraCandidates = normalizeDbCandidates(models, providers, capability, {
+      databaseReady: true,
+      queueReady: true,
+    })
   } catch {
     // DB unavailable — Orchestra will evaluate with empty candidates and block
   }
@@ -1076,13 +970,63 @@ function attachOrchestraRouteMetadata(result: ProcessorResult, route: ProviderEx
   }
 }
 
+async function recordCanonicalUsage(
+  payload: WorkerJobData,
+  route: ProviderExecutionRoute,
+  result: ProcessorResult,
+): Promise<void> {
+  const usage = result.metadata?.usage
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return
+  const record = usage as Record<string, unknown>
+  const inputTokens = readFiniteNonNegative(record.inputTokens)
+  const outputTokens = readFiniteNonNegative(record.outputTokens)
+  const reportedCost = typeof record.providerReportedCost === 'number' && Number.isFinite(record.providerReportedCost)
+    ? record.providerReportedCost
+    : null
+  const currency = typeof record.currency === 'string' ? record.currency.toUpperCase() : null
+  const hasReportedUsdCost = reportedCost !== null && (currency === null || currency === 'USD')
+  const costUsdCents = hasReportedUsdCost ? Math.max(0, Math.round(reportedCost * 100)) : null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  await prisma.usageMeter.upsert({
+    where: { usage_meter_unique: { appSlug: payload.appSlug, date: today, capability: payload.capability, provider: route.provider, model: route.model } },
+    update: {
+      requestCount: { increment: 1 },
+      ...(result.success ? { successCount: { increment: 1 } } : { errorCount: { increment: 1 } }),
+      inputTokens: { increment: inputTokens },
+      outputTokens: { increment: outputTokens },
+      ...(costUsdCents !== null ? { costUsdCents: { increment: costUsdCents } } : {}),
+      ...(result.artifactId ? { artifactCount: { increment: 1 } } : {}),
+    },
+    create: {
+      appSlug: payload.appSlug,
+      date: today,
+      capability: payload.capability,
+      provider: route.provider,
+      model: route.model,
+      requestCount: 1,
+      successCount: result.success ? 1 : 0,
+      errorCount: result.success ? 0 : 1,
+      inputTokens,
+      outputTokens,
+      ...(costUsdCents !== null ? { costUsdCents } : {}),
+      artifactCount: result.artifactId ? 1 : 0,
+    },
+  })
+}
+
+function readFiniteNonNegative(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
 type ExecutorHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
 
-export const EXECUTOR_HANDLERS: Record<ExecutorId, ExecutorHandler> = {
-  'groq.chat': executeGroqChat,
-  'groq.text-transform': executeGroqTextCapability,
-  'deepinfra.chat': executeDeepInfraTextCapability,
-  'deepinfra.text-transform': executeDeepInfraTextCapability,
+export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
+  ...DIRECT_EXECUTOR_HANDLERS,
   'together.image-generation': executeTogetherImage,
   'genx.video-generation': executeGenxVideo,
   'genx.music-generation': executeGenxMusic,
@@ -1102,6 +1046,34 @@ export async function executeRegisteredRoute(
       model: route.model,
       error: `No callable executor registration '${route.executorId}' for ${route.provider}/${capability}.`,
     }
+  }
+
+  if (registration.executionMode === 'stream') {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Streaming executor '${registration.id}' must run through the authenticated SSE route.`,
+    }
+  }
+
+  if (!registration.compatibleModels.includes(route.model)) {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor '${registration.id}' is not compatible with model '${route.model}'.`,
+    }
+  }
+
+  const grant = readAppGrantSnapshot(payload)
+  if (registration.sourceArtifactRequired && !grant?.artifactRead) {
+    return { success: false, status: 'failed', provider: route.provider, model: route.model, error: `AppCapabilityGrant denies source-artifact read for '${payload.capability}'.` }
+  }
+  if (registration.artifactOutput && !grant?.artifactWrite) {
+    return { success: false, status: 'failed', provider: route.provider, model: route.model, error: `AppCapabilityGrant denies artifact write for '${payload.capability}'.` }
   }
 
   const handler = EXECUTOR_HANDLERS[registration.id]
@@ -1212,7 +1184,21 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
       orchestraActualExecutorId: route.executorId,
       orchestraActualOutcome: result.success ? 'completed' : 'failed',
       orchestraRouteAttempts: attempts,
+      directProviderExecutorId: route.executorId,
+      directProviderRouteType: route.routeKind,
+      directProviderUsage: result.metadata?.usage ?? null,
+      directProviderCostEvidence: result.metadata?.usage && typeof result.metadata.usage === 'object'
+        ? {
+          providerReportedCost: (result.metadata.usage as Record<string, unknown>).providerReportedCost ?? null,
+          estimatedCost: (result.metadata.usage as Record<string, unknown>).estimatedCost ?? null,
+          estimated: (result.metadata.usage as Record<string, unknown>).estimated ?? false,
+          currency: (result.metadata.usage as Record<string, unknown>).currency ?? null,
+        }
+        : null,
+      directProviderOutputValidation: result.metadata?.outputValidation ?? null,
+      directProviderErrorClassification: result.metadata?.errorClassification ?? null,
     }).catch(() => {})
+    await recordCanonicalUsage(payload, route, result).catch(() => {})
 
     if (result.success) {
       return {

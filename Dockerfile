@@ -42,7 +42,7 @@ ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
 
 # Generate build-info.json for health route consumption
-RUN node -e "const p=require('./package.json');process.stdout.write(JSON.stringify({gitSha:'${GIT_SHA}',buildTime:'${BUILD_TIME}',serviceName:'amarktai-api',version:p.version||'0.0.0'}))" > build-info.json
+RUN node -e "const p=require('./package.json');process.stdout.write(JSON.stringify({gitSha:'${GIT_SHA}',buildTime:'${BUILD_TIME}',serviceName:'amarktai-runtime',version:p.version||'0.0.0'}))" > build-info.json
 
 # Generate Prisma client with correct binaryTargets for Debian
 RUN npx prisma generate --schema=./prisma/schema.prisma
@@ -103,6 +103,8 @@ COPY scripts/prisma-migrate-deploy.mjs scripts/prisma-migrate-deploy.mjs
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
 
+ENV SERVICE_NAME=amarktai-api
+
 # Install ffmpeg for long-form video assembly
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -129,6 +131,9 @@ CMD ["api"]
 # ── Stage 5: Worker (includes Playwright for Crawlee) ─────────
 FROM production-base AS worker
 
+ENV SERVICE_NAME=amarktai-worker \
+    WORKER_HEALTH_PORT=3002
+
 # Install Playwright Chromium and system dependencies
 # This must happen in the production stage (not build) so the browsers persist
 RUN npx playwright install chromium --with-deps
@@ -136,14 +141,19 @@ RUN npx playwright install chromium --with-deps
 COPY --from=build /app/apps/worker/dist apps/worker/dist
 COPY apps/worker/package.json apps/worker/package.json
 
+EXPOSE 3002
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "process.exit(0)"
+  CMD node -e "fetch('http://localhost:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["worker"]
 
 # ── Stage 6: Dashboard (Next.js standalone) ───────────────────
 FROM node:22-slim AS dashboard
+
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
@@ -152,7 +162,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    GIT_SHA=${GIT_SHA} \
+    BUILD_TIME=${BUILD_TIME} \
+    SERVICE_NAME=amarktai-dashboard \
+    APP_VERSION=1.0.0
 
 # Copy Next.js standalone build
 COPY --from=build /app/.next/standalone ./
@@ -162,6 +176,6 @@ COPY --from=build /app/public ./public
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://localhost:3000/api/build-identity').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]

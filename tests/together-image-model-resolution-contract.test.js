@@ -8,12 +8,17 @@ import { TOGETHER_DEFAULT_IMAGE_MODEL } from '../packages/core/src/index.ts'
 const ORIGINAL_ENV = process.env
 
 function makeTogetherResponse(model = 'test-serverless-image-model') {
+  const png = Buffer.alloc(24)
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png)
+  png.write('IHDR', 12, 4, 'ascii')
+  png.writeUInt32BE(64, 16)
+  png.writeUInt32BE(32, 20)
   return {
     ok: true,
     status: 200,
     json: async () => ({
       model,
-      data: [{ b64_json: Buffer.from('image-bytes').toString('base64') }],
+      data: [{ b64_json: png.toString('base64') }],
       usage: { prompt_tokens: 2, completion_tokens: 0, total_tokens: 2 },
     }),
   }
@@ -48,6 +53,7 @@ describe('Together image model resolution', () => {
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.model).toBe('explicit-image-model')
     expect(result.model).toBe('explicit-image-model')
+    expect(result.images[0]).toMatchObject({ width: 64, height: 32, mimeType: 'image/png' })
   })
 
   it('uses the DB provider default model before env fallback', () => {

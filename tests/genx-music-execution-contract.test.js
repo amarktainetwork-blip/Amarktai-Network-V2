@@ -88,7 +88,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'genx', enabled: true, healthStatus: 'live' },
+      { providerKey: 'genx', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))
@@ -162,7 +162,7 @@ function mockSuccessfulMusicFlow() {
     resultUrl: 'https://query.genx.sh/api/v1/jobs/genx-remote-job-001/file',
   })
   providerMocks.genxDownloadMusic.mockResolvedValue({
-    audioBuffer: Buffer.from('audio-bytes'),
+    audioBuffer: Buffer.from('ID3audio-bytes'),
     mimeType: 'audio/mpeg',
     duration: 60,
     model: 'lyria-3-clip-preview',
@@ -286,7 +286,7 @@ describe('GenX music executor', () => {
           duration: 60,
         }),
       }),
-      data: Buffer.from('audio-bytes'),
+      data: Buffer.from('ID3audio-bytes'),
       explicitMimeType: 'audio/mpeg',
     }))
 
@@ -491,6 +491,7 @@ describe('GenX music executor', () => {
       mimeType: 'audio/mpeg',
       fileSizeBytes: 1024,
       status: 'completed',
+      metadata: JSON.stringify({ duration: 12 }),
     })
 
     const result = await executeWithProvider(makePayload())
@@ -511,6 +512,7 @@ describe('GenX music executor', () => {
       mimeType: 'audio/mpeg',
       fileSizeBytes: 512,
       status: 'completed',
+      metadata: JSON.stringify({ duration: 12 }),
     })
 
     await executeWithProvider(makePayload())
@@ -581,7 +583,7 @@ describe('GenX music executor', () => {
         progress: 100,
       })
     providerMocks.genxDownloadMusic.mockResolvedValue({
-      audioBuffer: Buffer.from('audio-bytes'),
+      audioBuffer: Buffer.from('ID3audio-bytes'),
       mimeType: 'audio/mpeg',
       duration: 30,
       model: 'lyria-3-clip-preview',

@@ -3,6 +3,18 @@ import { discoveryTimestamp, fetchModelList, modelFromProviderRecord, skippedRes
 
 const DEEPINFRA_MODELS_ENDPOINT = 'https://api.deepinfra.com/models/list'
 const DEEPINFRA_PUBLIC_DISCOVERY_DISABLED = process.env.DEEPINFRA_PUBLIC_DISCOVERY_DISABLED === 'true'
+const DEEPINFRA_IMPLEMENTED_MODELS: Readonly<Record<string, CapabilityKey[]>> = {
+  'meta-llama/Meta-Llama-3.1-8B-Instruct': ['chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification', 'extraction', 'structured_output'],
+  'meta-llama/Llama-3.3-70B-Instruct': ['chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification', 'extraction', 'structured_output'],
+  'facebook/bart-large-mnli': ['zero_shot_classification'],
+  'dslim/bert-base-NER': ['token_classification'],
+  'bert-base-cased': ['fill_mask'],
+  'google/tapas-base-finetuned-wtq': ['table_qa'],
+  'Qwen/Qwen3-Embedding-0.6B': ['embeddings', 'feature_extraction', 'sentence_similarity'],
+  'BAAI/bge-large-en-v1.5': ['embeddings', 'feature_extraction', 'sentence_similarity'],
+  'Qwen/Qwen3-Reranker-0.6B': ['reranking'],
+  'BAAI/bge-reranker-large': ['reranking'],
+}
 
 function deepinfraCapabilities(modelId: string, rawType: string, record: Record<string, unknown>): CapabilityKey[] {
   const tags = Array.isArray(record.tags) ? record.tags.join(' ') : ''
@@ -54,7 +66,8 @@ function safeDeepInfraMetadata(record: Record<string, unknown>): Record<string, 
 function deepinfraPublicModel(record: Record<string, unknown>, timestamp: string): ProviderDiscoveredModel {
   const modelId = stringField(record, ['model_name', 'id', 'model', 'name'])
   const rawType = stringField(record, ['reported_type', 'type', 'task', 'pipeline_tag', 'object'])
-  const capabilities = deepinfraCapabilities(modelId, rawType, record)
+  const capabilities = DEEPINFRA_IMPLEMENTED_MODELS[modelId] ?? deepinfraCapabilities(modelId, rawType, record)
+  const implemented = modelId in DEEPINFRA_IMPLEMENTED_MODELS
   return modelFromProviderRecord({
     provider: 'deepinfra',
     modelId,
@@ -67,11 +80,11 @@ function deepinfraPublicModel(record: Record<string, unknown>, timestamp: string
     lastDiscoveredAt: timestamp,
     source: 'docs_fallback',
     discoverySource: 'docs_fallback',
-    providerClientExists: false,
-    workerExecutorExists: false,
+    providerClientExists: implemented,
+    workerExecutorExists: implemented,
     endpointShapeKnown: true,
-    requestShapeKnown: false,
-    responseShapeKnown: false,
+    requestShapeKnown: implemented,
+    responseShapeKnown: implemented,
     artifactPersistenceExists: !capabilities.some((capability) => ['image_generation', 'image_edit', 'video_generation', 'music_generation', 'tts'].includes(capability)),
     contextWindow: numberField(record, ['max_tokens', 'max_model_len', 'context_window', 'context']),
     transportProfile: deepinfraTransport(capabilities),
@@ -84,6 +97,27 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
   const timestamp = discoveryTimestamp(options)
   const staticModels = [
     modelFromProviderRecord({ provider: 'deepinfra', modelId: 'meta-llama/Meta-Llama-3.1-8B-Instruct', displayName: 'Meta Llama 3.1 8B Instruct', rawProviderType: 'chat', category: 'text', endpointSource: 'repo_static_deepinfra_client', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, streamingSupported: true, transportProfile: 'openai_chat_sse', batchSupported: true }),
+    ...Object.entries(DEEPINFRA_IMPLEMENTED_MODELS)
+      .filter(([modelId]) => modelId !== 'meta-llama/Meta-Llama-3.1-8B-Instruct')
+      .map(([modelId, capabilities]) => modelFromProviderRecord({
+        provider: 'deepinfra',
+        modelId,
+        displayName: modelId,
+        inferredCapabilities: capabilities,
+        rawProviderType: capabilities.includes('reranking') ? 'reranker' : capabilities.includes('embeddings') ? 'embeddings' : 'specialist-task',
+        category: capabilities.includes('reranking') ? 'reranker' : capabilities.includes('embeddings') ? 'embeddings' : 'text',
+        endpointSource: 'DeepInfra official native/OpenAI-compatible API docs',
+        lastDiscoveredAt: timestamp,
+        source: 'docs_fallback',
+        providerClientExists: true,
+        workerExecutorExists: true,
+        endpointShapeKnown: true,
+        requestShapeKnown: true,
+        responseShapeKnown: true,
+        artifactPersistenceExists: true,
+        transportProfile: 'native_inference_json',
+        batchSupported: capabilities.includes('embeddings'),
+      })),
   ]
 
   if (DEEPINFRA_PUBLIC_DISCOVERY_DISABLED) {
@@ -91,7 +125,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
   }
 
   try {
-    const records = await fetchModelList(DEEPINFRA_MODELS_ENDPOINT)
+    const records = await fetchModelList(DEEPINFRA_MODELS_ENDPOINT, options.live ? options.apiKey : undefined)
     const publicModels = records
       .filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
       .map((record) => deepinfraPublicModel(record, timestamp))
@@ -125,7 +159,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
       providerUniverseKnown: publicDiscoverySucceeded,
       providerUniversePartiallyKnown: !publicDiscoverySucceeded,
       publicDocsUniverseKnown: publicDiscoverySucceeded,
-      authenticatedUniverseKnown: false,
+      authenticatedUniverseKnown: options.live === true && Boolean(options.apiKey) && publicDiscoverySucceeded,
       endpointSource: DEEPINFRA_MODELS_ENDPOINT,
       error: publicDiscoverySucceeded ? null : 'public model-list returned zero usable models',
       returnedModelCount: publicModels.length,

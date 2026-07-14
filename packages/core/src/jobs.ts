@@ -46,6 +46,8 @@ export interface CreateJobResponse {
 
 export interface JobStatusResponse {
   jobId: string
+  executionId: string | null
+  appSlug: string
   status: JobStatus
   capability: string
   provider: string | null
@@ -53,6 +55,17 @@ export interface JobStatusResponse {
   artifactId: string | null
   progress: number
   error: string | null
+  output: string | null
+  executionEvidence: {
+    grantSnapshotSource: string | null
+    executorId: string | null
+    routeType: string | null
+    fallbackAttempts: unknown[]
+    usage: unknown
+    cost: unknown
+    outputValidation: unknown
+    errorClassification: unknown
+  }
   createdAt: string
   startedAt: string | null
   completedAt: string | null

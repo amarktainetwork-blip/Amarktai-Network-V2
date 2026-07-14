@@ -71,14 +71,23 @@ async function checkOrchestra() {
 // Check worker execution paths
 async function checkWorkerExecution() {
   const content = await safeRead('apps/worker/src/providers/provider-executor.ts')
+  const direct = await safeRead('apps/worker/src/providers/direct-provider-executor.ts')
+  const streaming = await safeRead('apps/api/src/routes/streaming-chat.ts')
   if (!content) return { found: false, executors: {} }
   
   return {
     found: true,
     executors: {
-      groqChat: content.includes('executeGroqChat') || content.includes('groqChat'),
-      groqText: content.includes('executeGroqTextCapability'),
-      deepinfraText: content.includes('executeDeepInfraTextCapability'),
+      groqChat: direct?.includes('executeGroqChat') || false,
+      groqText: direct?.includes('executeValidatedTextCapability') || false,
+      groqStreaming: streaming?.includes('openAiStreamingChat') || false,
+      groqToolUse: direct?.includes('executeGroqToolUse') || false,
+      groqTts: direct?.includes('executeGroqTts') || false,
+      groqStt: direct?.includes('executeGroqStt') || false,
+      deepinfraText: direct?.includes('executeValidatedTextCapability') || false,
+      deepinfraTasks: direct?.includes('executeDeepInfraTaskCapability') || false,
+      embeddings: direct?.includes('executeEmbeddingsCapability') || false,
+      reranking: direct?.includes('executeRerankingCapability') || false,
       togetherImage: content.includes('executeTogetherImage'),
       genxVideo: content.includes('executeGenxVideo'),
       musicWorker: content.includes('executeGenxMusic')
@@ -802,9 +811,9 @@ async function runAudit() {
     },
     {
       priority: 5,
-      title: 'feat: add TTS/STT execution',
-      description: 'Wire Groq TTS/STT models to worker executor and dashboard',
-      effort: 'medium'
+      title: 'feat: begin the next approved capability family after live proof',
+      description: 'Only after foundational VPS proof, implement the separately scoped visual or knowledge capabilities that remain catalogue-only',
+      effort: 'large'
     }
   ]
 

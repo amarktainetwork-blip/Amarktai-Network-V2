@@ -10,6 +10,7 @@
  */
 
 import { getGenxApiKey, getGenxBaseUrl } from '@amarktai/core'
+import { inspectVideoBuffer } from './media-inspection.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -332,15 +333,16 @@ export async function genxDownloadVideo(
 
   const arrayBuffer = await response.arrayBuffer()
   const videoBuffer = Buffer.from(arrayBuffer)
+  const inspected = inspectVideoBuffer(videoBuffer, mimeType, 'genx')
 
   return {
     videoBuffer,
     mimeType,
-    duration: 5,
-    width: 1920,
-    height: 1080,
+    duration: inspected.duration,
+    width: inspected.width!,
+    height: inspected.height!,
     model: resolveGenxVideoModel(request),
-    metadata: { downloaded: true, sizeBytes: videoBuffer.length, authenticated },
+    metadata: { downloaded: true, sizeBytes: videoBuffer.length, authenticated, durationSource: inspected.durationSource },
   }
 }
 

@@ -20,6 +20,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     runtimeRole: 'media_runtime',
     credentialEnvKey: 'GENX_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://query.genx.sh',
     backendExecutionAllowed: true,
     codingOnly: false,
   },
@@ -29,6 +30,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     runtimeRole: 'language_runtime',
     credentialEnvKey: 'GROQ_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://api.groq.com/openai/v1',
     backendExecutionAllowed: true,
     codingOnly: false,
   },
@@ -38,6 +40,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     runtimeRole: 'media_runtime',
     credentialEnvKey: 'TOGETHER_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://api.together.xyz/v1',
     backendExecutionAllowed: true,
     codingOnly: false,
   },
@@ -47,6 +50,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     runtimeRole: 'coding_agent_only',
     credentialEnvKey: 'MIMO_API_KEY',
     discoveryPolicy: 'docs_only',
+    defaultBaseUrl: '',
     backendExecutionAllowed: false,
     codingOnly: true,
   },
@@ -56,6 +60,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     runtimeRole: 'language_runtime',
     credentialEnvKey: 'DEEPINFRA_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://api.deepinfra.com/v1',
     backendExecutionAllowed: true,
     codingOnly: false,
   },
@@ -153,4 +158,8 @@ export function getProviderEnvVar(provider: ProviderKey): string {
 
 export function getProviderDefinition(provider: ProviderKey): ApprovedProviderDefinition {
   return APPROVED_PROVIDER_DEFINITIONS.find((definition) => definition.key === provider)!
+}
+
+export function getProviderDefaultBaseUrl(provider: ProviderKey): string {
+  return getProviderDefinition(provider).defaultBaseUrl
 }

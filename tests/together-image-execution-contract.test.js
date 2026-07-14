@@ -22,8 +22,8 @@ const prismaMock = vi.hoisted(() => ({
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'together', enabled: true, healthStatus: 'live' },
-      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+      { providerKey: 'together', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+      { providerKey: 'groq', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))
@@ -71,7 +71,7 @@ import {
 import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
-const TEST_IMAGE_BUFFER = Buffer.from('real-image-bytes')
+const TEST_IMAGE_BUFFER = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('test-png-data')])
 
 function makePayload(overrides = {}) {
   const appSlug = overrides.appSlug ?? 'proof-app'

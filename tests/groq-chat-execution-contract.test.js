@@ -22,8 +22,8 @@ const prismaMock = vi.hoisted(() => ({
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'groq', enabled: true, healthStatus: 'live' },
-      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live' },
+      { providerKey: 'groq', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))
@@ -52,13 +52,29 @@ vi.mock('@amarktai/db', () => ({
 
 // ── Mock Groq client ─────────────────────────────────────────────────────────
 
-const mockGroqChat = vi.fn()
-const mockDeepInfraChat = vi.fn()
-
+const providerMocks = vi.hoisted(() => {
+  class CanonicalProviderError extends Error {
+    constructor({ code, provider, message, status = null, retryable = false }) {
+      super(message)
+      this.code = code
+      this.provider = provider
+      this.status = status
+      this.retryable = retryable
+    }
+  }
+  return {
+    CanonicalProviderError,
+    mockGroqChat: vi.fn(),
+    mockDeepInfraChat: vi.fn(),
+  }
+})
 vi.mock('@amarktai/providers', () => ({
-  groqChat: mockGroqChat,
-  deepinfraChat: mockDeepInfraChat,
+  CanonicalProviderError: providerMocks.CanonicalProviderError,
+  groqChat: providerMocks.mockGroqChat,
+  deepinfraChat: providerMocks.mockDeepInfraChat,
 }))
+
+const { mockGroqChat, mockDeepInfraChat } = providerMocks
 
 // ── Imports ──────────────────────────────────────────────────────────────────
 
@@ -245,7 +261,7 @@ describe('Groq executor — client contract', () => {
 
     expect(result.success).toBe(false)
     expect(result.status).toBe('failed')
-    expect(result.error).toContain('Groq execution failed')
+    expect(result.error).toContain('provider_unavailable')
     expect(result.error).toContain('rate limited')
   })
 
@@ -360,7 +376,7 @@ describe('Routing/execution gate', () => {
     expect(result.output).toBe('DeepInfra fallback response')
     expect(mockDeepInfraChat).toHaveBeenCalledWith(expect.objectContaining({
       apiKey: 'deepinfra-db-key',
-      providerDefaultModel: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
     }))
     expect(JSON.stringify(result)).not.toContain('deepinfra-db-key')
   })
@@ -553,7 +569,7 @@ describe('Worker integration with Groq chat', () => {
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate).toBeDefined()
-    expect(failedUpdate[0].data.error).toContain('Groq execution failed')
+    expect(failedUpdate[0].data.error).toContain('groq provider_unavailable')
   })
 
   it('worker throws on Groq error so BullMQ records failure', async () => {

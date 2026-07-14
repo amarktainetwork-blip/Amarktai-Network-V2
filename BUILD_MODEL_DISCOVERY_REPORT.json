@@ -21,7 +21,7 @@
   "providerDiscoveryStatus": [
     {
       "provider": "genx",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "media_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -69,7 +69,7 @@
     },
     {
       "provider": "groq",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "language_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -115,7 +115,7 @@
     },
     {
       "provider": "together",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "media_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -165,7 +165,7 @@
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": false,
       "docsFallbackSupported": true,
-      "apiKeyEnvName": null,
+      "apiKeyEnvName": "MIMO_API_KEY",
       "apiKeyRequiredForLiveDiscovery": false,
       "baseUrl": "https://api.xiaomimimo.com/v1",
       "alternateBaseUrls": [
@@ -178,7 +178,7 @@
       "policyRestrictedByApp": true,
       "policyExecutionDisabled": true,
       "policyBlockedReason": "coding_agent_only_not_backend_runtime",
-      "apiKeyPresent": false,
+      "apiKeyPresent": true,
       "mode": "safe_static",
       "source": "last_known_good",
       "totalDiscovered": 6,
@@ -207,7 +207,7 @@
     },
     {
       "provider": "deepinfra",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "language_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -272,8 +272,10 @@
     "genxMusicEndpointFamily": [
       "/api/v1/generate + /api/v1/jobs/:id"
     ],
-    "genxMusicExecutorReady": true,
-    "genxMusicBlockers": []
+    "genxMusicExecutorReady": false,
+    "genxMusicBlockers": [
+      "execution_readiness_not_derived_from_discovery"
+    ]
   },
   "fullProviderModelUniverseKnown": false,
   "liveDiscoveryPartial": true,
@@ -313,8 +315,8 @@
   "totalDocsFallbackModels": 90,
   "totalPublicEndpointModels": 340,
   "totalEffectiveCatalogueModels": 430,
-  "modelsExecutableNow": 7,
-  "modelsKnownButBlocked": 423,
+  "modelsExecutableNow": 0,
+  "modelsKnownButBlocked": 430,
   "policyRestrictedModels": 6,
   "transportProfilesPresent": [
     "anthropic_messages_sse",
@@ -330,7 +332,7 @@
     "websocket_realtime_audio"
   ],
   "genxMusicCapabilityKnown": true,
-  "genxMusicExecutionReady": true,
+  "genxMusicExecutionReady": false,
   "mimoCapabilityKnown": true,
   "mimoPolicyRestricted": true,
   "togetherStaticFallbackCount": 10,
@@ -389,8 +391,8 @@
   },
   "totals": {
     "discovered": 430,
-    "executableNow": 7,
-    "catalogueOnly": 423,
+    "executableNow": 0,
+    "catalogueOnly": 430,
     "missingClient": 419,
     "missingExecutor": 423
   },
@@ -410,7 +412,7 @@
     },
     "chat": {
       "total": 258,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 258,
       "liveDiscovered": 0,
       "providers": [
@@ -423,7 +425,7 @@
     },
     "reasoning": {
       "total": 165,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 165,
       "liveDiscovered": 0,
       "providers": [
@@ -449,7 +451,7 @@
     },
     "image_generation": {
       "total": 64,
-      "executable": 1,
+      "executable": 0,
       "docsKnown": 64,
       "liveDiscovered": 0,
       "providers": [
@@ -481,7 +483,7 @@
     },
     "video_generation": {
       "total": 50,
-      "executable": 1,
+      "executable": 0,
       "docsKnown": 50,
       "liveDiscovered": 0,
       "providers": [
@@ -501,7 +503,7 @@
     },
     "music_generation": {
       "total": 4,
-      "executable": 2,
+      "executable": 0,
       "docsKnown": 4,
       "liveDiscovered": 0,
       "providers": [
@@ -521,7 +523,7 @@
     },
     "summarization": {
       "total": 5,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 5,
       "liveDiscovered": 0,
       "providers": [
@@ -532,7 +534,7 @@
     },
     "classification": {
       "total": 6,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 6,
       "liveDiscovered": 0,
       "providers": [
@@ -543,7 +545,7 @@
     },
     "extraction": {
       "total": 5,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 5,
       "liveDiscovered": 0,
       "providers": [
@@ -624,6 +626,6 @@
     "endpointShapeKnown": true,
     "providerClientExists": true,
     "workerExecutorExists": true,
-    "executableNow": true
+    "executableNow": false
   }
 }

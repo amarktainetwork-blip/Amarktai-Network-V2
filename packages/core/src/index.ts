@@ -40,6 +40,7 @@ export {
   isValidProvider,
   getProviderEnvVar,
   getProviderDefinition,
+  getProviderDefaultBaseUrl,
   type ApprovedProviderDefinition,
   type RuntimeExecutionProvider,
   type ProviderKey,
@@ -189,9 +190,26 @@ export {
   getExecutorRegistrations,
   getExecutorRegistration,
   hasExecutorRegistration,
+  isExecutorModelCompatible,
   type ExecutorId,
   type ExecutorRegistration,
 } from './executor-registry.js'
+
+// Direct provider capability contracts and normalized execution evidence
+export {
+  DIRECT_PROVIDER_CAPABILITIES,
+  DIRECT_PROVIDER_REQUEST_SCHEMAS,
+  DIRECT_PROVIDER_OUTPUT_SCHEMAS,
+  ChatMessageSchema,
+  isDirectProviderCapability,
+  validateDirectProviderRequest,
+  validateJsonSchemaValue,
+  createCanonicalProviderUsage,
+  type DirectProviderCapability,
+  type DirectProviderRequestValidation,
+  type CanonicalProviderUsage,
+  type JsonSchemaValidationResult,
+} from './direct-provider-contracts.js'
 
 // Orchestra routing engine
 export {
@@ -212,6 +230,7 @@ export {
   type ScoringWeights,
   type DbModelRecord,
   type DbProviderRecord,
+  type RuntimeInfrastructureEvidence,
   type AppCapabilityGrantContext,
 } from './orchestra.js'
 

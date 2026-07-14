@@ -362,7 +362,7 @@ function mapDeepInfraTask(taskInput: string, idInput: string): { category: strin
 
   if (text.includes('text-to-image') || text.includes('image-generation')) return { category: 'image', role: 'image_generation', capabilities: { supportsImageGeneration: true } }
   if (text.includes('text-to-video') || text.includes('video-generation')) return { category: 'video', role: 'video_generation', capabilities: { supportsVideoGeneration: true } }
-  if (text.includes('text-to-music') || text.includes('music-generation')) return { category: 'audio', role: 'music_generation', capabilities: { supportsText: true } }
+  if (text.includes('text-to-music') || text.includes('music-generation')) return { category: 'audio', role: 'music_generation', capabilities: { supportsMusicGeneration: true } }
   if (text.includes('text-to-speech') || text.includes('tts')) return { category: 'audio', role: 'tts', capabilities: { supportsTts: true } }
   if (text.includes('automatic-speech-recognition') || text.includes('speech-to-text') || text.includes('whisper')) return { category: 'audio', role: 'stt', capabilities: { supportsStt: true } }
   if (text.includes('embedding') || text.includes('feature-extraction')) return { category: 'embeddings', role: 'embeddings', capabilities: { supportsEmbeddings: true } }

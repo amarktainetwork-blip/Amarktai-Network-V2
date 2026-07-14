@@ -454,6 +454,9 @@ model ModelRegistryEntry {
   supportsMultimodal       Boolean @default(false) @map("supports_multimodal")
   supportsToolUse          Boolean @default(false) @map("supports_tool_use")
   supportsStructuredOutput Boolean @default(false) @map("supports_structured_output")
+  supportsMusicGeneration  Boolean @default(false) @map("supports_music_generation")
+  /// Exact canonical capability keys used by Orchestra model matching.
+  capabilitiesJson         String  @default("[]") @map("capabilities_json") @db.LongText
 
   // Discovery metadata
   source               String @default("unknown") // provider_api | curated_seed | admin_manual | unknown

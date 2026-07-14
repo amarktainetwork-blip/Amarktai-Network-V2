@@ -500,7 +500,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(catalogue.filter((model) => model.provider === 'groq').some((model) => /grok/i.test(model.modelId))).toBe(false)
   })
 
-  it('GenX docs fallback includes Lyria as source-executable without claiming local live proof', () => {
+  it('GenX docs fallback includes Lyria wiring without claiming runtime execution', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
     const clip = catalogue.find((model) => model.provider === 'genx' && model.modelId === 'lyria-3-clip-preview')
@@ -514,13 +514,13 @@ describe('provider model discovery and router catalogue rebuild', () => {
       providerClientExists: true,
       workerExecutorExists: true,
       artifactPersistenceExists: true,
-      executableNow: true,
+      executableNow: false,
       transportProfile: 'async_job_poll',
     })
-    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: true })
+    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: false })
     expect(report.genxMusicDiscovery.lyriaClipDiscovered).toBe(true)
     expect(report.genxMusicDiscovery.lyriaProDiscovered).toBe(true)
-    expect(report.genxMusicDiscovery.genxMusicBlockers).toEqual([])
+    expect(report.genxMusicDiscovery.genxMusicBlockers).toContain('execution_readiness_not_derived_from_discovery')
     expect(JSON.stringify(report)).not.toContain('provider_lacks_music')
   })
 

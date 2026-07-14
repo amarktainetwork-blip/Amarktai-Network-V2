@@ -13,6 +13,13 @@ import {
   GROQ_TTS_MODEL,
   GROQ_TTS_MAX_CHARS,
 } from '@amarktai/core'
+import {
+  openAiChatCompletion,
+  type OpenAiToolCall,
+  type OpenAiToolDefinition,
+  type OpenAiTransportMessage,
+} from './openai-transport.js'
+import { CanonicalProviderError, providerHttpError } from './provider-errors.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +30,11 @@ export interface GroqChatRequest {
   systemPrompt?: string
   maxTokens?: number
   temperature?: number
+  messages?: OpenAiTransportMessage[]
+  responseFormat?: Record<string, unknown>
+  tools?: OpenAiToolDefinition[]
+  toolChoice?: 'auto' | 'none' | 'required'
+  reasoningEffort?: 'low' | 'medium' | 'high'
 }
 
 export interface GroqChatResponse {
@@ -30,17 +42,45 @@ export interface GroqChatResponse {
   model: string
   usage: { promptTokens: number; completionTokens: number; totalTokens: number }
   finishReason: string
+  reasoningSummary: string | null
+  toolCalls: OpenAiToolCall[]
 }
 
 export interface GroqSttResponse {
   text: string
   language: string
   duration: number
+  segments: Array<Record<string, unknown>>
+  words: Array<Record<string, unknown>>
+  model: string
 }
 
 export interface GroqTtsResponse {
   audioBuffer: Buffer
   model: string
+  voice: string
+  mimeType: string
+  duration: number
+  outputFormat: 'wav' | 'mp3' | 'flac' | 'ogg'
+  chunkCount: number
+}
+
+export interface GroqSttOptions {
+  apiKey?: string
+  model?: string
+  language?: string
+  timestamps?: 'none' | 'segment' | 'word' | 'both'
+  translateToEnglish?: boolean
+  mimeType?: string
+}
+
+export interface GroqTtsRequest {
+  text: string
+  apiKey?: string
+  model?: string
+  voice?: string
+  speed?: number
+  outputFormat?: 'wav' | 'mp3' | 'flac' | 'ogg'
 }
 
 // ── Chat Completion ───────────────────────────────────────────────────────────
@@ -49,59 +89,58 @@ export async function groqChat(request: GroqChatRequest): Promise<GroqChatRespon
   const apiKey = request.apiKey ?? getGroqApiKey()
   const model = request.model ?? GROQ_DEFAULT_MODEL
 
-  const messages: Array<{ role: string; content: string }> = []
+  const messages: OpenAiTransportMessage[] = []
   if (request.systemPrompt) {
     messages.push({ role: 'system', content: request.systemPrompt })
   }
-  messages.push({ role: 'user', content: request.prompt })
+  messages.push(...(request.messages ?? []))
+  if (request.prompt.trim()) messages.push({ role: 'user', content: request.prompt })
 
-  const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: request.maxTokens ?? 4096,
-      temperature: request.temperature ?? 0.7,
-    }),
+  const result = await openAiChatCompletion({
+    provider: 'groq',
+    baseUrl: GROQ_BASE_URL,
+    apiKey,
+    model,
+    messages,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    responseFormat: request.responseFormat,
+    tools: request.tools,
+    toolChoice: request.toolChoice,
+    reasoningEffort: request.reasoningEffort,
   })
 
-  if (!response.ok) {
-    const errBody = await response.text()
-    throw new Error(`Groq chat error ${response.status}: ${errBody}`)
-  }
-
-  const data = await response.json() as Record<string, unknown>
-  const choice = (data.choices as Array<Record<string, unknown>>)?.[0]
-  const message = choice?.message as Record<string, unknown> | undefined
-  const usage = data.usage as Record<string, number> | undefined
-
   return {
-    content: (message?.content as string) ?? '',
-    model: (data.model as string) ?? model,
+    content: result.content,
+    model: result.model,
     usage: {
-      promptTokens: usage?.prompt_tokens ?? 0,
-      completionTokens: usage?.completion_tokens ?? 0,
-      totalTokens: usage?.total_tokens ?? 0,
+      promptTokens: result.usage.inputTokens,
+      completionTokens: result.usage.outputTokens,
+      totalTokens: result.usage.totalTokens,
     },
-    finishReason: (choice?.finish_reason as string) ?? 'stop',
+    finishReason: result.finishReason,
+    reasoningSummary: result.reasoningSummary,
+    toolCalls: result.toolCalls,
   }
 }
 
 // ── Speech-to-Text (Whisper) ──────────────────────────────────────────────────
 
-export async function groqStt(audioBuffer: Buffer, filename: string): Promise<GroqSttResponse> {
-  const apiKey = getGroqApiKey()
+export async function groqStt(audioBuffer: Buffer, filename: string, options: GroqSttOptions = {}): Promise<GroqSttResponse> {
+  if (audioBuffer.length === 0) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source artifact is empty' })
+  const apiKey = options.apiKey ?? getGroqApiKey()
+  const model = options.model ?? GROQ_STT_MODEL
 
   const formData = new FormData()
-  formData.append('file', new Blob([new Uint8Array(audioBuffer)], { type: 'audio/wav' }), filename)
-  formData.append('model', GROQ_STT_MODEL)
+  formData.append('file', new Blob([new Uint8Array(audioBuffer)], { type: options.mimeType ?? 'audio/wav' }), filename)
+  formData.append('model', model)
   formData.append('response_format', 'verbose_json')
+  if (options.language) formData.append('language', options.language)
+  if (options.timestamps === 'word' || options.timestamps === 'both') formData.append('timestamp_granularities[]', 'word')
+  if (options.timestamps !== 'none' && options.timestamps !== 'word') formData.append('timestamp_granularities[]', 'segment')
 
-  const response = await fetch(`${GROQ_BASE_URL}/audio/transcriptions`, {
+  const endpoint = options.translateToEnglish ? 'translations' : 'transcriptions'
+  const response = await fetch(`${GROQ_BASE_URL}/audio/${endpoint}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -111,15 +150,20 @@ export async function groqStt(audioBuffer: Buffer, filename: string): Promise<Gr
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`Groq STT error ${response.status}: ${errBody}`)
+    throw providerHttpError({ provider: 'groq', status: response.status, body: errBody })
   }
 
   const data = await response.json() as Record<string, unknown>
 
+  const text = (data.text as string) ?? ''
+  if (!text.trim()) throw new CanonicalProviderError({ code: 'malformed_response', provider: 'groq', message: 'Groq STT returned an empty transcript' })
   return {
-    text: (data.text as string) ?? '',
+    text,
     language: (data.language as string) ?? 'en',
     duration: (data.duration as number) ?? 0,
+    segments: Array.isArray(data.segments) ? data.segments.filter(isRecord) : [],
+    words: Array.isArray(data.words) ? data.words.filter(isRecord) : [],
+    model,
   }
 }
 
@@ -131,8 +175,15 @@ export async function groqStt(audioBuffer: Buffer, filename: string): Promise<Gr
  * requests individual audio pieces sequentially, and concatenates the raw
  * WAV data buffers into a single unified payload.
  */
-export async function groqTts(text: string): Promise<GroqTtsResponse> {
-  const apiKey = getGroqApiKey()
+export async function groqTts(input: string | GroqTtsRequest): Promise<GroqTtsResponse> {
+  const request: GroqTtsRequest = typeof input === 'string' ? { text: input } : input
+  const text = request.text.trim()
+  if (!text) throw new CanonicalProviderError({ code: 'invalid_request', provider: 'groq', message: 'TTS text must not be empty' })
+  const apiKey = request.apiKey ?? getGroqApiKey()
+  const model = request.model ?? GROQ_TTS_MODEL
+  const voice = request.voice ?? 'tara'
+  const outputFormat = request.outputFormat ?? 'wav'
+  const speed = request.speed ?? 1
   const chunks = chunkText(text, GROQ_TTS_MAX_CHARS)
   const audioBuffers: Buffer[] = []
 
@@ -144,28 +195,36 @@ export async function groqTts(text: string): Promise<GroqTtsResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: GROQ_TTS_MODEL,
+        model,
         input: chunk,
-        voice: 'tara',
-        response_format: 'wav',
+        voice,
+        speed,
+        response_format: outputFormat,
       }),
     })
 
     if (!response.ok) {
       const errBody = await response.text()
-      throw new Error(`Groq TTS error ${response.status}: ${errBody}`)
+      throw providerHttpError({ provider: 'groq', status: response.status, body: errBody })
     }
 
     const arrayBuffer = await response.arrayBuffer()
-    audioBuffers.push(Buffer.from(arrayBuffer))
+    const buffer = Buffer.from(arrayBuffer)
+    validateAudioBuffer(buffer, outputFormat)
+    audioBuffers.push(buffer)
   }
 
-  // Concatenate all WAV buffers into a single unified payload
-  const concatenated = concatenateWavBuffers(audioBuffers)
+  const concatenated = outputFormat === 'wav' ? concatenateWavBuffers(audioBuffers) : Buffer.concat(audioBuffers)
+  validateAudioBuffer(concatenated, outputFormat)
 
   return {
     audioBuffer: concatenated,
-    model: GROQ_TTS_MODEL,
+    model,
+    voice,
+    mimeType: audioMimeType(outputFormat),
+    duration: outputFormat === 'wav' ? wavDurationSeconds(concatenated) : 0,
+    outputFormat,
+    chunkCount: chunks.length,
   }
 }
 
@@ -273,4 +332,30 @@ function concatenateWavBuffers(buffers: Buffer[]): Buffer {
   }
 
   return output
+}
+
+function validateAudioBuffer(buffer: Buffer, format: GroqTtsResponse['outputFormat']): void {
+  const valid = format === 'wav'
+    ? buffer.length >= 44 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE'
+    : format === 'flac'
+      ? buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'fLaC'
+      : format === 'ogg'
+        ? buffer.length >= 4 && buffer.subarray(0, 4).toString('ascii') === 'OggS'
+        : buffer.length >= 3 && (buffer.subarray(0, 3).toString('ascii') === 'ID3' || (buffer[0] === 0xff && (buffer[1]! & 0xe0) === 0xe0))
+  if (!valid) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: `Groq TTS returned invalid ${format} audio bytes` })
+}
+
+function audioMimeType(format: GroqTtsResponse['outputFormat']): string {
+  return format === 'wav' ? 'audio/wav' : format === 'mp3' ? 'audio/mpeg' : format === 'flac' ? 'audio/flac' : 'audio/ogg'
+}
+
+function wavDurationSeconds(buffer: Buffer): number {
+  if (buffer.length < 44) return 0
+  const byteRate = buffer.readUInt32LE(28)
+  const dataSize = buffer.readUInt32LE(40)
+  return byteRate > 0 ? dataSize / byteRate : 0
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

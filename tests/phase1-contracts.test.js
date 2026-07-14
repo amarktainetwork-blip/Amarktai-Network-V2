@@ -154,9 +154,10 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
   it('does not expose Mimo or DeepInfra as app-selected runtime adapters', () => {
     const workerRegistry = fs.readFileSync(path.join(ROOT, 'apps/worker/src/adapters/index.ts'), 'utf8')
     const executorText = fs.readFileSync(path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts'), 'utf8')
+    const directExecutorText = fs.readFileSync(path.join(ROOT, 'apps/worker/src/providers/direct-provider-executor.ts'), 'utf8')
 
     expect(workerRegistry).not.toMatch(/Mimo|DeepInfra/i)
-    expect(executorText).toContain('executeDeepInfraTextCapability')
+    expect(directExecutorText).toContain('executeDeepInfraTask')
     expect(executorText).not.toContain("EXECUTION_SUPPORT: Partial<Record<CapabilityKey, ProviderKey>> = {\n  mimo")
     expect(executorText).toContain('resolveProviderApiKey')
   })

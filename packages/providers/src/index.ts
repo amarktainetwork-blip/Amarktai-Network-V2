@@ -15,6 +15,8 @@ export {
   type GroqChatResponse,
   type GroqSttResponse,
   type GroqTtsResponse,
+  type GroqSttOptions,
+  type GroqTtsRequest,
 } from './groq-client.js'
 
 // DeepInfra — OpenAI-compatible text fallback/runtime diagnostics
@@ -93,6 +95,45 @@ export {
   type EmbeddingRequest,
   type EmbeddingResponse,
 } from './embeddings-client.js'
+
+// Shared direct-provider transports and canonical failures
+export {
+  CanonicalProviderError,
+  providerHttpError,
+  normalizeProviderError,
+  redactProviderErrorMessage,
+  type ProviderErrorCode,
+} from './provider-errors.js'
+export {
+  openAiChatCompletion,
+  openAiStreamingChat,
+  type OpenAiTransportMessage,
+  type OpenAiToolDefinition,
+  type OpenAiToolCall,
+  type OpenAiChatTransportRequest,
+  type OpenAiChatTransportResponse,
+  type OpenAiStreamChunk,
+} from './openai-transport.js'
+export {
+  deepinfraTaskInference,
+  type DeepInfraTaskRequest,
+} from './deepinfra-task-client.js'
+export {
+  providerEmbeddings,
+  providerRerank,
+  type ProviderEmbeddingRequest,
+  type ProviderEmbeddingResponse,
+  type ProviderRerankDocument,
+  type ProviderRerankRequest,
+  type ProviderRerankResponse,
+} from './retrieval-client.js'
+export {
+  inspectImageBuffer,
+  inspectAudioBuffer,
+  inspectVideoBuffer,
+  type InspectedImage,
+  type InspectedTimedMedia,
+} from './media-inspection.js'
 
 // Provider model discovery — model-list/catalogue only, no generation calls.
 export {

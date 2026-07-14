@@ -27,12 +27,16 @@ function jsonResponse(body) {
   }
 }
 
+const TEST_AUDIO = Buffer.alloc(834)
+TEST_AUDIO.set([0xff, 0xfb, 0x90, 0x00], 0) // MPEG-1 Layer III, 128 kbps, 417-byte frame.
+TEST_AUDIO.set([0xff, 0xfb, 0x90, 0x00], 417)
+
 function audioResponse() {
   return {
     ok: true,
     status: 200,
     headers: { get: (name) => name === 'content-type' ? 'audio/mpeg' : null },
-    arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    arrayBuffer: async () => TEST_AUDIO.buffer.slice(TEST_AUDIO.byteOffset, TEST_AUDIO.byteOffset + TEST_AUDIO.byteLength),
   }
 }
 
@@ -183,7 +187,8 @@ describe('GenX music authenticated downloads', () => {
 
     expect(fileDownload[0]).toBe('https://query.genx.sh/api/v1/jobs/job-1/file')
     expect(fileDownload[1].headers.Authorization).toBe('Bearer genx-secret')
-    expect(result.audioBuffer.length).toBe(4)
+    expect(result.audioBuffer.length).toBe(TEST_AUDIO.length)
+    expect(result.duration).toBeGreaterThan(0)
     expect(result.model).toBe('lyria-3-clip-preview')
     expect(result.providerJobId).toBe('job-1')
   })
@@ -230,7 +235,8 @@ describe('GenX music polling robustness and diagnostics', () => {
 
     expect(globalThis.fetch.mock.calls[1][0]).toBe('https://query.genx.sh/api/v1/jobs/job-transient')
     expect(globalThis.fetch.mock.calls[2][0]).toBe('https://query.genx.sh/api/v1/jobs/job-transient')
-    expect(result.audioBuffer.length).toBe(4)
+    expect(result.audioBuffer.length).toBe(TEST_AUDIO.length)
+    expect(result.duration).toBeGreaterThan(0)
     expect(result.providerJobId).toBe('job-transient')
     expect(result.model).toBe('lyria-3-clip-preview')
     expect(result.metadata.providerJobId).toBe('job-transient')

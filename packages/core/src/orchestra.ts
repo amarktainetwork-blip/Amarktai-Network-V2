@@ -5,9 +5,9 @@
  * Does not import Prisma or query databases.
  */
 
-import { PROVIDER_KEYS, getProviderDefinition, type ProviderKey } from './providers.js'
+import { PROVIDER_KEYS, getProviderDefinition, getProviderDefaultBaseUrl, type ProviderKey } from './providers.js'
 import { CAPABILITY_FIELD_MAP, type CapabilityKey } from './capabilities.js'
-import { getExecutorRegistration, type ExecutorId } from './executor-registry.js'
+import { getExecutorRegistration, isExecutorModelCompatible, type ExecutorId } from './executor-registry.js'
 
 // ── Routing Modes ──────────────────────────────────────────────
 
@@ -16,7 +16,7 @@ export type OrchestraRoutingMode = (typeof ORCHESTRA_ROUTING_MODES)[number]
 
 // ── Shared Constants ───────────────────────────────────────────
 
-export const HEALTHY_PROVIDER_STATUSES = new Set(['configured', 'live'])
+export const HEALTHY_PROVIDER_STATUSES = new Set(['live', 'healthy'])
 export const BLOCKED_PROVIDER_STATUSES = new Set(['disabled', 'runtime_restricted'])
 
 export const CODING_TOOL_CAPABILITIES = new Set<CapabilityKey>([
@@ -101,6 +101,7 @@ export interface OrchestraCandidate {
   providerConfigured: boolean
   providerEnabled: boolean
   providerHealth: string
+  providerHealthReady: boolean
   providerAccountAllowed: boolean
   providerPolicyAllowed: boolean
   modelLifecycleAllowed: boolean
@@ -108,6 +109,10 @@ export interface OrchestraCandidate {
   executorSupported: boolean
   requestShapeKnown: boolean
   responseShapeKnown: boolean
+  endpointReady: boolean
+  databaseReady: boolean
+  queueReady: boolean
+  modelCompatible: boolean
   infrastructureReady: boolean
   executionReady: boolean
   liveProven: boolean
@@ -214,6 +219,10 @@ export function checkCandidateEligibility(
     blockers.push('provider_runtime_restricted')
   }
 
+  if (!candidate.providerHealthReady) {
+    blockers.push('provider_health_not_ready')
+  }
+
   if (!candidate.providerAccountAllowed) {
     blockers.push('provider_account_blocked')
   }
@@ -248,6 +257,22 @@ export function checkCandidateEligibility(
 
   if (!candidate.responseShapeKnown) {
     blockers.push('response_shape_unknown')
+  }
+
+  if (!candidate.modelCompatible) {
+    blockers.push('executor_model_incompatible')
+  }
+
+  if (!candidate.endpointReady) {
+    blockers.push('provider_endpoint_not_ready')
+  }
+
+  if (!candidate.databaseReady) {
+    blockers.push('database_not_ready')
+  }
+
+  if (!candidate.queueReady) {
+    blockers.push('queue_not_ready')
   }
 
   if (!candidate.infrastructureReady) {
@@ -501,6 +526,7 @@ export interface DbModelRecord {
   latencyTier?: string | null
   estimatedUnitCost?: number | null
   pricingConfidence?: string | null
+  capabilitiesJson?: string | null
   [key: string]: unknown
 }
 
@@ -508,13 +534,24 @@ export interface DbProviderRecord {
   providerKey: string
   enabled: boolean
   healthStatus: string | null
+  apiKey?: string | null
+  baseUrl?: string | null
+  defaultModel?: string | null
+  credentialUsagePolicy?: string | null
+}
+
+export interface RuntimeInfrastructureEvidence {
+  databaseReady?: boolean
+  queueReady?: boolean
+  endpointReadyByProvider?: Partial<Record<ProviderKey, boolean>>
+  liveProvenRoutes?: ReadonlySet<string>
 }
 
 export function normalizeDbCandidates(
   models: DbModelRecord[],
   providers: DbProviderRecord[],
   capability: CapabilityKey,
-  evidence: { infrastructureReady?: boolean; liveProvenRoutes?: ReadonlySet<string> } = {},
+  evidence: RuntimeInfrastructureEvidence = {},
 ): OrchestraCandidate[] {
   const supportField = CAPABILITY_FIELD_MAP[capability]
   if (!supportField) return []
@@ -528,12 +565,18 @@ export function normalizeDbCandidates(
 
   for (const model of models) {
     const record = model as Record<string, unknown>
-    if (record[supportField] !== true) continue
+    const exactCapabilities = parseCapabilityList(model.capabilitiesJson)
+    if (exactCapabilities.length > 0) {
+      if (!exactCapabilities.includes(capability)) continue
+    } else if (record[supportField] !== true) {
+      continue
+    }
 
     const provider = providerMap.get(model.provider)
     const providerHealth = provider?.healthStatus ?? 'unconfigured'
     const providerEnabled = provider?.enabled ?? false
-    const providerConfigured = HEALTHY_PROVIDER_STATUSES.has(providerHealth)
+    const providerConfigured = typeof provider?.apiKey === 'string' && provider.apiKey.trim().length > 0
+    const providerHealthReady = HEALTHY_PROVIDER_STATUSES.has(providerHealth)
     const providerAccountAllowed = !BLOCKED_PROVIDER_STATUSES.has(providerHealth)
     if (!(PROVIDER_KEYS as readonly string[]).includes(model.provider)) continue
     const providerDefinition = getProviderDefinition(model.provider as ProviderKey)
@@ -543,7 +586,25 @@ export function normalizeDbCandidates(
     const executorSupported = executorRegistration !== undefined
     const requestShapeKnown = executorRegistration !== undefined
     const responseShapeKnown = executorRegistration !== undefined
-    const infrastructureReady = evidence.infrastructureReady === true
+    const modelCompatible = executorRegistration !== undefined && isExecutorModelCompatible(executorRegistration, model.modelId)
+    const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
+    const defaultBaseUrl = getProviderDefaultBaseUrl(model.provider as ProviderKey)
+    const endpointReady = evidence.endpointReadyByProvider?.[model.provider as ProviderKey]
+      ?? isHttpEndpoint(configuredBaseUrl || defaultBaseUrl)
+    const databaseReady = evidence.databaseReady === true
+    const queueReady = executorRegistration?.executionMode === 'stream' || executorRegistration?.executionMode === 'sync'
+      ? true
+      : evidence.queueReady === true
+    const infrastructureReady = databaseReady
+      && queueReady
+      && providerConfigured
+      && providerEnabled
+      && providerHealthReady
+      && providerAccountAllowed
+      && providerPolicyAllowed
+      && endpointReady
+      && executorSupported
+      && modelCompatible
     const modelLifecycleAllowed = model.status !== 'blocked' && model.status !== 'retired'
     const liveProven = evidence.liveProvenRoutes?.has(`${model.provider}/${model.modelId}/${capability}`) === true
 
@@ -556,6 +617,7 @@ export function normalizeDbCandidates(
       providerConfigured,
       providerEnabled,
       providerHealth,
+      providerHealthReady,
       providerAccountAllowed,
       providerPolicyAllowed,
       modelLifecycleAllowed,
@@ -563,8 +625,12 @@ export function normalizeDbCandidates(
       executorSupported,
       requestShapeKnown,
       responseShapeKnown,
+      endpointReady,
+      databaseReady,
+      queueReady,
+      modelCompatible,
       infrastructureReady,
-      executionReady: adapterSupported && executorSupported && modelLifecycleAllowed && providerConfigured && infrastructureReady,
+      executionReady: adapterSupported && executorSupported && modelLifecycleAllowed && infrastructureReady,
       liveProven,
       estimatedCost: model.estimatedUnitCost ?? null,
       costTier: model.costTier ?? 'medium',
@@ -578,4 +644,25 @@ export function normalizeDbCandidates(
   }
 
   return candidates
+}
+
+function isHttpEndpoint(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+function parseCapabilityList(value: string | null | undefined): CapabilityKey[] {
+  if (!value?.trim()) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is CapabilityKey => typeof item === 'string' && item in CAPABILITY_FIELD_MAP)
+      : []
+  } catch {
+    return []
+  }
 }

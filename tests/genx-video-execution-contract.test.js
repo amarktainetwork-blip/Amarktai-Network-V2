@@ -43,7 +43,7 @@ const prismaMock = vi.hoisted(() => ({
   aiProvider: {
     findUnique: vi.fn(),
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'genx', enabled: true, healthStatus: 'live' },
+      { providerKey: 'genx', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
   job: {
@@ -135,7 +135,7 @@ describe('GenX video executor', () => {
     prismaMock.job.update.mockResolvedValue({})
     prismaMock.usageMeter.upsert.mockResolvedValue({})
     providerMocks.genxGenerateVideo.mockResolvedValue({
-      videoBuffer: Buffer.from('video-bytes'),
+      videoBuffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomvideo-bytes')]),
       mimeType: 'video/mp4',
       duration: 4,
       width: 1280,
@@ -155,7 +155,7 @@ describe('GenX video executor', () => {
       metadata: {},
     })
     providerMocks.genxDownloadVideo.mockResolvedValue({
-      videoBuffer: Buffer.from('resumed-video-bytes'),
+      videoBuffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomresumed-video-bytes')]),
       mimeType: 'video/mp4',
       duration: 4,
       width: 1280,
@@ -214,7 +214,7 @@ describe('GenX video executor', () => {
           duration: 4,
         }),
       }),
-      data: Buffer.from('video-bytes'),
+      data: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomvideo-bytes')]),
       explicitMimeType: 'video/mp4',
     }))
 
@@ -257,7 +257,7 @@ describe('GenX video executor', () => {
       model: 'seedance-v1-fast',
     }))
     expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
-      data: Buffer.from('resumed-video-bytes'),
+      data: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomresumed-video-bytes')]),
     }))
     const output = JSON.parse(result.output)
     expect(output.providerJobId).toBe('genx-remote-resume-001')

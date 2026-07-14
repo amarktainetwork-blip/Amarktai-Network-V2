@@ -23,12 +23,13 @@ import {
   type JobPayload,
   type CreateJobResponse,
   type JobStatusResponse,
+  validateDirectProviderRequest,
 } from '@amarktai/core'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 // ── Auth Helper ───────────────────────────────────────────────────────────────
 
-async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
+export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   ok: boolean
   statusCode: number
   error?: string
@@ -149,6 +150,16 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     const { capability, prompt, input, metadata, callbackUrl } = parsed.data
 
+    const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
+    if (!capabilityRequest.success) {
+      return reply.status(400).send({
+        error: true,
+        message: capabilityRequest.error,
+        details: capabilityRequest.issues,
+      })
+    }
+    const validatedInput = capabilityRequest.data ?? input
+
     // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
     // allowlist is migration input only and is never consulted by the worker.
     const allowedCaps = auth.allowedCapabilities ?? []
@@ -212,7 +223,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         appSlug: auth.app!.slug,
         capability,
         prompt,
-        inputJson: JSON.stringify(input),
+        inputJson: JSON.stringify(validatedInput),
         metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
@@ -235,7 +246,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       appSlug: auth.app!.slug,
       capability,
       prompt,
-      input,
+      input: validatedInput,
       metadata: immutableMetadata,
       traceId,
       callbackUrl,
@@ -292,8 +303,13 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(404).send({ error: true, message: 'Job not found' })
     }
 
+    const jobMetadata = parseJobMetadata(job.metadataJson)
+    const routeAttempts = Array.isArray(jobMetadata.orchestraRouteAttempts) ? jobMetadata.orchestraRouteAttempts : []
+
     const response: JobStatusResponse = {
       jobId: job.id,
+      executionId: job.executionId || stringMetadata(jobMetadata.orchestraExecutionId),
+      appSlug: job.appSlug,
       status: job.status as JobStatusResponse['status'],
       capability: job.capability,
       provider: job.provider,
@@ -301,6 +317,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       artifactId: job.artifactId,
       progress: job.progress,
       error: job.error,
+      output: job.output,
+      executionEvidence: {
+        grantSnapshotSource: stringMetadata(jobMetadata.appGrantSnapshotSource),
+        executorId: stringMetadata(jobMetadata.directProviderExecutorId) || stringMetadata(jobMetadata.orchestraActualExecutorId) || stringMetadata(jobMetadata.orchestraSelectedExecutorId),
+        routeType: stringMetadata(jobMetadata.directProviderRouteType),
+        fallbackAttempts: routeAttempts,
+        usage: jobMetadata.directProviderUsage ?? null,
+        cost: jobMetadata.directProviderCostEvidence ?? null,
+        outputValidation: jobMetadata.directProviderOutputValidation ?? null,
+        errorClassification: jobMetadata.directProviderErrorClassification ?? null,
+      },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       completedAt: job.completedAt?.toISOString() ?? null,
@@ -308,4 +335,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send(response)
   })
+}
+
+function parseJobMetadata(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function stringMetadata(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
 }

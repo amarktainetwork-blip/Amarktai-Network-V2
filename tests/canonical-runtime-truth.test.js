@@ -99,14 +99,15 @@ describe('canonical runtime truth', () => {
     expect(mimo.policyRestrictions).toContain('coding_tools_only_not_backend_runtime')
   })
 
-  it('catalogue presence does not imply implementation', () => {
+  it('tool use has an executor but remains blocked without credentials and infrastructure', () => {
     const runtimeTruth = truth()
     const toolUse = capability(runtimeTruth, 'tool_use')
 
     expect(toolUse.catalogueKnown).toBe(true)
-    expect(toolUse.implementationReady).toBe(false)
-    expect(toolUse.classification).toBe('CATALOGUE_ONLY')
-    expect(toolUse.blockedReasons).toContain('executor_missing')
+    expect(toolUse.implementationReady).toBe(true)
+    expect(toolUse.classification).toBe('EXECUTOR_PRESENT')
+    expect(toolUse.blockedReasons).toContain('credentials_missing')
+    expect(toolUse.blockedReasons).toContain('infrastructure_missing')
   })
 
   it('implementationReady does not imply configured', () => {

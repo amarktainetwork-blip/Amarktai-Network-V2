@@ -10,19 +10,19 @@ import {
   normalizeDbCandidates,
   type OrchestraDecision,
   type OrchestraRequest,
+  type RuntimeInfrastructureEvidence,
 } from '@amarktai/core'
 
 export async function loadOrchestraSnapshot(
   request: OrchestraRequest,
+  evidence: RuntimeInfrastructureEvidence = {},
 ): Promise<OrchestraDecision> {
   const [allModels, providers] = await Promise.all([
     prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
     prisma.aiProvider.findMany(),
   ])
 
-  const candidates = normalizeDbCandidates(allModels, providers, request.capability, {
-    infrastructureReady: request.infrastructureReady === true,
-  })
+  const candidates = normalizeDbCandidates(allModels, providers, request.capability, evidence)
 
   return evaluateOrchestra(request, candidates)
 }

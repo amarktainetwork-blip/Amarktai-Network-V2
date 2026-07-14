@@ -11,6 +11,7 @@
  */
 
 import { getGenxApiKey, getGenxBaseUrl } from '@amarktai/core'
+import { inspectAudioBuffer } from './media-inspection.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -391,13 +392,14 @@ export async function genxDownloadMusic(
 
   const mimeType = contentType || 'audio/mpeg'
   const model = resolveGenxMusicModel(request)
+  const inspected = inspectAudioBuffer(audioBuffer, mimeType, 'genx')
 
   return {
     audioBuffer,
     mimeType,
-    duration: 0,
+    duration: inspected.duration,
     model,
-    metadata: { downloaded: true, sizeBytes: audioBuffer.length, authenticated },
+    metadata: { downloaded: true, sizeBytes: audioBuffer.length, authenticated, durationSource: inspected.durationSource },
   }
 }
 

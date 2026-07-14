@@ -23,12 +23,33 @@ function jsonResponse(body) {
   }
 }
 
+function isoBox(type, payload) {
+  const box = Buffer.alloc(8 + payload.length)
+  box.writeUInt32BE(box.length, 0)
+  box.write(type, 4, 4, 'ascii')
+  payload.copy(box, 8)
+  return box
+}
+
+function measurableMp4() {
+  const ftyp = isoBox('ftyp', Buffer.from('isom\x00\x00\x02\x00isomiso2', 'binary'))
+  const mvhdPayload = Buffer.alloc(100)
+  mvhdPayload.writeUInt32BE(1_000, 12)
+  mvhdPayload.writeUInt32BE(5_000, 16)
+  const tkhdPayload = Buffer.alloc(84)
+  tkhdPayload.writeUInt32BE(1920 * 65_536, tkhdPayload.length - 8)
+  tkhdPayload.writeUInt32BE(1080 * 65_536, tkhdPayload.length - 4)
+  return Buffer.concat([ftyp, isoBox('moov', Buffer.concat([isoBox('mvhd', mvhdPayload), isoBox('trak', isoBox('tkhd', tkhdPayload))]))])
+}
+
+const TEST_VIDEO = measurableMp4()
+
 function videoResponse() {
   return {
     ok: true,
     status: 200,
     headers: { get: (name) => name === 'content-type' ? 'video/mp4' : null },
-    arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    arrayBuffer: async () => TEST_VIDEO.buffer.slice(TEST_VIDEO.byteOffset, TEST_VIDEO.byteOffset + TEST_VIDEO.byteLength),
   }
 }
 
@@ -143,7 +164,8 @@ describe('GenX authenticated downloads', () => {
 
     expect(fileDownload[0]).toBe('https://query.genx.sh/api/v1/jobs/job-1/file')
     expect(fileDownload[1].headers.Authorization).toBe('Bearer genx-secret')
-    expect(result.videoBuffer.length).toBe(4)
+    expect(result.videoBuffer.length).toBe(TEST_VIDEO.length)
+    expect(result).toMatchObject({ duration: 5, width: 1920, height: 1080 })
     expect(result.model).toBe('seedance-v1-fast')
     expect(result.providerJobId).toBe('job-1')
   })
@@ -191,7 +213,8 @@ describe('GenX polling robustness and diagnostics', () => {
 
     expect(globalThis.fetch.mock.calls[1][0]).toBe('https://query.genx.sh/api/v1/jobs/job-transient')
     expect(globalThis.fetch.mock.calls[2][0]).toBe('https://query.genx.sh/api/v1/jobs/job-transient')
-    expect(result.videoBuffer.length).toBe(4)
+    expect(result.videoBuffer.length).toBe(TEST_VIDEO.length)
+    expect(result).toMatchObject({ duration: 5, width: 1920, height: 1080 })
     expect(result.providerJobId).toBe('job-transient')
     expect(result.model).toBe('grok-imagine-video')
     expect(result.metadata.providerJobId).toBe('job-transient')

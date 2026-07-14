@@ -20,14 +20,19 @@ function loadBuildInfo(): { gitSha: string; buildTime: string; serviceName: stri
   try {
     const buildInfoPath = join(process.cwd(), 'build-info.json')
     const raw = readFileSync(buildInfoPath, 'utf-8')
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw) as ReturnType<typeof loadBuildInfo>
+    return {
+      ...parsed,
+      serviceName: process.env.SERVICE_NAME ?? 'amarktai-api',
+      version: process.env.APP_VERSION ?? parsed.version,
+    }
   } catch {
     // Fallback: try git SHA from environment (set in Dockerfile or CI)
     return {
       gitSha: process.env.GIT_SHA ?? 'unknown',
       buildTime: process.env.BUILD_TIME ?? 'unknown',
-      serviceName: 'amarktai-api',
-      version: process.env.npm_package_version ?? '0.0.0',
+      serviceName: process.env.SERVICE_NAME ?? 'amarktai-api',
+      version: process.env.APP_VERSION ?? process.env.npm_package_version ?? '0.0.0',
     }
   }
 }

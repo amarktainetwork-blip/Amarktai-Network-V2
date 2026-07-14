@@ -61,7 +61,8 @@ function candidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCandid
     executorId: 'groq.chat',
     providerConfigured: true,
     providerEnabled: true,
-    providerHealth: 'configured',
+    providerHealth: 'live',
+    providerHealthReady: true,
     providerAccountAllowed: true,
     providerPolicyAllowed: true,
     modelLifecycleAllowed: true,
@@ -71,6 +72,10 @@ function candidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCandid
     responseShapeKnown: true,
     infrastructureReady: true,
     executionReady: true,
+    endpointReady: true,
+    databaseReady: true,
+    queueReady: true,
+    modelCompatible: true,
     liveProven: false,
     estimatedCost: 1,
     costTier: 'low',
@@ -124,10 +129,12 @@ describe('canonical source-of-truth consolidation', () => {
     expect(getExecutorRegistration('image_generation', 'together')?.id).toBe('together.image-generation')
     expect(getExecutorRegistration('image_edit', 'together')).toBeUndefined()
     expect(getExecutorRegistration('image_to_video', 'genx')).toBeUndefined()
-    expect(getExecutorRegistration('tts', 'groq')).toBeUndefined()
+    expect(getExecutorRegistration('tts', 'groq')?.id).toBe('groq.tts')
     expect(getExecutorRegistration('campaign_generation', 'groq')).toBeUndefined()
     for (const registration of EXECUTOR_REGISTRATIONS) {
-      expect(typeof EXECUTOR_HANDLERS[registration.id]).toBe('function')
+      if (registration.executionMode !== 'stream') {
+        expect(typeof EXECUTOR_HANDLERS[registration.id]).toBe('function')
+      }
     }
   })
 
@@ -179,16 +186,16 @@ describe('canonical source-of-truth consolidation', () => {
         jobId: 'job', appSlug: 'test-app', capability: 'chat', prompt: 'hello', traceId: 'trace', appGrantSnapshot: grant(),
       }
       const result = await executeRegisteredRoute(payload, {
-        provider: 'groq', model: 'exact-model', executorId: 'groq.chat', routeKind: 'primary',
+        provider: 'groq', model: 'llama-3.3-70b-versatile', executorId: 'groq.chat', routeKind: 'primary',
       })
-      expect(handler).toHaveBeenCalledWith(payload, 'exact-model')
-      expect(result).toMatchObject({ success: true, provider: 'groq', model: 'exact-model' })
+      expect(handler).toHaveBeenCalledWith(payload, 'llama-3.3-70b-versatile')
+      expect(result).toMatchObject({ success: true, provider: 'groq', model: 'llama-3.3-70b-versatile' })
 
       EXECUTOR_HANDLERS['groq.chat'] = vi.fn(async () => ({
         success: true, status: 'completed' as const, provider: 'deepinfra', model: 'other-model', output: 'bad',
       }))
       const rejected = await executeRegisteredRoute(payload, {
-        provider: 'groq', model: 'exact-model', executorId: 'groq.chat', routeKind: 'primary',
+        provider: 'groq', model: 'llama-3.3-70b-versatile', executorId: 'groq.chat', routeKind: 'primary',
       })
       expect(rejected.success).toBe(false)
       expect(rejected.error).toContain('attempted to change provider')

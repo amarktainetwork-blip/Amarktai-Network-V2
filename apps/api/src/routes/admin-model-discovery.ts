@@ -11,6 +11,7 @@ import {
   type ProviderKey,
 } from '@amarktai/core'
 import { runProviderModelDiscovery } from '@amarktai/providers'
+import { getProviderCredentialStatus, resolveProviderApiKey } from '@amarktai/db'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 const RUNTIME_EXECUTABLE_PROVIDERS = RUNTIME_EXECUTION_PROVIDERS
@@ -152,13 +153,20 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
   }
 }
 
-function envApiKeys(): Partial<Record<ProviderKey, string>> {
-  return {
-    genx: process.env.GENX_API_KEY,
-    groq: process.env.GROQ_API_KEY,
-    together: process.env.TOGETHER_API_KEY,
-    deepinfra: process.env.DEEPINFRA_API_KEY,
-  }
+async function storedRuntimeCredentials(): Promise<{
+  apiKeys: Partial<Record<ProviderKey, string>>
+  genxBaseUrl?: string
+}> {
+  const apiKeys: Partial<Record<ProviderKey, string>> = {}
+  await Promise.all(RUNTIME_EXECUTABLE_PROVIDERS.map(async (provider) => {
+    try {
+      apiKeys[provider] = (await resolveProviderApiKey(provider)).apiKey
+    } catch {
+      // The discovery adapter records a redacted missing-credential result.
+    }
+  }))
+  const genxStatus = await getProviderCredentialStatus('genx').catch(() => null)
+  return { apiKeys, genxBaseUrl: genxStatus?.baseUrl || process.env.GENX_BASE_URL }
 }
 
 export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<void> {
@@ -183,10 +191,11 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
     const body = request.body as Record<string, unknown> | undefined
     const live = body?.live === true
     const strict = body?.strict === true
+    const credentials = live ? await storedRuntimeCredentials() : { apiKeys: {} }
     const results = await runProviderModelDiscovery({
       live,
-      apiKeys: live ? envApiKeys() : {},
-      genxBaseUrl: process.env.GENX_BASE_URL,
+      apiKeys: credentials.apiKeys,
+      genxBaseUrl: credentials.genxBaseUrl,
     })
     const models = results.flatMap((result) => result.models)
     const strictFailures = strict
