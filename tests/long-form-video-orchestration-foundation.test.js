@@ -4,8 +4,8 @@ import {
   LongFormVideoPlanSchema,
   validateLongFormVideoRequest,
   createLongFormVideoPlan,
-  LONG_FORM_VIDEO_STATUS,
-  routeBrain,
+  getExecutorRegistrations,
+  getRuntimeTruth,
   PROVIDER_KEYS,
   hasBlockedOverrides
 } from '@amarktai/core'
@@ -25,13 +25,6 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(typeof validateLongFormVideoRequest).toBe('function')
     })
 
-    it('exports LONG_FORM_VIDEO_STATUS', () => {
-      expect(LONG_FORM_VIDEO_STATUS).toBeDefined()
-      expect(LONG_FORM_VIDEO_STATUS.orchestrationFoundationReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.schemaReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.plannerReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
-    })
   })
 
   describe('Request validation', () => {
@@ -278,29 +271,16 @@ describe('Long-Form Video Orchestration Foundation', () => {
 
   describe('Capability status', () => {
     it('long_form_video remains not fully executable', () => {
-      const decision = routeBrain({
-        capability: 'long_form_video',
-        routingMode: 'balanced'
-      })
-      expect(decision.executionAllowed).toBe(false)
+      const truth = getRuntimeTruth().capabilities.find(item => item.capability === 'long_form_video')
+      expect(truth.executableNow).toBe(false)
     })
 
-    it('Brain Router still blocks final long_form_video execution', () => {
-      const decision = routeBrain({
-        capability: 'long_form_video',
-        routingMode: 'premium'
-      })
-      expect(decision.executionAllowed).toBe(false)
-      expect(decision.selectedProvider).toBeNull()
+    it('final long_form_video has no direct provider executor', () => {
+      expect(getExecutorRegistrations('long_form_video')).toEqual([])
     })
 
-    it('video_generation remains executable for short clips', () => {
-      const decision = routeBrain({
-        capability: 'video_generation',
-        routingMode: 'balanced'
-      })
-      expect(decision.executionAllowed).toBe(true)
-      expect(decision.selectedProvider).toBe('genx')
+    it('video_generation retains the GenX short-clip executor', () => {
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
     })
   })
 
@@ -334,35 +314,32 @@ describe('Long-Form Video Orchestration Foundation', () => {
   describe('Adult generation remains on hold', () => {
     it('adult capabilities remain blocked', () => {
       const adultCaps = ['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video']
+      const truth = getRuntimeTruth()
       adultCaps.forEach(cap => {
-        const decision = routeBrain({ capability: cap, routingMode: 'balanced' })
-        expect(decision.executionAllowed).toBe(false)
+        expect(truth.capabilities.find(item => item.capability === cap)?.classification).toBe('POLICY_RESTRICTED')
       })
     })
   })
 
   describe('Phase 1 foundation verification', () => {
-    it('orchestration foundation is ready', () => {
-      expect(LONG_FORM_VIDEO_STATUS.orchestrationFoundationReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.schemaReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.plannerReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.sceneSplitterReady).toBe(true)
+    it('binds foundation claims to the callable schema and planner', () => {
+      expect(LongFormVideoRequestSchema).toBeDefined()
+      expect(LongFormVideoPlanSchema).toBeDefined()
+      expect(typeof createLongFormVideoPlan).toBe('function')
     })
 
-    it('per-scene video generation is possible', () => {
-      expect(LONG_FORM_VIDEO_STATUS.perSceneVideoGenerationPossible).toBe(true)
+    it('keeps per-scene execution support tied to a real executor registration', () => {
+      expect(getExecutorRegistrations('video_generation')).toEqual([
+        expect.objectContaining({ provider: 'genx', handlerName: 'executeGenxVideo' }),
+      ])
     })
 
-    it('final assembly is not yet ready', () => {
-      expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(false)
-    })
-
-    it('final long-form video is not yet executable', () => {
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
+    it('does not invent API component evidence in core-only runtime truth', () => {
+      const longForm = getRuntimeTruth().capabilities.find(item => item.capability === 'long_form_video')
+      expect(longForm.plannerReady).toBe(false)
+      expect(longForm.videoOnlyAssemblyReady).toBe(false)
+      expect(longForm.fullMultimediaReady).toBe(false)
+      expect(longForm.executableNow).toBe(false)
     })
   })
 })

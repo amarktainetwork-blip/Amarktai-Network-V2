@@ -16,7 +16,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { prisma, refreshLongFormParentState } from '@amarktai/db'
-import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
+import { QUEUE_NAMES, isValidCapability, type AppCapabilityGrantContext } from '@amarktai/core'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -30,6 +30,7 @@ export interface WorkerJobData {
   traceId: string
   callbackUrl?: string
   routingMode?: string
+  appGrantSnapshot?: AppCapabilityGrantContext
 }
 
 export interface ProcessorResult {
@@ -145,6 +146,8 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
       traceId: rawPayload.traceId || makeTraceId(),
       callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
       routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
+      appGrantSnapshot: rawPayload.appGrantSnapshot
+        ?? (safeParseJsonObject(dbJob.metadataJson).appGrantSnapshot as AppCapabilityGrantContext | undefined),
     },
     dbJob,
   }

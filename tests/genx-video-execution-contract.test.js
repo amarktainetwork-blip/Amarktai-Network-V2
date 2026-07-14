@@ -73,19 +73,23 @@ vi.mock('@amarktai/artifacts', () => artifactMocks)
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { PROVIDER_KEYS } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'runtime-proof-genx-video'
+  const capability = overrides.capability ?? 'video_generation'
   return {
     jobId: 'job-genx-video-001',
-    appSlug: 'runtime-proof-genx-video',
-    capability: 'video_generation',
+    appSlug,
+    capability,
     prompt: 'A simple red ball bouncing gently on a white background',
     input: { duration: 4, aspectRatio: '16:9' },
     metadata: {},
     traceId: 'trace-genx-video-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 
@@ -136,11 +140,11 @@ describe('GenX video executor', () => {
       duration: 4,
       width: 1280,
       height: 720,
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
       providerJobId: 'genx-provider-job-001',
       metadata: {
         providerJobId: 'genx-provider-job-001',
-        selectedModel: 'grok-imagine-video',
+        selectedModel: 'seedance-v1-fast',
       },
     })
     providerMocks.genxPollVideo.mockResolvedValue({
@@ -156,7 +160,7 @@ describe('GenX video executor', () => {
       duration: 4,
       width: 1280,
       height: 720,
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
       metadata: { downloaded: true },
     })
     artifactMocks.saveArtifact.mockResolvedValue({
@@ -172,7 +176,7 @@ describe('GenX video executor', () => {
     process.env = ORIGINAL_ENV
   })
 
-  it('uses discovered Router models instead of an unsupported stale default', async () => {
+  it('uses Orchestra exact registered model and ignores caller overrides', async () => {
     const result = await executeWithProvider(makePayload({
       provider: 'together',
       model: 'user-supplied-model',
@@ -186,16 +190,10 @@ describe('GenX video executor', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('genx')
-    expect(result.model).toBe('grok-imagine-video')
-    expect(providerMocks.resolveGenxVideoModel).toHaveBeenCalledWith({
-      model: 'seedance-v1-fast',
-      providerDefaultModel: 'seedance-v1-fast',
-      providerFallbackModel: '',
-      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
-    })
+    expect(result.model).toBe('seedance-v1-fast')
+    expect(providerMocks.resolveGenxVideoModel).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).toHaveBeenCalledWith(expect.objectContaining({
       model: 'seedance-v1-fast',
-      providerDefaultModel: 'seedance-v1-fast',
       providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
     }))
     expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBe('seedance-v1-fast')
@@ -209,10 +207,10 @@ describe('GenX video executor', () => {
         type: 'video',
         subType: 'video_generation',
         provider: 'genx',
-        model: 'grok-imagine-video',
+        model: 'seedance-v1-fast',
         metadata: expect.objectContaining({
           providerJobId: 'genx-provider-job-001',
-          model: 'grok-imagine-video',
+          model: 'seedance-v1-fast',
           duration: 4,
         }),
       }),
@@ -230,7 +228,7 @@ describe('GenX video executor', () => {
       height: 720,
       duration: 4,
       providerJobId: 'genx-provider-job-001',
-      selectedModel: 'grok-imagine-video',
+      selectedModel: 'seedance-v1-fast',
     })
   })
 
@@ -240,7 +238,7 @@ describe('GenX video executor', () => {
       .mockResolvedValueOnce({
         metadataJson: JSON.stringify({
           genxProviderJobId: 'genx-remote-resume-001',
-          genxProviderModel: 'grok-imagine-video',
+          genxProviderModel: 'seedance-v1-fast',
         }),
       })
 
@@ -256,7 +254,7 @@ describe('GenX video executor', () => {
     expect(providerMocks.genxDownloadVideo).toHaveBeenCalledWith('https://query.genx.sh/api/v1/jobs/genx-provider-job-001/file', expect.objectContaining({
       apiKey: 'genx-secret-key',
       baseUrl: 'https://query.genx.sh',
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
     }))
     expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
       data: Buffer.from('resumed-video-bytes'),

@@ -4,8 +4,7 @@
  * Phase 6B proves one executable provider/capability path:
  * image_generation through Together, with artifact persistence.
  *
- * The execution support map is a temporary proof gate, not final Brain logic.
- * Apps still request capabilities only; provider/model choice stays internal.
+ * Apps request capabilities only; Orchestra keeps provider/model choice internal.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -67,22 +66,26 @@ import { executeWithProvider } from '../apps/worker/src/providers/provider-execu
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
 import {
   PROVIDER_KEYS,
-  routeBrain,
+  getExecutorRegistration,
 } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
 const TEST_IMAGE_BUFFER = Buffer.from('real-image-bytes')
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'proof-app'
+  const capability = overrides.capability ?? 'image_generation'
   return {
     jobId: 'job-image-001',
-    appSlug: 'proof-app',
-    capability: 'image_generation',
+    appSlug,
+    capability,
     prompt: 'A simple blue circle on a white background, minimal icon style',
     input: {},
     metadata: {},
     traceId: 'trace-image-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 
@@ -215,7 +218,7 @@ describe('Together image executor', () => {
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 
-  it('uses the Brain Router model and DB Together default, not a user-supplied model', async () => {
+  it('uses Orchestra exact model, not a user-supplied model', async () => {
     await executeWithProvider(makePayload({
       input: { model: 'user-model', modelOverride: 'user-model-2' },
       model: 'user-model-3',
@@ -393,7 +396,7 @@ describe('Execution routing gate', () => {
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('blocked')
+    expect(result.error).toContain("Provider 'together' is missing configuration")
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 
@@ -404,11 +407,8 @@ describe('Execution routing gate', () => {
     expect(result.error).toContain('blocked')
   })
 
-  it('DeepInfra is not an image_generation runtime candidate', () => {
-    const decision = routeBrain({ capability: 'image_generation', routingMode: 'balanced' })
-    const deepinfra = decision.rejectedCandidates.find((candidate) => candidate.provider === 'deepinfra')
-
-    expect(deepinfra?.reason).toContain("does not support capability 'image_generation'")
+  it('DeepInfra has no image_generation executor registration', () => {
+    expect(getExecutorRegistration('image_generation', 'deepinfra')).toBeUndefined()
   })
 
   it('provider/model user override is ignored by the executor', async () => {

@@ -2,21 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { CAPABILITY_KEYS, QUEUE_NAMES, validateOrchestraRequest } from '@amarktai/core'
+import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
 import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
-const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
-  'text.chat': 'chat',
-  'text.reasoning': 'reasoning',
-  'text.code': 'code',
-  'text.summarization': 'summarization',
-  'text.translation': 'translation',
-  'text.classification': 'classification',
-  'text.extraction': 'extraction',
-  'text.structured_output': 'structured_output',
-  'image.generate': 'image_generation',
-  'video.generate': 'video_generation',
-}
+const STUDIO_CAPABILITY_ALIASES = Object.fromEntries(
+  CAPABILITY_CATALOG.map((capability) => [capability.dashboardType, capability.key]),
+) as Record<string, string>
 
 const KNOWN_CAPABILITY_SET = new Set<string>(CAPABILITY_KEYS)
 
@@ -94,6 +86,20 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
 
     // Create job
     const appSlug = 'dashboard-studio'
+    const canonicalCapability = capability as CapabilityKey
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(appSlug, canonicalCapability)
+    if (!grantResolution || !grantResolution.grant.enabled) {
+      return reply.status(403).send({ error: true, message: `No enabled AppCapabilityGrant exists for ${appSlug}/${capability}` })
+    }
+    if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
+      return reply.status(403).send({ error: true, message: `Adult execution requires an explicit adult AppCapabilityGrant` })
+    }
+    const immutableMetadata = {
+      ...metadata,
+      appGrantSnapshot: grantResolution.grant,
+      appGrantSnapshotSource: grantResolution.source,
+      appGrantSnapshotAt: new Date().toISOString(),
+    }
     const traceId = `trace_${randomUUID()}`
     const safePrompt = prompt.substring(0, 10000)
     const job = await prisma.job.create({
@@ -102,7 +108,7 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
         capability: capability as never,
         prompt: safePrompt,
         inputJson: JSON.stringify(inputObj),
-        metadataJson: JSON.stringify(metadata),
+        metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
       },
@@ -111,14 +117,16 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     // Enqueue in BullMQ
     try {
       const q = getQueue()
-      const payload = {
+      const payload: JobPayload = {
         jobId: job.id,
         appSlug,
-        capability,
+        capability: canonicalCapability,
         prompt: safePrompt,
         input: inputObj,
-        metadata,
+        metadata: immutableMetadata,
         traceId,
+        routingMode: 'balanced',
+        appGrantSnapshot: grantResolution.grant,
       }
       app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability, traceId }, 'Enqueuing Studio job')
       await q.add('process-job', payload, { jobId: job.id })

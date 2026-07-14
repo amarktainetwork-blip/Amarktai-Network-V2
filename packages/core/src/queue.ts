@@ -9,6 +9,31 @@
 import { z } from 'zod'
 import { CAPABILITY_KEYS } from './capabilities.js'
 
+export const AppCapabilityGrantSnapshotSchema = z.object({
+  appSlug: z.string().min(1),
+  capability: z.enum(CAPABILITY_KEYS),
+  enabled: z.boolean(),
+  qualityFloor: z.string(),
+  budgetPolicy: z.string(),
+  maxCostPerRequest: z.number(),
+  maxCostPerWorkflow: z.number(),
+  latencyPreference: z.string(),
+  allowFallback: z.boolean(),
+  maxFallbackAttempts: z.number().int().nonnegative(),
+  liveProofRequired: z.boolean(),
+  approvalRequired: z.boolean(),
+  artifactRead: z.boolean(),
+  artifactWrite: z.boolean(),
+  memoryRead: z.boolean(),
+  memoryWrite: z.boolean(),
+  ragNamespaces: z.array(z.string()),
+  policyProfile: z.string(),
+  adultPermission: z.boolean(),
+  dataRetentionPolicy: z.string(),
+  passthroughModelAllowed: z.boolean(),
+  providerResidencyConstraints: z.array(z.string()),
+})
+
 // ── Queue Names ──────────────────────────────────────────────────────────────
 
 export const QUEUE_NAMES = {
@@ -28,6 +53,7 @@ export const JobPayloadSchema = z.object({
   traceId: z.string().default(''),
   callbackUrl: z.string().url().optional(),
   routingMode: z.string().default('balanced'),
+  appGrantSnapshot: AppCapabilityGrantSnapshotSchema.optional(),
 })
 
 export type JobPayload = z.infer<typeof JobPayloadSchema>

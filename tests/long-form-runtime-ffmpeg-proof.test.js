@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
+import { getRuntimeTruth } from '../packages/core/src/index.ts'
 
 const ROOT = process.cwd()
 
@@ -263,29 +264,26 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
   })
 
   describe('Runtime truth honesty', () => {
+    const longFormTruth = () => getRuntimeTruth().capabilities.find(capability => capability.capability === 'long_form_video')
+
     it('fullMultimediaReady is false in runtime truth', () => {
-      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
-      expect(content).toContain('fullMultimediaReady: false')
+      expect(longFormTruth().fullMultimediaReady).toBe(false)
     })
 
     it('liveProven is false in runtime truth for long_form_video', () => {
-      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
-      expect(content).toContain('liveProven: false')
+      expect(longFormTruth().liveProven).toBe(false)
     })
 
-    it('voiceover_not_live_proven blocker exists', () => {
-      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
-      expect(content).toContain('voiceover_not_live_proven')
+    it('voiceover is not ready', () => {
+      expect(longFormTruth().voiceoverReady).toBe(false)
     })
 
-    it('subtitles_not_live_proven blocker exists', () => {
-      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
-      expect(content).toContain('subtitles_not_live_proven')
+    it('subtitles are not ready', () => {
+      expect(longFormTruth().subtitlesReady).toBe(false)
     })
 
-    it('music_bed_not_live_proven blocker exists', () => {
-      const content = fs.readFileSync(path.join(ROOT, 'packages/core/src/runtime-truth.ts'), 'utf-8')
-      expect(content).toContain('music_bed_not_live_proven')
+    it('music bed is not ready', () => {
+      expect(longFormTruth().musicBedReady).toBe(false)
     })
   })
 
@@ -315,9 +313,10 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
       expect(content).toContain('checkFfmpegAvailable')
     })
 
-    it('status route reports fullMultimediaReady false', () => {
+    it('status route projects canonical component truth without a hardcoded readiness value', () => {
       const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-long-form-video.ts'), 'utf-8')
-      expect(content).toContain('fullMultimediaReady: false')
+      expect(content).toContain('...canonical')
+      expect(content).not.toContain('fullMultimediaReady: false')
     })
   })
 

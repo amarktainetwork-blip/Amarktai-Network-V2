@@ -11,6 +11,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 const BUILD_INFO = loadBuildInfo()
 
@@ -84,6 +85,7 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const statusCode = criticalHealthy ? 200 : 503
+    const runtimeTruth = await buildAdminRuntimeTruth(app).catch(() => null)
     return reply.status(statusCode).send({
       status: criticalHealthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
@@ -94,6 +96,12 @@ export async function healthRoutes(app: FastifyInstance): Promise<void> {
         version: BUILD_INFO.version,
       },
       checks,
+      runtimeTruth: runtimeTruth ? {
+        providerCount: runtimeTruth.providers.length,
+        capabilityCount: runtimeTruth.capabilities.length,
+        countsByClassification: runtimeTruth.countsByClassification,
+        providerPolicy: runtimeTruth.providerPolicy,
+      } : null,
     })
   }
 

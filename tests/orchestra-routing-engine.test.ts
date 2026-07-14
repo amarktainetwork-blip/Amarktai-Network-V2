@@ -16,6 +16,7 @@ function makeCandidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCa
     model: 'llama-3.3-70b-versatile',
     displayName: 'Groq Llama 3.3 70B',
     capability: 'chat' as CapabilityKey,
+    executorId: 'groq.chat',
     providerConfigured: true,
     providerEnabled: true,
     providerHealth: 'configured',

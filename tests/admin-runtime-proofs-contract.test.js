@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PROVIDER_KEYS } from '@amarktai/core'
 
 vi.mock('../apps/api/src/lib/admin-runtime-truth.js', () => ({
   buildAdminRuntimeTruth: vi.fn().mockResolvedValue({
@@ -33,7 +34,7 @@ vi.mock('../apps/api/src/lib/admin-runtime-truth.js', () => ({
 const { adminRuntimeProofRoutes } = await import('../apps/api/src/routes/admin-runtime-proofs.ts')
 const { getRuntimeProofStatus, projectProofStatusFromTruth } = await import('../apps/api/src/lib/runtime-proof-status.ts')
 
-const APPROVED_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const APPROVED_PROVIDERS = [...PROVIDER_KEYS]
 const DISALLOWED_PROVIDERS = [
   'openai',
   'anthropic',

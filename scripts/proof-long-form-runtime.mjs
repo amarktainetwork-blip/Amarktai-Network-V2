@@ -142,25 +142,30 @@ async function runStaticDiagnostic() {
     else fail('Music bed route exists')
     if (content.includes('assembleMultimediaLongFormVideo')) pass('Multimedia assembly invoked')
     else fail('Multimedia assembly invoked')
-    if (content.includes('fullMultimediaReady: false')) pass('fullMultimediaReady honest: false')
-    else fail('fullMultimediaReady honest: false')
-    if (content.includes('liveProven: false')) pass('liveProven honest: false')
-    else fail('liveProven honest: false')
+    if (content.includes('...canonical')) pass('Status route projects canonical component truth')
+    else fail('Status route projects canonical component truth')
+    if (!content.includes('fullMultimediaReady: false')) pass('Status route has no hardcoded multimedia readiness')
+    else fail('Status route has no hardcoded multimedia readiness')
   } catch (e) { fail('Assembly routes readable', e.message) }
 
   section('Runtime Truth')
   try {
     const content = readSource('packages/core/src/runtime-truth.ts')
-    if (content.includes('fullMultimediaReady: false')) pass('fullMultimediaReady false in runtime truth')
-    else fail('fullMultimediaReady false in runtime truth')
-    if (content.includes('liveProven: false')) pass('liveProven false in runtime truth')
-    else fail('liveProven false in runtime truth')
-    if (content.includes('voiceover_not_live_proven')) pass('voiceover_not_live_proven blocker exists')
-    else fail('voiceover_not_live_proven blocker exists')
-    if (content.includes('subtitles_not_live_proven')) pass('subtitles_not_live_proven blocker exists')
-    else fail('subtitles_not_live_proven blocker exists')
-    if (content.includes('music_bed_not_live_proven')) pass('music_bed_not_live_proven blocker exists')
-    else fail('music_bed_not_live_proven blocker exists')
+    if (content.includes('components.fullMultimediaReady === true')) pass('Multimedia readiness requires supplied component evidence')
+    else fail('Multimedia readiness requires supplied component evidence')
+    if (!content.includes('LONG_FORM_VIDEO_STATUS')) pass('No manual long-form status object feeds runtime truth')
+    else fail('No manual long-form status object feeds runtime truth')
+    const tsxCli = path.join(__dirname, '..', 'node_modules', 'tsx', 'dist', 'cli.mjs')
+    const runtimeOutput = execFileSync(process.execPath, [
+      tsxCli,
+      '-e',
+      "import { getRuntimeTruth } from './packages/core/src/index.ts'; console.log(JSON.stringify(getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')))"
+    ], { cwd: path.join(__dirname, '..'), encoding: 'utf8' })
+    const longForm = JSON.parse(runtimeOutput.trim().split(/\r?\n/).at(-1))
+    if (longForm?.fullMultimediaReady === false) pass('Baseline multimedia readiness is honestly false')
+    else fail('Baseline multimedia readiness is honestly false', `got ${longForm?.fullMultimediaReady}`)
+    if (longForm?.liveProven === false) pass('Baseline long-form live proof is honestly false')
+    else fail('Baseline long-form live proof is honestly false', `got ${longForm?.liveProven}`)
   } catch (e) { fail('Runtime truth readable', e.message) }
 
   section('Security')

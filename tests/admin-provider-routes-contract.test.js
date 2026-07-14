@@ -144,7 +144,7 @@ describe('Admin provider credential routes', () => {
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body)
     const serialized = JSON.stringify(body)
-    expect(body.providers[0].maskedPreview).toBe('gsk_********abcd')
+    expect(body.providers.find((provider) => provider.providerKey === 'groq')?.maskedPreview).toBe('gsk_********abcd')
     expect(serialized).not.toContain('gsk_live_secret_abcd')
     expect(serialized).not.toContain('v1:')
     expect(serialized).not.toContain('apiKey')

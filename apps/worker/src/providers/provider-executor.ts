@@ -8,15 +8,14 @@
  */
 
 import {
-  routeBrain,
   evaluateOrchestra,
   normalizeDbCandidates,
-  extractRoutingMode,
+  getExecutorRegistration,
   type CapabilityKey,
   type ProviderKey,
-  type RoutingMode,
-  type BrainRouterDecision,
-  type BrainRouterProviderState,
+  type ExecutorId,
+  type AppCapabilityGrantContext,
+  type OrchestraRoutingMode,
   type OrchestraDecision,
   type OrchestraCandidate,
 } from '@amarktai/core'
@@ -26,13 +25,6 @@ import type { WorkerJobData, ProcessorResult } from '../processors/job-processor
 
 type ProvidersModule = typeof import('@amarktai/providers')
 
-function formatSupportedCandidates(capability: CapabilityKey): string {
-  const decision = routeBrain({ capability, routingMode: 'balanced' })
-  const executable = decision.executableCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(executable)`)
-  const catalogueOnly = decision.catalogueOnlyCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(catalogue-only)`)
-  return [...executable, ...catalogueOnly].join(', ') || 'none'
-}
-
 function redactProviderSecrets(message: string, extraKeys: string[] = []): string {
   let safe = message
   for (const key of [process.env.GROQ_API_KEY, process.env.TOGETHER_API_KEY, process.env.GENX_API_KEY, process.env.DEEPINFRA_API_KEY, process.env.MIMO_API_KEY, ...extraKeys]) {
@@ -41,55 +33,6 @@ function redactProviderSecrets(message: string, extraKeys: string[] = []): strin
     }
   }
   return safe
-}
-
-async function isProviderDisabledInDb(provider: ProviderKey): Promise<boolean> {
-  try {
-    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
-    if (!record) return false
-    return record.healthStatus === 'disabled' || !record.enabled
-  } catch {
-    return false
-  }
-}
-
-async function isProviderRuntimeRestrictedInDb(provider: ProviderKey): Promise<boolean> {
-  try {
-    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
-    if (!record) return false
-    return record.healthStatus === 'runtime_restricted'
-  } catch {
-    return false
-  }
-}
-
-async function buildProviderStates(): Promise<Partial<Record<ProviderKey, BrainRouterProviderState>>> {
-  const providers: ProviderKey[] = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-  const states: Partial<Record<ProviderKey, BrainRouterProviderState>> = {}
-
-  for (const provider of providers) {
-    const [disabled, runtimeRestricted] = await Promise.all([
-      isProviderDisabledInDb(provider),
-      isProviderRuntimeRestrictedInDb(provider),
-    ])
-    let credentialStatus: Awaited<ReturnType<typeof getProviderCredentialStatus>> | null = null
-    try {
-      credentialStatus = await getProviderCredentialStatus(provider)
-    } catch {
-      credentialStatus = null
-    }
-    if (disabled || runtimeRestricted || provider === 'genx') {
-      states[provider] = {
-        disabled,
-        runtimeRestricted,
-        configured: credentialStatus?.configured === true && credentialStatus.runtimeEnabled !== false,
-        infrastructureReady: true,
-        policyAllowed: provider !== 'mimo',
-      }
-    }
-  }
-
-  return states
 }
 
 function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
@@ -105,10 +48,6 @@ function readString(input: Record<string, unknown> | undefined, key: string): st
 function readBool(input: Record<string, unknown> | undefined, key: string): boolean | undefined {
   const value = input?.[key]
   return typeof value === 'boolean' ? value : undefined
-}
-
-function normalizeSelectedModel(model: string | null | undefined): string | undefined {
-  return typeof model === 'string' && model.trim() ? model.trim() : undefined
 }
 
 function sleep(ms: number): Promise<void> {
@@ -520,64 +459,6 @@ async function executeDeepInfraTextCapability(payload: WorkerJobData, selectedMo
   }
 }
 
-async function executeTextCapabilityWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  try {
-    return await executeGroqTextCapability(payload, selectedModel)
-  } catch (err) {
-    if (!(err instanceof ProviderConfigError)) throw err
-  }
-
-  if (await isProviderDisabledInDb('deepinfra')) {
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-    }
-  }
-
-  try {
-    return await executeDeepInfraTextCapability(payload)
-  } catch (err) {
-    if (err instanceof ProviderConfigError) {
-      return {
-        success: false,
-        status: 'failed',
-        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-      }
-    }
-    throw err
-  }
-}
-
-async function executeChatWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  try {
-    return await executeGroqChat(payload, selectedModel)
-  } catch (err) {
-    if (!(err instanceof ProviderConfigError)) throw err
-  }
-
-  if (await isProviderDisabledInDb('deepinfra')) {
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-    }
-  }
-
-  try {
-    return await executeDeepInfraTextCapability(payload)
-  } catch (err) {
-    if (err instanceof ProviderConfigError) {
-      return {
-        success: false,
-        status: 'failed',
-        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-      }
-    }
-    throw err
-  }
-}
-
 // ── Together Image Generation ────────────────────────────────────────────────
 
 async function executeTogetherImage(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
@@ -666,23 +547,17 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
 
 async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
-  let model = 'lyria-3-clip-preview'
+  let model = selectedModel?.trim() ?? ''
 
   try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX music model')
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
     const {
       genxSubmitMusic,
-      resolveGenxMusicModel,
     } = await import('@amarktai/providers')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
-    model = resolveGenxMusicModel({
-      model: selectedModel,
-      providerDefaultModel: providerStatus.defaultModel || undefined,
-      providerFallbackModel: providerStatus.fallbackModel || undefined,
-      providerAvailableModels,
-    })
 
     const vocalsRequested = readBool(payload.input, 'vocalsRequested') === true
       || readBool(payload.input, 'instrumentalOnly') === false
@@ -754,9 +629,7 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        model: selectedModel,
-        providerDefaultModel: providerStatus.defaultModel || undefined,
-        providerFallbackModel: providerStatus.fallbackModel || undefined,
+        model,
         providerAvailableModels,
       })
       if (!submitResult.jobId) {
@@ -984,22 +857,17 @@ async function pollAndDownloadMusic(
 
 async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
-  let model = 'seedance-v1-fast'
+  let model = selectedModel?.trim() ?? ''
 
   try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX video model')
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
     const providers = await import('@amarktai/providers')
-    const { genxGenerateVideo, resolveGenxVideoModel } = providers
+    const { genxGenerateVideo } = providers
     const { saveArtifact } = await import('@amarktai/artifacts')
     const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
-    model = resolveGenxVideoModel({
-      model: selectedModel,
-      providerDefaultModel: providerStatus.defaultModel,
-      providerFallbackModel: providerStatus.fallbackModel,
-      providerAvailableModels,
-    })
     const job = await prisma.job.findUnique({
       where: { id: payload.jobId },
       select: { metadataJson: true },
@@ -1053,9 +921,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        model: selectedModel,
-        providerDefaultModel: providerStatus.defaultModel || undefined,
-        providerFallbackModel: providerStatus.fallbackModel || undefined,
+        model,
         providerAvailableModels,
         duration: readNumber(payload.input, 'duration'),
         aspectRatio: readString(payload.input, 'aspectRatio'),
@@ -1149,249 +1015,218 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
   }
 }
 
-async function resolveBrainRouterDecision(payload: WorkerJobData): Promise<{
-  decision: BrainRouterDecision
-  routingMode: RoutingMode
-  orchestraDecision: OrchestraDecision
-}> {
-  const routingMode = extractRoutingMode(payload.metadata) as RoutingMode
-  const providerStates = await buildProviderStates()
+function normalizeRoutingMode(payload: WorkerJobData): OrchestraRoutingMode {
+  const raw = payload.routingMode ?? payload.metadata?.routingMode
+  if (raw === 'quality' || raw === 'premium') return 'quality'
+  if (raw === 'economy' || raw === 'budget') return 'economy'
+  if (raw === 'fast') return 'fast'
+  return 'balanced'
+}
 
-  const decision = routeBrain({
-    capability: payload.capability as CapabilityKey,
-    routingMode,
-    providerStates,
-    appSlug: payload.appSlug,
-  })
+function readAppGrantSnapshot(payload: WorkerJobData): AppCapabilityGrantContext | null {
+  const snapshot = payload.appGrantSnapshot ?? payload.metadata?.appGrantSnapshot
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
+  const grant = snapshot as unknown as AppCapabilityGrantContext
+  if (grant.appSlug !== payload.appSlug || grant.capability !== payload.capability) return null
+  if (typeof grant.enabled !== 'boolean' || typeof grant.adultPermission !== 'boolean') return null
+  if (!Array.isArray(grant.ragNamespaces) || !Array.isArray(grant.providerResidencyConstraints)) return null
+  return Object.freeze({ ...grant })
+}
 
-  // Use shared normalizer for Orchestra candidates
+async function resolveOrchestraDecision(
+  payload: WorkerJobData,
+  appGrant: AppCapabilityGrantContext,
+): Promise<OrchestraDecision> {
+  const capability = payload.capability as CapabilityKey
+  const routingMode = normalizeRoutingMode(payload)
   let orchestraCandidates: OrchestraCandidate[] = []
-  const cap = payload.capability as CapabilityKey
   try {
     const [models, providers] = await Promise.all([
       prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
       prisma.aiProvider.findMany(),
     ])
-    orchestraCandidates = normalizeDbCandidates(models, providers, cap)
+    orchestraCandidates = normalizeDbCandidates(models, providers, capability, { infrastructureReady: true })
   } catch {
     // DB unavailable — Orchestra will evaluate with empty candidates and block
   }
 
-  const orchestraDecision = evaluateOrchestra(
-    { capability: cap, routingMode: routingMode as 'balanced' | 'quality' | 'economy' | 'fast', executionId: payload.jobId },
-    orchestraCandidates,
-  )
-
-  return { decision, routingMode, orchestraDecision }
+  return evaluateOrchestra({
+    capability,
+    routingMode,
+    executionId: payload.jobId,
+    appSlug: payload.appSlug,
+    appGrant,
+  }, orchestraCandidates)
 }
 
-function canExecuteProviderForCapability(
-  capability: CapabilityKey,
-  provider: ProviderKey,
-): boolean {
-  if (provider === 'groq') {
-    const textCaps: CapabilityKey[] = [
-      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
-      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
-      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
-      'table_qa', 'structured_output', 'tool_use',
-      'rag_ingest', 'rag_search', 'research', 'brand_scrape', 'document_ingest',
-      'campaign_generation', 'social_content_generation',
-      'adult_text',
-    ]
-    const audioCaps: CapabilityKey[] = ['tts', 'stt', 'text_to_audio', 'audio_to_audio', 'adult_voice']
-    return textCaps.includes(capability) || audioCaps.includes(capability)
-  }
-  if (provider === 'deepinfra') {
-    const textCaps: CapabilityKey[] = [
-      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
-      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
-      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
-      'table_qa', 'structured_output', 'tool_use',
-      'embeddings', 'reranking',
-      'rag_ingest', 'rag_search', 'research', 'brand_scrape', 'document_ingest',
-      'campaign_generation', 'social_content_generation',
-      'adult_text',
-    ]
-    return textCaps.includes(capability)
-  }
-  if (provider === 'together') {
-    const imageCaps: CapabilityKey[] = ['image_generation', 'image_edit', 'image_to_image', 'image_upscale', 'adult_image']
-    const audioCaps: CapabilityKey[] = ['tts', 'stt', 'voice_clone', 'voice_conversion', 'text_to_audio', 'audio_to_audio', 'adult_voice']
-    const knowledgeCaps: CapabilityKey[] = ['embeddings', 'reranking']
-    return imageCaps.includes(capability) || audioCaps.includes(capability) || knowledgeCaps.includes(capability)
-  }
-  if (provider === 'genx') {
-    const videoCaps: CapabilityKey[] = [
-      'video_generation', 'image_to_video', 'video_to_video', 'long_form_video',
-      'music_generation', 'song_generation',
-      'adult_avatar', 'adult_video',
-    ]
-    return videoCaps.includes(capability)
-  }
-  return false
+export interface ProviderExecutionRoute {
+  provider: ProviderKey
+  model: string
+  executorId: ExecutorId
+  routeKind: 'primary' | 'fallback'
 }
 
-function attachBrainRouterMetadata(result: ProcessorResult, decision: BrainRouterDecision, routingMode: RoutingMode): ProcessorResult {
+function attachOrchestraRouteMetadata(result: ProcessorResult, route: ProviderExecutionRoute): ProcessorResult {
   return {
     ...result,
     metadata: {
       ...result.metadata,
-      brainRouter: {
-        routingMode,
-        selectedProvider: decision.selectedProvider,
-        selectedModel: decision.selectedModel,
-        executionAllowed: decision.executionAllowed,
-        truth: decision.truth,
-        fallbackChain: decision.fallbackChain,
-      },
+      orchestraRoute: route,
     },
   }
 }
 
-async function executeWithSelectedProvider(
+type ExecutorHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
+
+export const EXECUTOR_HANDLERS: Record<ExecutorId, ExecutorHandler> = {
+  'groq.chat': executeGroqChat,
+  'groq.text-transform': executeGroqTextCapability,
+  'deepinfra.chat': executeDeepInfraTextCapability,
+  'deepinfra.text-transform': executeDeepInfraTextCapability,
+  'together.image-generation': executeTogetherImage,
+  'genx.video-generation': executeGenxVideo,
+  'genx.music-generation': executeGenxMusic,
+}
+
+export async function executeRegisteredRoute(
   payload: WorkerJobData,
-  capability: CapabilityKey,
-  provider: ProviderKey,
-  decision: BrainRouterDecision,
-  routingMode: RoutingMode,
+  route: ProviderExecutionRoute,
 ): Promise<ProcessorResult> {
-  const selectedModel = normalizeSelectedModel(decision.selectedModel)
+  const capability = payload.capability as CapabilityKey
+  const registration = getExecutorRegistration(capability, route.provider)
+  if (!registration || registration.id !== route.executorId) {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `No callable executor registration '${route.executorId}' for ${route.provider}/${capability}.`,
+    }
+  }
+
+  const handler = EXECUTOR_HANDLERS[registration.id]
+  if (typeof handler !== 'function') {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor registration '${registration.id}' has no callable worker handler.`,
+    }
+  }
 
   try {
-    if (provider === 'groq' && capability === 'chat') {
-      const result = await executeChatWithFallback(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-
-    if (provider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      const result = await executeTextCapabilityWithFallback(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-
-    if (provider === 'deepinfra' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      if (await isProviderDisabledInDb('deepinfra')) {
-        return {
-          success: false,
-          status: 'failed',
-          error: `DeepInfra is disabled. Cannot use as fallback for '${capability}'. Truth: ${decision.truth}`,
-          metadata: { brainRouter: { routingMode, selectedProvider: 'deepinfra', executionAllowed: false, truth: decision.truth } },
-        }
-      }
-      const result = await executeDeepInfraTextCapability(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-
-    if (provider === 'together' && ['image_generation', 'image_edit', 'image_to_image', 'image_upscale'].includes(capability)) {
-      const result = await executeTogetherImage(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-
-    if (provider === 'genx' && ['video_generation', 'image_to_video', 'video_to_video', 'long_form_video'].includes(capability)) {
-      const result = await executeGenxVideo(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-
-    if (provider === 'genx' && capability === 'music_generation') {
-      const result = await executeGenxMusic(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) {
+    const result = await handler(payload, route.model)
+    if (result.provider && result.provider !== route.provider) {
       return {
         success: false,
         status: 'failed',
-        error: `Provider execution blocked for '${capability}'. ${err.message}. Truth: ${decision.truth}`,
-        metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
+        provider: route.provider,
+        model: route.model,
+        error: `Executor '${registration.id}' attempted to change provider from '${route.provider}' to '${result.provider}'.`,
       }
     }
-    throw err
-  }
-
-  return {
-    success: false,
-    status: 'failed',
-    error: `Provider execution not implemented for '${capability}' with provider '${provider}'. Truth: ${decision.truth}`,
-    metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
+    if (result.model && result.model !== route.model) {
+      return {
+        success: false,
+        status: 'failed',
+        provider: route.provider,
+        model: route.model,
+        error: `Executor '${registration.id}' attempted to change model from '${route.model}' to '${result.model}'.`,
+      }
+    }
+    return attachOrchestraRouteMetadata({ ...result, provider: route.provider, model: route.model }, route)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown provider execution error'
+    return attachOrchestraRouteMetadata({
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor '${registration.id}' failed: ${redactProviderSecrets(message)}.`,
+    }, route)
   }
 }
 
 export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
   const capability = payload.capability as CapabilityKey
+  const appGrant = readAppGrantSnapshot(payload)
+  if (!appGrant) {
+    return {
+      success: false,
+      status: 'failed',
+      error: `Execution denied for '${capability}': immutable AppCapabilityGrant snapshot is missing or invalid.`,
+    }
+  }
 
-  const { decision, routingMode, orchestraDecision } = await resolveBrainRouterDecision(payload)
+  const orchestraDecision = await resolveOrchestraDecision(payload, appGrant)
 
-  // Persist routing decision metadata
   await persistJobMetadata(payload.jobId, {
     orchestraExecutionId: orchestraDecision.executionId,
     orchestraSelectedProvider: orchestraDecision.selectedProvider,
     orchestraSelectedModel: orchestraDecision.selectedModel,
+    orchestraSelectedExecutorId: orchestraDecision.selectedExecutorId,
     orchestraScore: orchestraDecision.score,
     orchestraRoutingMode: orchestraDecision.routingMode,
     orchestraSnapshotTimestamp: orchestraDecision.snapshotTimestamp,
     orchestraFallbackCount: orchestraDecision.fallbackRoutes.length,
   }).catch(() => {})
 
-  if (!orchestraDecision.executionAllowed) {
+  if (!orchestraDecision.executionAllowed
+      || !orchestraDecision.selectedProvider
+      || !orchestraDecision.selectedModel
+      || !orchestraDecision.selectedExecutorId) {
     return {
       success: false,
       status: 'failed',
       error: `Orchestra blocked execution for '${capability}' in '${orchestraDecision.routingMode}' mode. ${orchestraDecision.blockReason ?? ''}.`,
-      metadata: {
-        orchestra: {
-          routingMode: orchestraDecision.routingMode,
-          executionAllowed: false,
-          blockReason: orchestraDecision.blockReason,
-          snapshotTimestamp: orchestraDecision.snapshotTimestamp,
-        },
-      },
+      metadata: { orchestra: orchestraDecision },
     }
   }
 
-  const selectedProvider = orchestraDecision.selectedProvider!
+  const routes: ProviderExecutionRoute[] = [
+    {
+      provider: orchestraDecision.selectedProvider,
+      model: orchestraDecision.selectedModel,
+      executorId: orchestraDecision.selectedExecutorId,
+      routeKind: 'primary',
+    },
+    ...orchestraDecision.fallbackRoutes.map((fallback) => ({
+      provider: fallback.provider,
+      model: fallback.model,
+      executorId: fallback.executorId,
+      routeKind: 'fallback' as const,
+    })),
+  ]
+  const attempts: Array<{ provider: ProviderKey; model: string; executorId: ExecutorId; success: boolean; error?: string }> = []
+  let lastResult: ProcessorResult | null = null
 
-  // Try primary route
-  if (canExecuteProviderForCapability(capability, selectedProvider)) {
-    const result = await executeWithSelectedProvider(payload, capability, selectedProvider, decision, routingMode)
-    // Persist actual execution route
+  for (const route of routes) {
+    const result = await executeRegisteredRoute(payload, route)
+    attempts.push({ provider: route.provider, model: route.model, executorId: route.executorId, success: result.success, error: result.error })
+    lastResult = result
+
     await persistJobMetadata(payload.jobId, {
-      orchestraActualProvider: result.provider ?? selectedProvider,
-      orchestraActualModel: result.model ?? orchestraDecision.selectedModel,
+      orchestraActualProvider: route.provider,
+      orchestraActualModel: route.model,
+      orchestraActualExecutorId: route.executorId,
       orchestraActualOutcome: result.success ? 'completed' : 'failed',
+      orchestraRouteAttempts: attempts,
     }).catch(() => {})
-    return result
-  }
 
-  // Try Orchestra fallback routes (each has its own provider/model)
-  for (const fallback of orchestraDecision.fallbackRoutes) {
-    if (canExecuteProviderForCapability(capability, fallback.provider as ProviderKey)) {
-      await persistJobMetadata(payload.jobId, {
-        orchestraFallbackProvider: fallback.provider,
-        orchestraFallbackModel: fallback.model,
-        orchestraFallbackReason: 'primary_executor_not_implemented',
-      }).catch(() => {})
-      const result = await executeWithSelectedProvider(payload, capability, fallback.provider as ProviderKey, decision, routingMode)
-      await persistJobMetadata(payload.jobId, {
-        orchestraActualProvider: result.provider ?? fallback.provider,
-        orchestraActualModel: result.model ?? fallback.model,
-        orchestraActualOutcome: result.success ? 'completed' : 'failed',
-      }).catch(() => {})
-      return result
+    if (result.success) {
+      return {
+        ...result,
+        metadata: { ...result.metadata, orchestra: orchestraDecision, routeAttempts: attempts },
+      }
     }
   }
 
   return {
+    ...(lastResult ?? { success: false, status: 'failed' as const }),
     success: false,
     status: 'failed',
-    error: `Orchestra selected ${selectedProvider}/${orchestraDecision.selectedModel} but no executor is implemented for '${capability}'.`,
-    metadata: {
-      orchestra: {
-        routingMode: orchestraDecision.routingMode,
-        selectedProvider,
-        selectedModel: orchestraDecision.selectedModel,
-        executionAllowed: true,
-        executorImplemented: false,
-      },
-    },
+    error: lastResult?.error ?? `No registered executor route was available for '${capability}'.`,
+    metadata: { ...lastResult?.metadata, orchestra: orchestraDecision, routeAttempts: attempts },
   }
 }

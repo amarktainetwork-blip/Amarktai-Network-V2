@@ -5,8 +5,9 @@
  * Does not import Prisma or query databases.
  */
 
-import { PROVIDER_KEYS, type ProviderKey } from './providers.js'
-import { type CapabilityKey } from './capabilities.js'
+import { PROVIDER_KEYS, getProviderDefinition, type ProviderKey } from './providers.js'
+import { CAPABILITY_FIELD_MAP, type CapabilityKey } from './capabilities.js'
+import { getExecutorRegistration, type ExecutorId } from './executor-registry.js'
 
 // ── Routing Modes ──────────────────────────────────────────────
 
@@ -14,115 +15,6 @@ export const ORCHESTRA_ROUTING_MODES = ['balanced', 'quality', 'economy', 'fast'
 export type OrchestraRoutingMode = (typeof ORCHESTRA_ROUTING_MODES)[number]
 
 // ── Shared Constants ───────────────────────────────────────────
-
-export const CAPABILITY_FIELD_MAP: Record<string, string> = {
-  chat: 'supportsChat',
-  streaming_chat: 'supportsChat',
-  reasoning: 'supportsReasoning',
-  code: 'supportsCode',
-  summarization: 'supportsText',
-  translation: 'supportsText',
-  question_answering: 'supportsText',
-  classification: 'supportsText',
-  zero_shot_classification: 'supportsText',
-  extraction: 'supportsText',
-  token_classification: 'supportsText',
-  fill_mask: 'supportsText',
-  feature_extraction: 'supportsText',
-  sentence_similarity: 'supportsText',
-  table_qa: 'supportsText',
-  structured_output: 'supportsStructuredOutput',
-  tool_use: 'supportsToolUse',
-  image_generation: 'supportsImageGeneration',
-  image_edit: 'supportsImageEditing',
-  image_to_image: 'supportsImageEditing',
-  image_upscale: 'supportsImageEditing',
-  image_classification: 'supportsVision',
-  object_detection: 'supportsVision',
-  image_segmentation: 'supportsVision',
-  depth_estimation: 'supportsVision',
-  keypoint_detection: 'supportsVision',
-  visual_question_answering: 'supportsVision',
-  document_qa: 'supportsText',
-  ocr: 'supportsVision',
-  zero_shot_object_detection: 'supportsVision',
-  mask_generation: 'supportsVision',
-  visual_document_retrieval: 'supportsVision',
-  video_generation: 'supportsVideoGeneration',
-  image_to_video: 'supportsVideoGeneration',
-  video_to_video: 'supportsVideoGeneration',
-  long_form_video: 'supportsVideoGeneration',
-  video_understanding: 'supportsVision',
-  video_classification: 'supportsVision',
-  storyboard_generation: 'supportsVision',
-  subtitle_generation: 'supportsTts',
-  lip_sync: 'supportsVideoGeneration',
-  avatar_generation: 'supportsVideoGeneration',
-  text_to_3d: 'supportsVision',
-  image_to_3d: 'supportsVision',
-  tts: 'supportsTts',
-  stt: 'supportsStt',
-  voice_clone: 'supportsTts',
-  voice_conversion: 'supportsTts',
-  text_to_audio: 'supportsTts',
-  audio_to_audio: 'supportsTts',
-  audio_classification: 'supportsStt',
-  voice_activity_detection: 'supportsStt',
-  music_generation: 'supportsMusicGeneration',
-  song_generation: 'supportsMusicGeneration',
-  embeddings: 'supportsEmbeddings',
-  reranking: 'supportsReranking',
-  rag_ingest: 'supportsText',
-  rag_search: 'supportsText',
-  research: 'supportsResearch',
-  brand_scrape: 'supportsText',
-  document_ingest: 'supportsText',
-  campaign_generation: 'supportsText',
-  social_content_generation: 'supportsText',
-  adult_text: 'supportsChat',
-  adult_image: 'supportsImageGeneration',
-  adult_voice: 'supportsTts',
-  adult_avatar: 'supportsVideoGeneration',
-  adult_video: 'supportsVideoGeneration',
-}
-
-export const EXECUTOR_CAPABILITY_MAP: Record<string, string[]> = {
-  chat: ['groq', 'deepinfra'],
-  streaming_chat: ['groq', 'deepinfra'],
-  reasoning: ['groq', 'deepinfra'],
-  code: ['groq', 'deepinfra'],
-  summarization: ['groq', 'deepinfra'],
-  translation: ['groq', 'deepinfra'],
-  question_answering: ['groq', 'deepinfra'],
-  classification: ['groq', 'deepinfra'],
-  zero_shot_classification: ['groq', 'deepinfra'],
-  extraction: ['groq', 'deepinfra'],
-  token_classification: ['groq', 'deepinfra'],
-  fill_mask: ['groq', 'deepinfra'],
-  feature_extraction: ['groq', 'deepinfra'],
-  sentence_similarity: ['groq', 'deepinfra'],
-  table_qa: ['groq', 'deepinfra'],
-  structured_output: ['groq', 'deepinfra'],
-  tool_use: ['groq', 'deepinfra'],
-  image_generation: ['together'],
-  image_edit: ['together'],
-  image_to_image: ['together'],
-  image_upscale: ['together'],
-  video_generation: ['genx'],
-  image_to_video: ['genx'],
-  video_to_video: ['genx'],
-  long_form_video: ['genx'],
-  tts: ['groq', 'together'],
-  stt: ['groq', 'together'],
-  voice_clone: ['together'],
-  voice_conversion: ['together'],
-  text_to_audio: ['groq', 'together'],
-  audio_to_audio: ['groq', 'together'],
-  music_generation: ['genx'],
-  song_generation: ['genx'],
-  embeddings: ['together', 'deepinfra'],
-  reranking: ['together', 'deepinfra'],
-}
 
 export const HEALTHY_PROVIDER_STATUSES = new Set(['configured', 'live'])
 export const BLOCKED_PROVIDER_STATUSES = new Set(['disabled', 'runtime_restricted'])
@@ -168,6 +60,7 @@ export interface OrchestraRequest {
   budgetLimit?: number
   executionId?: string
   appGrant?: AppCapabilityGrantContext
+  infrastructureReady?: boolean
 }
 
 // ── Request Validation ─────────────────────────────────────────
@@ -204,6 +97,7 @@ export interface OrchestraCandidate {
   model: string
   displayName: string
   capability: CapabilityKey
+  executorId: ExecutorId | null
   providerConfigured: boolean
   providerEnabled: boolean
   providerHealth: string
@@ -232,6 +126,7 @@ export interface OrchestraCandidate {
 export interface OrchestraFallbackRoute {
   provider: ProviderKey
   model: string
+  executorId: ExecutorId
   score: number
   blockers: string[]
 }
@@ -242,6 +137,7 @@ export interface OrchestraDecision {
   routingMode: OrchestraRoutingMode
   selectedProvider: ProviderKey | null
   selectedModel: string | null
+  selectedExecutorId: ExecutorId | null
   score: number
   scoreBreakdown: Record<string, number>
   fallbackRoutes: OrchestraFallbackRoute[]
@@ -259,10 +155,6 @@ const APPROVED_PROVIDER_SET = new Set<string>(PROVIDER_KEYS)
 
 function isProviderApproved(provider: string): boolean {
   return APPROVED_PROVIDER_SET.has(provider)
-}
-
-function isCodingCapability(capability: CapabilityKey): boolean {
-  return CODING_TOOL_CAPABILITIES.has(capability)
 }
 
 export function checkCandidateEligibility(
@@ -344,6 +236,10 @@ export function checkCandidateEligibility(
 
   if (!candidate.executorSupported) {
     blockers.push('executor_not_supported')
+  }
+
+  if (!candidate.executorId) {
+    blockers.push('executor_registration_missing')
   }
 
   if (!candidate.requestShapeKnown) {
@@ -553,6 +449,7 @@ export function evaluateOrchestra(
   const fallbackRoutes: OrchestraFallbackRoute[] = eligible.slice(1, 1 + maxFallbacks).map((c) => ({
     provider: c.provider,
     model: c.model,
+    executorId: c.executorId!,
     score: c.score,
     blockers: [],
   }))
@@ -578,6 +475,7 @@ export function evaluateOrchestra(
     routingMode,
     selectedProvider: selected?.provider ?? null,
     selectedModel: selected?.model ?? null,
+    selectedExecutorId: selected?.executorId ?? null,
     score: selected?.score ?? 0,
     scoreBreakdown: selected?.scoreBreakdown ?? {},
     fallbackRoutes,
@@ -616,6 +514,7 @@ export function normalizeDbCandidates(
   models: DbModelRecord[],
   providers: DbProviderRecord[],
   capability: CapabilityKey,
+  evidence: { infrastructureReady?: boolean; liveProvenRoutes?: ReadonlySet<string> } = {},
 ): OrchestraCandidate[] {
   const supportField = CAPABILITY_FIELD_MAP[capability]
   if (!supportField) return []
@@ -624,8 +523,6 @@ export function normalizeDbCandidates(
   for (const p of providers) {
     providerMap.set(p.providerKey, p)
   }
-
-  const executorProviders = new Set(EXECUTOR_CAPABILITY_MAP[capability] ?? [])
 
   const candidates: OrchestraCandidate[] = []
 
@@ -638,16 +535,24 @@ export function normalizeDbCandidates(
     const providerEnabled = provider?.enabled ?? false
     const providerConfigured = HEALTHY_PROVIDER_STATUSES.has(providerHealth)
     const providerAccountAllowed = !BLOCKED_PROVIDER_STATUSES.has(providerHealth)
-    const providerPolicyAllowed = model.provider !== 'mimo' || isCodingCapability(capability)
-    const adapterSupported = executorProviders.has(model.provider)
-    const executorSupported = adapterSupported
+    if (!(PROVIDER_KEYS as readonly string[]).includes(model.provider)) continue
+    const providerDefinition = getProviderDefinition(model.provider as ProviderKey)
+    const providerPolicyAllowed = providerDefinition.backendExecutionAllowed && !providerDefinition.codingOnly
+    const executorRegistration = getExecutorRegistration(capability, model.provider as ProviderKey)
+    const adapterSupported = executorRegistration !== undefined
+    const executorSupported = executorRegistration !== undefined
+    const requestShapeKnown = executorRegistration !== undefined
+    const responseShapeKnown = executorRegistration !== undefined
+    const infrastructureReady = evidence.infrastructureReady === true
     const modelLifecycleAllowed = model.status !== 'blocked' && model.status !== 'retired'
+    const liveProven = evidence.liveProvenRoutes?.has(`${model.provider}/${model.modelId}/${capability}`) === true
 
     candidates.push({
       provider: model.provider as ProviderKey,
       model: model.modelId,
       displayName: model.displayName ?? model.modelId,
       capability,
+      executorId: executorRegistration?.id ?? null,
       providerConfigured,
       providerEnabled,
       providerHealth,
@@ -656,11 +561,11 @@ export function normalizeDbCandidates(
       modelLifecycleAllowed,
       adapterSupported,
       executorSupported,
-      requestShapeKnown: true,
-      responseShapeKnown: true,
-      infrastructureReady: true,
-      executionReady: adapterSupported && executorSupported && modelLifecycleAllowed && providerConfigured,
-      liveProven: false,
+      requestShapeKnown,
+      responseShapeKnown,
+      infrastructureReady,
+      executionReady: adapterSupported && executorSupported && modelLifecycleAllowed && providerConfigured && infrastructureReady,
+      liveProven,
       estimatedCost: model.estimatedUnitCost ?? null,
       costTier: model.costTier ?? 'medium',
       qualityTier: model.costTier ?? 'balanced',

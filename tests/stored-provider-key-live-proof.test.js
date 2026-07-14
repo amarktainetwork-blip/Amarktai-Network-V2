@@ -143,31 +143,18 @@ describe('Stored-key live proof contract', () => {
     }
   })
 
-  it('no Mimo/DeepInfra execution is invoked for unsupported capabilities', async () => {
-    const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
-    // music_generation is not implemented for any provider
-    const result = await executeWithProvider({
-      jobId: 'test', appSlug: 'test', capability: 'music_generation',
-      prompt: 'test', input: {}, metadata: {}, traceId: 'test',
-    })
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('blocked')
+  it('no Mimo/DeepInfra execution is registered for music', async () => {
+    const { getExecutorRegistration } = await import('@amarktai/core')
+    expect(getExecutorRegistration('music_generation', 'mimo')).toBeUndefined()
+    expect(getExecutorRegistration('music_generation', 'deepinfra')).toBeUndefined()
   })
 
   it('DeepInfra is approved as text fallback but does not create proof by routing alone', async () => {
-    const { routeBrain } = await import('@amarktai/core')
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        groq: { disabled: true },
-        deepinfra: { configured: false },
-      },
-    })
-    const deepinfra = decision.executableCandidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfra).toBeDefined()
-    expect(decision.executionAllowed).toBe(true)
-    expect(decision.truth).toContain('Brain Router v1')
+    const { getExecutorRegistration, getRuntimeTruth } = await import('@amarktai/core')
+    expect(getExecutorRegistration('chat', 'deepinfra')?.id).toBe('deepinfra.chat')
+    const chat = getRuntimeTruth().capabilities.find(item => item.capability === 'chat')
+    expect(chat.liveProven).toBe(false)
+    expect(chat.executableNow).toBe(false)
   })
 })
 

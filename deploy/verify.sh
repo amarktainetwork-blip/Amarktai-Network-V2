@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+ADMIN_EMAIL="${ADMIN_EMAIL:-amarktainetwork@gmail.com}"
+: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set for authenticated verification}"
+export ADMIN_EMAIL ADMIN_PASSWORD
+LOGIN_PAYLOAD=$(node -e 'process.stdout.write(JSON.stringify({email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD}))')
+
 PASS=0
 FAIL=0
 
@@ -67,7 +72,7 @@ echo "[3] Login Flow"
 DASH_LOGIN=$(curl -s -w "\n%{http_code}" http://127.0.0.1:3000/api/auth/login \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"amarktainetwork@gmail.com","password":"Ashmor12@"}' 2>/dev/null)
+  -d "$LOGIN_PAYLOAD" 2>/dev/null)
 DASH_CODE=$(echo "$DASH_LOGIN" | tail -1)
 DASH_BODY=$(echo "$DASH_LOGIN" | head -1)
 
@@ -88,7 +93,7 @@ fi
 API_LOGIN=$(curl -s -w "\n%{http_code}" http://127.0.0.1:3001/api/v1/auth/login \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"amarktainetwork@gmail.com","password":"Ashmor12@"}' 2>/dev/null)
+  -d "$LOGIN_PAYLOAD" 2>/dev/null)
 API_CODE=$(echo "$API_LOGIN" | tail -1)
 
 if [ "$API_CODE" = "200" ]; then
@@ -129,7 +134,7 @@ fi
 PUBLIC_LOGIN=$(curl -s -w "\n%{http_code}" https://amarktai.co.za/api/auth/login \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"amarktainetwork@gmail.com","password":"Ashmor12@"}' 2>/dev/null || echo -e "\n000")
+  -d "$LOGIN_PAYLOAD" 2>/dev/null || echo -e "\n000")
 PUBLIC_CODE=$(echo "$PUBLIC_LOGIN" | tail -1)
 
 if [ "$PUBLIC_CODE" = "200" ]; then

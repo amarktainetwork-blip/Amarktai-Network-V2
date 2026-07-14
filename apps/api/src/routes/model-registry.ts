@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { resolveProviderApiKey, getProviderCredentialStatus, prisma } from '@amarktai/db'
 import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels, upsertGenXPricingCatalog } from '../lib/model-registry.js'
 import { getAllCapabilityGroupSummaries, buildCapabilityGroupSummary } from '../lib/capability-groups.js'
-import { getRuntimeProofStatus } from '../lib/runtime-proof-status.js'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
 import { discoverTogetherModels, discoverDeepInfraModels, discoverGenXModels, discoverGroqModels, discoverGenXPricing } from '../lib/provider-discovery.js'
@@ -208,12 +208,11 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
   // Capability group summaries
   app.get('/api/admin/capability-groups', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const [allModels, providers, proofStatus] = await Promise.all([
+    const [allModels, runtimeTruth] = await Promise.all([
       prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
-      prisma.aiProvider.findMany(),
-      getRuntimeProofStatus(app),
+      buildAdminRuntimeTruth(app),
     ])
-    const summaries = await getAllCapabilityGroupSummaries(allModels, providers, proofStatus)
+    const summaries = await getAllCapabilityGroupSummaries(allModels, runtimeTruth)
     return reply.send({ capabilities: summaries })
   })
 
@@ -221,12 +220,11 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/capability-groups/:capability', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { capability } = request.params as { capability: string }
-    const [allModels, providers, proofStatus] = await Promise.all([
+    const [allModels, runtimeTruth] = await Promise.all([
       prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
-      prisma.aiProvider.findMany(),
-      getRuntimeProofStatus(app),
+      buildAdminRuntimeTruth(app),
     ])
-    const summary = buildCapabilityGroupSummary(capability, allModels, providers, proofStatus)
+    const summary = buildCapabilityGroupSummary(capability, allModels, runtimeTruth)
     return reply.send(summary)
   })
 
@@ -251,6 +249,7 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
       qualityTier: qualityTier as string,
       maxCostCents: maxCostCents as number,
       excludeProviders: excludeProviders as string[],
+      infrastructureReady: Boolean(app.redis),
     })
     return reply.send(selection)
   })

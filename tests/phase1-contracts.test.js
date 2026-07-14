@@ -83,7 +83,7 @@ describe('Phase 1 capability map', () => {
   })
 
   it('uncensored.text maps to governed adult_text without proving execution', () => {
-    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['uncensored.text']).toMatchObject({ backendCapability: 'adult_text', missing: false, gated: true, providerId: 'deepinfra' })
+    expect(DASHBOARD_TO_BACKEND_CAPABILITY_MAP['uncensored.text']).toMatchObject({ backendCapability: 'adult_text', missing: false, governed: true, adult: true })
   })
 })
 

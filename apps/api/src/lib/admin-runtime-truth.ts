@@ -4,10 +4,25 @@ import {
   getRuntimeTruth,
   CAPABILITY_CATALOG,
   RUNTIME_EXECUTION_PROVIDERS,
+  calculateLongFormProgress,
+  createLongFormVideoPlan,
+  createSceneExecutionPayloads,
+  generateSubtitles,
+  getExecutorRegistrations,
+  hasExecutorRegistration,
   type CapabilityKey,
+  type LongFormComponentRuntimeState,
   type RuntimeTruth,
   type RuntimeTruthInput,
 } from '@amarktai/core'
+import {
+  assembleLongFormVideo,
+  assembleMultimediaLongFormVideo,
+  createAssemblyPlan,
+  resolveComponentArtifacts,
+  resolveSceneArtifacts,
+  validateSceneArtifactsForAssembly,
+} from './long-form-assembly.js'
 
 const ARTIFACT_CAPABILITY_SET = new Set<CapabilityKey>(
   CAPABILITY_CATALOG.filter((c) => c.artifactRequired).map((c) => c.key),
@@ -51,23 +66,23 @@ type ProofArtifact = {
   errorMessage?: string | null
 }
 
-const CAPABILITY_ARTIFACT_SHAPES: Partial<Record<CapabilityKey, {
-  types: readonly string[]
-  mimePrefixes: readonly string[]
-}>> = {
-  image_generation: { types: ['image'], mimePrefixes: ['image/'] },
-  image_edit: { types: ['image'], mimePrefixes: ['image/'] },
-  image_to_video: { types: ['video'], mimePrefixes: ['video/'] },
-  long_form_video: { types: ['video'], mimePrefixes: ['video/'] },
-  video_generation: { types: ['video'], mimePrefixes: ['video/'] },
-  music_generation: { types: ['music', 'audio'], mimePrefixes: ['audio/'] },
-  tts: { types: ['audio', 'music'], mimePrefixes: ['audio/'] },
-  avatar_generation: { types: ['video', 'image'], mimePrefixes: ['video/', 'image/'] },
-  adult_image: { types: ['image'], mimePrefixes: ['image/'] },
-  adult_voice: { types: ['audio', 'music'], mimePrefixes: ['audio/'] },
-  adult_avatar: { types: ['video', 'image'], mimePrefixes: ['video/', 'image/'] },
-  adult_video: { types: ['video'], mimePrefixes: ['video/'] },
-}
+const CAPABILITY_ARTIFACT_SHAPES = Object.fromEntries(
+  CAPABILITY_CATALOG.filter((capability) => capability.artifactRequired).map((capability) => {
+    const artifactType = capability.artifactType ?? capability.outputType
+    const audio = artifactType === 'audio'
+    const types = audio ? ['audio', 'music'] : [artifactType]
+    const mimePrefixes = audio
+      ? ['audio/']
+      : artifactType === 'image'
+        ? ['image/']
+        : artifactType === 'video'
+          ? ['video/']
+          : artifactType === 'document'
+            ? ['application/', 'text/']
+            : ['application/']
+    return [capability.key, { types, mimePrefixes }]
+  }),
+) as Partial<Record<CapabilityKey, { types: readonly string[]; mimePrefixes: readonly string[] }>>
 
 const PLACEHOLDER_PATTERN = /\b(mock|simulate|simulation|fake|fabricated|fixture|placeholder|backend pending|backend integration pending|not implemented|foundation only|proof pending)\b/i
 
@@ -108,7 +123,9 @@ function outputArtifactId(output: string | null | undefined): string {
 function hasRuntimeProviderAndModel(job: ProofJob): boolean {
   const provider = job.provider ?? ''
   const model = job.model ?? ''
-  return RUNTIME_PROVIDER_SET.has(provider) && model.trim().length > 0
+  return RUNTIME_PROVIDER_SET.has(provider)
+    && model.trim().length > 0
+    && hasExecutorRegistration(job.capability as CapabilityKey, provider as never)
 }
 
 function isTrustedTextProof(job: ProofJob): boolean {
@@ -181,12 +198,66 @@ export function selectCapabilityProofStates(
   return { capabilities, evidenceAvailable: true }
 }
 
+/**
+ * Component truth is bound to the callable implementation references used by
+ * the API. Infrastructure and live proof remain separate gates.
+ */
+export function buildLongFormComponentRuntimeState(
+  queueInfrastructureReady: boolean,
+  capabilityProofs: NonNullable<RuntimeTruthInput['capabilities']> = {},
+  jobPersistenceReady = false,
+): LongFormComponentRuntimeState {
+  const plannerReady = typeof createLongFormVideoPlan === 'function'
+  const scenePayloadBuilderReady = typeof createSceneExecutionPayloads === 'function'
+  const parentStateReady = jobPersistenceReady
+  const videoExecutorReady = getExecutorRegistrations('video_generation').length > 0
+  const voiceExecutorReady = getExecutorRegistrations('tts').length > 0
+  const musicExecutorReady = getExecutorRegistrations('music_generation').length > 0
+  const assemblyHandoffReady = typeof createAssemblyPlan === 'function'
+    && typeof validateSceneArtifactsForAssembly === 'function'
+    && typeof resolveSceneArtifacts === 'function'
+  const videoOnlyAssemblyReady = assemblyHandoffReady && typeof assembleLongFormVideo === 'function'
+  const voiceoverReady = voiceExecutorReady && queueInfrastructureReady
+  const subtitlesReady = typeof generateSubtitles === 'function'
+    && capabilityProofs.long_form_video?.liveProven === true
+  const musicBedReady = musicExecutorReady
+    && queueInfrastructureReady
+    && capabilityProofs.music_generation?.liveProven === true
+  const fullMultimediaReady = videoOnlyAssemblyReady
+    && typeof assembleMultimediaLongFormVideo === 'function'
+    && typeof resolveComponentArtifacts === 'function'
+    && voiceoverReady
+    && subtitlesReady
+    && musicBedReady
+    && capabilityProofs.long_form_video?.liveProven === true
+
+  return {
+    plannerReady,
+    durableParentReady: parentStateReady && jobPersistenceReady,
+    durablePlanReady: plannerReady && jobPersistenceReady,
+    sceneLinkageReady: scenePayloadBuilderReady && jobPersistenceReady,
+    sceneSubmissionReady: scenePayloadBuilderReady && queueInfrastructureReady,
+    sceneExecutionReady: videoExecutorReady && queueInfrastructureReady,
+    retryResumeReady: parentStateReady && jobPersistenceReady && queueInfrastructureReady,
+    progressTrackingReady: parentStateReady && typeof calculateLongFormProgress === 'function',
+    batchStructureReady: scenePayloadBuilderReady,
+    assemblyHandoffReady,
+    videoOnlyAssemblyReady,
+    voiceoverReady,
+    subtitlesReady,
+    musicBedReady,
+    fullMultimediaReady,
+  }
+}
+
 export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth & { evidenceAvailable: boolean }> {
   let providerStatuses: Awaited<ReturnType<typeof listProviderCredentialStatuses>> = []
   let completedJobs: ProofJob[] = []
   let evidenceAvailable = true
+  let jobPersistenceReady = false
 
   try {
+    jobPersistenceReady = typeof prisma.job.create === 'function' && typeof prisma.job.update === 'function'
     ;[providerStatuses, completedJobs] = await Promise.all([
       listProviderCredentialStatuses(),
       prisma.job.findMany({
@@ -268,13 +339,14 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
   const capabilities = proofResult.capabilities ?? {}
 
   const queueInfrastructureReady = Boolean(app.redis)
-  for (const capability of ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation', 'music_generation', 'long_form_video'] as CapabilityKey[]) {
+  for (const capability of CAPABILITY_CATALOG.filter((definition) => definition.requiresQueueExecution).map((definition) => definition.key)) {
     capabilities[capability] = {
       ...capabilities[capability],
       infrastructureReady: queueInfrastructureReady,
     }
   }
 
-  const truth = getRuntimeTruth({ providers, capabilities })
+  const longFormComponents = buildLongFormComponentRuntimeState(queueInfrastructureReady, capabilities, jobPersistenceReady)
+  const truth = getRuntimeTruth({ providers, capabilities, longFormComponents })
   return { ...truth, evidenceAvailable: proofResult.evidenceAvailable && evidenceAvailable }
 }

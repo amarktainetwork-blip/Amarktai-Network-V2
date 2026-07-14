@@ -1,6 +1,11 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import {
+  APPROVED_PROVIDER_DEFINITIONS,
+  PROVIDER_KEYS,
+  RUNTIME_EXECUTION_PROVIDERS,
+} from '../packages/core/src/providers.ts'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const OUTPUT_ROOT = process.env.AMARKTAI_DISCOVERY_OUTPUT_ROOT
@@ -12,8 +17,8 @@ const TEST_MODE = process.env.AMARKTAI_DISCOVERY_TEST === '1'
 const STATIC_TIME = '1970-01-01T00:00:00.000Z'
 const now = LIVE ? new Date().toISOString() : STATIC_TIME
 
-const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']
-const APPROVED_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const RUNTIME_PROVIDERS = [...RUNTIME_EXECUTION_PROVIDERS]
+const APPROVED_PROVIDERS = [...PROVIDER_KEYS]
 const MEDIA_CAPABILITIES = new Set(['image_generation', 'image_edit', 'video_generation', 'image_to_video', 'long_form_video', 'avatar_generation', 'music_generation', 'tts'])
 
 const PROVIDER_TRUTH = {
@@ -107,6 +112,16 @@ const PROVIDER_TRUTH = {
     policyExecutionDisabled: true,
     policyBlockedReason: 'coding_agent_only_not_backend_runtime',
   },
+}
+
+for (const definition of APPROVED_PROVIDER_DEFINITIONS) {
+  const discovery = PROVIDER_TRUTH[definition.key]
+  discovery.provider = definition.key
+  discovery.providerRole = definition.runtimeRole
+  discovery.apiKeyEnvName = definition.credentialEnvKey
+  discovery.runtimeExecutionAllowed = definition.backendExecutionAllowed
+  discovery.policyExecutionDisabled = !definition.backendExecutionAllowed
+  discovery.policyRestrictedByApp = definition.codingOnly
 }
 
 const OUTPUT_PATHS = {
@@ -340,8 +355,12 @@ function discovered(input) {
     liveDiscoverySkipped: input.liveDiscoverySkipped ?? !LIVE,
     rawMetadata: input.rawMetadata ?? {},
   }
-  const blockers = input.executableBlockers ?? executableBlockers(model)
-  const executableNow = input.executableNow ?? blockers.length === 0
+  const blockers = [...new Set([
+    ...executableBlockers(model),
+    ...(input.executableBlockers ?? []),
+    'execution_readiness_not_derived_from_discovery',
+  ])]
+  const executableNow = false
   return {
     ...model,
     executableNow,

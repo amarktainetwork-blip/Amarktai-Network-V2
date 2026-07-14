@@ -218,19 +218,15 @@ describe('dashboard polish and routing map contract', () => {
       expect(fs.existsSync(mapPath)).toBe(false)
     })
 
-    it('Brain Router says image_generation is Together-selected and video_generation is GenX-selected', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      expect(routeBrain({ capability: 'image_generation', routingMode: 'balanced' }).selectedProvider).toBe('together')
-      expect(routeBrain({ capability: 'video_generation', routingMode: 'balanced' }).selectedProvider).toBe('genx')
+    it('canonical registrations map image_generation to Together and video_generation to GenX', async () => {
+      const { getExecutorRegistrations } = await import('../packages/core/src/index.ts')
+      expect(getExecutorRegistrations('image_generation').map(entry => entry.provider)).toEqual(['together'])
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
     })
 
-    it('canonical runtime truth keeps provider/model override app-facing false', async () => {
-      const { CAPABILITY_KEYS, routeBrain } = await import('../packages/core/src/index.ts')
-      for (const capability of CAPABILITY_KEYS) {
-        const decision = routeBrain({ capability, routingMode: 'balanced' })
-        expect(decision.appFacingProviderOverride).toBe(false)
-        expect(decision.appFacingModelOverride).toBe(false)
-      }
+    it('public job contracts block provider/model overrides', async () => {
+      const { BLOCKED_OVERRIDE_FIELDS } = await import('../packages/core/src/index.ts')
+      expect(BLOCKED_OVERRIDE_FIELDS).toEqual(expect.arrayContaining(['provider', 'model', 'providerOverride', 'modelOverride']))
     })
 
     it('provider list remains exactly genx, groq, together, mimo, deepinfra', async () => {
@@ -247,11 +243,10 @@ describe('dashboard polish and routing map contract', () => {
     })
 
     it('chat has Groq with DeepInfra fallback and long-form/research remain not live-proven', async () => {
-      const { getRuntimeTruth, routeBrain } = await import('../packages/core/src/index.ts')
-      const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
+      const { getExecutorRegistrations, getRuntimeTruth } = await import('../packages/core/src/index.ts')
+      const chatProviders = getExecutorRegistrations('chat').map(entry => entry.provider)
       const truth = getRuntimeTruth()
-      expect(decision.selectedProvider).toBe('groq')
-      expect(decision.fallbackChain.some((entry) => entry.provider === 'deepinfra')).toBe(true)
+      expect(chatProviders).toEqual(['groq', 'deepinfra'])
       expect(truth.capabilities.find((capability) => capability.capability === 'long_form_video')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'research')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'embeddings')?.classification).not.toBe('LIVE_PROVEN')

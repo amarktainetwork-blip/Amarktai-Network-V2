@@ -20,7 +20,9 @@ export async function loadOrchestraSnapshot(
     prisma.aiProvider.findMany(),
   ])
 
-  const candidates = normalizeDbCandidates(allModels, providers, request.capability)
+  const candidates = normalizeDbCandidates(allModels, providers, request.capability, {
+    infrastructureReady: request.infrastructureReady === true,
+  })
 
   return evaluateOrchestra(request, candidates)
 }

@@ -10,10 +10,11 @@ import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
-const ADMIN_EMAIL = 'amarktainetwork@gmail.com'
-const ADMIN_PASSWORD = 'Ashmor12@'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || 'amarktainetwork@gmail.com'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim()
 
 async function main(): Promise<void> {
+  if (!ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD must be configured before seeding an admin account')
   console.log(`[seed] Ensuring admin account exists for ${ADMIN_EMAIL}...`)
 
   const passwordHash = await hash(ADMIN_PASSWORD, 12)

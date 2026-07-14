@@ -179,6 +179,35 @@ const db = vi.hoisted(() => {
       aiProvider: {
         findMany: vi.fn(async () => []),
       },
+      appCapabilityGrant: {
+        findUnique: vi.fn(async ({ where }) => {
+          const { appSlug, capability } = where.app_capability_grant_unique
+          return {
+            appSlug,
+            capability,
+            enabled: true,
+            qualityFloor: 'balanced',
+            budgetPolicy: 'balanced',
+            maxCostPerRequest: 0,
+            maxCostPerWorkflow: 0,
+            latencyPreference: 'medium',
+            allowFallback: true,
+            maxFallbackAttempts: 3,
+            liveProofRequired: false,
+            approvalRequired: false,
+            artifactRead: true,
+            artifactWrite: true,
+            memoryRead: false,
+            memoryWrite: false,
+            ragNamespaces: '[]',
+            policyProfile: 'test',
+            adultPermission: false,
+            dataRetentionPolicy: 'default',
+            passthroughModelAllowed: false,
+            providerResidencyConstraints: '[]',
+          }
+        }),
+      },
       $transaction: vi.fn(async (fn) => fn({ job: jobApi })),
     },
   }
@@ -647,13 +676,13 @@ describe('durable long-form orchestration', () => {
     await app.close()
   })
 
-  it('canonical truth exposes durable components while full multimedia remains false', () => {
+  it('core-only canonical truth does not invent API component evidence', () => {
     const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
-    expect(longForm.durableParentReady).toBe(true)
-    expect(longForm.durablePlanReady).toBe(true)
-    expect(longForm.sceneLinkageReady).toBe(true)
-    expect(longForm.retryResumeReady).toBe(true)
-    expect(longForm.assemblyHandoffReady).toBe(true)
+    expect(longForm.durableParentReady).toBe(false)
+    expect(longForm.durablePlanReady).toBe(false)
+    expect(longForm.sceneLinkageReady).toBe(false)
+    expect(longForm.retryResumeReady).toBe(false)
+    expect(longForm.assemblyHandoffReady).toBe(false)
     expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.liveProven).toBe(false)
   })

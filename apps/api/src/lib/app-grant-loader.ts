@@ -8,25 +8,9 @@
 import { prisma } from '@amarktai/db'
 import type { AppCapabilityGrantContext, CapabilityKey } from '@amarktai/core'
 
-/**
- * Loads the app capability grant for a specific app and capability.
- * Returns null if no grant exists (app has no explicit grant for this capability).
- */
-export async function loadAppCapabilityGrant(
-  appSlug: string,
-  capability: CapabilityKey,
-): Promise<AppCapabilityGrantContext | null> {
-  const grant = await prisma.appCapabilityGrant.findUnique({
-    where: {
-      app_capability_grant_unique: {
-        appSlug,
-        capability,
-      },
-    },
-  })
+type GrantRecord = Awaited<ReturnType<typeof prisma.appCapabilityGrant.findFirst>>
 
-  if (!grant) return null
-
+function toGrantContext(grant: NonNullable<GrantRecord>): AppCapabilityGrantContext {
   return {
     appSlug: grant.appSlug,
     capability: grant.capability as CapabilityKey,
@@ -54,6 +38,69 @@ export async function loadAppCapabilityGrant(
 }
 
 /**
+ * Loads the app capability grant for a specific app and capability.
+ * Returns null if no grant exists (app has no explicit grant for this capability).
+ */
+export async function loadAppCapabilityGrant(
+  appSlug: string,
+  capability: CapabilityKey,
+): Promise<AppCapabilityGrantContext | null> {
+  const grant = await prisma.appCapabilityGrant.findUnique({
+    where: {
+      app_capability_grant_unique: {
+        appSlug,
+        capability,
+      },
+    },
+  })
+
+  if (!grant) return null
+
+  return toGrantContext(grant)
+}
+
+/**
+ * Resolves the immutable runtime authority used for a new job. The legacy
+ * allowedCapabilities list is accepted only as an explicit migration input;
+ * after this point every runtime consumer uses the returned grant snapshot.
+ */
+export async function resolveAppCapabilityGrantSnapshot(
+  appSlug: string,
+  capability: CapabilityKey,
+  legacyAllowedCapabilities: readonly string[] = [],
+): Promise<{ grant: AppCapabilityGrantContext; source: 'app_capability_grant' | 'legacy_migration' } | null> {
+  const stored = await loadAppCapabilityGrant(appSlug, capability)
+  if (stored) return { grant: Object.freeze({ ...stored }), source: 'app_capability_grant' }
+  if (!legacyAllowedCapabilities.includes(capability)) return null
+
+  const migrated: AppCapabilityGrantContext = {
+    appSlug,
+    capability,
+    enabled: true,
+    qualityFloor: 'balanced',
+    budgetPolicy: 'balanced',
+    maxCostPerRequest: 0,
+    maxCostPerWorkflow: 0,
+    latencyPreference: 'medium',
+    allowFallback: true,
+    maxFallbackAttempts: 3,
+    liveProofRequired: false,
+    approvalRequired: false,
+    artifactRead: true,
+    artifactWrite: true,
+    memoryRead: false,
+    memoryWrite: false,
+    ragNamespaces: [],
+    policyProfile: 'legacy_migration',
+    adultPermission: false,
+    dataRetentionPolicy: 'default',
+    passthroughModelAllowed: false,
+    providerResidencyConstraints: [],
+  }
+  return { grant: Object.freeze(migrated), source: 'legacy_migration' }
+}
+
+/**
  * Loads all capability grants for an app.
  * Returns a map of capability → grant context.
  */
@@ -67,30 +114,7 @@ export async function loadAllAppCapabilityGrants(
   const grantMap = new Map<string, AppCapabilityGrantContext>()
 
   for (const grant of grants) {
-    grantMap.set(grant.capability, {
-      appSlug: grant.appSlug,
-      capability: grant.capability as CapabilityKey,
-      enabled: grant.enabled,
-      qualityFloor: grant.qualityFloor,
-      budgetPolicy: grant.budgetPolicy,
-      maxCostPerRequest: grant.maxCostPerRequest,
-      maxCostPerWorkflow: grant.maxCostPerWorkflow,
-      latencyPreference: grant.latencyPreference,
-      allowFallback: grant.allowFallback,
-      maxFallbackAttempts: grant.maxFallbackAttempts,
-      liveProofRequired: grant.liveProofRequired,
-      approvalRequired: grant.approvalRequired,
-      artifactRead: grant.artifactRead,
-      artifactWrite: grant.artifactWrite,
-      memoryRead: grant.memoryRead,
-      memoryWrite: grant.memoryWrite,
-      ragNamespaces: parseJsonArray(grant.ragNamespaces),
-      policyProfile: grant.policyProfile,
-      adultPermission: grant.adultPermission,
-      dataRetentionPolicy: grant.dataRetentionPolicy,
-      passthroughModelAllowed: grant.passthroughModelAllowed,
-      providerResidencyConstraints: parseJsonArray(grant.providerResidencyConstraints),
-    })
+    grantMap.set(grant.capability, toGrantContext(grant))
   }
 
   return grantMap
@@ -159,30 +183,7 @@ export async function upsertAppCapabilityGrant(
     },
   })
 
-  return {
-    appSlug: grant.appSlug,
-    capability: grant.capability as CapabilityKey,
-    enabled: grant.enabled,
-    qualityFloor: grant.qualityFloor,
-    budgetPolicy: grant.budgetPolicy,
-    maxCostPerRequest: grant.maxCostPerRequest,
-    maxCostPerWorkflow: grant.maxCostPerWorkflow,
-    latencyPreference: grant.latencyPreference,
-    allowFallback: grant.allowFallback,
-    maxFallbackAttempts: grant.maxFallbackAttempts,
-    liveProofRequired: grant.liveProofRequired,
-    approvalRequired: grant.approvalRequired,
-    artifactRead: grant.artifactRead,
-    artifactWrite: grant.artifactWrite,
-    memoryRead: grant.memoryRead,
-    memoryWrite: grant.memoryWrite,
-    ragNamespaces: parseJsonArray(grant.ragNamespaces),
-    policyProfile: grant.policyProfile,
-    adultPermission: grant.adultPermission,
-    dataRetentionPolicy: grant.dataRetentionPolicy,
-    passthroughModelAllowed: grant.passthroughModelAllowed,
-    providerResidencyConstraints: parseJsonArray(grant.providerResidencyConstraints),
-  }
+  return toGrantContext(grant)
 }
 
 /**

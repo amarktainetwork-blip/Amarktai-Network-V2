@@ -1,5 +1,6 @@
 import type { ProviderKey } from './providers.js'
 import type { CapabilityKey } from './capabilities.js'
+import { hasExecutorRegistration } from './executor-registry.js'
 import type { ModelDiscoverySource, ProviderDiscoveredModel } from './provider-model-discovery.js'
 import generatedProviderModels from './generated/provider-model-catalogue.generated.json'
 
@@ -75,7 +76,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: false,
     supportsStreaming: true,
     supportsBatch: false,
-    executable: true,
+    executable: false,
     notes: 'Primary text/chat model. Proven live via Groq API.',
   },
   {
@@ -90,7 +91,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: false,
     supportsStreaming: true,
     supportsBatch: false,
-    executable: true,
+    executable: false,
     notes: 'Fast/cheap Groq model for latency-sensitive text tasks.',
   },
   {
@@ -105,7 +106,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: false,
     supportsStreaming: true,
     supportsBatch: true,
-    executable: true,
+    executable: false,
     notes: 'DeepInfra text fallback. Only selected when enabled and not disabled.',
   },
   {
@@ -120,7 +121,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: true,
     supportsStreaming: false,
     supportsBatch: true,
-    executable: true,
+    executable: false,
     notes: 'Together image generation. Proven live. Requires TOGETHER_IMAGE_MODEL or provider defaultModel config.',
   },
   {
@@ -135,7 +136,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: true,
     supportsStreaming: false,
     supportsBatch: false,
-    executable: true,
+    executable: false,
     notes: 'GenX video generation. Proven live via GenX API.',
   },
   {
@@ -240,7 +241,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: true,
     supportsStreaming: false,
     supportsBatch: false,
-    executable: true,
+    executable: false,
     notes: 'GenX Lyria 3 clip music generation implementation path. Runtime execution requires GenX configuration and infrastructure; live proof is tracked separately.',
     source: 'docs_fallback',
     endpointShapeKnown: true,
@@ -262,7 +263,7 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsArtifacts: true,
     supportsStreaming: false,
     supportsBatch: false,
-    executable: true,
+    executable: false,
     notes: 'GenX Lyria 3 pro music generation implementation path. Runtime execution requires GenX configuration and infrastructure; live proof is tracked separately.',
     source: 'docs_fallback',
     endpointShapeKnown: true,
@@ -282,15 +283,15 @@ function discoveredModelToRecord(model: ProviderDiscoveredModel): ModelRecord {
     modelId: model.modelId,
     displayName: model.displayName,
     capabilities: model.inferredCapabilities,
-    status: model.policyRestrictedByApp ? 'blocked' : model.executableNow ? 'available' : 'planned',
+    status: model.policyRestrictedByApp ? 'blocked' : 'available',
     qualityTier: 'balanced',
     latencyTier: 'medium',
     costTier: 'medium',
     supportsArtifacts: model.artifactOutput,
     supportsStreaming: model.streamingSupported,
     supportsBatch: model.batchSupported,
-    executable: model.executableNow,
-    notes: `Discovered model from ${model.endpointSource}. ${model.blockedReason || 'Executable readiness satisfied.'}`,
+    executable: false,
+    notes: `Catalogued model from ${model.endpointSource}. Execution readiness is derived from executor registrations.`,
     source: model.source,
     executionProvider: model.executionProvider,
     upstreamProvider: model.upstreamProvider,
@@ -318,7 +319,7 @@ function discoveredModelToRecord(model: ProviderDiscoveredModel): ModelRecord {
     functionCallingSupported: model.functionCallingSupported,
     webhookSupported: model.webhookSupported,
     discoveredModel: true,
-    executableNow: model.executableNow,
+    executableNow: false,
     executableBlockers: model.executableBlockers,
     catalogueOnlyReason: model.catalogueOnlyReason,
     blockedReason: model.blockedReason,
@@ -343,7 +344,10 @@ export function getModelsByCapability(capability: CapabilityKey): ModelRecord[] 
 }
 
 export function getExecutableModels(): ModelRecord[] {
-  return MODEL_CATALOGUE.filter((m) => m.executable && m.status === 'available')
+  return MODEL_CATALOGUE.filter((model) =>
+    model.status === 'available'
+    && model.capabilities.some((capability) => hasExecutorRegistration(capability, model.provider)),
+  )
 }
 
 export function getPlannedModels(): ModelRecord[] {

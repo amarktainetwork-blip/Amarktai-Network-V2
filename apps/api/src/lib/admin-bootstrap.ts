@@ -2,7 +2,6 @@ import { hash } from 'bcryptjs'
 import { prisma } from '@amarktai/db'
 
 export const DEFAULT_ADMIN_EMAIL = 'amarktainetwork@gmail.com'
-const DEFAULT_ADMIN_PASSWORD = 'Ashmor12@'
 
 interface AdminBootstrapLogger {
   info: (...args: unknown[]) => void
@@ -22,9 +21,14 @@ interface AdminBootstrapPrisma {
 export async function ensureDefaultAdminExists(
   log: AdminBootstrapLogger,
   prismaClient: AdminBootstrapPrisma = prisma,
+  adminPassword = process.env.ADMIN_PASSWORD?.trim(),
 ): Promise<void> {
+  if (!adminPassword) {
+    log.info('[boot] Default admin bootstrap skipped: ADMIN_PASSWORD is not configured')
+    return
+  }
   try {
-    const passwordHash = await hash(DEFAULT_ADMIN_PASSWORD, 12)
+    const passwordHash = await hash(adminPassword, 12)
     const admin = await prismaClient.adminUser.upsert({
       where: { email: DEFAULT_ADMIN_EMAIL },
       update: {},

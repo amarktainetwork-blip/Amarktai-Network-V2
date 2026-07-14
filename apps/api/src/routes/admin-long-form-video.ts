@@ -14,6 +14,7 @@ import {
   isValidRoutingMode,
   validateLongFormVideoRequest,
   type JobPayload,
+  type AppCapabilityGrantContext,
   type LongFormVideoPlan,
   type LongFormVideoRequest,
 } from '@amarktai/core'
@@ -27,6 +28,7 @@ import {
   validateSceneArtifactsForAssembly,
 } from '../lib/long-form-assembly.js'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 const APP_SLUG = 'dashboard-long-form'
 const MAX_SCENE_RETRIES = 3
@@ -301,6 +303,7 @@ async function enqueueSceneJob(q: Queue, sceneJob: DbJob): Promise<{ queued: boo
     metadata,
     traceId: sceneJob.traceId,
     routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
   }
 
   const queueJobId = sceneJob.retryCount > 0 ? `${sceneJob.id}:attempt:${sceneJob.retryCount}` : sceneJob.id
@@ -408,6 +411,7 @@ async function enqueueVoiceoverJob(q: Queue, voiceoverJob: DbJob): Promise<{ que
     metadata,
     traceId: voiceoverJob.traceId,
     routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
   }
 
   const queueJobId = voiceoverJob.retryCount > 0 ? `${voiceoverJob.id}:attempt:${voiceoverJob.retryCount}` : voiceoverJob.id
@@ -461,6 +465,28 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
   const plan = createLongFormVideoPlan(input)
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
+  const [longFormGrant, videoGrant, voiceGrant] = await Promise.all([
+    resolveAppCapabilityGrantSnapshot(appSlug, 'long_form_video'),
+    resolveAppCapabilityGrantSnapshot(appSlug, 'video_generation'),
+    input.voiceoverEnabled ? resolveAppCapabilityGrantSnapshot(appSlug, 'tts') : Promise.resolve(null),
+  ])
+  if (!longFormGrant?.grant.enabled || !videoGrant?.grant.enabled) {
+    throw new Error('Long-form execution requires enabled long_form_video and video_generation AppCapabilityGrant records')
+  }
+  if (input.voiceoverEnabled && !voiceGrant?.grant.enabled) {
+    throw new Error('Voiceover execution requires an enabled tts AppCapabilityGrant record')
+  }
+  const snapshotAt = new Date().toISOString()
+  const parentGrantMetadata = {
+    appGrantSnapshot: longFormGrant.grant,
+    appGrantSnapshotSource: longFormGrant.source,
+    appGrantSnapshotAt: snapshotAt,
+  }
+  const videoGrantMetadata = {
+    appGrantSnapshot: videoGrant.grant,
+    appGrantSnapshotSource: videoGrant.source,
+    appGrantSnapshotAt: snapshotAt,
+  }
 
   const { parent, sceneJobs, voiceoverJobs } = await prisma.$transaction(async (tx) => {
     const parent = await tx.job.create({
@@ -469,7 +495,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
         capability: 'long_form_video',
         prompt: input.prompt,
         inputJson: JSON.stringify(input),
-        metadataJson: JSON.stringify(parentMetadata(input, plan, executionId)),
+        metadataJson: JSON.stringify({ ...parentMetadata(input, plan, executionId), ...parentGrantMetadata }),
         traceId: `trace_longform_${executionId}`,
         status: dryRun ? 'planned' : 'processing',
         progress: 0,
@@ -483,6 +509,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       const scene = plan.storyboard.scenes.find((item) => item.sceneNumber === payload.sceneNumber)
       const metadata = {
         ...payload.metadata,
+        ...videoGrantMetadata,
         parentJobId: parent.id,
         executionId,
         planVersion: plan.id,
@@ -521,6 +548,9 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
           parentJobId: parent.id,
           routingMode,
           retryGeneration: 0,
+          appGrantSnapshot: voiceGrant!.grant,
+          appGrantSnapshotSource: voiceGrant!.source,
+          appGrantSnapshotAt: snapshotAt,
         }
         const voJob = await tx.job.create({
           data: {
@@ -546,6 +576,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       data: {
         metadataJson: JSON.stringify({
           ...parentMetadata(input, plan, executionId),
+          ...parentGrantMetadata,
           voiceoverJobIds: voiceoverJobs.map((j) => j.id),
           assemblyHandoff: buildAssemblyHandoff({ parentJobId: parent.id, executionId, request: input, plan, sceneJobs }),
         }),
@@ -897,6 +928,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     const routingMode = isValidRoutingMode(body.routingMode) ? body.routingMode as string : 'balanced'
 
     try {
+      const musicGrant = await resolveAppCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+      if (!musicGrant?.grant.enabled) {
+        return reply.status(403).send({ error: true, message: 'Music bed execution requires an enabled music_generation AppCapabilityGrant record' })
+      }
+      const grantSnapshotAt = new Date().toISOString()
       const { randomUUID: uuid } = await import('node:crypto')
       const musicJobId = uuid()
       const traceId = `trace_longform_${executionId}_music_bed`
@@ -922,6 +958,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
             planId: plan.id,
             routingMode,
             retryGeneration: 0,
+            appGrantSnapshot: musicGrant.grant,
+            appGrantSnapshotSource: musicGrant.source,
+            appGrantSnapshotAt: grantSnapshotAt,
           }),
           traceId,
           status: 'queued',
@@ -939,9 +978,19 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           capability: 'music_generation',
           prompt,
           input: { prompt, durationSeconds: plan.totalDurationSeconds, instrumentalOnly: true },
-          metadata: { longFormVideo: true, longFormMusicBed: true, longFormExecutionId: executionId, parentJobId: loaded.parent.id, routingMode },
+          metadata: {
+            longFormVideo: true,
+            longFormMusicBed: true,
+            longFormExecutionId: executionId,
+            parentJobId: loaded.parent.id,
+            routingMode,
+            appGrantSnapshot: musicGrant.grant,
+            appGrantSnapshotSource: musicGrant.source,
+            appGrantSnapshotAt: grantSnapshotAt,
+          },
           traceId,
           routingMode,
+          appGrantSnapshot: musicGrant.grant,
         }
         await q.add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: musicJobId })
       }
@@ -1066,35 +1115,26 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
 
   app.get('/api/admin/long-form-video/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const { LONG_FORM_VIDEO_STATUS } = await import('@amarktai/core')
     const ffmpeg = await checkFfmpegAvailable()
     const truth = await buildAdminRuntimeTruth(app)
     const canonical = truth.capabilities.find((capability) => capability.capability === 'long_form_video')
     return reply.status(200).send({
       success: true,
       status: {
-        ...LONG_FORM_VIDEO_STATUS,
-        canonicalTruth: canonical,
+        ...canonical,
         ffmpegAvailable: ffmpeg.available,
-        durableParentReady: true,
-        durablePlanReady: true,
-        sceneLinkageReady: true,
-        sceneSubmissionReady: true,
-        retryResumeReady: true,
-        progressTrackingReady: true,
-        assemblyHandoffReady: true,
-        fullMultimediaReady: false,
-        liveProven: false,
       },
       ffmpeg,
-      message: 'Long-form durable orchestration and scene recovery are ready. Full multimedia assembly remains pending.',
+      message: canonical?.fullMultimediaReady
+        ? 'Long-form multimedia execution is proven ready.'
+        : 'Long-form component readiness is derived from callable implementations, infrastructure, and proof evidence.',
       limitations: {
         executionStateStorage: 'Durable parent and linked Job rows (scene + voiceover)',
         executionStateRecovery: 'Recovered by exact parentJobId/executionId fields',
-        assemblyMode: 'video_only handoff prepared; full multimedia pending',
-        voiceoverIncluded: false, // Not live-proven
-        subtitlesIncluded: false, // Not live-proven
-        musicBedIncluded: false, // Not live-proven
+        assemblyMode: canonical?.fullMultimediaReady ? 'multimedia_ready' : 'video_only_or_blocked',
+        voiceoverIncluded: canonical?.voiceoverReady === true,
+        subtitlesIncluded: canonical?.subtitlesReady === true,
+        musicBedIncluded: canonical?.musicBedReady === true,
       },
     })
   })

@@ -48,16 +48,15 @@ describe('dashboard truth contract', () => {
     expect(content).toContain('Disabled until backend proof passes')
   })
 
-  it('provider list remains exactly 5', () => {
-    const providers = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-    expect(providers).toHaveLength(5)
+  it('provider list remains exactly 5', async () => {
+    const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
+    expect(PROVIDER_KEYS).toHaveLength(5)
   })
 
-  it('MiMo remains coding_tools_only', () => {
-    const truthPath = path.join(ROOT, 'packages/core/src/runtime-truth.ts')
-    const content = fs.readFileSync(truthPath, 'utf8')
-    expect(content).toContain("CODING_ONLY_PROVIDERS = ['mimo']")
-    expect(content).toContain('coding_tools_only_not_backend_runtime')
+  it('MiMo remains coding_tools_only', async () => {
+    const { APPROVED_PROVIDER_DEFINITIONS, CODING_ONLY_PROVIDERS } = await import('../packages/core/src/index.ts')
+    expect([...CODING_ONLY_PROVIDERS]).toEqual(['mimo'])
+    expect(APPROVED_PROVIDER_DEFINITIONS.find(provider => provider.key === 'mimo')).toMatchObject({ codingOnly: true, backendExecutionAllowed: false })
   })
 
   it('no provider/model selectors are exposed', () => {

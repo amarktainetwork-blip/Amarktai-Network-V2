@@ -199,19 +199,19 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       })
     })
 
-    it('Brain Router still controls provider/model', () => {
+    it('Orchestra still controls provider/model', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
-          prompt: 'Test prompt for brain router',
+          prompt: 'Test prompt for Orchestra',
           targetDurationSeconds: 60,
           sceneCount: 2,
         })
       )
 
-      const executionId = 'test-execution-id-brain-router'
+      const executionId = 'test-execution-id-orchestra'
       const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
-      // Payloads should not include provider/model - Brain Router decides
+      // Payloads should not include provider/model - Orchestra decides.
       payloads.forEach((payload) => {
         expect(payload.capability).toBe('video_generation')
         expect(payload.metadata).not.toHaveProperty('selectedProvider')

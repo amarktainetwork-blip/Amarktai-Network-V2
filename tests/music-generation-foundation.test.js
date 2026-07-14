@@ -11,7 +11,8 @@ import {
   getMusicCapabilityStatus,
   inspirationProfileToPrompt,
   normalizeMusicPrompt,
-  routeBrain,
+  getExecutorRegistrations,
+  getRuntimeTruth,
   validateMusicGenerationRequest,
   validateMusicReferenceUploadRequest,
 } from '../packages/core/src/index.ts'
@@ -90,7 +91,7 @@ describe('Music generation backend foundation', () => {
 
     expect(plan.capability).toBe('music_generation')
     expect(plan.executionReady).toBe(false)
-    expect(plan.blockedReason).toContain('genx_api_key_not_configured')
+    expect(plan.blockedReason).toContain('credentials_missing')
     expect(plan.lyricsStatus).toBe('not_requested')
     expect(plan.vocalsStatus).toBe('not_requested')
     expect(plan.providerPrompt).toContain('Original ambient loop')
@@ -234,8 +235,8 @@ describe('Music generation backend foundation', () => {
     expect(status.executableNow).toBe(false)
     expect(status.musicGenerationReady).toBe(false)
     expect(status.executionBlocked).toBe(true)
-    expect(status.blockedReasons).toContain('genx_api_key_not_configured')
-    expect(status.blockedReason).toContain('genx_api_key_not_configured')
+    expect(status.blockedReasons).toContain('credentials_missing')
+    expect(status.blockedReason).toContain('credentials_missing')
     expect(status.genxMusicCapabilityKnown).toBe(true)
     expect(status.lyriaClipDiscovered).toBe(true)
     expect(status.lyriaProDiscovered).toBe(true)
@@ -282,9 +283,8 @@ describe('Music generation backend foundation', () => {
     expect(musicModels.length).toBeGreaterThanOrEqual(2)
     const staticLyria = musicModels.filter((m) => m.provider === 'genx' && m.modelId.startsWith('lyria-'))
     expect(staticLyria.length).toBeGreaterThanOrEqual(2)
-    expect(staticLyria.every((model) => model.executable === true)).toBe(true)
-    expect(staticLyria.every((model) => model.providerClientExists === true)).toBe(true)
-    expect(staticLyria.every((model) => model.workerExecutorExists === true)).toBe(true)
+    expect(staticLyria.every((model) => model.executable !== true)).toBe(true)
+    expect(getExecutorRegistrations('music_generation').map(entry => entry.provider)).toEqual(['genx'])
     expect(staticLyria.every((model) => model.executableNow !== true)).toBe(true)
     expect(staticLyria).toContainEqual(expect.objectContaining({
       provider: 'genx',
@@ -298,31 +298,27 @@ describe('Music generation backend foundation', () => {
     }))
   })
 
-  it('Brain Router blocks music_generation without runtime GenX configuration', () => {
-    const decision = routeBrain({ capability: 'music_generation', routingMode: 'balanced' })
-    expect(decision.executionAllowed).toBe(false)
-    expect(decision.selectedProvider).toBeNull()
-    expect(decision.selectedModel).toBeNull()
-    expect(decision.blockReason).toContain('music_generation')
-    expect(decision.blockReason).toContain('not configured')
+  it('runtime truth blocks music_generation without runtime GenX configuration', () => {
+    const music = getRuntimeTruth().capabilities.find(item => item.capability === 'music_generation')
+    expect(music.executorRegistered).toBe(true)
+    expect(music.configured).toBe(false)
+    expect(music.executableNow).toBe(false)
   })
 
-  it('Brain Router routes music_generation to GenX only with mocked healthy configured runtime state', () => {
-    const decision = routeBrain({
-      capability: 'music_generation',
-      routingMode: 'balanced',
-      providerStates: { genx: { configured: true, infrastructureReady: true, policyAllowed: true } },
-    })
-    expect(decision.executionAllowed).toBe(true)
-    expect(decision.selectedProvider).toBe('genx')
-    expect(decision.selectedModel).toMatch(/lyria/)
-    expect(decision.selectedProvider).not.toBe('mimo')
+  it('runtime truth exposes only the registered GenX music path when configured', () => {
+    const music = getRuntimeTruth({
+      providers: { genx: { enabled: true, configured: true } },
+      capabilities: { music_generation: { infrastructureReady: true } },
+    }).capabilities.find(item => item.capability === 'music_generation')
+    expect(music.executableNow).toBe(true)
+    expect(music.eligibleProviders).toEqual(['genx'])
+    expect(music.eligibleModels.every(model => model.modelId.includes('lyria'))).toBe(true)
   })
 
   it('keeps adult capabilities on hold', () => {
-    const decision = routeBrain({ capability: 'adult_text', routingMode: 'balanced' })
-    expect(decision.executionAllowed).toBe(false)
-    expect(decision.blockReason).toContain('adult_text')
+    const adult = getRuntimeTruth().capabilities.find(item => item.capability === 'adult_text')
+    expect(adult.classification).toBe('POLICY_RESTRICTED')
+    expect(adult.executableNow).toBe(false)
   })
 
   it('does not add a fake worker music executor or artifact execution path', () => {
@@ -463,8 +459,8 @@ describe('Admin music API contract', () => {
     const body = response.json()
     expect(body.success).toBe(false)
     expect(body.executionBlocked).toBe(true)
-    expect(body.message).toContain('genx_api_key_not_configured')
-    expect(body.missingDependencies).toEqual(expect.arrayContaining(['genx_api_key_not_configured']))
+    expect(body.message).toContain('credentials_missing')
+    expect(body.missingDependencies).toEqual(expect.arrayContaining(['credentials_missing', 'infrastructure_missing']))
     expect(body).not.toHaveProperty('artifactId')
   })
 

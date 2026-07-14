@@ -239,12 +239,12 @@ export default function CapabilityLabPage() {
             <Badge variant="outline" className="border-emerald-500/30 text-[9px] text-emerald-300">
               <CheckCircle2 className="mr-1 h-2.5 w-2.5" /> Active in worker
             </Badge>
-            <span className="text-muted-foreground/60">Module: packages/core/src/brain-router.ts</span>
+            <span className="text-muted-foreground/60">Module: packages/core/src/orchestra.ts</span>
           </div>
           <div className="rounded-md border border-cyan-500/20 bg-cyan-500/[0.04] p-2">
             <span className="font-semibold text-cyan-300">Worker integration: </span>
             <span className="text-muted-foreground">
-              Worker calls routeBrain() before provider execution. Provider/model are selected internally; app-facing override remains blocked.
+              Orchestra selects the exact provider, model, and executor registration. App-facing provider/model overrides remain blocked.
             </span>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

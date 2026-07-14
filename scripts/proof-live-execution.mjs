@@ -19,8 +19,8 @@
 import { createHash } from 'node:crypto'
 
 const API_URL = process.env.PROOF_API_URL || 'http://localhost:3001'
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'amarktainetwork@gmail.com'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Ashmor12@'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || ''
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 const TIMEOUT_MS = 120_000
 const POLL_INTERVAL_MS = 2_000
 

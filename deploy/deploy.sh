@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+ADMIN_EMAIL="${ADMIN_EMAIL:-amarktainetwork@gmail.com}"
+: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set for deployment verification}"
+export ADMIN_EMAIL ADMIN_PASSWORD
+LOGIN_PAYLOAD=$(node -e 'process.stdout.write(JSON.stringify({email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD}))')
+
 REPO_DIR="/var/www/Amarktai-Network-V2"
 cd "$REPO_DIR"
 
@@ -92,7 +97,7 @@ echo "[8/8] Testing login endpoint..."
 LOGIN_RESPONSE=$(curl -s -w "\n%{http_code}" http://127.0.0.1:3000/api/auth/login \
   -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"amarktainetwork@gmail.com","password":"Ashmor12@"}')
+  -d "$LOGIN_PAYLOAD")
 
 HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -1)
 BODY=$(echo "$LOGIN_RESPONSE" | head -1)
@@ -128,6 +133,6 @@ echo "  Dashboard: https://amarktai.co.za"
 echo "  API:       http://127.0.0.1:3001"
 echo "  Health:    http://127.0.0.1:3001/health"
 echo ""
-echo "  Login:     amarktainetwork@gmail.com"
-echo "  Password:  Ashmor12@"
+echo "  Login:     $ADMIN_EMAIL"
+echo "  Password:  supplied through ADMIN_PASSWORD"
 echo ""

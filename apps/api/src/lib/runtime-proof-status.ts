@@ -6,6 +6,7 @@ import {
   type CapabilityKey,
   type ProviderKey,
   type RuntimeTruth,
+  getRuntimeTruth,
 } from '@amarktai/core'
 import { buildAdminRuntimeTruth } from './admin-runtime-truth.js'
 
@@ -94,14 +95,7 @@ export function projectProofStatusFromTruth(truth: RuntimeTruth & { evidenceAvai
 
 export async function getRuntimeProofStatus(app?: FastifyInstance): Promise<RuntimeProofStatusPayload> {
   if (!app) {
-    return projectProofStatusFromTruth({
-      generatedAt: new Date(0).toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'] as const, codingOnlyProviders: ['mimo'] as const, qwenRuntimeEligible: false as const },
-      providers: [],
-      capabilities: [],
-      countsByClassification: {} as never,
-      evidenceAvailable: false,
-    })
+    return projectProofStatusFromTruth({ ...getRuntimeTruth(), evidenceAvailable: false })
   }
   const truth = await buildAdminRuntimeTruth(app)
   return projectProofStatusFromTruth(truth)

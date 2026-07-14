@@ -17,11 +17,13 @@ const prismaMock = vi.hoisted(() => ({
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
       { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+      { provider: 'deepinfra', modelId: 'meta-llama/Meta-Llama-3.1-8B-Instruct', displayName: 'Llama 3.1 8B', status: 'active', costTier: 'low', latencyTier: 'medium', estimatedUnitCost: 0.0002, pricingConfidence: 'known', supportsChat: true },
     ]),
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
       { providerKey: 'groq', enabled: true, healthStatus: 'live' },
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live' },
     ]),
   },
 }))
@@ -62,20 +64,24 @@ vi.mock('@amarktai/providers', () => ({
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
-import { routeBrain, GROQ_DEFAULT_MODEL } from '../packages/core/src/index.ts'
+import { GROQ_DEFAULT_MODEL, getExecutorRegistration } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'test-app'
+  const capability = overrides.capability ?? 'chat'
   return {
     jobId: 'job-uuid-001',
-    appSlug: 'test-app',
-    capability: 'chat',
+    appSlug,
+    capability,
     prompt: 'Hello world',
     input: {},
     metadata: {},
     traceId: 'trace_test-uuid',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability, { allowFallback: false }),
   }
 }
 
@@ -139,16 +145,9 @@ describe('Groq executor — client contract', () => {
     process.env = originalEnv
   })
 
-  it('blocks chat routing when configured text providers are disabled', () => {
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        groq: { disabled: true },
-        deepinfra: { disabled: true },
-      },
-    })
-    expect(decision.executionAllowed).toBe(false)
+  it('registers chat only through callable text executors', () => {
+    expect(getExecutorRegistration('chat', 'groq')?.id).toBe('groq.chat')
+    expect(getExecutorRegistration('chat', 'deepinfra')?.id).toBe('deepinfra.chat')
   })
 
   it('builds request with provider groq', async () => {
@@ -184,7 +183,7 @@ describe('Groq executor — client contract', () => {
 
     await executeWithProvider(makePayload())
 
-    // groqChat receives the Brain Router's internal model, not any app-supplied model.
+    // groqChat receives Orchestra's exact internal model, not an app-supplied model.
     expect(mockGroqChat).toHaveBeenCalledWith(
       expect.objectContaining({ prompt: 'Hello world' })
     )
@@ -298,14 +297,12 @@ describe('Routing/execution gate', () => {
     process.env = originalEnv
   })
 
-  it('chat routes to Groq when Groq config is present', () => {
-    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
-    expect(decision.selectedProvider).toBe('groq')
+  it('chat has a canonical Groq executor registration', () => {
+    expect(getExecutorRegistration('chat', 'groq')?.provider).toBe('groq')
   })
 
-  it('chat does not route to DeepInfra by default', () => {
-    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
-    expect(decision.selectedProvider).not.toBe('deepinfra')
+  it('DeepInfra remains a registered chat fallback candidate', () => {
+    expect(getExecutorRegistration('chat', 'deepinfra')?.provider).toBe('deepinfra')
   })
 
   it('non-chat capabilities do not execute Groq in Phase 6A', async () => {
@@ -332,7 +329,7 @@ describe('Routing/execution gate', () => {
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('blocked')
+    expect(result.error).toContain("Provider 'groq' is missing configuration")
   })
 
   it('chat can fall back to DeepInfra when Groq config is missing', async () => {
@@ -354,7 +351,9 @@ describe('Routing/execution gate', () => {
       finishReason: 'stop',
     })
 
-    const result = await executeWithProvider(makePayload())
+    const result = await executeWithProvider(makePayload({
+      appGrantSnapshot: makeAppGrantSnapshot('test-app', 'chat', { allowFallback: true }),
+    }))
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('deepinfra')
@@ -366,10 +365,10 @@ describe('Routing/execution gate', () => {
     expect(JSON.stringify(result)).not.toContain('deepinfra-db-key')
   })
 
-  it('config presence does not mean provider is generally live', () => {
+  it('config presence does not mean provider is generally live', async () => {
     // Even with GROQ_API_KEY set, only chat is live
     const imageResult = executeWithProvider(makePayload({ capability: 'image_generation' }))
-    expect(imageResult).resolves.toMatchObject({ success: false })
+    await expect(imageResult).resolves.toMatchObject({ success: false })
   })
 })
 

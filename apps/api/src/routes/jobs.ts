@@ -24,6 +24,7 @@ import {
   type CreateJobResponse,
   type JobStatusResponse,
 } from '@amarktai/core'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 // ── Auth Helper ───────────────────────────────────────────────────────────────
 
@@ -127,6 +128,8 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     // 2. COMPLIANCE GATE: Block provider/model overrides
     const blockedField = hasBlockedOverrides(body)
+      || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
+      || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
     if (blockedField) {
       return reply.status(400).send({
         error: true,
@@ -146,13 +149,29 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     const { capability, prompt, input, metadata, callbackUrl } = parsed.data
 
-    // 4. Check capability allowlist
+    // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
+    // allowlist is migration input only and is never consulted by the worker.
     const allowedCaps = auth.allowedCapabilities ?? []
-    if (allowedCaps.length > 0 && !allowedCaps.includes(capability)) {
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, allowedCaps)
+    if (!grantResolution || !grantResolution.grant.enabled) {
       return reply.status(403).send({
         error: true,
-        message: `Capability '${capability}' is not allowed for this app. Allowed: ${allowedCaps.join(', ')}`,
+        message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.`,
       })
+    }
+    if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
+      return reply.status(403).send({
+        error: true,
+        message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
+      })
+    }
+
+    const grantSnapshotAt = new Date().toISOString()
+    const immutableMetadata = {
+      ...metadata,
+      appGrantSnapshot: grantResolution.grant,
+      appGrantSnapshotSource: grantResolution.source,
+      appGrantSnapshotAt: grantSnapshotAt,
     }
 
     // 5. Check daily budget
@@ -194,7 +213,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         capability,
         prompt,
         inputJson: JSON.stringify(input),
-        metadataJson: JSON.stringify(metadata),
+        metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
         callbackUrl: callbackUrl ?? null,
@@ -217,10 +236,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       capability,
       prompt,
       input,
-      metadata,
+      metadata: immutableMetadata,
       traceId,
       callbackUrl,
       routingMode,
+      appGrantSnapshot: grantResolution.grant,
     }
 
     try {

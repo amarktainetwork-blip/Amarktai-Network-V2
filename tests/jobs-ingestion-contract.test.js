@@ -16,6 +16,9 @@ const prismaMock = vi.hoisted(() => ({
   appApiKey: {
     findUnique: vi.fn(),
   },
+  appCapabilityGrant: {
+    findUnique: vi.fn(),
+  },
   appConnection: {
     update: vi.fn(),
   },
@@ -100,6 +103,34 @@ function makeJob(overrides = {}) {
     startedAt: null,
     completedAt: null,
     updatedAt: new Date('2026-07-04T10:00:00Z'),
+    ...overrides,
+  }
+}
+
+function makeGrantRecord(appSlug, capability, overrides = {}) {
+  return {
+    appSlug,
+    capability,
+    enabled: true,
+    qualityFloor: 'balanced',
+    budgetPolicy: 'balanced',
+    maxCostPerRequest: 0,
+    maxCostPerWorkflow: 0,
+    latencyPreference: 'medium',
+    allowFallback: true,
+    maxFallbackAttempts: 3,
+    liveProofRequired: false,
+    approvalRequired: false,
+    artifactRead: true,
+    artifactWrite: true,
+    memoryRead: false,
+    memoryWrite: false,
+    ragNamespaces: '[]',
+    policyProfile: 'test',
+    adultPermission: false,
+    dataRetentionPolicy: 'default',
+    passthroughModelAllowed: false,
+    providerResidencyConstraints: '[]',
     ...overrides,
   }
 }
@@ -303,43 +334,6 @@ describe('Token cost multiplier', () => {
 
 // ── Capability allowlist tests ───────────────────────────────────────────────
 
-describe('Capability allowlist behavior', () => {
-  it('empty allowedCapabilities allows any valid capability', () => {
-    const allowedCaps = []
-    const requestedCap = 'chat'
-    // When allowedCaps is empty, any valid capability is allowed
-    const blocked = allowedCaps.length > 0 && !allowedCaps.includes(requestedCap)
-    expect(blocked).toBe(false)
-  })
-
-  it('allowedCapabilities matching capability allows it', () => {
-    const allowedCaps = ['chat', 'image_generation']
-    const requestedCap = 'chat'
-    const blocked = allowedCaps.length > 0 && !allowedCaps.includes(requestedCap)
-    expect(blocked).toBe(false)
-  })
-
-  it('allowedCapabilities not matching capability blocks it', () => {
-    const allowedCaps = ['chat', 'image_generation']
-    const requestedCap = 'video_generation'
-    const blocked = allowedCaps.length > 0 && !allowedCaps.includes(requestedCap)
-    expect(blocked).toBe(true)
-  })
-
-  it('invalid JSON in allowedCapabilities behaves as empty (allows all)', () => {
-    // The route catches JSON.parse errors and defaults to []
-    let allowedCaps = []
-    try {
-      allowedCaps = JSON.parse('invalid json')
-    } catch {
-      allowedCaps = []
-    }
-    expect(allowedCaps).toEqual([])
-    const blocked = allowedCaps.length > 0 && !allowedCaps.includes('chat')
-    expect(blocked).toBe(false)
-  })
-})
-
 // ── Budget behavior tests ────────────────────────────────────────────────────
 
 describe('Daily budget behavior', () => {
@@ -507,6 +501,10 @@ describe('Job route integration (Fastify inject)', async () => {
     prismaMock.usageMeter.aggregate.mockResolvedValue({ _sum: { costUsdCents: 0 } })
     prismaMock.appConnection.update.mockResolvedValue({})
     prismaMock.job.update.mockResolvedValue({})
+    prismaMock.appCapabilityGrant.findUnique.mockImplementation(async ({ where }) => {
+      const key = where.app_capability_grant_unique
+      return makeGrantRecord(key.appSlug, key.capability)
+    })
   })
 
   // We test the route logic directly by importing and registering it
@@ -758,6 +756,7 @@ describe('Job route integration (Fastify inject)', async () => {
   })
 
   it('POST /api/v1/jobs returns 403 when capability not in allowlist', async () => {
+    prismaMock.appCapabilityGrant.findUnique.mockResolvedValue(null)
     prismaMock.appApiKey.findUnique.mockResolvedValue(
       makeApiKey({ appConnection: makeAppConnection({ allowedCapabilities: '["chat"]' }) })
     )
@@ -775,7 +774,7 @@ describe('Job route integration (Fastify inject)', async () => {
 
     expect(res.statusCode).toBe(403)
     const body = JSON.parse(res.payload)
-    expect(body.message).toContain('not allowed')
+    expect(body.message).toContain('no enabled AppCapabilityGrant')
     expect(prismaMock.job.create).not.toHaveBeenCalled()
     expect(mockQueueAdd).not.toHaveBeenCalled()
 
@@ -931,7 +930,7 @@ describe('Job route integration (Fastify inject)', async () => {
     await app.close()
   })
 
-  it('POST /api/v1/jobs allows empty allowedCapabilities (any capability)', async () => {
+  it('POST /api/v1/jobs uses a stored grant when the legacy migration list is empty', async () => {
     prismaMock.appApiKey.findUnique.mockResolvedValue(
       makeApiKey({ appConnection: makeAppConnection({ allowedCapabilities: '[]' }) })
     )

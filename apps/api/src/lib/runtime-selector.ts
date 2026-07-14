@@ -45,6 +45,7 @@ export async function selectRuntimeModel(
     allowUnknownCostPremium?: boolean
     routingMode?: string
     executionId?: string
+    infrastructureReady?: boolean
   },
 ): Promise<RuntimeSelection> {
   const routingMode = (options?.routingMode ?? 'balanced') as OrchestraRoutingMode
@@ -55,6 +56,7 @@ export async function selectRuntimeModel(
     qualityTier: options?.qualityTier,
     maxCostCents: options?.maxCostCents,
     executionId: options?.executionId,
+    infrastructureReady: options?.infrastructureReady === true,
   })
 
   const selected: RuntimeCandidate | null = decision.selectedProvider

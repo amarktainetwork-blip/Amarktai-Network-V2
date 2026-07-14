@@ -101,6 +101,78 @@ export const CAPABILITY_KEYS = [
 
 export type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
 
+/** Canonical ModelRegistryEntry support field for each capability. */
+export const CAPABILITY_FIELD_MAP: Record<CapabilityKey, string> = {
+  chat: 'supportsChat',
+  streaming_chat: 'supportsChat',
+  reasoning: 'supportsReasoning',
+  code: 'supportsCode',
+  summarization: 'supportsText',
+  translation: 'supportsText',
+  question_answering: 'supportsText',
+  classification: 'supportsText',
+  zero_shot_classification: 'supportsText',
+  extraction: 'supportsText',
+  token_classification: 'supportsText',
+  fill_mask: 'supportsText',
+  feature_extraction: 'supportsText',
+  sentence_similarity: 'supportsText',
+  table_qa: 'supportsText',
+  structured_output: 'supportsStructuredOutput',
+  tool_use: 'supportsToolUse',
+  image_generation: 'supportsImageGeneration',
+  image_edit: 'supportsImageEditing',
+  image_to_image: 'supportsImageEditing',
+  image_upscale: 'supportsImageEditing',
+  image_classification: 'supportsVision',
+  object_detection: 'supportsVision',
+  image_segmentation: 'supportsVision',
+  depth_estimation: 'supportsVision',
+  keypoint_detection: 'supportsVision',
+  visual_question_answering: 'supportsVision',
+  document_qa: 'supportsText',
+  ocr: 'supportsVision',
+  zero_shot_object_detection: 'supportsVision',
+  mask_generation: 'supportsVision',
+  visual_document_retrieval: 'supportsVision',
+  video_generation: 'supportsVideoGeneration',
+  image_to_video: 'supportsVideoGeneration',
+  video_to_video: 'supportsVideoGeneration',
+  long_form_video: 'supportsVideoGeneration',
+  video_understanding: 'supportsVision',
+  video_classification: 'supportsVision',
+  storyboard_generation: 'supportsVision',
+  subtitle_generation: 'supportsTts',
+  lip_sync: 'supportsVideoGeneration',
+  avatar_generation: 'supportsVideoGeneration',
+  text_to_3d: 'supportsVision',
+  image_to_3d: 'supportsVision',
+  tts: 'supportsTts',
+  stt: 'supportsStt',
+  voice_clone: 'supportsTts',
+  voice_conversion: 'supportsTts',
+  text_to_audio: 'supportsTts',
+  audio_to_audio: 'supportsTts',
+  audio_classification: 'supportsStt',
+  voice_activity_detection: 'supportsStt',
+  music_generation: 'supportsMusicGeneration',
+  song_generation: 'supportsMusicGeneration',
+  embeddings: 'supportsEmbeddings',
+  reranking: 'supportsReranking',
+  rag_ingest: 'supportsText',
+  rag_search: 'supportsText',
+  research: 'supportsResearch',
+  brand_scrape: 'supportsText',
+  document_ingest: 'supportsText',
+  campaign_generation: 'supportsText',
+  social_content_generation: 'supportsText',
+  adult_text: 'supportsChat',
+  adult_image: 'supportsImageGeneration',
+  adult_voice: 'supportsTts',
+  adult_avatar: 'supportsVideoGeneration',
+  adult_video: 'supportsVideoGeneration',
+}
+
 // ── Capability → Category Mapping (canonical) ─────────────────────────────────
 
 export const CAPABILITY_CATEGORY_MAP: Record<CapabilityKey, CapabilityCategory> = {
@@ -270,8 +342,16 @@ export const CapabilityDefinitionSchema = z.object({
   requiredFlags: z.array(z.string()).default([]),
   allowedProviders: z.array(z.string()).default([]),
   inputContract: z.array(z.string()).default([]),
+  inputContractReference: z.string(),
+  outputContractReference: z.string(),
   outputType: z.string().default('text'),
+  artifactType: z.string().nullable().default(null),
   artifactRequired: z.boolean().default(false),
+  orchestrated: z.boolean().default(false),
+  governed: z.boolean().default(false),
+  adult: z.boolean().default(false),
+  requiresSourceArtifact: z.boolean().default(false),
+  requiresQueueExecution: z.boolean().default(true),
   policyRequirement: z.string().default('standard'),
   family: z.string().default('Unsorted'),
   schemaKey: z.string().default(''),
@@ -285,7 +365,26 @@ export type CapabilityDefinition = z.infer<typeof CapabilityDefinitionSchema>
 
 // ── Built-in Capability Catalog ───────────────────────────────────────────────
 
-const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition, 'key' | 'category' | 'enabled' | 'allowedProviders' | 'family' | 'schemaKey' | 'studioMode' | 'dashboardType' | 'proofStatus' | 'readyForDashboardExecution'>> = {
+const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition,
+  | 'key'
+  | 'category'
+  | 'enabled'
+  | 'allowedProviders'
+  | 'family'
+  | 'schemaKey'
+  | 'studioMode'
+  | 'dashboardType'
+  | 'inputContractReference'
+  | 'outputContractReference'
+  | 'artifactType'
+  | 'orchestrated'
+  | 'governed'
+  | 'adult'
+  | 'requiresSourceArtifact'
+  | 'requiresQueueExecution'
+  | 'proofStatus'
+  | 'readyForDashboardExecution'
+>> = {
   // Language and Agent
   chat: { label: 'Chat', description: 'Conversational text generation for external app requests.', requiredFlags: [], inputContract: ['prompt', 'input.context?'], outputType: 'text', artifactRequired: false, policyRequirement: 'standard' },
   streaming_chat: { label: 'Streaming Chat', description: 'Streaming conversational text generation with SSE/WebSocket.', requiredFlags: [], inputContract: ['prompt', 'input.context?'], outputType: 'text', artifactRequired: false, policyRequirement: 'standard' },
@@ -439,16 +538,51 @@ const CAPABILITY_DISPLAY_METADATA: Record<CapabilityKey, Pick<CapabilityDefiniti
   adult_video: { family: 'Adult Governed', schemaKey: 'adult_video', studioMode: 'adult_video', dashboardType: 'adult.video' },
 }
 
-export const CAPABILITY_CATALOG: CapabilityDefinition[] = CAPABILITY_KEYS.map((key) => ({
-  key,
-  ...CAPABILITY_METADATA[key],
-  ...CAPABILITY_DISPLAY_METADATA[key],
-  category: CAPABILITY_CATEGORY_MAP[key],
-  enabled: true,
-  allowedProviders: [],
-  proofStatus: 'unproven',
-  readyForDashboardExecution: false,
-}))
+const ORCHESTRATED_CAPABILITIES = new Set<CapabilityKey>([
+  'long_form_video',
+  'rag_ingest',
+  'rag_search',
+  'research',
+  'brand_scrape',
+  'document_ingest',
+  'campaign_generation',
+  'social_content_generation',
+])
+
+function requiresSourceArtifact(key: CapabilityKey): boolean {
+  return CAPABILITY_METADATA[key].inputContract.some((field) =>
+    /(?:source|image|audio|video|document|sample)/i.test(field),
+  )
+}
+
+export const CAPABILITY_CATALOG: CapabilityDefinition[] = CAPABILITY_KEYS.map((key) => {
+  const metadata = CAPABILITY_METADATA[key]
+  const display = CAPABILITY_DISPLAY_METADATA[key]
+  const adult = key.startsWith('adult_')
+
+  return {
+    key,
+    ...metadata,
+    ...display,
+    category: CAPABILITY_CATEGORY_MAP[key],
+    enabled: true,
+    allowedProviders: [],
+    inputContractReference: `capability:${key}:request`,
+    outputContractReference: `capability:${key}:response:${metadata.outputType}`,
+    artifactType: metadata.artifactRequired ? metadata.outputType : null,
+    orchestrated: ORCHESTRATED_CAPABILITIES.has(key),
+    governed: adult || metadata.policyRequirement !== 'standard',
+    adult,
+    requiresSourceArtifact: requiresSourceArtifact(key),
+    requiresQueueExecution: true,
+    proofStatus: 'unproven',
+    readyForDashboardExecution: false,
+  }
+})
+
+export const CAPABILITY_BY_KEY = Object.fromEntries(
+  CAPABILITY_CATALOG.map((capability) => [capability.key, capability]),
+) as Record<CapabilityKey, CapabilityDefinition>
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 

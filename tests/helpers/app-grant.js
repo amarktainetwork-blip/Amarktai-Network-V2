@@ -1,0 +1,27 @@
+export function makeAppGrantSnapshot(appSlug, capability, overrides = {}) {
+  return Object.freeze({
+    appSlug,
+    capability,
+    enabled: true,
+    qualityFloor: 'balanced',
+    budgetPolicy: 'balanced',
+    maxCostPerRequest: 0,
+    maxCostPerWorkflow: 0,
+    latencyPreference: 'medium',
+    allowFallback: true,
+    maxFallbackAttempts: 3,
+    liveProofRequired: false,
+    approvalRequired: false,
+    artifactRead: true,
+    artifactWrite: true,
+    memoryRead: false,
+    memoryWrite: false,
+    ragNamespaces: [],
+    policyProfile: 'test',
+    adultPermission: false,
+    dataRetentionPolicy: 'default',
+    passthroughModelAllowed: false,
+    providerResidencyConstraints: [],
+    ...overrides,
+  })
+}

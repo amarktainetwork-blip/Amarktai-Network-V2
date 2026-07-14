@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { execFileSync } from 'child_process'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 /**
  * Music Generation Proof Script — Phase 5
  *
@@ -24,10 +28,11 @@
  */
 
 const API_URL = process.env.PROOF_API_URL || 'http://localhost:3001'
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'amarktainetwork@gmail.com'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Ashmor12@'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || ''
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ''
 const TIMEOUT_MS = 300_000
 const POLL_INTERVAL_MS = 3_000
+const STATIC_ONLY = process.argv.includes('--static-only')
 
 const results = []
 let passed = 0
@@ -344,6 +349,36 @@ async function proofAppMusicGeneration(appApiKey) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+async function runStaticDiagnostic() {
+  console.log('  AMARKTAI NETWORK V2 — MUSIC GENERATION DIAGNOSTIC (static-only)')
+  console.log('  Mode: static-only (NEVER produces live proof)')
+  const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
+  const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+  const diagnosticOutput = execFileSync(process.execPath, [
+    tsxCli,
+    path.join(root, 'scripts', 'proof-music-static-diagnostic.mts'),
+  ], { cwd: root, encoding: 'utf8' })
+  const diagnostic = JSON.parse(diagnosticOutput.trim().split(/\r?\n/).at(-1))
+  const registrations = diagnostic.registrations
+  const registration = registrations.find((entry) => entry.provider === 'genx')
+  const truth = diagnostic.truth
+
+  if (registrations.length === 1 && registration?.id === 'genx.music-generation') pass('Exactly one GenX music executor is registered')
+  else fail('Exactly one GenX music executor is registered')
+  if (diagnostic.callable) pass('Music registration is bound to a callable worker handler')
+  else fail('Music registration is bound to a callable worker handler')
+  if (truth?.implementationReady === true) pass('Canonical truth derives implemented music support from the registration')
+  else fail('Canonical truth derives implemented music support from the registration')
+  if (truth?.executableNow === false) pass('Missing configuration/infrastructure remains honestly non-executable')
+  else fail('Missing configuration/infrastructure remains honestly non-executable')
+  if (truth?.liveProven === false) pass('Static diagnostics do not create live proof')
+  else fail('Static diagnostics do not create live proof')
+
+  console.log(`  Results: ${passed} passed, ${failed} failed, ${skipped} skipped`)
+  console.log('  LIVE_PROOF_STATUS=NOT_ATTEMPTED')
+  if (failed > 0) process.exit(1)
+}
+
 async function main() {
   console.log('\x1b[1m\x1b[36m')
   console.log('  AMARKTAI NETWORK V2 — MUSIC GENERATION PROOF (Phase 5)')
@@ -391,7 +426,8 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+const selectedRun = STATIC_ONLY ? runStaticDiagnostic : main
+selectedRun().catch((err) => {
   console.error('Proof script error:', err)
   process.exit(1)
 })

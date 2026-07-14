@@ -62,19 +62,23 @@ import {
 } from '../apps/worker/src/processors/job-processor.ts'
 
 import { QUEUE_NAMES } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'test-app'
+  const capability = overrides.capability ?? 'chat'
   return {
     jobId: 'job-uuid-001',
-    appSlug: 'test-app',
-    capability: 'chat',
+    appSlug,
+    capability,
     prompt: 'Hello world',
     input: {},
     metadata: {},
     traceId: 'trace_test-uuid',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability, { allowFallback: false }),
   }
 }
 
@@ -409,18 +413,18 @@ describe('Job processor — execution lifecycle', () => {
     }))
   })
 
-  it('not-implemented execution fails DB job then throws for BullMQ', async () => {
+  it('missing provider configuration fails DB job then throws for BullMQ', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
     // processJob must throw so BullMQ records failure
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow("Provider 'groq' is missing configuration")
 
     // DB job must be updated to failed
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate).toBeDefined()
-    expect(failedUpdate[0].data.error).toContain('not implemented')
+    expect(failedUpdate[0].data.error).toContain("Provider 'groq' is missing configuration")
     expect(failedUpdate[0].data.status).toBe('failed')
     expect(failedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
@@ -436,7 +440,7 @@ describe('Job processor — execution lifecycle', () => {
     expect(failedUpdate[0].data.artifactId).toBeUndefined()
   })
 
-  it('does not set provider or model', async () => {
+  it('records Orchestra exact provider and model on failed execution', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
     await expect(processJob(makePayload())).rejects.toThrow()
@@ -444,8 +448,8 @@ describe('Job processor — execution lifecycle', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.provider).toBeNull()
-    expect(failedUpdate[0].data.model).toBeNull()
+    expect(failedUpdate[0].data.provider).toBe('groq')
+    expect(failedUpdate[0].data.model).toBe('llama-3.3-70b-versatile')
   })
 })
 
@@ -547,10 +551,10 @@ describe('Job processor — injectable execution', () => {
     expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
-  it('default processor uses not-implemented placeholder', async () => {
+  it('default processor uses the registered executor and reports missing configuration', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow("Provider 'groq' is missing configuration")
   })
 })
 
@@ -577,7 +581,7 @@ describe('Worker does not call providers', () => {
   it('does not import or call Groq adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await expect(processJob(makePayload())).rejects.toThrow('blocked')
+    await expect(processJob(makePayload())).rejects.toThrow("Provider 'groq' is missing configuration")
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
@@ -613,7 +617,7 @@ describe('Worker does not call providers', () => {
   it('does not import or call DeepInfra adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'chat' }))
 
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow("Provider 'groq' is missing configuration")
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'

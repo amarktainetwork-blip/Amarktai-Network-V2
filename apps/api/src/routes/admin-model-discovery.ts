@@ -3,6 +3,8 @@ import {
   DISCOVERED_PROVIDER_MODELS,
   MODEL_CATALOGUE,
   PROVIDER_KEYS,
+  RUNTIME_EXECUTION_PROVIDERS,
+  hasExecutorRegistration,
   isProviderKey,
   type ModelRecord,
   type ProviderDiscoveredModel,
@@ -11,7 +13,11 @@ import {
 import { runProviderModelDiscovery } from '@amarktai/providers'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
-const RUNTIME_EXECUTABLE_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra'] as const
+const RUNTIME_EXECUTABLE_PROVIDERS = RUNTIME_EXECUTION_PROVIDERS
+
+function hasRegisteredExecutor(model: Pick<ModelRecord, 'provider' | 'capabilities'>): boolean {
+  return model.capabilities.some((capability) => hasExecutorRegistration(capability, model.provider))
+}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -33,8 +39,8 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
 }
 
 function summarizeModels(models: readonly ModelRecord[]) {
-  const executable = models.filter((model) => model.executable && model.status === 'available')
-  const catalogueOnly = models.filter((model) => !model.executable || model.status !== 'available')
+  const executable = models.filter((model) => hasRegisteredExecutor(model) && model.status === 'available')
+  const catalogueOnly = models.filter((model) => !hasRegisteredExecutor(model) || model.status !== 'available')
   const blocked = models.filter((model) => model.status === 'blocked')
   const missingClient = models.filter((model) => model.providerClientExists === false)
   const missingExecutor = models.filter((model) => model.workerExecutorExists === false)
@@ -100,8 +106,8 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
     totalLiveDiscoveredModels: models.filter((model) => model.liveDiscovered).length,
     totalDocsFallbackModels: models.filter((model) => model.docsKnown).length,
     totalEffectiveCatalogueModels: models.length,
-    modelsExecutableNow: models.filter((model) => model.executableNow).length,
-    modelsKnownButBlocked: models.filter((model) => !model.executableNow).length,
+    modelsExecutableNow: 0,
+    modelsKnownButBlocked: models.length,
     policyRestrictedModels: models.filter((model) => model.policyRestrictedByApp).length,
     transportProfilesPresent: [...new Set(models.map((model) => model.transportProfile).filter(Boolean))],
     providerDiscoveryStatus: providerStatuses,
@@ -114,7 +120,7 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
     liveDiscoveryPartial: true,
     runtimeExecutableProviders: RUNTIME_EXECUTABLE_PROVIDERS,
     genxMusicCapabilityKnown: genxMusicModels.length > 0,
-    genxMusicExecutionReady: genxMusicModels.some((model) => model.executableNow),
+    genxMusicExecutionReady: false,
     mimoCapabilityKnown: models.some((model) => model.provider === 'mimo' && model.docsKnown),
     mimoPolicyRestricted: models.filter((model) => model.provider === 'mimo').every((model) => model.policyRestrictedByApp && !model.executableNow),
     countsByProvider: Object.fromEntries(PROVIDER_KEYS.map((provider) => [
@@ -128,7 +134,7 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
       lyriaExactMatches: genxMusicModels.filter((model) => /^lyria-3-(clip|pro)-preview$/.test(model.modelId)).map((model) => model.modelId),
       genxMusicTransportProfile: [...new Set(genxMusicModels.map((model) => model.transportProfile))],
       genxMusicEndpointFamily: [...new Set(genxMusicModels.map((model) => model.endpointFamily))],
-      genxMusicExecutorReady: genxMusicModels.some((model) => model.executableNow),
+      genxMusicExecutorReady: genxMusicModels.some((model) => hasExecutorRegistration('music_generation', model.provider)),
       genxMusicBlockers: [...new Set(genxMusicModels.flatMap((model) => model.executableBlockers ?? []))],
     },
     musicReadiness: {
@@ -140,7 +146,7 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
       endpointShapeKnown: musicModels.some((model) => model.endpointShapeKnown),
       providerClientExists: musicModels.some((model) => model.providerClientExists),
       workerExecutorExists: musicModels.some((model) => model.workerExecutorExists),
-      executableNow: musicModels.some((model) => model.executableNow),
+      executableNow: false,
       lyriaLikeModels: musicModels.filter((model) => /lyria/i.test(model.modelId)).map((model) => `${model.provider}/${model.modelId}`),
     },
   }

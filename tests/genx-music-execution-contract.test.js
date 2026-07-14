@@ -7,9 +7,7 @@
  * atomic execution claim, concurrent worker protection,
  * and artifact idempotency.
  *
- * The brain router is mocked to allow music_generation through,
- * since the model catalogue marks music as planned/executable-false
- * per the instruction not to change readiness in this slice.
+ * Orchestra routes through the canonical GenX music executor registration.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -72,35 +70,6 @@ const coreMocks = vi.hoisted(() => ({
     }
     return allowed[type]?.includes(mime) ?? false
   }),
-  routeBrain: vi.fn((request) => ({
-    selectedProvider: 'genx',
-    selectedModel: 'lyria-3-clip-preview',
-    routingMode: request.routingMode ?? 'balanced',
-    executionAllowed: true,
-    candidateModels: [],
-    discoveredCandidates: [],
-    docsFallbackCandidates: [],
-    liveDiscoveredCandidates: [],
-    executableCandidates: [],
-    catalogueOnlyCandidates: [],
-    blockedCandidates: [],
-    policyRestrictedCandidates: [],
-    missingEndpointShapeCandidates: [],
-    missingRequestShapeCandidates: [],
-    missingResponseShapeCandidates: [],
-    missingArtifactPathCandidates: [],
-    missingExecutorCandidates: [],
-    providerClientMissingCandidates: [],
-    modelDiscoverySource: [],
-    transportProfileCandidates: [],
-    upstreamProviderBreakdown: {},
-    rejectedCandidates: [],
-    fallbackChain: [],
-    blockReason: null,
-    truth: 'Brain Router v1 selected genx/lyria-3-clip-preview for music_generation in balanced mode.',
-    appFacingProviderOverride: false,
-    appFacingModelOverride: false,
-  })),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -140,19 +109,23 @@ vi.mock('@amarktai/core', async () => {
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { PROVIDER_KEYS } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'runtime-proof-genx-music'
+  const capability = overrides.capability ?? 'music_generation'
   return {
     jobId: 'job-genx-music-001',
-    appSlug: 'runtime-proof-genx-music',
-    capability: 'music_generation',
+    appSlug,
+    capability,
     prompt: 'A gentle ambient piano melody for meditation',
     input: { genre: 'ambient', instrumental: true },
     metadata: {},
     traceId: 'trace-genx-music-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 

@@ -122,9 +122,8 @@ describe('studio execution loop contract', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
 
-    expect(content).toContain("'image.generate': 'image_generation'")
-    expect(content).toContain("'video.generate': 'video_generation'")
-    expect(content).toContain("'text.chat': 'chat'")
+    expect(content).toContain('CAPABILITY_CATALOG')
+    expect(content).toContain('capability.dashboardType')
     expect(content).toContain('normalizeStudioCapability(body.capability, proofStatus)')
     expect(content).toContain('capability: capability as never')
   })
@@ -242,9 +241,9 @@ describe('studio execution loop contract', () => {
     expect(content).toContain('Artifact preview unavailable')
   })
 
-  it('provider list remains exactly 5', () => {
-    const providers = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-    expect(providers).toHaveLength(5)
+  it('provider list remains exactly 5', async () => {
+    const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
+    expect(PROVIDER_KEYS).toHaveLength(5)
   })
 
   it('no provider/model selectors are exposed', () => {

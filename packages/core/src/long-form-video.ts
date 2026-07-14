@@ -164,33 +164,3 @@ export function validateLongFormVideoRequest(input: unknown): LongFormVideoReque
 export function validateLongFormVideoPlan(input: unknown): LongFormVideoPlan {
   return LongFormVideoPlanSchema.parse(input)
 }
-
-// ── Capability Status ─────────────────────────────────────────────────────────
-
-export const LONG_FORM_VIDEO_STATUS = {
-  orchestrationFoundationReady: true,
-  schemaReady: true,
-  plannerReady: true,
-  durableParentReady: true,
-  durablePlanReady: true,
-  sceneLinkageReady: true,
-  sceneSubmissionReady: true,
-  sceneExecutionReady: true,
-  retryResumeReady: true,
-  progressTrackingReady: true,
-  batchStructureReady: true,
-  assemblyHandoffReady: true,
-  videoOnlyAssemblyReady: true,
-  sceneSplitterReady: true,
-  perSceneVideoGenerationPossible: true, // Can use existing video_generation
-  voiceoverReady: false, // TTS client exists but long-form child dispatch not live-proven
-  subtitlesReady: false, // Subtitle generation code exists but not live-proven
-  musicBedReady: false, // Music bed endpoint exists but not live-proven
-  fullMultimediaReady: false,
-  liveProven: false,
-  sceneStitchingReady: true,
-  finalAssemblyReady: false, // Video-only concat works; full multimedia assembly not live-proven
-  executableNow: false // Not live-proven
-} as const
-
-export type LongFormVideoStatus = typeof LONG_FORM_VIDEO_STATUS

@@ -49,7 +49,7 @@ describe('Docker admin bootstrap contract', () => {
   it('ensures the default admin with an idempotent upsert', async () => {
     const log = makeLog()
 
-    await ensureDefaultAdminExists(log, dbMocks.prisma)
+    await ensureDefaultAdminExists(log, dbMocks.prisma, 'test-admin-password')
 
     expect(bcryptMocks.hash).toHaveBeenCalledWith(expect.any(String), 12)
     expect(dbMocks.prisma.adminUser.upsert).toHaveBeenCalledWith({
@@ -65,8 +65,8 @@ describe('Docker admin bootstrap contract', () => {
     dbMocks.prisma.adminUser.upsert.mockResolvedValueOnce({ email: DEFAULT_ADMIN_EMAIL })
     dbMocks.prisma.adminUser.upsert.mockResolvedValueOnce({ email: DEFAULT_ADMIN_EMAIL })
 
-    await ensureDefaultAdminExists(log, dbMocks.prisma)
-    await ensureDefaultAdminExists(log, dbMocks.prisma)
+    await ensureDefaultAdminExists(log, dbMocks.prisma, 'test-admin-password')
+    await ensureDefaultAdminExists(log, dbMocks.prisma, 'test-admin-password')
 
     expect(dbMocks.prisma.adminUser.upsert).toHaveBeenCalledTimes(2)
     expect(dbMocks.prisma.adminUser.upsert.mock.calls[0][0].where).toEqual({ email: DEFAULT_ADMIN_EMAIL })
@@ -78,7 +78,7 @@ describe('Docker admin bootstrap contract', () => {
     const log = makeLog()
     dbMocks.prisma.adminUser.upsert.mockRejectedValueOnce(new Error('database unavailable'))
 
-    await expect(ensureDefaultAdminExists(log, dbMocks.prisma)).resolves.toBeUndefined()
+    await expect(ensureDefaultAdminExists(log, dbMocks.prisma, 'test-admin-password')).resolves.toBeUndefined()
 
     const serializedLogs = JSON.stringify(log.error.mock.calls)
     expect(serializedLogs).toContain('Failed to ensure default admin account')

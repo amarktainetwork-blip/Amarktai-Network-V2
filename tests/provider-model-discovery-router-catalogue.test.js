@@ -8,8 +8,9 @@ import {
   DISCOVERED_PROVIDER_MODELS,
   MODEL_CATALOGUE,
   buildCapabilityReadiness,
+  getExecutorRegistrations,
+  getRuntimeTruth,
   getMusicCapabilityStatus,
-  routeBrain,
 } from '../packages/core/src/index.ts'
 import {
   discoverGenXProviderModels,
@@ -151,9 +152,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
 
   it('package scripts expose safe and live discovery modes', () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'))
-    expect(packageJson.scripts['discover:models']).toBe('node scripts/discover-provider-models.mjs')
-    expect(packageJson.scripts['discover:models:live']).toBe('node scripts/discover-provider-models.mjs --live')
-    expect(packageJson.scripts['discover:models:live:strict']).toBe('node scripts/discover-provider-models.mjs --live --strict')
+    expect(packageJson.scripts['discover:models']).toBe('tsx scripts/discover-provider-models.mjs')
+    expect(packageJson.scripts['discover:models:live']).toBe('tsx scripts/discover-provider-models.mjs --live')
+    expect(packageJson.scripts['discover:models:live:strict']).toBe('tsx scripts/discover-provider-models.mjs --live --strict')
   })
 
   it('default discovery mode makes no live calls and writes reports', () => {
@@ -167,14 +168,14 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
     expect(report.deepinfraPublicDiscoverySucceeded).toBe(false)
     expect(report.totalPublicEndpointModels).toBe(0)
-    expect(report.modelsExecutableNow).toBe(7)
+    expect(report.modelsExecutableNow).toBe(0)
     expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
     expect(report.countsByProvider.genx).toBe(65)
     expect(report.togetherDocsFallbackComplete).toBe(false)
     expect(report.togetherProviderUniverseKnown).toBe(false)
     expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
     expect(report.genxMusicCapabilityKnown).toBe(true)
-    expect(report.genxMusicExecutionReady).toBe(true)
+    expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
   }, 30000)
 
@@ -233,7 +234,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     const outputRoot = createDiscoveryOutputRoot()
     expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1', AMARKTAI_DISCOVERY_OUTPUT_ROOT: outputRoot }, encoding: 'utf-8' })).toThrow()
     const source = fs.readFileSync(path.join(ROOT, 'scripts/discover-provider-models.mjs'), 'utf-8')
-    expect(source).toContain("const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']")
+    expect(source).toContain('const RUNTIME_PROVIDERS = [...RUNTIME_EXECUTION_PROVIDERS]')
   }, 30000)
 
   it('default live mode soft-skips missing runtime keys', () => {
@@ -345,7 +346,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(result.models).toHaveLength(9)
     expect(result.models.find((model) => model.modelId === 'meta-llama/chat').inferredCapabilities).toEqual(expect.arrayContaining(['chat', 'reasoning', 'summarization', 'classification', 'extraction']))
     expect(result.models.find((model) => model.modelId === 'together/code').inferredCapabilities).toEqual(['code'])
-    expect(result.models.find((model) => model.modelId === 'black-forest-labs/FLUX.1-schnell').executableNow).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'black-forest-labs/FLUX.1-schnell').executableNow).toBe(false)
     expect(result.models.find((model) => model.modelId === 'together/video').executableNow).toBe(false)
     expect(result.models.find((model) => model.modelId === 'together/audio-speech').inferredCapabilities).toEqual(['tts'])
     expect(result.models.flatMap((model) => model.inferredCapabilities)).not.toContain('music_generation')
@@ -463,7 +464,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(lyria.providerClientExists).toBe(true)
     expect(lyria.workerExecutorExists).toBe(true)
     expect(lyria.artifactPersistenceExists).toBe(true)
-    expect(lyria.executableNow).toBe(true)
+    expect(lyria.executableNow).toBe(false)
   })
 
   it('MiMo remains coding_tools_only and never executable', async () => {
@@ -531,46 +532,40 @@ describe('provider model discovery and router catalogue rebuild', () => {
     }
   })
 
-  it('Brain Router separates executable candidates from catalogue-only candidates', () => {
-    const image = routeBrain({ capability: 'image_generation', routingMode: 'balanced' })
-    expect(image.executionAllowed).toBe(true)
-    expect(image.executableCandidates.length).toBeGreaterThan(0)
-    expect(Array.isArray(image.catalogueOnlyCandidates)).toBe(true)
-    expect(Array.isArray(image.discoveredCandidates)).toBe(true)
-    expect(Array.isArray(image.docsFallbackCandidates)).toBe(true)
-    expect(Array.isArray(image.liveDiscoveredCandidates)).toBe(true)
-    expect(image.transportProfileCandidates.length).toBeGreaterThan(0)
-    expect(image.upstreamProviderBreakdown.openai).toBeGreaterThan(0)
+  it('runtime truth separates catalogue models from registered and configured execution', () => {
+    const baseline = getRuntimeTruth()
+    const image = baseline.capabilities.find(item => item.capability === 'image_generation')
+    const music = baseline.capabilities.find(item => item.capability === 'music_generation')
+    expect(image.discoveredModelCount).toBeGreaterThan(0)
+    expect(image.executorRegistered).toBe(true)
+    expect(image.executableNow).toBe(false)
+    expect(music.discoveredModelCount).toBeGreaterThan(0)
+    expect(music.executorRegistered).toBe(true)
+    expect(music.executableNow).toBe(false)
 
-    const music = routeBrain({ capability: 'music_generation', routingMode: 'balanced' })
-    expect(music.executionAllowed).toBe(false)
-    expect(music.selectedProvider).toBeNull()
-    expect(music.catalogueOnlyCandidates.some((model) => model.capabilities.includes('music_generation'))).toBe(true)
-
-    const configuredMusic = routeBrain({
-      capability: 'music_generation',
-      routingMode: 'balanced',
-      providerStates: { genx: { configured: true, infrastructureReady: true, policyAllowed: true } },
-    })
-    expect(configuredMusic.executionAllowed).toBe(true)
-    expect(configuredMusic.selectedProvider).toBe('genx')
+    const configuredMusic = getRuntimeTruth({
+      providers: { genx: { enabled: true, configured: true } },
+      capabilities: { music_generation: { infrastructureReady: true } },
+    }).capabilities.find(item => item.capability === 'music_generation')
+    expect(configuredMusic.executableNow).toBe(true)
+    expect(getExecutorRegistrations('music_generation').map(entry => entry.provider)).toEqual(['genx'])
   })
 
   it('capability readiness keeps model discovery separate from execution readiness', () => {
     const readiness = buildCapabilityReadiness(DISCOVERED_PROVIDER_MODELS)
     const music = readiness.find((item) => item.capability === 'music_generation')
     expect(music.modelDiscovered).toBe(true)
-    expect(music.executableNow).toBe(true)
+    expect(music.executableNow).toBe(false)
   })
 
-  it('musicGenerationReady is true when client, worker, and artifact path are wired', () => {
+  it('musicGenerationReady remains false until canonical runtime gates are supplied', () => {
     const status = getMusicCapabilityStatus()
     expect(status.discoveredMusicModels).toBeGreaterThan(0)
     expect(status.genxMusicCapabilityKnown).toBe(true)
     expect(status.lyriaClipDiscovered).toBe(true)
     expect(status.lyriaProDiscovered).toBe(true)
-    expect(status.musicGenerationReady).toBe(true)
-    expect(status.executableNow).toBe(true)
+    expect(status.musicGenerationReady).toBe(false)
+    expect(status.executableNow).toBe(false)
     expect(status.providerClientExists).toBe(true)
     expect(status.workerExecutorExists).toBe(true)
   })
@@ -600,9 +595,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('adult remains on hold', () => {
-    const adult = routeBrain({ capability: 'adult_text', routingMode: 'balanced' })
-    expect(adult.executionAllowed).toBe(false)
-    expect(adult.blockReason).toContain('adult_text')
+    const adult = getRuntimeTruth().capabilities.find(item => item.capability === 'adult_text')
+    expect(adult.classification).toBe('POLICY_RESTRICTED')
+    expect(adult.executableNow).toBe(false)
   })
 
   it('no fake music execution or worker executor was added', () => {

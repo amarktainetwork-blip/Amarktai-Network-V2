@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
+import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
 import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverGroqModels, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
 
 const prismaMock = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ function modelRow(overrides = {}) {
     provider: 'genx',
     modelId: 'seedance-v1-fast',
     displayName: 'Seedance',
+    enabled: true,
     category: 'video',
     primaryRole: 'video_generation',
     costTier: 'medium',
@@ -507,15 +509,12 @@ describe('real provider model discovery and catalog truth', () => {
       { providerKey: 'together', enabled: true, healthStatus: 'live' },
       { providerKey: 'mimo', enabled: false, healthStatus: 'runtime_restricted' },
     ]
-    const proofStatus = {
-      providers: ['genx', 'groq', 'together', 'mimo', 'deepinfra'],
-      provenCapabilities: [{ capability: 'video_generation', status: 'proven', provider: 'genx', model: 'grok-imagine-video', artifactRequired: true, proofLevel: 'live_external_app_job_with_artifact_download', readyForDashboardExecution: true, description: 'test' }],
-      unprovenCapabilities: [],
-      evidenceAvailable: true,
-      summary: { provenCount: 1, providerCount: 5, lastUpdatedFrom: 'canonical-truth', source: 'backend-runtime-proof-status' },
-    }
+    const runtimeTruth = getRuntimeTruth({
+      providers: { genx: { enabled: true, configured: true } },
+      capabilities: { video_generation: { infrastructureReady: true, liveProven: true } },
+    })
 
-    const summary = buildCapabilityGroupSummary('video_generation', allModels, providers, proofStatus)
+    const summary = buildCapabilityGroupSummary('video_generation', allModels, runtimeTruth)
 
     expect(summary).toMatchObject({
       totalAvailableModels: 4,
@@ -536,8 +535,9 @@ describe('real provider model discovery and catalog truth', () => {
       blockedUnknownPricingCount: 1,
     })
     expect(summary.missingExecutorBlockers).toContain('video_generation: 1 media model(s) blocked by unknown pricing')
-    expect(summary.missingExecutorBlockers).toContain('together: discovered_but_no_executor_adapter for video_generation (2 model(s))')
-    expect(summary.missingExecutorBlockers).toContain('mimo: coding_tool_only, not normal runtime')
+    expect(summary.missingExecutorBlockers).toContain('together: catalogued but no executor registration for video_generation (2 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('mimo: catalogued but no executor registration for video_generation (1 model(s))')
+    expect(summary.providerHealthBlockers).toContain('mimo: not runtime ready')
   })
 
   it('separates discovery, provider health, and capability proof truth', () => {

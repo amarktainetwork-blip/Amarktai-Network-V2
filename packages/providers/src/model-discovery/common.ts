@@ -2,6 +2,7 @@ import {
   STATIC_DISCOVERY_TIMESTAMP,
   createDiscoveredModel,
   inferCapabilitiesFromModelId,
+  getProviderDefinition,
   type CapabilityKey,
   type ProviderDiscoveredModel,
   type ProviderDiscoveryMode,
@@ -23,9 +24,10 @@ export function discoveryTimestamp(options: DiscoveryAdapterOptions): string {
 }
 
 export function skippedResult(provider: ProviderKey, endpointSource: string, models: ProviderDiscoveredModel[], notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
@@ -53,9 +55,9 @@ export function skippedResult(provider: ProviderKey, endpointSource: string, mod
     staticFallbackCount: models.length,
     docsFallbackCount: models.length,
     effectiveCatalogueCount: models.length,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: STATIC_DISCOVERY_TIMESTAMP,
     notes,
@@ -63,9 +65,10 @@ export function skippedResult(provider: ProviderKey, endpointSource: string, mod
 }
 
 export function failedLiveResult(provider: ProviderKey, endpointSource: string, error: string, notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
@@ -88,9 +91,9 @@ export function failedLiveResult(provider: ProviderKey, endpointSource: string, 
     staticFallbackCount: 0,
     docsFallbackCount: 0,
     effectiveCatalogueCount: 0,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: new Date().toISOString(),
     notes,
@@ -224,9 +227,10 @@ export function modelFromProviderRecord(input: {
 }
 
 export function liveResult(provider: ProviderKey, endpointSource: string, mode: ProviderDiscoveryMode, models: ProviderDiscoveredModel[], notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
@@ -249,9 +253,9 @@ export function liveResult(provider: ProviderKey, endpointSource: string, mode: 
     staticFallbackCount: 0,
     docsFallbackCount: 0,
     effectiveCatalogueCount: models.length,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: models[0]?.lastDiscoveredAt ?? new Date().toISOString(),
     notes,

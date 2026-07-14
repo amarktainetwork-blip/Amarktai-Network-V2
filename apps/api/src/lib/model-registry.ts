@@ -1,4 +1,5 @@
 import { prisma } from '@amarktai/db'
+import { APPROVED_PROVIDER_DEFINITIONS } from '@amarktai/core'
 import type { DiscoveryResult, GenXPricingResult } from './provider-discovery.js'
 
 const MAX_METADATA_CHARS = 500_000
@@ -601,10 +602,10 @@ export async function getModelCatalog(options?: {
 }
 
 export async function getCatalogSummary() {
-  const providers = ['genx', 'groq', 'together', 'deepinfra', 'mimo']
   const summaries = []
 
-  for (const provider of providers) {
+  for (const definition of APPROVED_PROVIDER_DEFINITIONS) {
+    const provider = definition.key
     const models = await prisma.modelRegistryEntry.findMany({ where: { provider } })
     const healthRow = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
 
@@ -646,7 +647,7 @@ export async function getCatalogSummary() {
       pricingKnownCount: pricingKnown,
       pricingUnknownCount: pricingUnknown,
       lastSyncedAt: models.length > 0 && models[0] ? models[0].lastSyncedAt?.toISOString() : null,
-      warnings: provider === 'mimo' ? ['coding_tool_only, not normal runtime'] : [],
+      warnings: definition.codingOnly ? ['coding_tool_only, not normal runtime'] : [],
     })
   }
 

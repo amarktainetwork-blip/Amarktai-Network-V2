@@ -116,8 +116,8 @@ describe('canonical runtime truth', () => {
     expect(music.implementationReady).toBe(true)
     expect(music.configured).toBe(false)
     expect(music.executableNow).toBe(false)
-    expect(music.classification).toBe('IMPLEMENTED_NOT_CONFIGURED')
-    expect(music.blockedReasons).toContain('genx_api_key_not_configured')
+    expect(music.classification).toBe('EXECUTOR_PRESENT')
+    expect(music.blockedReasons).toContain('credentials_missing')
   })
 
   it('configured does not imply infrastructureReady', () => {
@@ -132,7 +132,7 @@ describe('canonical runtime truth', () => {
     expect(music.infrastructureReady).toBe(false)
     expect(music.executableNow).toBe(false)
     expect(music.classification).toBe('BLOCKED')
-    expect(music.blockedReasons).toContain('infrastructure_not_ready')
+    expect(music.blockedReasons).toContain('infrastructure_missing')
   })
 
   it('executableNow requires implementation, configuration, infrastructure, policy, and eligible model path', () => {
@@ -188,44 +188,37 @@ describe('canonical runtime truth', () => {
     expect(image.blockedReasons).toContain('credentials_missing')
   })
 
-  it('long-form is PARTIAL with component-level accuracy', () => {
+  it('long-form remains catalogue-only without inventing component evidence', () => {
     const runtimeTruth = truth()
     const longForm = capability(runtimeTruth, 'long_form_video')
 
-    expect(longForm.classification).toBe('PARTIAL')
+    expect(longForm.classification).toBe('CATALOGUE_ONLY')
     expect(longForm.liveProven).toBe(false)
     expect(longForm.executableNow).toBe(false)
     expect(longForm.clientImplemented).toBe(false)
     expect(longForm.executorRegistered).toBe(false)
-    expect(longForm.routeImplemented).toBe(true)
-    expect(longForm.queuePathImplemented).toBe(true)
-    expect(longForm.artifactPathImplemented).toBe(true)
-    expect(longForm.durableParentReady).toBe(true)
-    expect(longForm.durablePlanReady).toBe(true)
-    expect(longForm.sceneLinkageReady).toBe(true)
-    expect(longForm.sceneSubmissionReady).toBe(true)
-    expect(longForm.retryResumeReady).toBe(true)
-    expect(longForm.progressTrackingReady).toBe(true)
-    expect(longForm.assemblyHandoffReady).toBe(true)
+    expect(longForm.routeImplemented).toBe(false)
+    expect(longForm.queuePathImplemented).toBe(false)
+    expect(longForm.artifactPathImplemented).toBe(false)
+    expect(longForm.durableParentReady).toBe(false)
+    expect(longForm.durablePlanReady).toBe(false)
+    expect(longForm.sceneLinkageReady).toBe(false)
+    expect(longForm.sceneSubmissionReady).toBe(false)
+    expect(longForm.retryResumeReady).toBe(false)
+    expect(longForm.progressTrackingReady).toBe(false)
+    expect(longForm.assemblyHandoffReady).toBe(false)
     expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.blockedReasons).toContain('executor_missing')
     expect(longForm.blockedReasons).toContain('provider_client_missing')
-    expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
-    // Phase 1 multimedia blockers
-    expect(longForm.blockedReasons).toContain('voiceover_not_live_proven')
-    expect(longForm.blockedReasons).toContain('subtitles_not_live_proven')
-    expect(longForm.blockedReasons).toContain('music_bed_not_live_proven')
-    expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
-    // Old inaccurate blockers must not appear
-    expect(longForm.blockedReasons).not.toContain('voiceover_missing')
-    expect(longForm.blockedReasons).not.toContain('subtitles_missing')
-    expect(longForm.blockedReasons).not.toContain('music_bed_missing')
+    expect(longForm.blockedReasons).toContain('route_missing')
+    expect(longForm.blockedReasons).toContain('queue_path_missing')
+    expect(longForm.blockedReasons).toContain('artifact_support_missing')
   })
 
   it('adult capabilities remain policy restricted', () => {
     const runtimeTruth = truth()
     expect(capability(runtimeTruth, 'adult_text').classification).toBe('POLICY_RESTRICTED')
-    expect(capability(runtimeTruth, 'adult_image').blockedReasons).toContain('provider_policy_restriction')
+    expect(capability(runtimeTruth, 'adult_image').blockedReasons).toContain('policy_restricted')
   })
 
   it('admin truth route, capability API, dashboard proxy, and audit consume canonical truth', () => {

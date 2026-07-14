@@ -13,6 +13,8 @@ export {
   CAPABILITY_CATEGORY_MAP,
   CAPABILITY_PREFIX_MAP,
   CAPABILITY_CATALOG,
+  CAPABILITY_BY_KEY,
+  CAPABILITY_FIELD_MAP,
   CapabilityDefinitionSchema,
   isValidCapability,
   getCapabilityCategory,
@@ -25,6 +27,9 @@ export {
 // Provider definitions
 export {
   PROVIDER_KEYS,
+  APPROVED_PROVIDER_DEFINITIONS,
+  RUNTIME_EXECUTION_PROVIDERS,
+  CODING_ONLY_PROVIDERS,
   PROVIDER_HEALTH_STATUSES,
   PROVIDER_ENV_VARS,
   CREDENTIAL_USAGE_POLICIES,
@@ -34,6 +39,9 @@ export {
   ProviderCapabilityMapSchema,
   isValidProvider,
   getProviderEnvVar,
+  getProviderDefinition,
+  type ApprovedProviderDefinition,
+  type RuntimeExecutionProvider,
   type ProviderKey,
   type ProviderHealthStatus,
   type CredentialUsagePolicy,
@@ -87,6 +95,7 @@ export {
 export {
   QUEUE_NAMES,
   JobPayloadSchema,
+  AppCapabilityGrantSnapshotSchema,
   WORKER_EVENTS,
   DEFAULT_JOB_OPTIONS,
   type JobPayload,
@@ -174,17 +183,15 @@ export {
   type TransportProfile,
 } from './provider-model-discovery.js'
 
-// Brain Router v1
+// Executor registrations
 export {
-  ROUTING_MODES,
-  routeBrain,
-  type RoutingMode,
-  type BrainRouterProviderState,
-  type BrainRouterRequest,
-  type BrainRouterDecision,
-  type RejectedCandidate,
-  type FallbackEntry,
-} from './brain-router.js'
+  EXECUTOR_REGISTRATIONS,
+  getExecutorRegistrations,
+  getExecutorRegistration,
+  hasExecutorRegistration,
+  type ExecutorId,
+  type ExecutorRegistration,
+} from './executor-registry.js'
 
 // Orchestra routing engine
 export {
@@ -194,8 +201,6 @@ export {
   normalizeDbCandidates,
   validateOrchestraRequest,
   ORCHESTRA_BLOCKED_REQUEST_FIELDS,
-  CAPABILITY_FIELD_MAP,
-  EXECUTOR_CAPABILITY_MAP,
   HEALTHY_PROVIDER_STATUSES,
   BLOCKED_PROVIDER_STATUSES,
   CODING_TOOL_CAPABILITIES,
@@ -225,16 +230,14 @@ export {
 
 // Canonical runtime truth
 export {
-  RUNTIME_EXECUTION_PROVIDERS,
-  CODING_ONLY_PROVIDERS,
   CAPABILITY_RUNTIME_CLASSIFICATIONS,
   getProviderRuntimeTruth,
   getCapabilityRuntimeTruth,
   getRuntimeTruth,
-  type RuntimeExecutionProvider,
   type CapabilityRuntimeClassification,
   type ProviderRuntimeStateInput,
   type CapabilityRuntimeStateInput,
+  type LongFormComponentRuntimeState,
   type RuntimeTruthInput,
   type ProviderRuntimeTruth,
   type CapabilityRuntimeTruth,
@@ -265,7 +268,6 @@ export {
   LongFormSceneStatus,
   LongFormRenderStepType,
   LongFormRenderStatus,
-  LONG_FORM_VIDEO_STATUS,
   validateLongFormVideoRequest,
   validateLongFormVideoPlan,
   type LongFormVideoRequest,
@@ -274,7 +276,6 @@ export {
   type LongFormStoryboard,
   type LongFormRenderStep,
   type LongFormVideoArtifactPlan,
-  type LongFormVideoStatus,
 } from './long-form-video.js'
 
 export {
