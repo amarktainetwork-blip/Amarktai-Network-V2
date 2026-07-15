@@ -164,7 +164,7 @@ test('long-form execution survives reload and renders component/final evidence',
     method: 'POST',
     data: {
       request: {
-        prompt: 'A deterministic release fixture story', targetDurationSeconds: 15, sceneCount: 3,
+        prompt: 'A deterministic release fixture story', targetDurationSeconds: 30, sceneCount: 3,
         aspectRatio: '16:9', style: 'cinematic', tone: 'professional', voiceoverEnabled: true,
         subtitlesEnabled: true, musicBedEnabled: true, count: 1, routingMode: 'balanced',
       },
