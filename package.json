@@ -40,7 +40,7 @@
     "proof:production-release-candidate": "node scripts/proof-production-release-candidate.mjs",
     "proof:production-preflight": "node scripts/validate-production-preflight.mjs",
     "test:browser": "npm run test:browser:release-candidate",
-    "test:browser:release-candidate": "playwright test tests/browser/release-candidate.spec.mjs --reporter=line,html --trace=retain-on-failure --screenshot=only-on-failure --output=test-results",
+    "test:browser:release-candidate": "playwright test tests/browser/release-candidate.spec.mjs",
     "worker": "node scripts/worker.mjs",
     "db:push": "prisma db push",
     "db:migrate:deploy": "prisma migrate deploy",
