@@ -218,11 +218,18 @@ async function proveQueueAndRestartRecovery(token, proofReport) {
   const staleCompleted = await pollJob(token, staleJobId)
   const staleEvidence = queueControl('inspect', staleJobId)
   invariant(staleCompleted.status === 'completed' && staleEvidence.retryCount >= 1, staleCompleted.error || 'Stale processing job did not recover according to policy')
+  invariant(
+    staleEvidence.artifactId === staleCompleted.artifactId && staleEvidence.artifactCount === 1,
+    `Stale recovery artifact evidence is inconsistent (${JSON.stringify({ apiArtifactId: staleCompleted.artifactId, ...staleEvidence })})`,
+  )
 
   queueControl('redeliver', staleJobId)
   const duplicateEvidence = await waitForDelivery(staleJobId)
   invariant(duplicateEvidence.status === 'completed', 'Duplicate queue delivery changed the durable completed status')
-  invariant(duplicateEvidence.artifactId === staleCompleted.artifactId && duplicateEvidence.artifactCount === 1, 'Duplicate delivery duplicated provider output or artifacts')
+  invariant(
+    duplicateEvidence.artifactId === staleEvidence.artifactId && duplicateEvidence.artifactCount === staleEvidence.artifactCount,
+    `Duplicate delivery changed provider output or artifact identity (${JSON.stringify({ before: staleEvidence, after: duplicateEvidence })})`,
+  )
 
   queueControl('pause')
   const cancelledJobId = await submitFixtureImage(token, 'cancelled terminal protection')
