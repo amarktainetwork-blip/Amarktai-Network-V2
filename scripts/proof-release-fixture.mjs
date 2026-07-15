@@ -14,6 +14,7 @@ const configuredOutputDir = process.env.RELEASE_FIXTURE_OUTPUT_DIR?.trim()
 const outputDir = configuredOutputDir ? resolve(root, configuredOutputDir) : ''
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker'
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+const tsx = join(root, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx')
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -253,7 +254,7 @@ try {
     ADMIN_PASSWORD: generated.FIXTURE_ADMIN_PASSWORD,
     RELEASE_FIXTURE_BASE_URL: 'http://127.0.0.1:3210',
   }
-  run(process.execPath, [
+  run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
     '--fixture', '--strict', '--long-form', '--json-output', proofReportFile,
