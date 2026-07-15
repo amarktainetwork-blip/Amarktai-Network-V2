@@ -1,7 +1,8 @@
 import type { ProviderDiscoveryResult } from '@amarktai/core'
 import { discoveryTimestamp, failedLiveResult, fetchModelList, liveResult, modelFromProviderRecord, skippedResult, stringField, numberField, type DiscoveryAdapterOptions } from './common.js'
 
-const TOGETHER_MODELS_ENDPOINT = 'https://api.together.ai/models'
+const TOGETHER_LEGACY_MODELS_ENDPOINT = 'https://api.together.ai/models'
+const TOGETHER_MODELS_ENDPOINT = 'https://api.together.ai/v1/models'
 
 function togetherCapabilities(modelId: string, rawType: string): Array<'chat' | 'reasoning' | 'summarization' | 'classification' | 'extraction' | 'code' | 'image_generation' | 'embeddings' | 'reranking' | 'video_generation' | 'tts' | 'stt' | 'music_generation'> {
   const type = rawType.toLowerCase()
@@ -26,11 +27,11 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
   ]
 
   if (!options.live || !options.apiKey) {
-    return skippedResult('together', TOGETHER_MODELS_ENDPOINT, staticModels, ['Together live discovery uses GET /v1/models only when --live and TOGETHER_API_KEY are present.'])
+    return skippedResult('together', TOGETHER_MODELS_ENDPOINT, staticModels, ['Together live discovery uses the canonical GET /v1/models endpoint when --live and TOGETHER_API_KEY are present.'])
   }
 
   try {
-    const records = await fetchModelList(TOGETHER_MODELS_ENDPOINT, options.apiKey)
+    const records = await fetchModelList(TOGETHER_LEGACY_MODELS_ENDPOINT, options.apiKey)
     const models = records
       .filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
       .map((record) => {
@@ -81,7 +82,7 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
         })
       })
       .filter((model) => model.modelId)
-    return liveResult('together', TOGETHER_MODELS_ENDPOINT, 'live_model_list', models, ['Together live discovery used the model-list endpoint only.'])
+    return liveResult('together', TOGETHER_MODELS_ENDPOINT, 'live_model_list', models, ['Together live discovery used the canonical model-list endpoint, with a legacy URL compatibility retry during the endpoint migration.'])
   } catch (error) {
     return failedLiveResult('together', TOGETHER_MODELS_ENDPOINT, error instanceof Error ? error.message : 'Together discovery failed', [])
   }
