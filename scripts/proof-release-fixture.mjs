@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { randomBytes } from 'node:crypto'
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -10,6 +10,8 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
 const envFile = join(tmpdir(), `amarktai-release-fixture-${process.pid}.env`)
 const proofReportFile = join(tmpdir(), `amarktai-release-proof-${process.pid}.json`)
+const configuredOutputDir = process.env.RELEASE_FIXTURE_OUTPUT_DIR?.trim()
+const outputDir = configuredOutputDir ? resolve(root, configuredOutputDir) : ''
 const docker = process.platform === 'win32' ? 'docker.exe' : 'docker'
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
@@ -58,16 +60,52 @@ if (dockerVersion.status !== 0) {
 
 const sha = run('git', ['rev-parse', 'HEAD'], { capture: true }).stdout.trim()
 const generated = {
-  FIXTURE_DB_ROOT_PASSWORD: randomBytes(24).toString('hex'),
-  FIXTURE_DB_PASSWORD: randomBytes(24).toString('hex'),
-  FIXTURE_JWT_SECRET: randomBytes(40).toString('hex'),
-  FIXTURE_ADMIN_PASSWORD: randomBytes(24).toString('base64url'),
-  FIXTURE_GIT_SHA: sha,
-  FIXTURE_BUILD_TIME: new Date().toISOString(),
+  FIXTURE_DB_ROOT_PASSWORD: process.env.FIXTURE_DB_ROOT_PASSWORD || randomBytes(24).toString('hex'),
+  FIXTURE_DB_PASSWORD: process.env.FIXTURE_DB_PASSWORD || randomBytes(24).toString('hex'),
+  FIXTURE_JWT_SECRET: process.env.FIXTURE_JWT_SECRET || randomBytes(40).toString('hex'),
+  FIXTURE_ADMIN_PASSWORD: process.env.FIXTURE_ADMIN_PASSWORD || randomBytes(24).toString('base64url'),
+  FIXTURE_GIT_SHA: process.env.FIXTURE_GIT_SHA || sha,
+  FIXTURE_BUILD_TIME: process.env.FIXTURE_BUILD_TIME || new Date().toISOString(),
 }
 await writeFile(envFile, `${Object.entries(generated).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, { mode: 0o600 })
 
 const compose = ['compose', '--env-file', envFile, '-f', composeFile]
+
+function redact(value) {
+  let redacted = String(value || '')
+  for (const secret of [
+    generated.FIXTURE_DB_ROOT_PASSWORD,
+    generated.FIXTURE_DB_PASSWORD,
+    generated.FIXTURE_JWT_SECRET,
+    generated.FIXTURE_ADMIN_PASSWORD,
+  ]) {
+    if (secret) redacted = redacted.replaceAll(secret, '[redacted]')
+  }
+  return redacted.replace(/((?:password|secret|api[_-]?key|authorization|bearer)\s*[:=]\s*)\S+/gi, '$1[redacted]')
+}
+
+function capture(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    env: process.env,
+    windowsHide: true,
+  })
+  return redact(`${result.stdout || ''}${result.stderr || ''}`)
+}
+
+async function persistFixtureDiagnostics() {
+  if (!outputDir) return
+  await mkdir(outputDir, { recursive: true })
+  const report = await readFile(proofReportFile, 'utf8').catch(() => '')
+  if (report) await writeFile(join(outputDir, 'proof-report.json'), redact(report), { mode: 0o600 })
+  await writeFile(join(outputDir, 'docker-compose-status.log'), capture(docker, [...compose, 'ps', '--all']), { mode: 0o600 })
+  for (const service of ['mariadb', 'redis', 'qdrant', 'migrate', 'api', 'worker', 'dashboard']) {
+    const logs = capture(docker, [...compose, 'logs', '--no-color', '--timestamps', service])
+    await writeFile(join(outputDir, `${service}.log`), logs, { mode: 0o600 })
+  }
+}
 
 async function apiRequest(path, token, init = {}) {
   const headers = new Headers(init.headers || {})
@@ -224,9 +262,16 @@ try {
   const recoveryToken = await loginFixtureAdmin()
   await proveQueueAndRestartRecovery(recoveryToken, proofReport)
   run(docker, [...compose, 'up', '--detach', '--wait', '--wait-timeout', '300', 'api', 'worker', 'dashboard'])
-  run(npm, ['run', 'test:browser:release-candidate'], { env: proofEnv })
+  run(npm, ['run', 'test:browser'], {
+    env: {
+      ...proofEnv,
+      PLAYWRIGHT_HTML_OPEN: 'never',
+      ...(outputDir ? { PLAYWRIGHT_HTML_OUTPUT_DIR: join(outputDir, 'playwright-report') } : {}),
+    },
+  })
   passed = true
 } finally {
+  try { await persistFixtureDiagnostics() } catch (error) { console.error(`FIXTURE_DIAGNOSTICS=FAIL ${error instanceof Error ? error.message : String(error)}`); passed = false }
   try { run(docker, [...compose, 'down', '--volumes', '--remove-orphans']) } catch (error) { console.error(`FIXTURE_CLEANUP=FAIL ${error instanceof Error ? error.message : String(error)}`); passed = false }
   await Promise.all([rm(envFile, { force: true }), rm(proofReportFile, { force: true })])
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { writeFile } from 'node:fs/promises'
-import { PROVIDER_KEYS, RUNTIME_EXECUTION_PROVIDERS, getReleaseCandidateCapabilityKeys } from '@amarktai/core'
+import { PROVIDER_KEYS, RUNTIME_EXECUTION_PROVIDERS, getInternalDashboardApps, getReleaseCandidateCapabilityKeys } from '@amarktai/core'
 
 const args = parseArgs(process.argv.slice(2))
 const baseUrl = String(args['base-url'] || '').replace(/\/$/, '')
@@ -76,6 +76,14 @@ await runCheck('dashboard_and_platform_health', async () => {
   return { evidence: { build: body.build, dashboardBuild: dashboard.body.build, checks: body.checks } }
 })
 
+await runCheck('invalid_login_rejected', async () => {
+  const { response } = await request('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: process.env.ADMIN_EMAIL || 'fixture-admin@invalid.example', password: 'deliberately-invalid-fixture-password' }),
+  })
+  if (response.status !== 401) throw new Error(`expected 401, received ${response.status}`)
+})
+
 await runCheck('admin_login', async () => {
   const email = process.env.ADMIN_EMAIL
   const password = process.env.ADMIN_PASSWORD
@@ -118,6 +126,22 @@ await runCheck('provider_status_consistency', async () => {
   return { evidence: { count: body.providers.length } }
 })
 
+await runCheck('dashboard_apps_and_grants', async () => {
+  const expectedApps = getInternalDashboardApps()
+  const connectionsResult = await request('/api/admin/app-connections')
+  if (!connectionsResult.response.ok || !Array.isArray(connectionsResult.body.connections)) throw new Error(`app connections returned ${connectionsResult.response.status}`)
+  for (const expected of expectedApps) {
+    const connection = connectionsResult.body.connections.find((item) => item.appSlug === expected.appSlug)
+    if (!connection || connection.status !== 'active') throw new Error(`${expected.appSlug} is missing or inactive`)
+    const grantsResult = await request(`/api/admin/app-grants/${encodeURIComponent(expected.appSlug)}`)
+    if (!grantsResult.response.ok || !grantsResult.body.grants) throw new Error(`${expected.appSlug} grants returned ${grantsResult.response.status}`)
+    for (const capability of expected.capabilities) {
+      if (grantsResult.body.grants[capability]?.enabled !== true) throw new Error(`${expected.appSlug}/${capability} is missing or disabled`)
+    }
+  }
+  return { evidence: { appCount: expectedApps.length, grantCount: expectedApps.reduce((total, app) => total + app.capabilities.length, 0) } }
+})
+
 if (fixtureMode) {
   await runCheck('fixture_live_provider_boundary', async () => {
     const { response, body } = await request('/api/admin/providers')
@@ -142,6 +166,41 @@ if (fixtureMode) {
     })
   }
 }
+
+await runCheck('missing_app_grant_denied', async () => {
+  const appSlug = 'dashboard-studio'
+  const capability = 'chat'
+  const original = await readGrant(appSlug, capability)
+  try {
+    const removed = await request(`/api/admin/app-grants/${appSlug}/${capability}`, { method: 'DELETE' })
+    if (!removed.response.ok) throw new Error(`grant delete returned ${removed.response.status}`)
+    await expectStudioSubmissionDenied(capability, 403)
+    return { evidence: { appSlug, capability, denial: 'missing_grant' } }
+  } finally {
+    await writeGrant(appSlug, capability, original)
+  }
+})
+
+await runCheck('disabled_app_grant_denied', async () => {
+  const appSlug = 'dashboard-studio'
+  const capability = 'chat'
+  const original = await readGrant(appSlug, capability)
+  try {
+    await writeGrant(appSlug, capability, { ...original, enabled: false })
+    await expectStudioSubmissionDenied(capability, 403)
+    return { evidence: { appSlug, capability, denial: 'disabled_grant' } }
+  } finally {
+    await writeGrant(appSlug, capability, original)
+  }
+})
+
+await runCheck('unimplemented_capability_rejected', async () => {
+  const { response } = await request('/api/admin/studio/jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capability: 'voice_clone', prompt: 'must remain blocked', input: {} }),
+  })
+  if (response.status !== 400) throw new Error(`expected 400, received ${response.status}`)
+})
 
 const cheapCapabilities = [
   'chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification',
@@ -172,6 +231,29 @@ for (const capability of expensiveCapabilities) {
   const result = capability === 'music_generation' ? await executeMusic() : await executeCapability(capability, input, 900_000)
   if (capability === 'image_generation' && result?.artifactId) imageArtifactId = result.artifactId
   if (capability === 'video_generation' && result?.artifactId) videoArtifactId = result.artifactId
+}
+
+if (imageArtifactId) {
+  await runCheck('source_artifact_permission_enforced', async () => {
+    const appSlug = 'dashboard-video'
+    const capability = 'image_to_video'
+    const original = await readGrant(appSlug, capability)
+    try {
+      await writeGrant(appSlug, capability, { ...original, artifactRead: false })
+      const submitted = await request('/api/admin/studio/jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability, prompt: 'source permission denial proof', input: { sourceImageArtifactId: imageArtifactId, duration: 3 } }),
+      })
+      if (!submitted.response.ok || !submitted.body.jobId) throw new Error(submitted.body.message || `submission returned ${submitted.response.status}`)
+      const job = await pollJob(submitted.body.jobId, 300_000)
+      if (job.status !== 'failed' || !String(job.error || '').includes('denies source-artifact read')) throw new Error('source-artifact execution was not denied by the immutable grant')
+      return { jobId: job.id, evidence: { appSlug, capability, artifactRead: false, denied: true } }
+    } finally {
+      await writeGrant(appSlug, capability, original)
+    }
+  })
+} else {
+  record('source_artifact_permission_enforced', 'FAIL', { blocker: 'same-run image artifact is unavailable' })
 }
 
 if ((!capabilityFilter || capabilityFilter.has('stt')) && ttsArtifactId) {
@@ -361,6 +443,25 @@ function capabilityInput(capability) {
 }
 
 function proofPrompt(capability) { return `Production release proof for ${capability}` }
+async function readGrant(appSlug, capability) {
+  const result = await request(`/api/admin/app-grants/${encodeURIComponent(appSlug)}/${encodeURIComponent(capability)}`)
+  if (!result.response.ok) throw new Error(`grant read returned ${result.response.status}`)
+  return result.body
+}
+async function writeGrant(appSlug, capability, grant) {
+  const result = await request(`/api/admin/app-grants/${encodeURIComponent(appSlug)}/${encodeURIComponent(capability)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(grant),
+  })
+  if (!result.response.ok) throw new Error(`grant write returned ${result.response.status}`)
+  return result.body
+}
+async function expectStudioSubmissionDenied(capability, expectedStatus) {
+  const result = await request('/api/admin/studio/jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ capability, prompt: 'app grant denial proof', input: capabilityInput(capability) }),
+  })
+  if (result.response.status !== expectedStatus) throw new Error(`expected ${expectedStatus}, received ${result.response.status}`)
+}
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)) }
 function safeError(error) { return (error instanceof Error ? error.message : String(error)).replace(/(Bearer|api[_-]?key|secret|password)\s*[:=]?\s*\S+/gi, '$1=[redacted]').slice(0, 500) }
 function parseArgs(argv) {

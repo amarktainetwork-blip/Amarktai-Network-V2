@@ -2,7 +2,7 @@ import type { ProviderKey } from './providers.js'
 import type { CapabilityKey } from './capabilities.js'
 import { hasExecutorRegistration } from './executor-registry.js'
 import type { ModelDiscoverySource, ProviderDiscoveredModel } from './provider-model-discovery.js'
-import generatedProviderModels from './generated/provider-model-catalogue.generated.json'
+import generatedProviderModels from './generated/provider-model-catalogue.generated.json' with { type: 'json' }
 
 export const MODEL_STATUSES = ['available', 'disabled', 'planned', 'blocked'] as const
 export type ModelStatus = (typeof MODEL_STATUSES)[number]

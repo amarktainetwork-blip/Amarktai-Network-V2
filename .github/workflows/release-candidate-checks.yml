@@ -63,9 +63,9 @@ jobs:
 
       - name: Router and app proof three times
         run: |
-          npm run proof
-          npm run proof
-          npm run proof
+          npm run proof:router-app-contract
+          npm run proof:router-app-contract
+          npm run proof:router-app-contract
 
       - name: Direct-provider static proof
         run: node scripts/proof-direct-provider-capabilities.mjs --static --strict
@@ -107,3 +107,73 @@ jobs:
         run: |
           git diff --check
           test -z "$(git status --porcelain --untracked-files=no)"
+
+  real-service-fixture:
+    needs: static-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NODE_ENV: test
+      RELEASE_FIXTURE_OUTPUT_DIR: release-fixture-output
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Generate ephemeral fixture credentials
+        shell: bash
+        run: |
+          {
+            echo "FIXTURE_DB_ROOT_PASSWORD=$(openssl rand -hex 24)"
+            echo "FIXTURE_DB_PASSWORD=$(openssl rand -hex 24)"
+            echo "FIXTURE_JWT_SECRET=$(openssl rand -hex 32)"
+            echo "FIXTURE_ADMIN_PASSWORD=$(openssl rand -hex 24)"
+            echo "FIXTURE_GIT_SHA=$GITHUB_SHA"
+            echo "FIXTURE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          } >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Confirm Docker and Docker Compose
+        run: |
+          docker version
+          docker compose version
+
+      - name: Verify disposable MariaDB migrations
+        shell: bash
+        run: |
+          mkdir -p "$RELEASE_FIXTURE_OUTPUT_DIR"
+          set -o pipefail
+          bash scripts/verify-migrations-disposable.sh 2>&1 | tee "$RELEASE_FIXTURE_OUTPUT_DIR/migration.log"
+
+      - name: Run authoritative real-service release fixture
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run proof 2>&1 | tee "$RELEASE_FIXTURE_OUTPUT_DIR/fixture-run.log"
+
+      - name: Upload fixture proof and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-service-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            release-fixture-output/
+            playwright-report/
+            test-results/
+
+      - name: Remove fixture containers, networks, and volumes
+        if: always()
+        run: docker compose -f docker-compose.release-fixture.yml down --volumes --remove-orphans

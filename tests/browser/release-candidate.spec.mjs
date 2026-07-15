@@ -10,6 +10,7 @@ let page
 let token = ''
 let imageArtifactId = ''
 let videoArtifactId = ''
+let ttsArtifactId = ''
 const consoleErrors = []
 const stylesheetFailures = []
 
@@ -24,6 +25,17 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
   await page?.close()
+})
+
+test.afterEach(async ({}, testInfo) => {
+  await testInfo.attach('browser-console-errors', {
+    body: Buffer.from(consoleErrors.length ? consoleErrors.join('\n') : 'none\n'),
+    contentType: 'text/plain',
+  })
+  await testInfo.attach('stylesheet-failures', {
+    body: Buffer.from(stylesheetFailures.length ? stylesheetFailures.join('\n') : 'none\n'),
+    contentType: 'text/plain',
+  })
 })
 
 test('styled login establishes the verified dashboard shell', async () => {
@@ -90,6 +102,7 @@ test('image result is rendered, range-readable, and downloadable', async () => {
   await expect(download).toBeVisible()
   imageArtifactId = artifactIdFromHref(await download.getAttribute('href'))
   await expectArtifact(imageArtifactId, 'image/')
+  await expectDownload(imageArtifactId)
 })
 
 test('music result has playable audio and an authenticated download', async () => {
@@ -102,7 +115,28 @@ test('music result has playable audio and an authenticated download', async () =
   await expect(audio).toBeVisible({ timeout: 90_000 })
   await expect(page.getByRole('link', { name: 'Download Audio' })).toBeVisible()
   const source = await audio.getAttribute('src')
-  await expectArtifact(artifactIdFromHref(source), 'audio/')
+  const musicArtifactId = artifactIdFromHref(source)
+  await expectArtifact(musicArtifactId, 'audio/')
+  await expectDownload(musicArtifactId)
+})
+
+test('Voice Studio executes TTS and transcribes the same-run authorised audio', async () => {
+  await page.goto(`${baseURL}/dashboard/voice`)
+  await expect(page.getByRole('heading', { name: 'Voice Studio' })).toBeVisible()
+  await page.getByPlaceholder('Text to speak').fill('AmarktAI browser fixture voice proof.')
+  await page.getByRole('button', { name: 'Generate speech' }).click()
+  const download = page.getByRole('link', { name: 'Download audio' })
+  await expect(download).toBeVisible({ timeout: 90_000 })
+  ttsArtifactId = artifactIdFromHref(await download.getAttribute('href'))
+  await expectArtifact(ttsArtifactId, 'audio/')
+  await expectDownload(ttsArtifactId)
+
+  await page.getByRole('button', { name: 'STT' }).click()
+  const sourceSelect = page.locator('select').first()
+  await expect(sourceSelect.locator(`option[value="${ttsArtifactId}"]`)).toHaveCount(1, { timeout: 30_000 })
+  await sourceSelect.selectOption(ttsArtifactId)
+  await page.getByRole('button', { name: 'Transcribe' }).click()
+  await expect(page.getByText('Deterministic fixture transcription.', { exact: true })).toBeVisible({ timeout: 90_000 })
 })
 
 test('source-artifact video flow renders provenance, preview, and download', async () => {
@@ -149,8 +183,12 @@ test('long-form execution survives reload and renders component/final evidence',
   }
   const finalDownload = page.getByRole('link', { name: 'Download final video' })
   await expect(finalDownload).toBeVisible({ timeout: 8 * 60_000 })
+  const finalPreview = page.locator('video').last()
+  await expect(finalPreview).toBeVisible()
+  await expect.poll(() => finalPreview.evaluate((video) => video.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(1)
   const finalId = artifactIdFromHref(await finalDownload.getAttribute('href'))
   await expectArtifact(finalId, 'video/')
+  await expectDownload(finalId)
 })
 
 test('dashboards expose no provider/model override controls and navigation has no console errors', async () => {
@@ -162,6 +200,16 @@ test('dashboards expose no provider/model override controls and navigation has n
   }
   expect(stylesheetFailures).toEqual([])
   expect(consoleErrors).toEqual([])
+})
+
+test('logout revokes the session and denies protected dashboard access', async () => {
+  await page.goto(`${baseURL}/dashboard/chat`)
+  const oldToken = token
+  await page.getByRole('button', { name: 'Logout' }).click()
+  await page.waitForURL('**/login', { timeout: 30_000 })
+  expect(await page.evaluate(() => localStorage.getItem('amarktai_token'))).toBeNull()
+  const denied = await page.request.get(`${baseURL}/api/admin/truth`, { headers: { Authorization: `Bearer ${oldToken}` } })
+  expect(denied.status()).toBe(401)
 })
 
 test('expired token is cleared and redirected to login', async () => {
@@ -186,6 +234,13 @@ async function expectArtifact(id, mimePrefix) {
   expect(Number(response.headers()['content-length'] || 0)).toBeGreaterThan(0)
   const unauthorisedStatus = await page.evaluate(async (url) => (await fetch(url, { credentials: 'omit' })).status, `${baseURL}/api/admin/artifacts/${id}/file`)
   expect(unauthorisedStatus).toBe(401)
+}
+
+async function expectDownload(id) {
+  const response = await adminRequest(`/api/admin/artifacts/${id}/file?download=1`)
+  expect(response.status()).toBe(200)
+  expect(response.headers()['content-disposition'] || '').toMatch(/^attachment;/)
+  expect((await response.body()).length).toBeGreaterThan(0)
 }
 
 function artifactIdFromHref(href) {

@@ -3,16 +3,33 @@ import { APPROVED_PROVIDER_DEFINITIONS } from '@amarktai/core'
 import { prisma } from '@amarktai/db'
 
 const FIXTURE_SWITCH = 'release-candidate-v1'
+const FIXTURE_SAFETY_TOKEN = 'amarktai-release-fixture-local-ci-v1'
+
+function hasFixtureDatabase(): boolean {
+  try {
+    const database = new URL(process.env.DATABASE_URL ?? '')
+    return database.hostname === 'mariadb' && database.pathname === '/amarktai_fixture'
+  } catch {
+    return false
+  }
+}
 
 export function isReleaseFixtureMode(): boolean {
   return process.env.NODE_ENV === 'test'
+    && process.env.RELEASE_FIXTURE_MODE === 'true'
+    && process.env.RELEASE_FIXTURE_SAFETY_TOKEN === FIXTURE_SAFETY_TOKEN
     && process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === FIXTURE_SWITCH
+    && hasFixtureDatabase()
 }
 
 export function assertReleaseFixtureModeConfiguration(): void {
-  const configured = process.env.AMARKTAI_TEST_FIXTURE_ADAPTER?.trim()
+  const configured = [
+    process.env.AMARKTAI_TEST_FIXTURE_ADAPTER,
+    process.env.RELEASE_FIXTURE_MODE,
+    process.env.RELEASE_FIXTURE_SAFETY_TOKEN,
+  ].some((value) => Boolean(value?.trim()))
   if (configured && !isReleaseFixtureMode()) {
-    throw new Error('AMARKTAI_TEST_FIXTURE_ADAPTER is test-only and requires NODE_ENV=test with value release-candidate-v1')
+    throw new Error('Release fixture execution requires the exact test-only adapter, mode, safety token, and disposable MariaDB target')
   }
 }
 

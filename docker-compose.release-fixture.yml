@@ -57,6 +57,8 @@ services:
         BUILD_TIME: ${FIXTURE_BUILD_TIME}
     environment:
       NODE_ENV: test
+      RELEASE_FIXTURE_MODE: "true"
+      RELEASE_FIXTURE_SAFETY_TOKEN: amarktai-release-fixture-local-ci-v1
       AMARKTAI_TEST_FIXTURE_ADAPTER: release-candidate-v1
       DATABASE_URL: mysql://amarktai_fixture:${FIXTURE_DB_PASSWORD}@mariadb:3306/amarktai_fixture
       REDIS_URL: redis://redis:6379
@@ -94,6 +96,8 @@ services:
         BUILD_TIME: ${FIXTURE_BUILD_TIME}
     environment:
       NODE_ENV: test
+      RELEASE_FIXTURE_MODE: "true"
+      RELEASE_FIXTURE_SAFETY_TOKEN: amarktai-release-fixture-local-ci-v1
       AMARKTAI_TEST_FIXTURE_ADAPTER: release-candidate-v1
       DATABASE_URL: mysql://amarktai_fixture:${FIXTURE_DB_PASSWORD}@mariadb:3306/amarktai_fixture
       REDIS_URL: redis://redis:6379

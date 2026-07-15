@@ -14,16 +14,33 @@ import type { ProcessorResult, WorkerJobData } from '../processors/job-processor
 
 const runFile = promisify(execFile)
 const FIXTURE_SWITCH = 'release-candidate-v1'
+const FIXTURE_SAFETY_TOKEN = 'amarktai-release-fixture-local-ci-v1'
+
+function hasFixtureDatabase(): boolean {
+  try {
+    const database = new URL(process.env.DATABASE_URL ?? '')
+    return database.hostname === 'mariadb' && database.pathname === '/amarktai_fixture'
+  } catch {
+    return false
+  }
+}
 
 export function isReleaseFixtureAdapterEnabled(): boolean {
   return process.env.NODE_ENV === 'test'
+    && process.env.RELEASE_FIXTURE_MODE === 'true'
+    && process.env.RELEASE_FIXTURE_SAFETY_TOKEN === FIXTURE_SAFETY_TOKEN
     && process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === FIXTURE_SWITCH
+    && hasFixtureDatabase()
 }
 
 export function assertFixtureAdapterConfiguration(): void {
-  const configured = process.env.AMARKTAI_TEST_FIXTURE_ADAPTER?.trim()
+  const configured = [
+    process.env.AMARKTAI_TEST_FIXTURE_ADAPTER,
+    process.env.RELEASE_FIXTURE_MODE,
+    process.env.RELEASE_FIXTURE_SAFETY_TOKEN,
+  ].some((value) => Boolean(value?.trim()))
   if (configured && !isReleaseFixtureAdapterEnabled()) {
-    throw new Error('AMARKTAI_TEST_FIXTURE_ADAPTER is test-only and requires NODE_ENV=test with value release-candidate-v1')
+    throw new Error('Release fixture execution requires the exact test-only adapter, mode, safety token, and disposable MariaDB target')
   }
 }
 
@@ -124,6 +141,13 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
   if (!isReleaseFixtureAdapterEnabled()) throw new Error('Release fixture adapter is not enabled')
   const capability = payload.capability as CapabilityKey
   const { provider, model } = fixtureRoute(capability)
+  const grant = payload.appGrantSnapshot
+  if (['image_to_video', 'video_to_video', 'stt'].includes(capability) && !grant?.artifactRead) {
+    return { success: false, status: 'failed', provider, model, error: `AppCapabilityGrant denies source-artifact read for '${capability}'.` }
+  }
+  if (['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'tts'].includes(capability) && !grant?.artifactWrite) {
+    return { success: false, status: 'failed', provider, model, error: `AppCapabilityGrant denies artifact write for '${capability}'.` }
+  }
   const sourceArtifactId = await verifySourceArtifact(payload)
 
   if (!['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'tts'].includes(capability)) {

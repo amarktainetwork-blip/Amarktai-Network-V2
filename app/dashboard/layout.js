@@ -148,7 +148,7 @@ export default function DashboardLayout({ children }) {
           {user && (
             <div className="mt-2 flex items-center justify-between rounded-md bg-white/[0.03] px-3 py-2">
               <span className="text-xs text-muted-foreground truncate">{user.email}</span>
-              <button onClick={handleLogout} className="text-muted-foreground hover:text-foreground transition">
+              <button aria-label="Logout" onClick={handleLogout} className="text-muted-foreground hover:text-foreground transition">
                 <LogOut className="h-3.5 w-3.5" />
               </button>
             </div>

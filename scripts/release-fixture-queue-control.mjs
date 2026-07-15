@@ -6,9 +6,13 @@ import { QUEUE_NAMES } from '@amarktai/core'
 
 const [action, jobId] = process.argv.slice(2)
 const fixtureEnabled = process.env.NODE_ENV === 'test'
+  && process.env.RELEASE_FIXTURE_MODE === 'true'
+  && process.env.RELEASE_FIXTURE_SAFETY_TOKEN === 'amarktai-release-fixture-local-ci-v1'
   && process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === 'release-candidate-v1'
+  && new URL(process.env.DATABASE_URL ?? 'mysql://invalid/invalid').hostname === 'mariadb'
+  && new URL(process.env.DATABASE_URL ?? 'mysql://invalid/invalid').pathname === '/amarktai_fixture'
 
-if (!fixtureEnabled) throw new Error('Release fixture queue control is test-only and requires the exact release-candidate-v1 adapter switch')
+if (!fixtureEnabled) throw new Error('Release fixture queue control requires the exact test-only adapter, mode, safety token, and disposable MariaDB target')
 if (!action) throw new Error('Usage: release-fixture-queue-control.mjs <pause|resume|prepare-stale|redeliver|prepare-cancelled|inspect> [jobId]')
 
 const queue = new Queue(QUEUE_NAMES.JOBS, {
