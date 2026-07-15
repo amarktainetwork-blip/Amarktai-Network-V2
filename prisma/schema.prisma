@@ -1829,7 +1829,7 @@ model AppConnection {
   appName              String   @map("app_name")
   status               String   @default("active") // active | paused | suspended | unconfigured
   /// JSON array of allowed capability keys for this app
-  allowedCapabilities  String   @default("[]") @map("allowed_capabilities")
+  allowedCapabilities  String   @default("[]") @map("allowed_capabilities") @db.VarChar(4096)
   dailyBudgetCents     Int      @default(0) @map("daily_budget_cents") // 0 = unlimited
   /// Token ledger — remaining paid request credits for this connection
   tokenBalance         Int      @default(1000) @map("token_balance")
