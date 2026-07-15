@@ -51,6 +51,7 @@ describe('studio execution loop contract', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-studio.ts')
     const content = fs.readFileSync(routePath, 'utf8')
     expect(content).toContain('is not ready for dashboard execution')
+    expect(content).toContain('RELEASE_CAPABILITY_SET.has(canonicalCapability)')
   })
 
   it.each([

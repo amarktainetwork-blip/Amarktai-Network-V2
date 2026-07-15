@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, getDashboardAppSlug, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
+import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, getDashboardAppSlug, getReleaseCandidateCapabilityKeys, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
 import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
@@ -11,6 +11,7 @@ const STUDIO_CAPABILITY_ALIASES = Object.fromEntries(
 ) as Record<string, string>
 
 const KNOWN_CAPABILITY_SET = new Set<string>(CAPABILITY_KEYS)
+const RELEASE_CAPABILITY_SET = new Set<string>(getReleaseCandidateCapabilityKeys())
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -81,6 +82,9 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const canonicalCapability = capability as CapabilityKey
+    if (!RELEASE_CAPABILITY_SET.has(canonicalCapability)) {
+      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
+    }
     const appSlug = getDashboardAppSlug(canonicalCapability)
     const grantResolution = await resolveAppCapabilityGrantSnapshot(appSlug, canonicalCapability)
     if (!grantResolution || !grantResolution.grant.enabled) {

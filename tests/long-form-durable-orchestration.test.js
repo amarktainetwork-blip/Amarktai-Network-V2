@@ -257,6 +257,11 @@ function requestPayload(overrides = {}) {
 }
 
 describe('durable long-form orchestration', () => {
+  it('loads status by root parent identity rather than the assembly child sharing its execution ID', async () => {
+    const source = await import('node:fs/promises').then((fs) => fs.readFile('apps/api/src/routes/admin-long-form-video.ts', 'utf8'))
+    expect(source).toContain('parentJobId: null')
+  })
+
   beforeEach(() => {
     db.reset()
     queue.add.mockReset()

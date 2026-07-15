@@ -205,6 +205,7 @@ async function loadParentAndScenes(id: string, appSlug: string) {
     where: {
       appSlug,
       capability: 'long_form_video',
+      parentJobId: null,
       OR: [{ id }, { executionId: id }],
     },
   })
