@@ -44,6 +44,7 @@ describe('studio execution loop contract', () => {
     const content = fs.readFileSync(routePath, 'utf8')
     expect(content).toContain('Orchestra selects provider and model')
     expect(content).toContain('validateOrchestraRequest')
+    expect(content).toContain('validateOrchestraRequest(inputObj)')
   })
 
   it('admin Studio route rejects capabilities that are not release-ready', () => {

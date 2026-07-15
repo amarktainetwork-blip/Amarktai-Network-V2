@@ -216,7 +216,7 @@ if [ "$MIGRATION_COUNT" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
   exit 1
 fi
 
-for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate 20260715_expand_app_connection_capabilities; do
+for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate 20260715_expand_app_connection_capabilities 20260715_expand_job_prompt; do
   RECORDED=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
     "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$MIGRATION'")
   [ "$RECORDED" -eq 1 ] || { echo "ERROR: Migration not recorded: $MIGRATION"; exit 1; }
@@ -225,6 +225,10 @@ done
 ALLOWED_CAPABILITIES_LENGTH=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
   "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$FRESH_DB' AND TABLE_NAME='app_connections' AND COLUMN_NAME='allowed_capabilities'")
 [ "${ALLOWED_CAPABILITIES_LENGTH:-0}" -ge 4096 ] || { echo 'ERROR: app_connections.allowed_capabilities is too small'; exit 1; }
+
+JOB_PROMPT_TYPE=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
+  "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$FRESH_DB' AND TABLE_NAME='jobs' AND COLUMN_NAME='prompt'")
+[ "$JOB_PROMPT_TYPE" = "text" ] || { echo "ERROR: jobs.prompt has unsafe type $JOB_PROMPT_TYPE"; exit 1; }
 
 BASELINE_RECORDED=$(docker exec "$FRESH_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$FRESH_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '20250701_baseline_fc21a6e'")
@@ -373,7 +377,7 @@ if [ "$MIGRATION_COUNT" -ne "$EXPECTED_MIGRATION_COUNT" ]; then
   exit 1
 fi
 
-for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate 20260715_expand_app_connection_capabilities; do
+for MIGRATION in 20260711_add_job_orchestration 20260714_add_app_capability_grants 20260714_foundational_provider_runtime 20260714_release_candidate 20260715_expand_app_connection_capabilities 20260715_expand_job_prompt; do
   RECORDED=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
     "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '$MIGRATION'")
   [ "$RECORDED" -eq 1 ] || { echo "ERROR: Migration not applied: $MIGRATION"; exit 1; }
@@ -382,6 +386,10 @@ done
 ALLOWED_CAPABILITIES_LENGTH=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
   "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$UNMANAGED_DB' AND TABLE_NAME='app_connections' AND COLUMN_NAME='allowed_capabilities'")
 [ "${ALLOWED_CAPABILITIES_LENGTH:-0}" -ge 4096 ] || { echo 'ERROR: app_connections.allowed_capabilities is too small after migration'; exit 1; }
+
+JOB_PROMPT_TYPE=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
+  "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$UNMANAGED_DB' AND TABLE_NAME='jobs' AND COLUMN_NAME='prompt'")
+[ "$JOB_PROMPT_TYPE" = "text" ] || { echo "ERROR: jobs.prompt has unsafe type $JOB_PROMPT_TYPE after migration"; exit 1; }
 
 ADDITIVE_APPLIED=$(docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -N -s -e \
   "SELECT COUNT(*) FROM _prisma_migrations WHERE migration_name = '20260711_add_job_orchestration'")
@@ -513,6 +521,7 @@ echo "BASELINE_MIGRATION=20250701_baseline_fc21a6e"
 echo "ADDITIVE_MIGRATION=20260711_add_job_orchestration"
 echo "RELEASE_CANDIDATE_MIGRATION=20260714_release_candidate"
 echo "APP_CONNECTION_CAPABILITIES_MIGRATION=20260715_expand_app_connection_capabilities"
+echo "JOB_PROMPT_MIGRATION=20260715_expand_job_prompt"
 echo "MIGRATION_COUNT=$EXPECTED_MIGRATION_COUNT"
 echo "FRESH_DATABASE_PROOF=PASS"
 echo "UNMANAGED_DATABASE_PROOF=PASS"

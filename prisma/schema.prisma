@@ -1863,7 +1863,7 @@ model Job {
   id              String    @id @default(uuid())
   appSlug         String    @map("app_slug")
   capability      String
-  prompt          String
+  prompt          String    @db.Text
   inputJson       String    @map("input_json") @db.LongText
   metadataJson    String    @map("metadata_json") @db.LongText
   traceId         String    @default("") @map("trace_id")

@@ -75,17 +75,11 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Reject provider/model/routing override using shared validation
-    const blockedField = validateOrchestraRequest(body) || validateOrchestraRequest(metadata)
+    const blockedField = validateOrchestraRequest(body) || validateOrchestraRequest(inputObj) || validateOrchestraRequest(metadata)
     if (blockedField) {
       return reply.status(400).send({ error: true, message: `Provider/model/routing override not allowed. Orchestra selects provider and model. Blocked field: ${blockedField}` })
     }
 
-    // Evaluate runtime proof from the single snapshot
-    if (!isCapabilityDashboardReady(capability, proofStatus)) {
-      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
-    }
-
-    // Create job
     const canonicalCapability = capability as CapabilityKey
     const appSlug = getDashboardAppSlug(canonicalCapability)
     const grantResolution = await resolveAppCapabilityGrantSnapshot(appSlug, canonicalCapability)
@@ -95,6 +89,14 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
       return reply.status(403).send({ error: true, message: `Adult execution requires an explicit adult AppCapabilityGrant` })
     }
+
+    // Evaluate runtime readiness only after authorization so a missing or
+    // disabled grant is reported as an access denial, not a contract error.
+    if (!isCapabilityDashboardReady(capability, proofStatus)) {
+      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
+    }
+
+    // Create job
     const immutableMetadata = {
       ...metadata,
       appGrantSnapshot: grantResolution.grant,
