@@ -178,8 +178,9 @@ test('long-form execution survives reload and renders component/final evidence',
   await page.evaluate((id) => localStorage.setItem('amarktai_long_form_execution_id', id), executionId)
   await page.reload()
   await expect(page.getByText(executionId, { exact: true })).toBeVisible({ timeout: 30_000 })
+  const main = page.getByRole('main')
   for (const component of ['Scenes', 'Voiceover', 'Subtitles', 'Music', 'Assembly']) {
-    await expect(page.getByText(component, { exact: true })).toBeVisible()
+    await expect(main.getByText(component, { exact: true })).toBeVisible()
   }
   const finalDownload = page.getByRole('link', { name: 'Download final video' })
   await expect(finalDownload).toBeVisible({ timeout: 8 * 60_000 })
