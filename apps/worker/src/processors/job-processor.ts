@@ -146,7 +146,9 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
       prompt: rawPayload.prompt?.trim() ? rawPayload.prompt : dbJob.prompt,
       input: rawPayload.input ?? safeParseJsonObject(dbJob.inputJson),
       metadata: rawPayload.metadata ?? safeParseJsonObject(dbJob.metadataJson),
-      traceId: rawPayload.traceId || makeTraceId(),
+      // Recovery deliveries may contain only jobId. Preserve the durable trace
+      // so retries reuse provider output and artifact identity.
+      traceId: rawPayload.traceId || dbJob.traceId || makeTraceId(),
       callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
       routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
       appGrantSnapshot: rawPayload.appGrantSnapshot

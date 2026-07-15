@@ -228,7 +228,7 @@ describe('Job processor — validation rejects before DB', () => {
       prompt: 'Studio image prompt',
       input: { prompt: 'Studio image prompt', width: 1024 },
       metadata: { source: 'studio' },
-      traceId: expect.stringMatching(/^trace_/),
+      traceId: 'trace_test-uuid',
     }))
   })
 
@@ -279,7 +279,7 @@ describe('Job processor — validation rejects before DB', () => {
     await processor(makePayload({ traceId: '' }))
 
     expect(mockExecute).toHaveBeenCalledWith(expect.objectContaining({
-      traceId: expect.stringMatching(/^trace_/),
+      traceId: 'trace_test-uuid',
     }))
   })
 
