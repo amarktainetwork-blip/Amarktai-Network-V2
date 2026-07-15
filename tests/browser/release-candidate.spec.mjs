@@ -170,7 +170,7 @@ test('long-form execution survives reload and renders component/final evidence',
       },
     },
   })
-  expect(submitted.status()).toBe(200)
+  expect(submitted.status()).toBe(202)
   const { executionId } = await submitted.json()
   expect(executionId).toBeTruthy()
   await page.goto(`${baseURL}/dashboard/video`)
