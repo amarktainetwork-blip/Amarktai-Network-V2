@@ -313,7 +313,7 @@ async function executeMusic() {
   return runCheck('capability:music_generation', async () => {
     const submitted = await request('/api/admin/music/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'Original instrumental release proof bed', style: 'cinematic', durationSeconds: 12, instrumentalOnly: true, vocalsRequested: false }),
+      body: JSON.stringify({ prompt: 'Original instrumental release proof bed', style: 'cinematic', durationSeconds: 15, instrumentalOnly: true, vocalsRequested: false }),
     })
     if (!submitted.response.ok || !submitted.body.jobId) throw new Error(submitted.body.message || `submission returned ${submitted.response.status}`)
     const job = await pollJob(submitted.body.jobId, 900_000)

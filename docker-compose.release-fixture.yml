@@ -73,6 +73,7 @@ services:
       BUILD_TIME: ${FIXTURE_BUILD_TIME}
       SERVICE_NAME: amarktai-api
       APP_VERSION: 1.0.0
+      RATE_LIMIT_MAX: 10000
       WORKER_HEALTH_URL: http://worker:3002/health
       PUBLIC_API_URL: http://api:3001
     ports:

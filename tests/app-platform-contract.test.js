@@ -201,6 +201,17 @@ describe('app platform contract', () => {
     expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 
+  it('dashboard proxies list and mutate app capability grants', () => {
+    const listProxy = path.join(ROOT, 'app/api/admin/app-grants/[appSlug]/route.js')
+    const grantProxy = path.join(ROOT, 'app/api/admin/app-grants/[appSlug]/[capability]/route.js')
+    expect(fs.existsSync(listProxy)).toBe(true)
+    expect(fs.existsSync(grantProxy)).toBe(true)
+    expect(fs.readFileSync(listProxy, 'utf8')).toContain('Authorization')
+    const content = fs.readFileSync(grantProxy, 'utf8')
+    expect(content).toContain("method === 'PUT'")
+    expect(content).toContain("proxy(request, params, 'DELETE')")
+  })
+
   it('no provider/model selectors are exposed', () => {
     const studioPath = path.join(ROOT, 'app/dashboard/studio/page.jsx')
     const content = fs.readFileSync(studioPath, 'utf8')
