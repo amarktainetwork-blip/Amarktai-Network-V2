@@ -1062,7 +1062,7 @@ model AppCapabilityGrant {
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
-  @@unique([appSlug, capability], name: "app_capability_grant_unique")
+  @@unique([appSlug, capability], name: "app_capability_grant_unique", map: "app_capability_grant_unique")
   @@index([appSlug])
   @@index([capability])
   @@map("app_capability_grants")

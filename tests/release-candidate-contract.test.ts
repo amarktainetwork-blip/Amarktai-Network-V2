@@ -83,6 +83,7 @@ describe('production release-candidate canonical contract', () => {
     expect(workflow).toContain('npm run proof 2>&1 | tee')
     expect(workflow).toContain('bash scripts/verify-migrations-disposable.sh')
     expect(workflow).toContain('if: always()')
+    expect(workflow).toContain('echo "::add-mask::$value"')
     expect(packageJson).toContain('"proof": "node scripts/proof-release-fixture.mjs"')
     expect(source('deploy/preflight.sh')).toContain('PRODUCTION_PREFLIGHT=PASS')
     expect(source('scripts/proof-production-release-candidate.mjs')).toContain('--base-url is required')
