@@ -1,4 +1,4 @@
-import { test, expect } from 'playwright/test'
+import { test, expect, request } from 'playwright/test'
 
 const baseURL = process.env.RELEASE_FIXTURE_BASE_URL || 'http://127.0.0.1:3210'
 const email = process.env.ADMIN_EMAIL || 'fixture-admin@invalid.example'
@@ -232,8 +232,15 @@ async function expectArtifact(id, mimePrefix) {
   expect([200, 206]).toContain(response.status())
   expect(response.headers()['content-type']?.startsWith(mimePrefix)).toBe(true)
   expect(Number(response.headers()['content-length'] || 0)).toBeGreaterThan(0)
-  const unauthorisedStatus = await page.evaluate(async (url) => (await fetch(url, { credentials: 'omit' })).status, `${baseURL}/api/admin/artifacts/${id}/file`)
-  expect(unauthorisedStatus).toBe(401)
+  const anonymous = await request.newContext()
+  try {
+    const unauthorised = await anonymous.get(`${baseURL}/api/admin/artifacts/${id}/file?anonymous-proof=${Date.now()}`, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
+    expect(unauthorised.status()).toBe(401)
+  } finally {
+    await anonymous.dispose()
+  }
 }
 
 async function expectDownload(id) {
