@@ -100,18 +100,36 @@ export function failedLiveResult(provider: ProviderKey, endpointSource: string, 
   }
 }
 
+const TOGETHER_LEGACY_MODELS_ENDPOINT = 'https://api.together.ai/models'
+const TOGETHER_CANONICAL_MODELS_ENDPOINT = 'https://api.together.ai/v1/models'
+
+async function fetchModelListPayload(url: string, headers: Record<string, string>): Promise<unknown> {
+  const response = await fetch(url, { headers })
+  if (!response.ok) {
+    throw new Error(`model list endpoint returned ${response.status}`)
+  }
+  try {
+    return await response.json() as unknown
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'response was not valid JSON'
+    throw new Error(`model list endpoint returned non-JSON content: ${reason}`)
+  }
+}
+
 export async function fetchModelList(url: string, apiKey?: string): Promise<unknown[]> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
   }
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-  const response = await fetch(url, {
-    headers,
-  })
-  if (!response.ok) {
-    throw new Error(`model list endpoint returned ${response.status}`)
+
+  let payload: unknown
+  try {
+    payload = await fetchModelListPayload(url, headers)
+  } catch (error) {
+    if (url !== TOGETHER_LEGACY_MODELS_ENDPOINT) throw error
+    payload = await fetchModelListPayload(TOGETHER_CANONICAL_MODELS_ENDPOINT, headers)
   }
-  const payload = await response.json() as unknown
+
   if (Array.isArray(payload)) return payload
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>
