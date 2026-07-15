@@ -245,6 +245,9 @@ async function proveQueueAndRestartRecovery(token, proofReport) {
 
 let passed = false
 try {
+  // The host-side proof imports the workspace package through its production
+  // export, so a fresh checkout must compile that entrypoint before invocation.
+  run(npm, ['run', 'build', '--workspace=@amarktai/core'])
   run(docker, [...compose, 'config', '--quiet'])
   run(docker, [...compose, 'down', '--volumes', '--remove-orphans'])
   run(docker, [...compose, 'up', '--detach', '--build', '--wait', '--wait-timeout', '900'])
