@@ -8,6 +8,7 @@
 
 import { z } from 'zod'
 import { CAPABILITY_KEYS } from './capabilities.js'
+import { EXECUTION_PROFILES } from './orchestra.js'
 
 export const AppCapabilityGrantSnapshotSchema = z.object({
   appSlug: z.string().min(1),
@@ -47,6 +48,7 @@ export const JobPayloadSchema = z.object({
   jobId: z.string().uuid(),
   appSlug: z.string().min(1),
   capability: z.enum(CAPABILITY_KEYS),
+  executionProfile: z.enum(EXECUTION_PROFILES).default('external_app'),
   prompt: z.string().min(1),
   input: z.record(z.string(), z.unknown()).default({}),
   metadata: z.record(z.string(), z.unknown()).default({}),

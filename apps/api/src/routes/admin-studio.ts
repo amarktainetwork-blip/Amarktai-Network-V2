@@ -4,7 +4,7 @@ import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, getDashboardAppSlug, getReleaseCandidateCapabilityKeys, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
 import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
-import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
+import { resolveInternalDashboardCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 const STUDIO_CAPABILITY_ALIASES = Object.fromEntries(
   CAPABILITY_CATALOG.map((capability) => [capability.dashboardType, capability.key]),
@@ -86,9 +86,9 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
     }
     const appSlug = getDashboardAppSlug(canonicalCapability)
-    const grantResolution = await resolveAppCapabilityGrantSnapshot(appSlug, canonicalCapability)
-    if (!grantResolution || !grantResolution.grant.enabled) {
-      return reply.status(403).send({ error: true, message: `No enabled AppCapabilityGrant exists for ${appSlug}/${capability}` })
+    const grantResolution = await resolveInternalDashboardCapabilityGrantSnapshot(appSlug, canonicalCapability)
+    if (!grantResolution) {
+      return reply.status(403).send({ error: true, message: `Capability ${appSlug}/${capability} is not part of the internal dashboard authority` })
     }
     if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
       return reply.status(403).send({ error: true, message: `Adult execution requires an explicit adult AppCapabilityGrant` })
@@ -103,6 +103,7 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     // Create job
     const immutableMetadata = {
       ...metadata,
+      executionProfile: 'internal_dashboard',
       appGrantSnapshot: grantResolution.grant,
       appGrantSnapshotSource: grantResolution.source,
       appGrantSnapshotAt: new Date().toISOString(),
@@ -128,6 +129,7 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
         jobId: job.id,
         appSlug,
         capability: canonicalCapability,
+        executionProfile: 'internal_dashboard',
         prompt: safePrompt,
         input: inputObj,
         metadata: immutableMetadata,

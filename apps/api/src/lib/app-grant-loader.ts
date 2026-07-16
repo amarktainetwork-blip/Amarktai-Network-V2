@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '@amarktai/db'
-import type { AppCapabilityGrantContext, CapabilityKey } from '@amarktai/core'
+import { getInternalDashboardApps, type AppCapabilityGrantContext, type CapabilityKey } from '@amarktai/core'
 
 type GrantRecord = Awaited<ReturnType<typeof prisma.appCapabilityGrant.findFirst>>
 
@@ -98,6 +98,47 @@ export async function resolveAppCapabilityGrantSnapshot(
     providerResidencyConstraints: [],
   }
   return { grant: Object.freeze(migrated), source: 'legacy_migration' }
+}
+
+/**
+ * Builds the server-controlled authority for an authenticated Network operator
+ * dashboard request. External-app commercial policy is deliberately removed,
+ * while safety and artifact/memory permissions remain sourced from the stored
+ * grant. Callers cannot select this profile from request data.
+ */
+export async function resolveInternalDashboardCapabilityGrantSnapshot(
+  appSlug: string,
+  capability: CapabilityKey,
+): Promise<{ grant: AppCapabilityGrantContext; source: 'internal_dashboard' } | null> {
+  const definition = getInternalDashboardApps().find((app) => app.appSlug === appSlug)
+  if (!definition?.capabilities.includes(capability)) return null
+
+  const stored = await loadAppCapabilityGrant(appSlug, capability)
+  const grant: AppCapabilityGrantContext = {
+    appSlug,
+    capability,
+    enabled: true,
+    qualityFloor: 'balanced',
+    budgetPolicy: 'balanced',
+    maxCostPerRequest: 0,
+    maxCostPerWorkflow: 0,
+    latencyPreference: 'medium',
+    allowFallback: true,
+    maxFallbackAttempts: 3,
+    liveProofRequired: false,
+    approvalRequired: false,
+    artifactRead: stored?.artifactRead ?? true,
+    artifactWrite: stored?.artifactWrite ?? true,
+    memoryRead: stored?.memoryRead ?? false,
+    memoryWrite: stored?.memoryWrite ?? false,
+    ragNamespaces: stored?.ragNamespaces ?? [],
+    policyProfile: 'internal_dashboard',
+    adultPermission: stored?.adultPermission ?? false,
+    dataRetentionPolicy: stored?.dataRetentionPolicy ?? 'default',
+    passthroughModelAllowed: false,
+    providerResidencyConstraints: [],
+  }
+  return { grant: Object.freeze(grant), source: 'internal_dashboard' }
 }
 
 /**

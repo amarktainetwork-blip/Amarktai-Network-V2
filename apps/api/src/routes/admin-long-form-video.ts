@@ -20,7 +20,7 @@ import {
 } from '@amarktai/core'
 import { checkFfmpegAvailable, resolveSceneArtifacts, validateSceneArtifactsForAssembly } from '../lib/long-form-assembly.js'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
-import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
+import { resolveInternalDashboardCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 const APP_SLUG = 'dashboard-long-form'
 const MAX_SCENE_RETRIES = 3
@@ -252,6 +252,7 @@ async function enqueueSceneJob(q: Queue, sceneJob: DbJob): Promise<{ queued: boo
     jobId: sceneJob.id,
     appSlug: sceneJob.appSlug,
     capability: 'video_generation',
+    executionProfile: 'internal_dashboard',
     prompt: sceneJob.prompt,
     input: safeJson(sceneJob.inputJson),
     metadata,
@@ -360,6 +361,7 @@ async function enqueueVoiceoverJob(q: Queue, voiceoverJob: DbJob): Promise<{ que
     jobId: voiceoverJob.id,
     appSlug: voiceoverJob.appSlug,
     capability: 'tts',
+    executionProfile: 'internal_dashboard',
     prompt: voiceoverJob.prompt,
     input: safeJson(voiceoverJob.inputJson),
     metadata,
@@ -424,6 +426,7 @@ async function enqueueMusicBedJob(q: Queue, musicJob: DbJob): Promise<{ queued: 
     jobId: musicJob.id,
     appSlug: musicJob.appSlug,
     capability: 'music_generation',
+    executionProfile: 'internal_dashboard',
     prompt: musicJob.prompt,
     input: safeJson(musicJob.inputJson),
     metadata,
@@ -464,27 +467,30 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
   const [longFormGrant, videoGrant, voiceGrant, musicGrant] = await Promise.all([
-    resolveAppCapabilityGrantSnapshot(appSlug, 'long_form_video'),
-    resolveAppCapabilityGrantSnapshot(appSlug, 'video_generation'),
-    input.voiceoverEnabled ? resolveAppCapabilityGrantSnapshot(appSlug, 'tts') : Promise.resolve(null),
-    input.musicBedEnabled ? resolveAppCapabilityGrantSnapshot(appSlug, 'music_generation') : Promise.resolve(null),
+    resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'long_form_video'),
+    resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'video_generation'),
+    input.voiceoverEnabled ? resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'tts') : Promise.resolve(null),
+    input.musicBedEnabled ? resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'music_generation') : Promise.resolve(null),
   ])
-  if (!longFormGrant?.grant.enabled || !videoGrant?.grant.enabled) {
-    throw new Error('Long-form execution requires enabled long_form_video and video_generation AppCapabilityGrant records')
+  if (!longFormGrant || !videoGrant) {
+    throw new Error('Long-form execution requires registered internal long_form_video and video_generation capabilities')
   }
-  if (input.voiceoverEnabled && !voiceGrant?.grant.enabled) {
-    throw new Error('Voiceover execution requires an enabled tts AppCapabilityGrant record')
+  if (input.voiceoverEnabled && !voiceGrant) {
+    throw new Error('Voiceover execution requires a registered internal tts capability')
   }
-  if (input.musicBedEnabled && !musicGrant?.grant.enabled) {
-    throw new Error('Music-bed execution requires an enabled music_generation AppCapabilityGrant record')
+  if (input.musicBedEnabled && !musicGrant) {
+    throw new Error('Music-bed execution requires a registered internal music_generation capability')
   }
   const snapshotAt = new Date().toISOString()
   const parentGrantMetadata = {
+    executionProfile: 'internal_dashboard',
     appGrantSnapshot: longFormGrant.grant,
     appGrantSnapshotSource: longFormGrant.source,
     appGrantSnapshotAt: snapshotAt,
   }
   const videoGrantMetadata = {
+    executionProfile: 'internal_dashboard',
+    orchestraExecutorConstraint: 'genx.video-generation',
     appGrantSnapshot: videoGrant.grant,
     appGrantSnapshotSource: videoGrant.source,
     appGrantSnapshotAt: snapshotAt,
@@ -541,6 +547,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       for (const scene of plan.storyboard.scenes) {
         if (!scene.voiceoverText) continue
         const voMetadata = {
+          executionProfile: 'internal_dashboard',
           longFormVideo: true,
           longFormVoiceover: true,
           longFormExecutionId: executionId,
@@ -580,6 +587,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
         appSlug, capability: 'music_generation', prompt: musicPrompt,
         inputJson: JSON.stringify({ duration: Math.min(plan.totalDurationSeconds, 300), instrumentalOnly: true, style: plan.style }),
         metadataJson: JSON.stringify({
+          executionProfile: 'internal_dashboard',
           longFormVideo: true, longFormMusicBed: true, longFormExecutionId: executionId, parentJobId: parent.id,
           planId: plan.id, routingMode, retryGeneration: 0, appGrantSnapshot: musicGrant!.grant,
           appGrantSnapshotSource: musicGrant!.source, appGrantSnapshotAt: snapshotAt,
@@ -967,9 +975,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     const routingMode = isValidRoutingMode(body.routingMode) ? body.routingMode as string : 'balanced'
 
     try {
-      const musicGrant = await resolveAppCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
-      if (!musicGrant?.grant.enabled) {
-        return reply.status(403).send({ error: true, message: 'Music bed execution requires an enabled music_generation AppCapabilityGrant record' })
+      const musicGrant = await resolveInternalDashboardCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+      if (!musicGrant) {
+        return reply.status(403).send({ error: true, message: 'Music bed execution requires a registered internal music_generation capability' })
       }
       const grantSnapshotAt = new Date().toISOString()
       const { randomUUID: uuid } = await import('node:crypto')
@@ -990,6 +998,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
             mood: plan.tone,
           }),
           metadataJson: JSON.stringify({
+            executionProfile: 'internal_dashboard',
             longFormVideo: true,
             longFormMusicBed: true,
             longFormExecutionId: executionId,
@@ -1015,9 +1024,11 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           jobId: musicJobId,
           appSlug: APP_SLUG,
           capability: 'music_generation',
+          executionProfile: 'internal_dashboard',
           prompt,
           input: { prompt, durationSeconds: plan.totalDurationSeconds, instrumentalOnly: true },
           metadata: {
+            executionProfile: 'internal_dashboard',
             longFormVideo: true,
             longFormMusicBed: true,
             longFormExecutionId: executionId,

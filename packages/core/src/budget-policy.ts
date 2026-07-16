@@ -75,12 +75,12 @@ export interface BudgetCheckResult {
  */
 export function checkBudgetConstraints(
   estimatedCostCents: number | null,
-  maxCostPerRequest: number,
-  maxCostPerWorkflow: number,
-  currentWorkflowCostCents: number,
+  maxCostPerRequest?: number,
+  maxCostPerWorkflow?: number,
+  currentWorkflowCostCents = 0,
 ): BudgetCheckResult {
-  // Unlimited if max is 0
-  if (maxCostPerRequest > 0 && estimatedCostCents !== null && estimatedCostCents > maxCostPerRequest) {
+  // Zero or absent means there is no app-specific ceiling configured.
+  if ((maxCostPerRequest ?? 0) > 0 && estimatedCostCents !== null && estimatedCostCents > maxCostPerRequest!) {
     return {
       allowed: false,
       reason: `Estimated cost ${estimatedCostCents} cents exceeds per-request limit ${maxCostPerRequest} cents`,
@@ -88,13 +88,13 @@ export function checkBudgetConstraints(
     }
   }
 
-  if (maxCostPerWorkflow > 0) {
+  if ((maxCostPerWorkflow ?? 0) > 0) {
     const projectedTotal = currentWorkflowCostCents + (estimatedCostCents ?? 0)
-    if (projectedTotal > maxCostPerWorkflow) {
+    if (projectedTotal > maxCostPerWorkflow!) {
       return {
         allowed: false,
         reason: `Projected workflow cost ${projectedTotal} cents exceeds workflow limit ${maxCostPerWorkflow} cents`,
-        remainingBudgetCents: maxCostPerWorkflow - currentWorkflowCostCents,
+        remainingBudgetCents: maxCostPerWorkflow! - currentWorkflowCostCents,
       }
     }
   }
@@ -102,7 +102,7 @@ export function checkBudgetConstraints(
   return {
     allowed: true,
     reason: null,
-    remainingBudgetCents: maxCostPerWorkflow > 0 ? maxCostPerWorkflow - currentWorkflowCostCents : null,
+    remainingBudgetCents: (maxCostPerWorkflow ?? 0) > 0 ? maxCostPerWorkflow! - currentWorkflowCostCents : null,
   }
 }
 

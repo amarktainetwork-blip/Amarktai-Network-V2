@@ -165,8 +165,8 @@ test('long-form execution survives reload and renders component/final evidence',
     data: {
       request: {
         prompt: 'A deterministic release fixture story', targetDurationSeconds: 30, sceneCount: 3,
-        aspectRatio: '16:9', style: 'cinematic', tone: 'professional', voiceoverEnabled: true,
-        subtitlesEnabled: true, musicBedEnabled: true, count: 1, routingMode: 'balanced',
+        aspectRatio: '16:9', style: 'cinematic', tone: 'professional', voiceoverEnabled: false,
+        subtitlesEnabled: false, musicBedEnabled: false, count: 1, routingMode: 'balanced',
       },
     },
   })
@@ -179,7 +179,7 @@ test('long-form execution survives reload and renders component/final evidence',
   await page.reload()
   await expect(page.getByText(executionId, { exact: true })).toBeVisible({ timeout: 30_000 })
   const main = page.getByRole('main')
-  for (const component of ['Scenes', 'Voiceover', 'Subtitles', 'Music', 'Assembly']) {
+  for (const component of ['Scene plan', 'Voiceover', 'Subtitles', 'Music', 'Assembly']) {
     await expect(main.getByText(component, { exact: true })).toBeVisible()
   }
   const finalDownload = page.getByRole('link', { name: 'Download final video' })
@@ -188,6 +188,15 @@ test('long-form execution survives reload and renders component/final evidence',
   await expect(finalPreview).toBeVisible()
   await expect.poll(() => finalPreview.evaluate((video) => video.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(1)
   const finalId = artifactIdFromHref(await finalDownload.getAttribute('href'))
+  const durable = await adminRequest(`/api/admin/long-form-video/executions/${executionId}`)
+  expect(durable.status()).toBe(200)
+  const execution = (await durable.json()).execution
+  expect(execution.scenes).toHaveLength(3)
+  expect(execution.scenes.every((scene) => scene.status === 'completed' && scene.artifactId)).toBe(true)
+  expect(execution.componentState.voiceover.status).toBe('not_requested')
+  expect(execution.componentState.subtitles.status).toBe('not_requested')
+  expect(execution.componentState.musicBed.status).toBe('not_requested')
+  expect(execution.componentState.assembly.ready).toBe(true)
   await expectArtifact(finalId, 'video/')
   await expectDownload(finalId)
 })

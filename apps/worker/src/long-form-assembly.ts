@@ -55,9 +55,16 @@ export async function executeLongFormAssembly(payload: WorkerJobData): Promise<P
     const normalizedScenes: string[] = []
     for (const [index, sceneJob] of classified.scenes.entries()) {
       if (!sceneJob.artifactId) throw new Error(`scene_job_failed: scene ${sceneJob.sceneNumber ?? index + 1} has no artifact`)
+      const plannedScene = plannedScenes.find((scene) => numberValue(scene.sceneNumber) === (sceneJob.sceneNumber ?? index + 1)) ?? plannedScenes[index]
+      const sceneDuration = positiveNumber(plannedScene?.durationSeconds)
+        ?? expectedDuration / Math.max(1, classified.scenes.length)
       const source = await materializeArtifact(sceneJob.artifactId, workDir, `scene-${index + 1}.input`)
       const target = join(workDir, `scene-${index + 1}.mp4`)
-      await run(ffmpeg, ['-y', '-i', source, '-vf', `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2`, '-an', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', target])
+      await run(ffmpeg, [
+        '-y', '-i', source,
+        '-vf', `scale=${resolution.width}:${resolution.height}:force_original_aspect_ratio=decrease,pad=${resolution.width}:${resolution.height}:(ow-iw)/2:(oh-ih)/2,tpad=stop_mode=clone:stop_duration=${sceneDuration},trim=duration=${sceneDuration},setpts=PTS-STARTPTS,fps=30`,
+        '-t', String(sceneDuration), '-an', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', target,
+      ])
       normalizedScenes.push(target)
     }
     const concatFile = join(workDir, 'scenes.txt')
@@ -128,16 +135,15 @@ export async function executeLongFormAssembly(payload: WorkerJobData): Promise<P
     args.push('-t', String(expectedDuration), '-movflags', '+faststart', outputFile)
     await run(ffmpeg, args)
 
-    const validation = await probeFinal(ffprobe, outputFile, expectedDuration, voiceRequested || musicRequested)
     const outputBuffer = await readFile(outputFile)
-    if (!outputBuffer.length) throw new Error('final_artifact_validation_failed: output is empty')
+    const validation = await probeFinal(ffprobe, outputFile, expectedDuration, voiceRequested || musicRequested, outputBuffer.length)
     const artifact = await saveArtifact({
       input: {
         appSlug: parent.appSlug, type: 'video', subType: 'long_form_video_multimedia', title: `Long-form video ${parent.executionId}`,
         description: `Automatically assembled long-form video from ${classified.scenes.length} scenes`, provider: 'ffmpeg', model: 'durable-multimedia-assembly',
         traceId: payload.traceId, mimeType: 'video/mp4', metadata: {
           longFormVideo: true, executionId: parent.executionId, parentJobId: parent.id, sceneCount: classified.scenes.length,
-          totalDurationSeconds: validation.duration, expectedDurationSeconds: expectedDuration, width: resolution.width, height: resolution.height,
+          totalDurationSeconds: validation.duration, expectedDurationSeconds: expectedDuration, width: validation.width, height: validation.height,
           voiceoverIncluded: voiceRequested, subtitlesIncluded: subtitleRequested, musicBedIncluded: musicRequested,
           finalVideoValidated: validation.video, finalAudioValidated: validation.audio,
           componentArtifactIds: { scenes: state.scenes.artifactIds, voiceovers: state.voiceover.artifactIds, subtitle: state.subtitles.artifactId, musicBed: state.musicBed.artifactId },
@@ -145,7 +151,7 @@ export async function executeLongFormAssembly(payload: WorkerJobData): Promise<P
       }, data: outputBuffer, explicitMimeType: 'video/mp4',
     })
     return completed(artifact.id, artifact.storageUrl, artifact.mimeType, artifact.fileSizeBytes, {
-      finalVideoValidated: validation.video, finalAudioValidated: validation.audio, duration: validation.duration, width: resolution.width, height: resolution.height,
+      finalVideoValidated: validation.video, finalAudioValidated: validation.audio, duration: validation.duration, width: validation.width, height: validation.height,
       voiceoverIncluded: voiceRequested, subtitlesIncluded: subtitleRequested, musicBedIncluded: musicRequested,
       componentArtifactIds: { scenes: state.scenes.artifactIds, voiceovers: state.voiceover.artifactIds, subtitle: state.subtitles.artifactId, musicBed: state.musicBed.artifactId },
     }, false)
@@ -168,17 +174,44 @@ async function run(binary: string, args: string[], timeout = 300_000): Promise<v
   await execFileAsync(binary, args, { timeout, windowsHide: true, maxBuffer: 10 * 1024 * 1024 })
 }
 
-async function probeFinal(ffprobe: string, output: string, expectedDuration: number, audioRequested: boolean): Promise<{ video: boolean; audio: boolean; duration: number }> {
-  const { stdout } = await execFileAsync(ffprobe, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { timeout: 30_000, windowsHide: true })
-  const data = JSON.parse(stdout) as { streams?: Array<{ codec_type?: string }>; format?: { duration?: string } }
-  const duration = Number(data.format?.duration)
-  const video = data.streams?.some((stream) => stream.codec_type === 'video') === true
-  const audio = !audioRequested || data.streams?.some((stream) => stream.codec_type === 'audio') === true
-  const tolerance = Math.max(2, expectedDuration * 0.1)
-  if (!video || !audio || !Number.isFinite(duration) || duration <= 0 || Math.abs(duration - expectedDuration) > tolerance) {
-    throw new Error(`final_artifact_validation_failed: video=${video}; audio=${audio}; duration=${duration}; expected=${expectedDuration}`)
+export interface FinalArtifactProbe {
+  streams?: Array<{ codec_type?: string; width?: number; height?: number }>
+  format?: { duration?: string }
+}
+
+export function validateFinalArtifact(input: {
+  probe: FinalArtifactProbe
+  expectedDuration: number
+  audioRequested: boolean
+  mimeType: string
+  fileSizeBytes: number
+}): { video: true; audio: true; duration: number; width: number; height: number } {
+  const videoStream = input.probe.streams?.find((stream) => stream.codec_type === 'video')
+  const duration = Number(input.probe.format?.duration)
+  const width = Number(videoStream?.width)
+  const height = Number(videoStream?.height)
+  const video = Boolean(videoStream)
+  const audio = !input.audioRequested || input.probe.streams?.some((stream) => stream.codec_type === 'audio') === true
+  const tolerance = Math.max(2, input.expectedDuration * 0.1)
+  const milestoneDurationValid = input.expectedDuration === 30 ? duration >= 25 && duration <= 40 : true
+  if (!input.mimeType.startsWith('video/') || input.fileSizeBytes <= 0 || !video || !audio
+      || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0
+      || !Number.isFinite(duration) || duration <= 0 || Math.abs(duration - input.expectedDuration) > tolerance
+      || !milestoneDurationValid) {
+    throw new Error(`final_artifact_validation_failed: mime=${input.mimeType}; bytes=${input.fileSizeBytes}; video=${video}; audio=${audio}; width=${width}; height=${height}; duration=${duration}; expected=${input.expectedDuration}`)
   }
-  return { video, audio, duration }
+  return { video: true, audio: true, duration, width, height }
+}
+
+async function probeFinal(ffprobe: string, output: string, expectedDuration: number, audioRequested: boolean, fileSizeBytes: number): Promise<{ video: true; audio: true; duration: number; width: number; height: number }> {
+  const { stdout } = await execFileAsync(ffprobe, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', output], { timeout: 30_000, windowsHide: true })
+  return validateFinalArtifact({
+    probe: JSON.parse(stdout) as FinalArtifactProbe,
+    expectedDuration,
+    audioRequested,
+    mimeType: 'video/mp4',
+    fileSizeBytes,
+  })
 }
 
 function completed(id: string, url: string, mimeType: string, fileSizeBytes: number, metadata: Record<string, unknown>, reused: boolean): ProcessorResult {

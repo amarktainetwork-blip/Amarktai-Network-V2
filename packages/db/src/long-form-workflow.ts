@@ -23,6 +23,7 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
 
   const id = longFormAssemblyJobId(parentJobId)
   const metadata = {
+    executionProfile: 'internal_dashboard',
     longFormVideo: true,
     longFormAssembly: true,
     internalLocalExecution: true,
@@ -71,6 +72,7 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
     jobId: id,
     appSlug: refreshed.parent.appSlug,
     capability: 'long_form_video',
+    executionProfile: 'internal_dashboard',
     prompt: assembly.prompt,
     input: {},
     metadata,

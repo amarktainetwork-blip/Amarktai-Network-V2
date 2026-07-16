@@ -130,6 +130,7 @@ describe('Phase 1 hard cleanup filesystem checks', () => {
   it('provider and model override fields remain blocked', () => {
     expect([...BLOCKED_OVERRIDE_FIELDS]).toEqual([
       'providerOverride', 'modelOverride', 'provider', 'model', 'providerKey', 'modelId', 'selectedProvider', 'selectedModel',
+      'executionProfile', 'orchestraExecutorConstraint',
     ])
 
     for (const field of BLOCKED_OVERRIDE_FIELDS) {

@@ -180,6 +180,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     const grantSnapshotAt = new Date().toISOString()
     const immutableMetadata = {
       ...metadata,
+      executionProfile: 'external_app',
       appGrantSnapshot: grantResolution.grant,
       appGrantSnapshotSource: grantResolution.source,
       appGrantSnapshotAt: grantSnapshotAt,
@@ -245,6 +246,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       jobId: job.id,
       appSlug: auth.app!.slug,
       capability,
+      executionProfile: 'external_app',
       prompt,
       input: validatedInput,
       metadata: immutableMetadata,

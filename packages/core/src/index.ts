@@ -216,6 +216,7 @@ export {
 // Orchestra routing engine
 export {
   ORCHESTRA_ROUTING_MODES,
+  EXECUTION_PROFILES,
   evaluateOrchestra,
   checkCandidateEligibility,
   normalizeDbCandidates,
@@ -226,6 +227,7 @@ export {
   BLOCKED_PROVIDER_STATUSES,
   CODING_TOOL_CAPABILITIES,
   type OrchestraRoutingMode,
+  type ExecutionProfile,
   type OrchestraRequest,
   type OrchestraCandidate,
   type OrchestraDecision,

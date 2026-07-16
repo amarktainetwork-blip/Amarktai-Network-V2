@@ -16,7 +16,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { prisma, refreshLongFormParentState } from '@amarktai/db'
-import { QUEUE_NAMES, isValidCapability, type AppCapabilityGrantContext } from '@amarktai/core'
+import { QUEUE_NAMES, isValidCapability, type AppCapabilityGrantContext, type ExecutionProfile } from '@amarktai/core'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ export interface WorkerJobData {
   jobId: string
   appSlug: string
   capability: string
+  executionProfile?: ExecutionProfile
   prompt: string
   input?: Record<string, unknown>
   metadata?: Record<string, unknown>
@@ -52,6 +53,49 @@ export interface ProcessorDeps {
 
 type PartialWorkerJobData = Partial<WorkerJobData> & { jobId?: string }
 const TERMINAL_JOB_STATUSES = new Set(['completed', 'cancelled', 'cancelling'])
+
+function durableDeliveryResult(job: {
+  status: string
+  error?: string | null
+  output?: string | null
+  provider?: string | null
+  model?: string | null
+  artifactId?: string | null
+}): ProcessorResult {
+  if (job.status === 'completed') {
+    return {
+      success: true,
+      status: 'completed',
+      output: job.output ?? undefined,
+      provider: job.provider ?? undefined,
+      model: job.model ?? undefined,
+      artifactId: job.artifactId ?? undefined,
+      metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status },
+    }
+  }
+  if (job.status === 'processing') {
+    // A BullMQ retry can redeliver while the original worker still owns the
+    // provider claim. The database is authoritative: acknowledge the duplicate
+    // delivery without invoking the provider or turning it into a user failure.
+    return {
+      success: true,
+      status: 'completed',
+      provider: job.provider ?? undefined,
+      model: job.model ?? undefined,
+      artifactId: job.artifactId ?? undefined,
+      metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status, providerExecutionSkipped: true },
+    }
+  }
+  return {
+    success: false,
+    status: 'failed',
+    error: job.error ?? `Job is not execution-eligible: ${job.status}`,
+    provider: job.provider ?? undefined,
+    model: job.model ?? undefined,
+    artifactId: job.artifactId ?? undefined,
+    metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status, providerExecutionSkipped: true },
+  }
+}
 
 // ── Canonical queue name (must match API ingestion) ────────────────────────────
 
@@ -138,11 +182,14 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
     return { payload: rawPayload as WorkerJobData, dbJob: null }
   }
 
+  const durableMetadata = safeParseJsonObject(dbJob.metadataJson)
   return {
     payload: {
       jobId: rawPayload.jobId!,
       appSlug: rawPayload.appSlug || dbJob.appSlug,
       capability: rawPayload.capability || dbJob.capability,
+      executionProfile: rawPayload.executionProfile
+        ?? (durableMetadata.executionProfile === 'internal_dashboard' ? 'internal_dashboard' : 'external_app'),
       prompt: rawPayload.prompt?.trim() ? rawPayload.prompt : dbJob.prompt,
       input: rawPayload.input ?? safeParseJsonObject(dbJob.inputJson),
       metadata: rawPayload.metadata ?? safeParseJsonObject(dbJob.metadataJson),
@@ -150,9 +197,9 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
       // so retries reuse provider output and artifact identity.
       traceId: rawPayload.traceId || dbJob.traceId || makeTraceId(),
       callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
-      routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
+      routingMode: rawPayload.routingMode ?? (durableMetadata.routingMode as string | undefined),
       appGrantSnapshot: rawPayload.appGrantSnapshot
-        ?? (safeParseJsonObject(dbJob.metadataJson).appGrantSnapshot as AppCapabilityGrantContext | undefined),
+        ?? (durableMetadata.appGrantSnapshot as AppCapabilityGrantContext | undefined),
       queueRecoveryAttempt: rawPayload.queueRecoveryAttempt === true,
     },
     dbJob,
@@ -223,19 +270,13 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
     if (TERMINAL_JOB_STATUSES.has(job.status)) {
       console.info('[worker] skipping terminal job', { dbJobId: jobId, appSlug, capability, status: job.status })
       await refreshParentFromPayload(payload, advanceWorkflow)
-      return {
-        success: false,
-        status: 'failed',
-        error: `Job skipped because it is already terminal: ${job.status}`,
-        metadata: { skipped: true, terminalStatus: job.status },
-      }
+      return durableDeliveryResult(job)
     }
 
-    if (job.status === 'processing' && payload.queueRecoveryAttempt) {
-      await updateJobMany({
-        where: { id: jobId, status: 'processing', startedAt: job.startedAt },
-        data: { status: 'queued', retryCount: { increment: 1 }, queuedAt: new Date(), error: 'Recovered by BullMQ redelivery' },
-      })
+    if (job.status === 'processing') {
+      console.info('[worker] acknowledging duplicate delivery for active durable execution', { dbJobId: jobId, appSlug, capability })
+      await refreshParentFromPayload(payload, advanceWorkflow)
+      return durableDeliveryResult(job)
     }
     console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, from: job.status, to: 'processing' })
     const processingClaim = await updateJobMany({
@@ -251,12 +292,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
     if (processingClaim.count !== 1) {
       const latest = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
       console.info('[worker] skipped non-executable job state', { dbJobId: jobId, appSlug, capability, status: latest?.status ?? job.status })
-      return {
-        success: false,
-        status: 'failed',
-        error: `Job skipped because status is not execution-eligible: ${latest?.status ?? job.status}`,
-        metadata: { skipped: true, terminalStatus: latest?.status ?? job.status },
-      }
+      return durableDeliveryResult(latest ?? job)
     }
 
     try {

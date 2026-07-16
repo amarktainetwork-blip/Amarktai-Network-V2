@@ -372,6 +372,53 @@ describe('Job processor — execution lifecycle', () => {
     }))
   })
 
+  it('delivers the same video job twice with one provider execution and one durable artifact', async () => {
+    const durable = makeDbJob({ capability: 'video_generation' })
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: true,
+      status: 'completed',
+      provider: 'genx',
+      model: 'seedance-v1-fast',
+      artifactId: 'scene-artifact-1',
+    })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockImplementation(async () => durable)
+    prismaMock.job.updateMany.mockImplementation(async ({ where, data }) => {
+      const eligible = typeof where.status === 'string' ? durable.status === where.status : true
+      if (!eligible) return { count: 0 }
+      Object.assign(durable, data)
+      return { count: 1 }
+    })
+
+    const payload = makePayload({ capability: 'video_generation' })
+    const first = await processor(payload)
+    const second = await processor({ ...payload, queueRecoveryAttempt: true })
+
+    expect(mockExecute).toHaveBeenCalledTimes(1)
+    expect(first.artifactId).toBe('scene-artifact-1')
+    expect(second.success).toBe(true)
+    expect(second.artifactId).toBe('scene-artifact-1')
+    expect(second.error ?? '').not.toContain('Execution already claimed by another worker')
+  })
+
+  it('acknowledges an active processing redelivery without reclaiming or calling the provider', async () => {
+    const mockExecute = vi.fn()
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({
+      capability: 'video_generation',
+      status: 'processing',
+      providerClaimAt: new Date(),
+    }))
+
+    const result = await processor(makePayload({ capability: 'video_generation', queueRecoveryAttempt: true }))
+
+    expect(result.success).toBe(true)
+    expect(result.metadata).toEqual(expect.objectContaining({ durableStatus: 'processing', providerExecutionSkipped: true }))
+    expect(result.error ?? '').not.toContain('Execution already claimed by another worker')
+    expect(mockExecute).not.toHaveBeenCalled()
+    expect(prismaMock.job.updateMany).not.toHaveBeenCalled()
+  })
+
   it('does not overwrite a job cancelled after provider execution starts', async () => {
     const mockExecute = vi.fn().mockResolvedValue({ success: true, status: 'completed', output: 'late artifact' })
     const processor = createJobProcessor({ executeCapability: mockExecute })

@@ -1099,15 +1099,18 @@ function readAppGrantSnapshot(payload: WorkerJobData): AppCapabilityGrantContext
 async function resolveOrchestraDecision(
   payload: WorkerJobData,
   appGrant: AppCapabilityGrantContext,
-): Promise<OrchestraDecision> {
+): Promise<{ decision: OrchestraDecision; reusedPersistedRoute: boolean }> {
   const capability = payload.capability as CapabilityKey
   const routingMode = normalizeRoutingMode(payload)
   let orchestraCandidates: OrchestraCandidate[] = []
+  let durableMetadata: Record<string, unknown> = {}
   try {
-    const [models, providers] = await Promise.all([
+    const [models, providers, job] = await Promise.all([
       prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
       prisma.aiProvider.findMany(),
+      prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }),
     ])
+    durableMetadata = safeParseJsonObject(job?.metadataJson)
     // Reaching this point proves the worker has both its DB connection and its
     // BullMQ delivery. Provider readiness is still derived per provider by the
     // core normalizer from credential, enabled, health, endpoint, registry, and
@@ -1120,13 +1123,41 @@ async function resolveOrchestraDecision(
     // DB unavailable — Orchestra will evaluate with empty candidates and block
   }
 
-  return evaluateOrchestra({
+  const serverControlledLongFormRoute = payload.executionProfile === 'internal_dashboard'
+    && capability === 'video_generation'
+    && durableMetadata.longFormVideo === true
+  const executorConstraint = serverControlledLongFormRoute && typeof durableMetadata.orchestraExecutorConstraint === 'string'
+    ? durableMetadata.orchestraExecutorConstraint
+    : null
+  if (executorConstraint) {
+    orchestraCandidates = orchestraCandidates.filter((candidate) => candidate.executorId === executorConstraint)
+  }
+
+  const persistedProvider = durableMetadata.orchestraSelectedProvider
+  const persistedModel = durableMetadata.orchestraSelectedModel
+  const persistedExecutor = durableMetadata.orchestraSelectedExecutorId
+  const reusedPersistedRoute = typeof persistedProvider === 'string'
+    && typeof persistedModel === 'string'
+    && typeof persistedExecutor === 'string'
+  if (reusedPersistedRoute) {
+    // Re-evaluate current health/configuration/compatibility, but never silently
+    // switch the provider, model, or executor selected for this durable job.
+    orchestraCandidates = orchestraCandidates.filter((candidate) => (
+      candidate.provider === persistedProvider
+      && candidate.model === persistedModel
+      && candidate.executorId === persistedExecutor
+    ))
+  }
+
+  const decision = evaluateOrchestra({
     capability,
+    executionProfile: payload.executionProfile ?? 'external_app',
     routingMode,
     executionId: payload.jobId,
     appSlug: payload.appSlug,
     appGrant,
   }, orchestraCandidates)
+  return { decision, reusedPersistedRoute }
 }
 
 export interface ProviderExecutionRoute {
@@ -1351,13 +1382,18 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
     return result
   }
 
-  const orchestraDecision = await resolveOrchestraDecision(payload, appGrant)
+  const { decision: orchestraDecision, reusedPersistedRoute } = await resolveOrchestraDecision(payload, appGrant)
 
   await persistJobMetadata(payload.jobId, {
-    orchestraExecutionId: orchestraDecision.executionId,
-    orchestraSelectedProvider: orchestraDecision.selectedProvider,
-    orchestraSelectedModel: orchestraDecision.selectedModel,
-    orchestraSelectedExecutorId: orchestraDecision.selectedExecutorId,
+    ...(reusedPersistedRoute ? {} : {
+      orchestraExecutionId: orchestraDecision.executionId,
+      orchestraSelectedProvider: orchestraDecision.selectedProvider,
+      orchestraSelectedModel: orchestraDecision.selectedModel,
+      orchestraSelectedExecutorId: orchestraDecision.selectedExecutorId,
+      orchestraSelectionPersistedAt: new Date().toISOString(),
+    }),
+    orchestraSelectionReused: reusedPersistedRoute,
+    orchestraExecutionProfile: orchestraDecision.executionProfile,
     orchestraScore: orchestraDecision.score,
     orchestraRoutingMode: orchestraDecision.routingMode,
     orchestraSnapshotTimestamp: orchestraDecision.snapshotTimestamp,

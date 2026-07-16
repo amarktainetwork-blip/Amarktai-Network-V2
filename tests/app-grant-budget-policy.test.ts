@@ -142,6 +142,24 @@ describe('App Grant and Budget Policy', () => {
       const blockers = checkCandidateEligibility(candidate, 'chat', grant)
       expect(blockers).not.toContain('app_provider_residency_constraint')
     })
+
+    it('keeps external-app grant and budget policy enforced', () => {
+      const grant = makeAppGrant({ enabled: false, maxCostPerRequest: 0.01 })
+      const decision = evaluateOrchestra(makeRequest({ executionProfile: 'external_app', appGrant: grant }), [
+        makeCandidate({ estimatedCost: 1 }),
+      ])
+      expect(decision.executionAllowed).toBe(false)
+      expect(decision.blockersRejected[0]?.blockers).toContain('app_capability_disabled')
+    })
+
+    it('does not apply external commercial ceilings to authenticated internal dashboard routing', () => {
+      const grant = makeAppGrant({ enabled: false, approvalRequired: true, maxCostPerRequest: 0.000001 })
+      const decision = evaluateOrchestra(makeRequest({ executionProfile: 'internal_dashboard', appGrant: grant }), [
+        makeCandidate({ estimatedCost: 10 }),
+      ])
+      expect(decision.executionAllowed).toBe(true)
+      expect(decision.executionProfile).toBe('internal_dashboard')
+    })
   })
 
   describe('Budget policy mapping', () => {
@@ -197,6 +215,10 @@ describe('App Grant and Budget Policy', () => {
       const result = checkBudgetConstraints(999999, 0, 0, 0)
       expect(result.allowed).toBe(true)
     })
+
+    it('treats absent ceilings as no app-specific spending ceiling', () => {
+      expect(checkBudgetConstraints(999999, undefined, undefined, 0).allowed).toBe(true)
+    })
   })
 
   describe('Quality floor', () => {
@@ -245,6 +267,13 @@ describe('App Grant and Budget Policy', () => {
       // Both candidates should be rejected since costs are in dollars, not cents
       // The cheap model at 0.001 dollars = 0.1 cents should pass
       expect(decision.selectedModel).toBe('cheap')
+    })
+
+    it('treats a zero app route limit as no configured ceiling', () => {
+      const decision = evaluateOrchestra(makeRequest({ executionProfile: 'external_app', appGrant: makeAppGrant({ maxCostPerRequest: 0 }) }), [
+        makeCandidate({ estimatedCost: 100 }),
+      ])
+      expect(decision.executionAllowed).toBe(true)
     })
   })
 })

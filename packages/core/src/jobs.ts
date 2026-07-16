@@ -87,6 +87,8 @@ export const BLOCKED_OVERRIDE_FIELDS = [
   'modelId',
   'selectedProvider',
   'selectedModel',
+  'executionProfile',
+  'orchestraExecutorConstraint',
 ] as const
 
 export const SAFE_ROUTING_FIELDS = ['routingMode'] as const

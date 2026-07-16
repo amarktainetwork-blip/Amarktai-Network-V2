@@ -450,7 +450,10 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
   const releaseCandidateCapabilities = getReleaseCandidateCapabilityKeys()
   const releaseCandidateSet = new Set(releaseCandidateCapabilities)
   const capabilityMap = new Map(capabilities.map((capability) => [capability.capability, capability]))
-  const longFormDependencies = ['video_generation', 'tts', 'music_generation']
+  // The base durable workflow is executable with video scenes and FFmpeg.
+  // Voiceover and music remain optional component paths, not prerequisites for
+  // the first video-only long-form execution profile.
+  const longFormDependencies = ['video_generation']
     .map((capability) => capabilityMap.get(capability as CapabilityKey))
     .filter((capability): capability is CapabilityRuntimeTruth => Boolean(capability))
 
@@ -473,14 +476,14 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
       ...(workflowPresent ? ['ffmpeg'] : []),
     ]
     const workflowReady = workflowPresent
-      && input.longFormComponents?.fullMultimediaReady === true
+      && input.longFormComponents?.videoOnlyAssemblyReady === true
       && longFormDependencies.every((dependency) => dependency.configured && dependency.infrastructureReady)
     const implementationReady = workflowPresent ? workflowReady : capability.implementationReady
     const configured = workflowPresent
       ? longFormDependencies.every((dependency) => dependency.configured)
       : capability.configured
     const infrastructureReady = workflowPresent
-      ? input.longFormComponents?.fullMultimediaReady === true
+      ? input.longFormComponents?.videoOnlyAssemblyReady === true
       : capability.infrastructureReady
     const locallyProven = input.localStaticEvidence?.[capability.capability] === true
     const blockedReasons: string[] = []
@@ -488,7 +491,6 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
     if (!clientPresent) blockedReasons.push('client_missing')
     if (!executorPresent && !workflowPresent) blockedReasons.push('executor_or_workflow_missing')
     if (!schemaPresent) blockedReasons.push('schema_missing')
-    if (!appGrantPresent) blockedReasons.push('app_grant_missing')
     if (!configured) blockedReasons.push('provider_configuration_missing')
     if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
     if (!capability.policyAllowed) blockedReasons.push('policy_restricted')
@@ -510,7 +512,6 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
       readyForDashboardExecution: releaseCandidate
         && implementationReady
         && schemaPresent
-        && appGrantPresent
         && configured
         && infrastructureReady
         && capability.policyAllowed,

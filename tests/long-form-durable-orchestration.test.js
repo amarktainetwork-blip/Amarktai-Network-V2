@@ -4,6 +4,7 @@ import Fastify from 'fastify'
 const db = vi.hoisted(() => {
   const jobs = []
   let counter = 0
+  let appGrantOverrides = {}
   const makeJob = (data) => {
     counter += 1
     const now = new Date(`2026-07-10T00:00:${String(counter).padStart(2, '0')}.000Z`)
@@ -165,10 +166,12 @@ const db = vi.hoisted(() => {
     reset: () => {
       jobs.splice(0, jobs.length)
       counter = 0
+      appGrantOverrides = {}
       Object.values(jobApi).forEach((fn) => fn.mockClear())
       refreshLongFormParentState.mockClear()
     },
     refreshLongFormParentState,
+    setAppGrantOverrides: (value) => { appGrantOverrides = value },
     prisma: {
       job: jobApi,
       artifact: {
@@ -205,6 +208,7 @@ const db = vi.hoisted(() => {
             dataRetentionPolicy: 'default',
             passthroughModelAllowed: false,
             providerResidencyConstraints: '[]',
+            ...appGrantOverrides,
           }
         }),
       },
@@ -247,11 +251,14 @@ const auth = { authorization: 'Bearer admin-token' }
 function requestPayload(overrides = {}) {
   return {
     prompt: 'Create a durable long-form documentary about resilient orchestration',
-    targetDurationSeconds: 60,
+    targetDurationSeconds: 30,
     sceneCount: 3,
     aspectRatio: '16:9',
-    style: 'documentary',
-    tone: 'informative',
+    style: 'cinematic',
+    tone: 'professional',
+    voiceoverEnabled: false,
+    subtitlesEnabled: false,
+    musicBedEnabled: false,
     ...overrides,
   }
 }
@@ -291,10 +298,43 @@ describe('durable long-form orchestration', () => {
     expect(parent.capability).toBe('long_form_video')
     expect(parent.executionId).toBe(body.executionId)
     expect(parentMeta.plan.storyboard.scenes).toHaveLength(3)
+    expect(parentMeta.request.targetDurationSeconds).toBe(30)
+    expect(parentMeta.request.voiceoverEnabled).toBe(false)
+    expect(parentMeta.request.subtitlesEnabled).toBe(false)
+    expect(parentMeta.request.musicBedEnabled).toBe(false)
     expect(parentMeta.assemblyHandoff.parentJobId).toBe(parent.id)
     expect(scenes).toHaveLength(3)
     expect(scenes.map((scene) => scene.sceneNumber)).toEqual([1, 2, 3])
     expect(scenes.every((scene) => scene.executionId === parent.executionId)).toBe(true)
+    expect(scenes.every((scene) => JSON.parse(scene.metadataJson).orchestraExecutorConstraint === 'genx.video-generation')).toBe(true)
+    expect(queue.add).toHaveBeenCalledTimes(3)
+
+    await app.close()
+  })
+
+  it('does not let external-app disablement or cost ceilings block the authenticated internal dashboard', async () => {
+    db.setAppGrantOverrides({ enabled: false, approvalRequired: true, maxCostPerRequest: 0.000001, maxCostPerWorkflow: 0.000001 })
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload(),
+    })
+
+    expect(response.statusCode).toBe(202)
+    const scenes = db.jobs.filter((job) => job.parentJobId === response.json().parentJobId && job.capability === 'video_generation')
+    expect(scenes).toHaveLength(3)
+    for (const scene of scenes) {
+      const metadata = JSON.parse(scene.metadataJson)
+      expect(metadata.executionProfile).toBe('internal_dashboard')
+      expect(metadata.appGrantSnapshot.enabled).toBe(true)
+      expect(metadata.appGrantSnapshot.maxCostPerRequest).toBe(0)
+      expect(metadata.appGrantSnapshot.maxCostPerWorkflow).toBe(0)
+    }
     expect(queue.add).toHaveBeenCalledTimes(3)
 
     await app.close()
@@ -583,6 +623,22 @@ describe('durable long-form orchestration', () => {
       payload: requestPayload({ provider: 'genx' }),
     })
     expect(override.statusCode).toBe(400)
+
+    const executionProfileOverride = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload({ executionProfile: 'internal_dashboard' }),
+    })
+    expect(executionProfileOverride.statusCode).toBe(400)
+
+    const executorOverride = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload({ orchestraExecutorConstraint: 'together.video-generation' }),
+    })
+    expect(executorOverride.statusCode).toBe(400)
 
     db.jobs.push({
       id: 'foreign-parent',

@@ -234,6 +234,7 @@ describe('GenX video executor', () => {
   it('resumes an existing GenX remote job without submitting a duplicate provider request', async () => {
     prismaMock.job.findUnique
       .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra selection persistence
       .mockResolvedValueOnce({
         metadataJson: JSON.stringify({
           genxProviderJobId: 'genx-remote-resume-001',
@@ -265,8 +266,9 @@ describe('GenX video executor', () => {
   it('blocks provider submission when cancellation wins before the provider claim', async () => {
     prismaMock.job.findUnique
       .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
-      .mockResolvedValueOnce({ metadataJson: '{}' }) // claimMusicExecution stale check
-      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' }) // claim check
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra selection persistence
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // GenX resume metadata
+      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' }) // provider claim check
     prismaMock.job.updateMany.mockResolvedValueOnce({ count: 0 })
 
     const result = await executeWithProvider(makePayload())

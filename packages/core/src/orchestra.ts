@@ -19,6 +19,8 @@ import { getModelRecord } from './model-catalog.js'
 
 export const ORCHESTRA_ROUTING_MODES = ['balanced', 'quality', 'economy', 'fast'] as const
 export type OrchestraRoutingMode = (typeof ORCHESTRA_ROUTING_MODES)[number]
+export const EXECUTION_PROFILES = ['internal_dashboard', 'external_app'] as const
+export type ExecutionProfile = (typeof EXECUTION_PROFILES)[number]
 
 // ── Shared Constants ───────────────────────────────────────────
 
@@ -58,6 +60,7 @@ export interface AppCapabilityGrantContext {
 
 export interface OrchestraRequest {
   capability: CapabilityKey
+  executionProfile?: ExecutionProfile
   routingMode?: OrchestraRoutingMode
   appSlug?: string
   qualityTier?: string
@@ -87,6 +90,8 @@ export const ORCHESTRA_BLOCKED_REQUEST_FIELDS = [
   'routingScore',
   'forceProvider',
   'forceModel',
+  'executionProfile',
+  'orchestraExecutorConstraint',
 ] as const
 
 export function validateOrchestraRequest(input: Record<string, unknown>): string | null {
@@ -145,6 +150,7 @@ export interface OrchestraFallbackRoute {
 export interface OrchestraDecision {
   executionId: string
   capability: CapabilityKey
+  executionProfile: ExecutionProfile
   routingMode: OrchestraRoutingMode
   selectedProvider: ProviderKey | null
   selectedModel: string | null
@@ -172,11 +178,12 @@ export function checkCandidateEligibility(
   candidate: OrchestraCandidate,
   capability: CapabilityKey,
   appGrant?: AppCapabilityGrantContext,
+  executionProfile: ExecutionProfile = 'external_app',
 ): string[] {
   const blockers: string[] = []
 
   // App grant checks
-  if (appGrant) {
+  if (appGrant && executionProfile === 'external_app') {
     if (!appGrant.enabled) {
       blockers.push('app_capability_disabled')
       return blockers
@@ -190,14 +197,15 @@ export function checkCandidateEligibility(
       blockers.push('app_live_proof_required')
     }
 
-    if (!appGrant.adultPermission && capability.startsWith('adult_')) {
-      blockers.push('app_adult_permission_required')
-    }
-
     if (appGrant.providerResidencyConstraints.length > 0 &&
         !appGrant.providerResidencyConstraints.includes(candidate.provider)) {
       blockers.push('app_provider_residency_constraint')
     }
+  }
+
+  // Adult permission is a safety boundary for every execution profile.
+  if (appGrant && !appGrant.adultPermission && capability.startsWith('adult_')) {
+    blockers.push('app_adult_permission_required')
   }
 
   if (!isProviderApproved(candidate.provider)) {
@@ -436,6 +444,7 @@ export function evaluateOrchestra(
 ): OrchestraDecision {
   const capability = request.capability
   const routingMode = request.routingMode ?? 'balanced'
+  const executionProfile = request.executionProfile ?? 'external_app'
   const executionId = request.executionId ?? `exec_${Date.now()}`
   const weights = getWeights(routingMode)
   const appGrant = request.appGrant
@@ -444,7 +453,7 @@ export function evaluateOrchestra(
   const blockersRejected: Array<{ provider: string; model: string; blockers: string[] }> = []
 
   for (const candidate of candidates) {
-    const blockers = checkCandidateEligibility(candidate, capability, appGrant)
+    const blockers = checkCandidateEligibility(candidate, capability, appGrant, executionProfile)
     if (blockers.length > 0) {
       blockersRejected.push({
         provider: candidate.provider,
@@ -455,7 +464,7 @@ export function evaluateOrchestra(
     }
 
     // Budget check if app grant specifies cost limits
-    if (appGrant && appGrant.maxCostPerRequest > 0 && candidate.estimatedCost !== null) {
+    if (executionProfile === 'external_app' && appGrant && appGrant.maxCostPerRequest > 0 && candidate.estimatedCost !== null) {
       if (candidate.estimatedCost > appGrant.maxCostPerRequest) {
         blockersRejected.push({
           provider: candidate.provider,
@@ -475,7 +484,9 @@ export function evaluateOrchestra(
   eligible.sort(compareCandidates)
 
   // Respect app grant fallback limits
-  const maxFallbacks = appGrant?.allowFallback === false ? 0 : (appGrant?.maxFallbackAttempts ?? 3)
+  const maxFallbacks = executionProfile === 'external_app' && appGrant?.allowFallback === false
+    ? 0
+    : executionProfile === 'external_app' ? (appGrant?.maxFallbackAttempts ?? 3) : 3
   const selected = eligible[0] ?? null
   const fallbackRoutes: OrchestraFallbackRoute[] = eligible.slice(1, 1 + maxFallbacks).map((c) => ({
     provider: c.provider,
@@ -503,6 +514,7 @@ export function evaluateOrchestra(
   return {
     executionId,
     capability,
+    executionProfile,
     routingMode,
     selectedProvider: selected?.provider ?? null,
     selectedModel: selected?.model ?? null,
