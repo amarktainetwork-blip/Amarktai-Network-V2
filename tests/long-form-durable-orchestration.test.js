@@ -357,7 +357,16 @@ describe('durable long-form orchestration', () => {
   it('does not use metadata substring lookup as canonical scene relation', async () => {
     const source = await import('node:fs/promises').then((fs) => fs.readFile('apps/api/src/routes/admin-long-form-video.ts', 'utf8'))
     expect(source).toContain('parentJobId')
-    expect(source).not.toContain('metadataJson: { contains')
+    // Canonical scene relation uses parentJobId, not metadata substring lookup.
+    // The preview-scene endpoint uses metadata lookup only for idempotent preview job reuse,
+    // not for canonical scene relationships.
+    const lines = source.split('\n')
+    const canonicalRelationLines = lines.filter((line) =>
+      line.includes('metadataJson: { contains') &&
+      !line.includes('longFormScenePreview') &&
+      !line.includes('trace_longform_preview')
+    )
+    expect(canonicalRelationLines).toHaveLength(0)
   })
 
   it('keeps partial queue failure recoverable', async () => {

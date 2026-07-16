@@ -43,6 +43,8 @@ export default function VideoStudioPage() {
   const [musicBedEnabled, setMusicBedEnabled] = useState(false)
   const [planResult, setPlanResult] = useState(null)
   const [planPhase, setPlanPhase] = useState('idle')
+  const [previewJobs, setPreviewJobs] = useState({})
+  const [previewRunning, setPreviewRunning] = useState(false)
   const stopped = useRef(false)
   const { status } = useRuntimeProofStatus()
   const proof = getRuntimeCapabilityProof(status, mode)
@@ -174,6 +176,69 @@ export default function VideoStudioPage() {
     } finally { setRunning(false) }
   }
 
+  const previewScene = async (sceneNumber) => {
+    if (!planResult?.planId || !planResult?.versionHash || !planResult?.executionId) return
+    setPreviewRunning(true)
+    try {
+      const response = await adminFetch('/api/admin/long-form-video/preview-scene', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          executionId: planResult.executionId,
+          planId: planResult.planId,
+          versionHash: planResult.versionHash,
+          sceneNumber,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || data.details || 'Scene preview failed')
+      setPreviewJobs((prev) => ({ ...prev, [sceneNumber]: data }))
+      if (data.status === 'queued' || data.status === 'processing') {
+        pollPreviewJob(sceneNumber, data.previewJobId)
+      }
+    } catch (error) {
+      setPreviewJobs((prev) => ({ ...prev, [sceneNumber]: { error: error.message } }))
+    } finally { setPreviewRunning(false) }
+  }
+
+  const retryPreview = async (sceneNumber) => {
+    if (!planResult?.planId || !planResult?.versionHash || !planResult?.executionId) return
+    setPreviewRunning(true)
+    try {
+      const response = await adminFetch('/api/admin/long-form-video/preview-scene/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          executionId: planResult.executionId,
+          planId: planResult.planId,
+          versionHash: planResult.versionHash,
+          sceneNumber,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message || data.details || 'Scene preview retry failed')
+      setPreviewJobs((prev) => ({ ...prev, [sceneNumber]: data }))
+      if (data.status === 'queued' || data.status === 'processing') {
+        pollPreviewJob(sceneNumber, data.previewJobId)
+      }
+    } catch (error) {
+      setPreviewJobs((prev) => ({ ...prev, [sceneNumber]: { error: error.message } }))
+    } finally { setPreviewRunning(false) }
+  }
+
+  const pollPreviewJob = async (sceneNumber, jobId) => {
+    const headers = { Authorization: `Bearer ${getAdminToken()}` }
+    for (let attempt = 0; attempt < 300 && !stopped.current; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2500))
+      try {
+        const response = await fetch(`/api/admin/jobs/${jobId}`, { headers, cache: 'no-store' })
+        const data = await response.json()
+        if (!response.ok) break
+        const job = data.job ?? data
+        setPreviewJobs((prev) => ({ ...prev, [sceneNumber]: { ...prev[sceneNumber], ...job, status: job.status } }))
+        if (['completed', 'failed', 'cancelled'].includes(job.status)) break
+      } catch { break }
+    }
+  }
+
   const sourceType = mode === 'image_to_video' ? 'image/' : 'video/'
   const sources = artifacts.filter((artifact) => artifact.mimeType?.startsWith(sourceType))
   const source = sources.find((artifact) => artifact.id === sourceArtifactId)
@@ -216,7 +281,7 @@ export default function VideoStudioPage() {
         <div><span className="text-muted-foreground">Narration words:</span> {planResult.plan?.storyboard?.scenes?.reduce((s, sc) => s + (sc.voiceoverText?.split(/\s+/).length || 0), 0) || 0}</div>
       </div>
       {planResult.validation && !planResult.validation.valid && <div className="rounded bg-rose-500/5 p-3 text-xs text-rose-200">Validation errors: {planResult.validation.errors.join('; ')}</div>}
-      <div className="grid gap-3 md:grid-cols-3">{(planResult.plan?.storyboard?.scenes || []).map((scene) => <PlanSceneCard key={scene.sceneNumber} scene={scene} />)}</div>
+      <div className="grid gap-3 md:grid-cols-3">{(planResult.plan?.storyboard?.scenes || []).map((scene) => <PlanSceneCard key={scene.sceneNumber} scene={scene} preview={previewJobs[scene.sceneNumber]} previewRunning={previewRunning} onPreview={() => previewScene(scene.sceneNumber)} onRetryPreview={() => retryPreview(scene.sceneNumber)} />)}</div>
       {planResult.plan?.callToAction && <div className="text-xs"><span className="font-semibold">CTA:</span> {planResult.plan.callToAction}</div>}
       {planResult.plan?.legalQualifier && <div className="text-xs"><span className="font-semibold">Legal:</span> {planResult.plan.legalQualifier}</div>}
       {planResult.plan?.musicBrief && <div className="text-xs"><span className="font-semibold">Music brief:</span> {planResult.plan.musicBrief}</div>}
@@ -227,7 +292,14 @@ export default function VideoStudioPage() {
   </PageTransition>
 }
 
-function PlanSceneCard({ scene }) {
+function PlanSceneCard({ scene, preview, previewRunning, onPreview, onRetryPreview }) {
+  const previewStatus = preview?.status
+  const isPreviewQueued = previewStatus === 'queued'
+  const isPreviewProcessing = previewStatus === 'processing'
+  const isPreviewCompleted = previewStatus === 'completed'
+  const isPreviewFailed = previewStatus === 'failed'
+  const previewArtifactId = preview?.artifactId || preview?.metadata?.artifactId
+
   return <div className="space-y-2 rounded-lg border border-cyan-500/10 bg-cyan-500/[0.02] p-3">
     <div className="flex items-center justify-between"><span className="text-xs font-semibold">Scene {scene.sceneNumber}: {scene.title}</span><Badge variant="outline">{scene.durationSeconds}s</Badge></div>
     {scene.objective && <div className="text-[10px]"><span className="font-semibold">Objective:</span> {scene.objective}</div>}
@@ -237,6 +309,16 @@ function PlanSceneCard({ scene }) {
     {scene.voiceoverText && <div className="text-[10px]"><span className="font-semibold">Voiceover:</span> {scene.voiceoverText}</div>}
     {scene.subtitleText && <div className="text-[10px]"><span className="font-semibold">Subtitle:</span> {scene.subtitleText}</div>}
     {scene.overlays?.length > 0 && <div className="text-[10px]"><span className="font-semibold">Overlays:</span> {scene.overlays.map((o) => o.text).join(' | ')}</div>}
+    <div className="mt-2 space-y-2 border-t border-cyan-500/10 pt-2">
+      {!previewStatus && <Button size="sm" variant="outline" disabled={previewRunning} onClick={onPreview}>Preview this scene</Button>}
+      {(isPreviewQueued || isPreviewProcessing) && <div className="flex items-center gap-2"><Badge variant="outline">{previewStatus}</Badge><span className="text-[10px] text-muted-foreground">Routing: {preview?.routingMode || 'pending'}</span></div>}
+      {isPreviewCompleted && <div className="space-y-1">
+        <div className="flex items-center gap-2"><Badge variant="outline" className="bg-emerald-500/10">Preview complete</Badge>{preview?.provider && <span className="text-[10px] text-muted-foreground">{preview.provider} / {preview.model}</span>}</div>
+        {previewArtifactId && <><video controls preload="metadata" src={`/api/admin/artifacts/${previewArtifactId}/file`} className="w-full rounded" /><a href={`/api/admin/artifacts/${previewArtifactId}/file?download=1`} className="inline-flex items-center text-xs text-cyan-300"><Download className="mr-1 h-3 w-3" />Download preview</a></>}
+      </div>}
+      {isPreviewFailed && <div className="space-y-1"><Badge variant="outline" className="bg-rose-500/10">Preview failed</Badge>{preview?.error && <p className="text-[10px] text-rose-300">{preview.error}</p>}<Button size="sm" variant="outline" disabled={previewRunning} onClick={onRetryPreview}>Retry preview</Button></div>}
+      {preview?.reused && <span className="text-[10px] text-muted-foreground">(Reused existing preview)</span>}
+    </div>
   </div>
 }
 

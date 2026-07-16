@@ -781,6 +781,281 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     }
   })
 
+  // ── Preview Scene Endpoint: preview one scene from a planned parent ─────────
+  app.post('/api/admin/long-form-video/preview-scene', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const executionId = body.executionId as string | undefined
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const sceneNumber = typeof body.sceneNumber === 'number' ? body.sceneNumber : Number(body.sceneNumber)
+
+    if (!executionId || !planId || !versionHash || !sceneNumber) {
+      return reply.status(400).send({ error: true, message: 'executionId, planId, versionHash, and sceneNumber are required' })
+    }
+
+    try {
+      // Load the persisted planned parent
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const metadata = safeJson(loaded.parent.metadataJson)
+      if (metadata.approved === true) {
+        return reply.status(409).send({ error: true, message: 'Plan is already approved and executing' })
+      }
+
+      const storedPlan = metadata.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+
+      // Verify plan ID matches
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+
+      // Verify version hash matches (immutable check)
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match. The plan may have been modified.' })
+      }
+
+      // Validate plan completeness
+      const validation = validatePlanCompleteness(storedPlan)
+      if (!validation.valid) {
+        return reply.status(422).send({ error: true, message: 'Plan validation failed', errors: validation.errors })
+      }
+
+      // Find the requested scene
+      const scene = storedPlan.storyboard.scenes.find((s) => s.sceneNumber === sceneNumber)
+      if (!scene) {
+        return reply.status(404).send({ error: true, message: `Scene ${sceneNumber} not found in plan. Available scenes: ${storedPlan.storyboard.scenes.map((s) => s.sceneNumber).join(', ')}` })
+      }
+
+      const routingMode = normalizeRoutingMode(metadata.routingMode ?? storedPlan.routingMode)
+
+      // Idempotency: check if a preview already exists for this scene/plan/version
+      const previewTraceId = `trace_longform_preview_${executionId}_scene_${sceneNumber}`
+      const existingPreview = await prisma.job.findFirst({
+        where: {
+          traceId: previewTraceId,
+          metadataJson: { contains: '"longFormScenePreview":true' },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (existingPreview) {
+        const existingStatus = existingPreview.status
+        if (['queued', 'processing'].includes(existingStatus)) {
+          return reply.status(200).send({
+            success: true,
+            previewJobId: existingPreview.id,
+            sceneNumber,
+            planId: storedPlan.id,
+            versionHash: storedPlan.versionHash,
+            routingMode,
+            status: existingStatus,
+            providerCallsStarted: true,
+            reused: true,
+            message: `Preview job already ${existingStatus}. Reusing existing job.`,
+          })
+        }
+        if (existingStatus === 'completed') {
+          const existingMeta = safeJson(existingPreview.metadataJson)
+          return reply.status(200).send({
+            success: true,
+            previewJobId: existingPreview.id,
+            sceneNumber,
+            planId: storedPlan.id,
+            versionHash: storedPlan.versionHash,
+            routingMode,
+            status: 'completed',
+            providerCallsStarted: true,
+            artifactId: existingPreview.artifactId ?? existingMeta.artifactId ?? null,
+            provider: existingMeta.orchestraActualProvider ?? existingMeta.directProviderExecutorId ?? null,
+            model: existingMeta.orchestraActualModel ?? null,
+            reused: true,
+            message: 'Preview already completed. Reusing existing artifact.',
+          })
+        }
+        if (existingStatus === 'failed') {
+          return reply.status(409).send({
+            error: true,
+            message: 'Previous preview failed. Use the retry endpoint to re-run.',
+            previewJobId: existingPreview.id,
+            status: 'failed',
+          })
+        }
+      }
+
+      // Resolve video grant for the preview job
+      const videoGrant = await resolveInternalDashboardCapabilityGrantSnapshot(APP_SLUG, 'video_generation')
+      if (!videoGrant) {
+        return reply.status(500).send({ error: true, message: 'No registered internal video_generation capability' })
+      }
+
+      // Build the scene payload using canonical functions
+      const payloads = createSceneExecutionPayloads(storedPlan, routingMode, executionId)
+      const payload = payloads.find((p) => p.sceneNumber === sceneNumber)
+      if (!payload) {
+        return reply.status(500).send({ error: true, message: 'Failed to create scene payload' })
+      }
+
+      const snapshotAt = new Date().toISOString()
+      const videoGrantMetadata = {
+        executionProfile: 'internal_dashboard',
+        orchestraExecutorConstraint: 'genx.video-generation',
+        appGrantSnapshot: videoGrant.grant,
+        appGrantSnapshotSource: videoGrant.source,
+        appGrantSnapshotAt: snapshotAt,
+      }
+
+      // Create exactly one preview job
+      const previewJob = await prisma.job.create({
+        data: {
+          appSlug: APP_SLUG,
+          capability: 'video_generation',
+          prompt: payload.prompt,
+          inputJson: JSON.stringify(payload.input),
+          metadataJson: JSON.stringify({
+            ...payload.metadata,
+            ...videoGrantMetadata,
+            longFormVideo: true,
+            longFormScenePreview: true,
+            sourcePlanId: storedPlan.id,
+            sourcePlanVersionHash: storedPlan.versionHash,
+            sourcePlanExecutionId: executionId,
+            sceneNumber,
+            routingMode,
+            retryGeneration: 0,
+            createdFromApprovedPlan: false,
+            executionProfile: 'internal_dashboard',
+          }),
+          traceId: previewTraceId,
+          status: 'queued',
+          executionId,
+          sceneNumber,
+          workflowPhase: 'scene_preview_queued',
+        },
+      })
+
+      // Queue the preview job using the canonical scene enqueue function
+      const queue = getQueue()
+      const enqueueResult = await enqueueSceneJob(queue, previewJob)
+
+      return reply.status(202).send({
+        success: true,
+        previewJobId: previewJob.id,
+        sceneNumber,
+        planId: storedPlan.id,
+        versionHash: storedPlan.versionHash,
+        routingMode,
+        status: enqueueResult.queued ? 'queued' : enqueueResult.skipped ? 'skipped' : 'failed_to_queue',
+        providerCallsStarted: enqueueResult.queued,
+        downgradeRequired: false,
+        downgradeReason: null,
+        message: enqueueResult.queued
+          ? `Scene ${sceneNumber} preview queued with ${routingMode} routing. No other scenes, audio, or assembly started.`
+          : enqueueResult.skipped
+            ? `Scene ${sceneNumber} preview skipped (already queued or terminal).`
+            : `Failed to queue scene ${sceneNumber} preview.`,
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Scene preview failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  // ── Preview Scene Retry Endpoint ─────────────────────────────────────────────
+  app.post('/api/admin/long-form-video/preview-scene/retry', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const executionId = body.executionId as string | undefined
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const sceneNumber = typeof body.sceneNumber === 'number' ? body.sceneNumber : Number(body.sceneNumber)
+
+    if (!executionId || !planId || !versionHash || !sceneNumber) {
+      return reply.status(400).send({ error: true, message: 'executionId, planId, versionHash, and sceneNumber are required' })
+    }
+
+    try {
+      const previewTraceId = `trace_longform_preview_${executionId}_scene_${sceneNumber}`
+      const existingPreview = await prisma.job.findFirst({
+        where: {
+          traceId: previewTraceId,
+          metadataJson: { contains: '"longFormScenePreview":true' },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (!existingPreview) {
+        return reply.status(404).send({ error: true, message: 'No preview job found for this scene. Use the preview endpoint to create one.' })
+      }
+
+      if (existingPreview.status === 'completed') {
+        return reply.status(409).send({ error: true, message: 'Preview already completed. Cannot retry a completed preview.' })
+      }
+
+      if (!['failed', 'cancelled'].includes(existingPreview.status)) {
+        return reply.status(409).send({ error: true, message: `Preview is in status '${existingPreview.status}'. Only failed or cancelled previews can be retried.` })
+      }
+
+      const existingMeta = safeJson(existingPreview.metadataJson)
+      const retryGeneration = (typeof existingMeta.retryGeneration === 'number' ? existingMeta.retryGeneration : 0) + 1
+      if (retryGeneration > MAX_SCENE_RETRIES) {
+        return reply.status(429).send({ error: true, message: `Retry limit (${MAX_SCENE_RETRIES}) reached for this preview.` })
+      }
+
+      // Update the existing job for retry
+      await prisma.job.update({
+        where: { id: existingPreview.id },
+        data: {
+          status: 'queued',
+          progress: 0,
+          error: null,
+          metadataJson: JSON.stringify({
+            ...existingMeta,
+            retryGeneration,
+            retryAt: new Date().toISOString(),
+          }),
+          workflowPhase: 'scene_preview_retry_queued',
+        },
+      })
+
+      // Re-queue
+      const queue = getQueue()
+      const enqueueResult = await enqueueSceneJob(queue, existingPreview)
+
+      return reply.status(202).send({
+        success: true,
+        previewJobId: existingPreview.id,
+        sceneNumber,
+        planId: existingMeta.sourcePlanId ?? planId,
+        versionHash: existingMeta.sourcePlanVersionHash ?? versionHash,
+        routingMode: normalizeRoutingMode(existingMeta.routingMode ?? 'balanced'),
+        status: enqueueResult.queued ? 'queued' : enqueueResult.skipped ? 'skipped' : 'failed_to_queue',
+        retryGeneration,
+        message: `Scene ${sceneNumber} preview retry #${retryGeneration} queued.`,
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Scene preview retry failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
   // ── Execution Handler (backward-compatible, for simple neutral tests) ───────
   async function createExecutionHandler(request: FastifyRequest, reply: FastifyReply) {
     if (!(await requireAdmin(app, request, reply))) return

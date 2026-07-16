@@ -59,4 +59,23 @@ describe('long-form dashboard plan-first contract', () => {
     expect(source).toContain("longResult?.parent?.executionId || longResult?.executionId || executionId")
     expect(source).toContain("localStorage.removeItem(LONG_PLAN_KEY)")
   })
+
+  it('supports single-scene preview before plan approval', () => {
+    expect(source).toContain("adminFetch('/api/admin/long-form-video/preview-scene'")
+    expect(source).toContain('previewScene')
+    expect(source).toContain('Preview this scene')
+    expect(source).toContain('previewJobs')
+    expect(source).toContain('previewRunning')
+    expect(source).toContain('retryPreview')
+    expect(source).toContain('pollPreviewJob')
+    expect(source).toContain('preview-scene/retry')
+  })
+
+  it('shows preview status and artifact without approving the plan', () => {
+    expect(source).toContain('Preview complete')
+    expect(source).toContain('Preview failed')
+    expect(source).toContain('Reused existing preview')
+    expect(source).toContain('previewArtifactId')
+    expect(source).toContain('Download preview')
+  })
 })
