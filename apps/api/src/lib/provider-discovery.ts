@@ -422,7 +422,13 @@ function mapGenXCategory(rawCategory: string, id: string): { category: string; r
   const idLower = id.toLowerCase()
   if (category.includes('image') || idLower.includes('image')) return { category: 'image', role: 'image_generation', capabilities: { supportsImageGeneration: true } }
   if (category.includes('avatar') || idLower.includes('avatar')) return { category: 'video', role: 'avatar_generation', capabilities: { supportsVideoGeneration: true } }
-  if (category.includes('audio') || category.includes('voice') || idLower.includes('tts') || idLower.includes('voice')) return { category: 'audio', role: 'tts', capabilities: { supportsTts: true } }
+  if (category.includes('audio') || category.includes('voice') || idLower.includes('tts') || idLower.includes('voice')) {
+    if (idLower.includes('music') || idLower.includes('lyria') || category.includes('music')) {
+      return { category: 'audio', role: 'music_generation', capabilities: { supportsMusicGeneration: true } }
+    }
+    return { category: 'audio', role: 'tts', capabilities: { supportsTts: true } }
+  }
+  if (category.includes('music')) return { category: 'audio', role: 'music_generation', capabilities: { supportsMusicGeneration: true } }
   if (category.includes('multimodal')) return { category: 'multimodal', role: 'multimodal', capabilities: { supportsMultimodal: true } }
   return { category: 'video', role: 'video_generation', capabilities: { supportsVideoGeneration: true } }
 }
@@ -514,7 +520,7 @@ export async function discoverGroqModels(apiKey: string): Promise<DiscoveryResul
 
       if (lowerId.includes('whisper') || lowerId.includes('distil-whisper')) {
         category = 'audio'; role = 'stt'; delete capabilities.supportsChat; delete capabilities.supportsText; capabilities.supportsStt = true
-      } else if (lowerId.includes('tts') || lowerId.includes('playai')) {
+      } else if (lowerId.includes('tts') || lowerId.includes('playai') || lowerId.includes('orpheus')) {
         category = 'audio'; role = 'tts'; delete capabilities.supportsChat; delete capabilities.supportsText; capabilities.supportsTts = true
       } else if (lowerId.includes('vision') || lowerId.includes('llama-3.2')) {
         capabilities.supportsMultimodal = true

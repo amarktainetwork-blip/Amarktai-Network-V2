@@ -523,6 +523,8 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
         parentJobId: parent.id,
         executionId,
         planVersion: plan.id,
+        planVersionHash: plan.versionHash,
+        routingMode,
         retryGeneration: 0,
       }
       const job = await tx.job.create({
@@ -546,6 +548,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
 
     const voiceoverJobs: DbJob[] = []
     if (input.voiceoverEnabled) {
+      const voiceProfile = plan.voiceProfile ?? {}
       for (const scene of plan.storyboard.scenes) {
         if (!scene.voiceoverText) continue
         const voMetadata = {
@@ -554,6 +557,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
           longFormVoiceover: true,
           longFormExecutionId: executionId,
           planId: plan.id,
+          planVersionHash: plan.versionHash,
           sceneNumber: scene.sceneNumber,
           sceneTitle: scene.title,
           parentJobId: parent.id,
@@ -568,7 +572,15 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
             appSlug,
             capability: 'tts',
             prompt: scene.voiceoverText,
-            inputJson: JSON.stringify({ text: scene.voiceoverText, sceneNumber: scene.sceneNumber }),
+            inputJson: JSON.stringify({
+              text: scene.voiceoverText,
+              sceneNumber: scene.sceneNumber,
+              voice: voiceProfile.voice ?? 'tara',
+              speed: voiceProfile.speed ?? 1,
+              outputFormat: voiceProfile.outputFormat ?? 'wav',
+              language: voiceProfile.language ?? 'en',
+              style: voiceProfile.tone,
+            }),
             metadataJson: JSON.stringify(voMetadata),
             traceId: `trace_longform_${executionId}_voiceover_${scene.sceneNumber}`,
             status: dryRun ? 'planned' : 'queued',
@@ -584,9 +596,9 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
 
     let musicJob: DbJob | null = null
     if (input.musicBedEnabled) {
-      const musicPrompt = `${plan.tone} ${plan.style} instrumental background music for: ${input.prompt}`
+      const musicBrief = plan.musicBrief || `${plan.tone} ${plan.style} instrumental background music`
       musicJob = await tx.job.create({ data: {
-        appSlug, capability: 'music_generation', prompt: musicPrompt,
+        appSlug, capability: 'music_generation', prompt: musicBrief,
         inputJson: JSON.stringify({ duration: Math.min(plan.totalDurationSeconds, 300), instrumentalOnly: true, style: plan.style }),
         metadataJson: JSON.stringify({
           executionProfile: 'internal_dashboard',

@@ -324,8 +324,14 @@ function buildGenXPricingCatalogData(
 }
 
 // Curated DB projection is derived from the canonical core model catalogue.
+// Always include ALL static catalogue entries so curated seed can overwrite
+// discovery metadata with correct compatibility fields for TTS, music, etc.
+const STATIC_MODEL_IDS = new Set(
+  MODEL_CATALOGUE.filter((m) => !m.discoveredModel).map((m) => `${m.provider}/${m.modelId}`)
+)
+
 export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = MODEL_CATALOGUE
-  .filter((model) => model.discoveredModel !== true)
+  .filter((model) => !model.discoveredModel || STATIC_MODEL_IDS.has(`${model.provider}/${model.modelId}`))
   .map(modelRecordToCatalogEntry)
 
 function modelRecordToCatalogEntry(model: ModelRecord): ModelCatalogEntry {
@@ -402,9 +408,18 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
     }
   }
   if (model.provider === 'genx' && (category === 'audio' || category === 'music')) {
+    const isMusic = identifier.includes('music') || identifier.includes('lyria') || capabilities.includes('music_generation')
     return {
       category: 'audio', capabilities, modalitiesIn: ['text'], modalitiesOut: ['audio'],
       transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true,
+      ...(isMusic ? { primaryRole: 'music_generation' } : {}),
+    }
+  }
+  if (model.provider === 'groq' && capabilities.includes('tts')) {
+    return {
+      category: 'audio', capabilities, modalitiesIn: ['text'], modalitiesOut: ['audio'],
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
       providerClientExists: true, workerExecutorExists: true,
     }
@@ -496,6 +511,9 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
       where: { provider_modelId: { provider: model.provider, modelId: model.modelId } },
     })
 
+    const statusModel = MODEL_CATALOGUE.find((m) => m.provider === model.provider && m.modelId === model.modelId)
+    const shouldBeEnabled = statusModel?.status === 'available'
+
     if (existing) {
       await prisma.modelRegistryEntry.update({
         where: { id: existing.id },
@@ -524,6 +542,7 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
           capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
+          enabled: shouldBeEnabled,
           ...model.capabilities,
         },
       })
@@ -557,6 +576,7 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
           capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
+          enabled: shouldBeEnabled,
           ...model.capabilities,
         },
       })
