@@ -193,8 +193,9 @@ test('long-form execution survives reload and renders component/final evidence',
   const execution = (await durable.json()).execution
   expect(execution.scenes).toHaveLength(3)
   expect(execution.scenes.every((scene) => scene.status === 'completed' && scene.artifactId)).toBe(true)
-  expect(execution.componentState.voiceover.status).toBe('not_requested')
-  expect(execution.componentState.subtitles.status).toBe('not_requested')
+  expect(execution.componentState.voiceover).toMatchObject({ requested: false, ready: true })
+  expect(execution.componentState.subtitles).toMatchObject({ requested: false, ready: true })
+  expect(execution.componentState.musicBed.requested).toBe(false)
   expect(execution.componentState.musicBed.status).toBe('not_requested')
   expect(execution.componentState.assembly.ready).toBe(true)
   await expectArtifact(finalId, 'video/')
