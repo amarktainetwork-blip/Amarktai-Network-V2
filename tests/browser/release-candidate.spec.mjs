@@ -180,7 +180,7 @@ test('long-form execution survives reload and renders component/final evidence',
   await expect(page.getByText(executionId, { exact: true })).toBeVisible({ timeout: 30_000 })
   const main = page.getByRole('main')
   for (const component of ['Scene plan', 'Voiceover', 'Subtitles', 'Music', 'Assembly']) {
-    await expect(main.getByText(component, { exact: true })).toBeVisible()
+    await expect(main.getByText(component, { exact: true }).last()).toBeVisible()
   }
   const finalDownload = page.getByRole('link', { name: 'Download final video' })
   await expect(finalDownload).toBeVisible({ timeout: 8 * 60_000 })
