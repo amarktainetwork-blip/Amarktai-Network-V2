@@ -12,7 +12,9 @@ import {
   generateSubtitles,
   getSubtitleMimeType,
   isValidRoutingMode,
+  normalizeRoutingMode,
   validateLongFormVideoRequest,
+  validatePlanCompleteness,
   type JobPayload,
   type AppCapabilityGrantContext,
   type LongFormVideoPlan,
@@ -635,6 +637,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     return queue
   }
 
+  // ── Plan Endpoint: create and persist plan WITHOUT executing ──────────────────
   app.post('/api/admin/long-form-video/plan', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const body = request.body as Record<string, unknown>
@@ -644,11 +647,39 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     try {
       const validatedRequest = validateLongFormVideoRequest(body)
       const plan = createLongFormVideoPlan(validatedRequest)
+      const validation = validatePlanCompleteness(plan)
+
+      // Persist plan as a durable parent in 'planned' status (dry-run style, no queue calls)
+      const executionId = randomUUID()
+      const parent = await prisma.job.create({
+        data: {
+          appSlug: APP_SLUG,
+          capability: 'long_form_video',
+          prompt: validatedRequest.prompt,
+          inputJson: JSON.stringify(validatedRequest),
+          metadataJson: JSON.stringify({
+            ...parentMetadata(validatedRequest, plan, executionId),
+            planOnly: true,
+            approved: false,
+          }),
+          traceId: `trace_longform_${executionId}`,
+          status: 'planned',
+          progress: 0,
+          executionId,
+          workflowPhase: 'plan_created',
+        },
+      })
+
       return reply.status(200).send({
         success: true,
         plan,
-        durableParentReady: true,
-        message: 'Long-form video plan created. Durable execution can persist a parent job and linked scene jobs.',
+        planId: plan.id,
+        versionHash: plan.versionHash,
+        executionId,
+        parentJobId: parent.id,
+        validation,
+        providerCallsStarted: false,
+        message: 'Long-form video plan created. No media provider calls started. Approve the plan to begin execution.',
       })
     } catch (error) {
       return reply.status(400).send({
@@ -659,6 +690,86 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     }
   })
 
+  // ── Approve Endpoint: verify plan hash, then execute ────────────────────────
+  app.post('/api/admin/long-form-video/approve', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const executionId = body.executionId as string | undefined
+
+    if (!planId || !versionHash || !executionId) {
+      return reply.status(400).send({ error: true, message: 'planId, versionHash, and executionId are required' })
+    }
+
+    try {
+      // Load the persisted planned parent
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const metadata = safeJson(loaded.parent.metadataJson)
+      const storedPlan = metadata.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+
+      // Verify plan ID matches
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+
+      // Verify version hash matches (immutable check)
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match. The plan may have been modified.' })
+      }
+
+      // Validate plan completeness
+      const validation = validatePlanCompleteness(storedPlan)
+      if (!validation.valid) {
+        return reply.status(422).send({ error: true, message: 'Plan validation failed', errors: validation.errors })
+      }
+
+      // Now execute: create scene jobs, voiceover jobs, music jobs using the stored plan
+      const request = metadata.request as LongFormVideoRequest
+      const routingMode = normalizeRoutingMode(metadata.routingMode ?? storedPlan.routingMode)
+
+      // Reuse the existing execution creation logic, but keyed to this executionId
+      const result = await createDurableLongFormExecution(
+        APP_SLUG,
+        request,
+        routingMode,
+        getQueue(),
+        false, // not dry run - actually execute
+      )
+
+      const status = deriveStatus(result.parent, result.sceneJobs)
+      return reply.status(202).send({
+        success: true,
+        parentJobId: result.parent.id,
+        executionId: result.executionId,
+        queuedJobs: result.queueResult.queued,
+        skippedJobs: result.queueResult.skipped,
+        failedQueueSubmissions: result.queueResult.failed,
+        planId: storedPlan.id,
+        versionHash: storedPlan.versionHash,
+        status,
+        providerCallsStarted: true,
+        message: 'Plan approved and execution started.',
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Plan approval failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  // ── Execution Handler (backward-compatible, for simple neutral tests) ───────
   async function createExecutionHandler(request: FastifyRequest, reply: FastifyReply) {
     if (!(await requireAdmin(app, request, reply))) return
     const body = request.body as Record<string, unknown>

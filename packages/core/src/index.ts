@@ -59,6 +59,8 @@ export {
   BLOCKED_OVERRIDE_FIELDS,
   SAFE_ROUTING_FIELDS,
   VALID_ROUTING_MODES,
+  ROUTING_MODE_ALIASES,
+  normalizeRoutingMode,
   isValidRoutingMode,
   extractRoutingMode,
   hasBlockedOverrides,
@@ -292,6 +294,10 @@ export {
   LongFormSceneStatus,
   LongFormRenderStepType,
   LongFormRenderStatus,
+  PlanningMode,
+  VoiceProfileSchema,
+  LongFormOverlaySchema,
+  StructuredSceneSchema,
   validateLongFormVideoRequest,
   validateLongFormVideoPlan,
   type LongFormVideoRequest,
@@ -300,10 +306,15 @@ export {
   type LongFormStoryboard,
   type LongFormRenderStep,
   type LongFormVideoArtifactPlan,
+  type PlanningMode as PlanningModeType,
+  type VoiceProfile,
+  type LongFormOverlay,
+  type StructuredScene,
 } from './long-form-video.js'
 
 export {
   createLongFormVideoPlan,
+  validatePlanCompleteness,
 } from './long-form-planner.js'
 
 export {

@@ -93,10 +93,26 @@ export const BLOCKED_OVERRIDE_FIELDS = [
 
 export const SAFE_ROUTING_FIELDS = ['routingMode'] as const
 
-export const VALID_ROUTING_MODES = ['balanced', 'premium', 'fast', 'budget', 'experimental'] as const
+export const VALID_ROUTING_MODES = ['balanced', 'quality', 'economy', 'fast'] as const
+
+export const ROUTING_MODE_ALIASES: Record<string, (typeof VALID_ROUTING_MODES)[number]> = {
+  premium: 'quality',
+  budget: 'economy',
+}
+
+export function normalizeRoutingMode(value: unknown): (typeof VALID_ROUTING_MODES)[number] {
+  if (typeof value !== 'string') return 'balanced'
+  const lower = value.trim().toLowerCase()
+  if ((VALID_ROUTING_MODES as readonly string[]).includes(lower)) return lower as (typeof VALID_ROUTING_MODES)[number]
+  const alias = ROUTING_MODE_ALIASES[lower]
+  if (alias) return alias
+  return 'balanced'
+}
 
 export function isValidRoutingMode(value: unknown): boolean {
-  return typeof value === 'string' && (VALID_ROUTING_MODES as readonly string[]).includes(value)
+  if (typeof value !== 'string') return false
+  const lower = value.trim().toLowerCase()
+  return (VALID_ROUTING_MODES as readonly string[]).includes(lower) || lower in ROUTING_MODE_ALIASES
 }
 
 export function extractRoutingMode(input: Record<string, unknown> | undefined): string {

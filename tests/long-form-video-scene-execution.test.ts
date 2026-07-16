@@ -28,8 +28,10 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
 
       expect(prompt).toContain('cinematic')
       expect(prompt).toContain('dramatic')
-      expect(prompt).toContain(scene.title)
-      expect(prompt).toContain(scene.description)
+      expect(prompt).toContain(scene.visualPrompt)
+      expect(prompt).toContain('high quality')
+      expect(prompt).not.toContain(scene.voiceoverText ?? '__no_vo__')
+      expect(prompt).not.toContain(scene.subtitleText ?? '__no_sub__')
     })
 
     it('includes camera direction when present', () => {
@@ -62,8 +64,11 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       scene.transitionOut = 'fade_out'
       const prompt = buildSceneVideoPrompt(scene, plan)
 
-      expect(prompt).toContain('begins with fade in')
-      expect(prompt).toContain('ends with fade out')
+      // Clean video prompt intentionally excludes transition hints
+      // to avoid injecting production instructions into the video model
+      expect(prompt).not.toContain('begins with fade in')
+      expect(prompt).not.toContain('ends with fade out')
+      expect(prompt).toContain(scene.visualPrompt)
     })
 
     it('adds quality enhancement keywords', () => {

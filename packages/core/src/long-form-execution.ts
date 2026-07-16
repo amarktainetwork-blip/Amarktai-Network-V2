@@ -99,39 +99,50 @@ export interface LongFormAssemblyHandoff {
 
 // ── Build Scene Video Prompt ───────────────────────────────────────────────────
 
+/**
+ * Builds the video-provider prompt for a single scene.
+ *
+ * Contains ONLY:
+ * - shared visual continuity context
+ * - that scene's visual prompt
+ * - that scene's negative prompt
+ * - that scene's camera direction
+ * - limited quality/style instructions
+ *
+ * Does NOT contain:
+ * - voiceover or narration text
+ * - subtitle text
+ * - music brief
+ * - pricing, CTA or legal copy
+ * - other scenes' prompts
+ * - the full campaign brief
+ */
 export function buildSceneVideoPrompt(
   scene: LongFormScene,
   plan: LongFormVideoPlan
 ): string {
   const parts: string[] = []
 
-  // Style and tone prefix
+  // Shared continuity context
   parts.push(`${plan.style} style, ${plan.tone} tone`)
 
-  // Scene title and description
-  parts.push(scene.title)
-  parts.push(scene.description)
-
-  // Visual prompt
-  parts.push(scene.visualPrompt)
+  // Scene visual prompt (the core instruction)
+  parts.push(scene.visualPrompt.trim())
 
   // Camera direction
   if (scene.cameraDirection) {
     parts.push(`camera: ${scene.cameraDirection}`)
   }
 
-  // Transition hints
-  if (scene.transitionIn && scene.transitionIn !== 'cut') {
-    parts.push(`begins with ${scene.transitionIn.replace('_', ' ')}`)
-  }
-  if (scene.transitionOut && scene.transitionOut !== 'cut') {
-    parts.push(`ends with ${scene.transitionOut.replace('_', ' ')}`)
+  // Negative prompt
+  if (scene.negativePrompt) {
+    parts.push(`avoid: ${scene.negativePrompt}`)
   }
 
-  // Quality enhancement
+  // Quality instruction
   parts.push('high quality, cinematic, professional')
 
-  return parts.join(', ')
+  return parts.join('. ')
 }
 
 // ── Create Scene Execution Payloads ────────────────────────────────────────────
