@@ -167,28 +167,28 @@ if (fixtureMode) {
   }
 }
 
-await runCheck('missing_app_grant_denied', async () => {
+await runCheck('missing_external_style_grant_does_not_block_internal_dashboard', async () => {
   const appSlug = 'dashboard-studio'
   const capability = 'chat'
   const original = await readGrant(appSlug, capability)
   try {
     const removed = await request(`/api/admin/app-grants/${appSlug}/${capability}`, { method: 'DELETE' })
     if (!removed.response.ok) throw new Error(`grant delete returned ${removed.response.status}`)
-    await expectStudioSubmissionDenied(capability, 403)
-    return { evidence: { appSlug, capability, denial: 'missing_grant' } }
+    const job = await expectStudioSubmissionAccepted(capability)
+    return { evidence: { appSlug, capability, internalExecution: job.status, externalStyleGrant: 'missing' } }
   } finally {
     await writeGrant(appSlug, capability, original)
   }
 })
 
-await runCheck('disabled_app_grant_denied', async () => {
+await runCheck('disabled_external_style_grant_does_not_block_internal_dashboard', async () => {
   const appSlug = 'dashboard-studio'
   const capability = 'chat'
   const original = await readGrant(appSlug, capability)
   try {
     await writeGrant(appSlug, capability, { ...original, enabled: false })
-    await expectStudioSubmissionDenied(capability, 403)
-    return { evidence: { appSlug, capability, denial: 'disabled_grant' } }
+    const job = await expectStudioSubmissionAccepted(capability)
+    return { evidence: { appSlug, capability, internalExecution: job.status, externalStyleGrant: 'disabled' } }
   } finally {
     await writeGrant(appSlug, capability, original)
   }
@@ -455,12 +455,15 @@ async function writeGrant(appSlug, capability, grant) {
   if (!result.response.ok) throw new Error(`grant write returned ${result.response.status}`)
   return result.body
 }
-async function expectStudioSubmissionDenied(capability, expectedStatus) {
+async function expectStudioSubmissionAccepted(capability) {
   const result = await request('/api/admin/studio/jobs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ capability, prompt: 'app grant denial proof', input: capabilityInput(capability) }),
+    body: JSON.stringify({ capability, prompt: 'internal dashboard grant separation proof', input: capabilityInput(capability) }),
   })
-  if (result.response.status !== expectedStatus) throw new Error(`expected ${expectedStatus}, received ${result.response.status}`)
+  if (!result.response.ok || !result.body.jobId) throw new Error(result.body.message || `internal dashboard submission returned ${result.response.status}`)
+  const job = await pollJob(result.body.jobId, 300_000)
+  if (job.status !== 'completed') throw new Error(job.error || `internal dashboard job ended in ${job.status}`)
+  return job
 }
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)) }
 function safeError(error) { return (error instanceof Error ? error.message : String(error)).replace(/(Bearer|api[_-]?key|secret|password)\s*[:=]?\s*\S+/gi, '$1=[redacted]').slice(0, 500) }
