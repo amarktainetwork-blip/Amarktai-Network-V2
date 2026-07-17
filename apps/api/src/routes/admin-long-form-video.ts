@@ -989,6 +989,31 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     }
 
     try {
+      // 1. Load and validate the parent execution
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const parentMeta = safeJson(loaded.parent.metadataJson)
+      if (parentMeta.approved === true) {
+        return reply.status(409).send({ error: true, message: 'Plan is already approved. Cannot retry preview.' })
+      }
+
+      const storedPlan = parentMeta.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match' })
+      }
+      if (!storedPlan.storyboard.scenes.some((s) => s.sceneNumber === sceneNumber)) {
+        return reply.status(404).send({ error: true, message: `Scene ${sceneNumber} not found in plan` })
+      }
+
+      // 2. Load and validate the existing preview job
       const previewTraceId = `trace_longform_preview_${executionId}_scene_${sceneNumber}`
       const existingPreview = await prisma.job.findFirst({
         where: {
@@ -1006,46 +1031,92 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         return reply.status(409).send({ error: true, message: 'Preview already completed. Cannot retry a completed preview.' })
       }
 
-      if (!['failed', 'cancelled'].includes(existingPreview.status)) {
-        return reply.status(409).send({ error: true, message: `Preview is in status '${existingPreview.status}'. Only failed or cancelled previews can be retried.` })
+      if (['queued', 'processing'].includes(existingPreview.status)) {
+        return reply.status(409).send({ error: true, message: `Preview is already '${existingPreview.status}'. Cannot retry an active preview.` })
       }
 
+      // 3. Validate persisted preview metadata against request
       const existingMeta = safeJson(existingPreview.metadataJson)
-      const retryGeneration = (typeof existingMeta.retryGeneration === 'number' ? existingMeta.retryGeneration : 0) + 1
-      if (retryGeneration > MAX_SCENE_RETRIES) {
+      if (existingMeta.sourcePlanExecutionId !== executionId) {
+        return reply.status(409).send({ error: true, message: 'Preview job execution ID does not match request' })
+      }
+      if (existingMeta.sourcePlanId !== planId) {
+        return reply.status(409).send({ error: true, message: 'Preview job plan ID does not match request' })
+      }
+      if (existingMeta.sourcePlanVersionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Preview job version hash does not match request' })
+      }
+      if (existingMeta.sceneNumber !== sceneNumber) {
+        return reply.status(409).send({ error: true, message: 'Preview job scene number does not match request' })
+      }
+
+      // 4. Enforce retry limit against canonical retryCount
+      const currentRetryCount = existingPreview.retryCount ?? 0
+      if (currentRetryCount >= MAX_SCENE_RETRIES) {
         return reply.status(429).send({ error: true, message: `Retry limit (${MAX_SCENE_RETRIES}) reached for this preview.` })
       }
+      const newRetryCount = currentRetryCount + 1
+      const newRetryGeneration = (typeof existingMeta.retryGeneration === 'number' ? existingMeta.retryGeneration : 0) + 1
 
-      // Update the existing job for retry
-      await prisma.job.update({
+      // 5. Update the job with incremented retryCount and metadata
+      const updatedJob = await prisma.job.update({
         where: { id: existingPreview.id },
         data: {
+          retryCount: newRetryCount,
           status: 'queued',
           progress: 0,
           error: null,
+          completedAt: null,
           metadataJson: JSON.stringify({
             ...existingMeta,
-            retryGeneration,
+            retryGeneration: newRetryGeneration,
             retryAt: new Date().toISOString(),
           }),
           workflowPhase: 'scene_preview_retry_queued',
         },
       })
 
-      // Re-queue
+      // 6. Enqueue the freshly updated job
       const queue = getQueue()
-      const enqueueResult = await enqueueSceneJob(queue, existingPreview)
+      let enqueueResult: { queued: boolean; skipped: boolean; error?: string }
+      try {
+        enqueueResult = await enqueueSceneJob(queue, updatedJob)
+      } catch (queueError) {
+        // Queue submission failed — return job to failed state
+        const errorMessage = queueError instanceof Error ? queueError.message : 'Queue submission failed'
+        await prisma.job.update({
+          where: { id: updatedJob.id },
+          data: {
+            status: 'failed',
+            error: `Preview retry queue submission failed: ${errorMessage}`,
+            workflowPhase: 'scene_preview_retry_queue_failed',
+            completedAt: new Date(),
+          },
+        })
+        return reply.status(500).send({
+          error: true,
+          message: 'Preview retry queue submission failed',
+          details: errorMessage,
+          retryGeneration: newRetryGeneration,
+        })
+      }
 
+      const routingMode = normalizeRoutingMode(existingMeta.routingMode ?? 'balanced')
       return reply.status(202).send({
         success: true,
-        previewJobId: existingPreview.id,
+        previewJobId: updatedJob.id,
         sceneNumber,
-        planId: existingMeta.sourcePlanId ?? planId,
-        versionHash: existingMeta.sourcePlanVersionHash ?? versionHash,
-        routingMode: normalizeRoutingMode(existingMeta.routingMode ?? 'balanced'),
+        planId: existingMeta.sourcePlanId,
+        versionHash: existingMeta.sourcePlanVersionHash,
+        routingMode,
         status: enqueueResult.queued ? 'queued' : enqueueResult.skipped ? 'skipped' : 'failed_to_queue',
-        retryGeneration,
-        message: `Scene ${sceneNumber} preview retry #${retryGeneration} queued.`,
+        retryGeneration: newRetryGeneration,
+        retryCount: newRetryCount,
+        message: enqueueResult.queued
+          ? `Scene ${sceneNumber} preview retry #${newRetryGeneration} queued.`
+          : enqueueResult.skipped
+            ? `Scene ${sceneNumber} preview retry skipped.`
+            : `Failed to queue scene ${sceneNumber} preview retry.`,
       })
     } catch (error) {
       return reply.status(400).send({
