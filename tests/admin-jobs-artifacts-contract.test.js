@@ -53,6 +53,106 @@ describe('dashboard artifact file proxy', () => {
     expect(response.status).toBe(404)
     expect(body).toEqual({ error: true, message: 'Artifact file not found' })
   })
+
+  it('successful ranged JSON artifact is streamed as raw bytes, not parsed as error', async () => {
+    const { GET } = await import('../app/api/admin/artifacts/[id]/file/route.js')
+    const transcriptBytes = Buffer.from('{"text":"Transcript output.","language":"en","duration":2}')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(transcriptBytes, {
+      status: 206,
+      headers: {
+        'content-type': 'application/json',
+        'content-length': String(transcriptBytes.length),
+        'content-range': `bytes 0-${transcriptBytes.length - 1}/${transcriptBytes.length}`,
+        'accept-ranges': 'bytes',
+        'content-disposition': 'inline; filename="transcript.json"',
+      },
+    })))
+
+    const response = await GET(new Request('http://localhost/api/admin/artifacts/stt-1/file', {
+      headers: { Range: 'bytes=0-31' },
+    }), { params: { id: 'stt-1' } })
+
+    expect(response.status).toBe(206)
+    expect(response.headers.get('content-type')).toBe('application/json')
+    expect(response.headers.get('accept-ranges')).toBe('bytes')
+    expect(response.headers.get('content-range')).toContain('bytes')
+    expect(Number(response.headers.get('content-length'))).toBeGreaterThan(0)
+    const body = await response.text()
+    expect(body).toContain('"text"')
+  })
+
+  it('successful full JSON artifact download preserves attachment disposition', async () => {
+    const { GET } = await import('../app/api/admin/artifacts/[id]/file/route.js')
+    const transcriptBytes = Buffer.from('{"text":"Full transcript.","language":"en","duration":5}')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(transcriptBytes, {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'content-length': String(transcriptBytes.length),
+        'content-disposition': 'attachment; filename="transcript.json"',
+      },
+    })))
+
+    const response = await GET(new Request('http://localhost/api/admin/artifacts/stt-2/file?download=1'), { params: { id: 'stt-2' } })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('application/json')
+    expect(response.headers.get('content-disposition')).toContain('attachment')
+    expect(Number(response.headers.get('content-length'))).toBeGreaterThan(0)
+  })
+
+  it('JSON API error is still returned as JSON error response', async () => {
+    const { GET } = await import('../app/api/admin/artifacts/[id]/file/route.js')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(
+      { error: true, message: 'Forbidden' },
+      { status: 403 },
+    )))
+
+    const response = await GET(new Request('http://localhost/api/admin/artifacts/forbidden/file'), { params: { id: 'forbidden' } })
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error).toBe(true)
+  })
+
+  it('binary artifact range response is unchanged', async () => {
+    const { GET } = await import('../app/api/admin/artifacts/[id]/file/route.js')
+    const videoBytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70])
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(videoBytes, {
+      status: 206,
+      headers: {
+        'content-type': 'video/mp4',
+        'content-length': String(videoBytes.length),
+        'content-range': `bytes 0-${videoBytes.length - 1}/1000`,
+        'accept-ranges': 'bytes',
+      },
+    })))
+
+    const response = await GET(new Request('http://localhost/api/admin/artifacts/vid-1/file', {
+      headers: { Range: 'bytes=0-7' },
+    }), { params: { id: 'vid-1' } })
+
+    expect(response.status).toBe(206)
+    expect(response.headers.get('content-type')).toBe('video/mp4')
+    expect(response.headers.get('accept-ranges')).toBe('bytes')
+  })
+
+  it('Range header is forwarded to backend', async () => {
+    const { GET } = await import('../app/api/admin/artifacts/[id]/file/route.js')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(Buffer.from('ok'), {
+      status: 206,
+      headers: { 'content-type': 'audio/wav', 'content-length': '2' },
+    })))
+
+    await GET(new Request('http://localhost/api/admin/artifacts/a-1/file', {
+      headers: { Range: 'bytes=0-31' },
+    }), { params: { id: 'a-1' } })
+
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ headers: expect.objectContaining({ Range: 'bytes=0-31' }) }),
+    )
+  })
 })
 
 describe('admin-jobs route contract', () => {

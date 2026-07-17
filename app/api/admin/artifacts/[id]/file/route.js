@@ -21,7 +21,7 @@ export async function GET(request, { params }) {
     })
 
     const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
+    if (!response.ok && contentType.includes('application/json')) {
       const data = await response.json().catch(() => ({ error: true, message: 'Artifact file request failed.' }))
       return NextResponse.json(data, { status: response.status })
     }
