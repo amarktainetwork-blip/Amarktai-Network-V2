@@ -74,6 +74,29 @@ export {
   type GenxMusicLongPollCallbacks,
 } from './genx-music-client.js'
 
+// GenX — voice (TTS and STT) with submit/poll/download
+export {
+  genxSubmitTts,
+  genxPollTts,
+  genxDownloadTts,
+  genxGenerateTts,
+  genxSubmitStt,
+  genxPollStt,
+  genxGenerateStt,
+  GENX_TTS_POLL_INTERVAL_MS,
+  GENX_TTS_POLL_MAX_ATTEMPTS,
+  GENX_STT_POLL_INTERVAL_MS,
+  GENX_STT_POLL_MAX_ATTEMPTS,
+  type GenxTtsRequest,
+  type GenxTtsSubmitResponse,
+  type GenxTtsPollResponse,
+  type GenxTtsResult,
+  type GenxSttRequest,
+  type GenxSttSubmitResponse,
+  type GenxSttPollResponse,
+  type GenxSttResult,
+} from './genx-voice-client.js'
+
 // Qdrant — vector database for RAG
 export {
   ensureCollection,

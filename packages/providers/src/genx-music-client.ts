@@ -20,6 +20,8 @@ export interface GenxMusicRequest {
   model?: string
   duration?: number
   instrumental?: boolean
+  lyrics?: string
+  vocals?: boolean
   genre?: string
   mood?: string
   tempo?: string
@@ -201,6 +203,8 @@ export async function genxSubmitMusic(request: GenxMusicRequest): Promise<GenxMu
 
   const params: Record<string, unknown> = removeUndefined({
     prompt: request.prompt,
+    ...(request.lyrics ? { lyrics: request.lyrics } : {}),
+    ...(request.vocals ? { vocals: request.vocals } : {}),
   })
 
   const body = removeUndefined({

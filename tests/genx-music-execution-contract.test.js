@@ -248,14 +248,17 @@ describe('GenX music executor', () => {
     expect(result.provider).toBe('genx')
   })
 
-  it('blocks unproven vocal or lyric execution before provider submission', async () => {
+  it('allows vocal or lyric requests through to provider (model-dependent routing)', async () => {
+    providerMocks.genxSubmitMusic.mockResolvedValueOnce({ jobId: 'vocal-job', status: 'pending', model: 'lyria-3-pro-preview' })
+    providerMocks.genxPollMusic.mockResolvedValueOnce({ jobId: 'vocal-job', status: 'completed', progress: 100, resultUrl: '/audio' })
+    providerMocks.genxDownloadMusic.mockResolvedValueOnce({ audioBuffer: Buffer.from('vocal-audio'), mimeType: 'audio/wav', duration: 10, model: 'lyria-3-pro-preview', metadata: {} })
+
     const result = await executeWithProvider(makePayload({
       input: { instrumentalOnly: false, vocalsRequested: true, lyrics: 'Original lyric line' },
     }))
 
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('vocals_not_proven')
-    expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
+    expect(result.success).toBe(true)
+    expect(providerMocks.genxSubmitMusic).toHaveBeenCalled()
   })
 
   it('does not select MiMo for music_generation', async () => {

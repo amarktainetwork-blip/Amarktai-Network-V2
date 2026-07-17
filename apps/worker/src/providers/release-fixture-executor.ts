@@ -45,16 +45,18 @@ export function assertFixtureAdapterConfiguration(): void {
 }
 
 function fixtureRoute(capability: CapabilityKey): { provider: ProviderKey; model: string } {
-  if (capability === 'image_generation' || capability === 'image_to_video' || capability === 'video_to_video') {
+  if (capability === 'image_generation') {
     return { provider: 'together', model: `fixture/${capability}` }
   }
-  if (capability === 'video_generation' || capability === 'music_generation') {
+  if (capability === 'video_generation' || capability === 'image_to_video' || capability === 'video_to_video'
+    || capability === 'music_generation' || capability === 'song_generation'
+    || capability === 'tts' || capability === 'stt') {
     return { provider: 'genx', model: `fixture/${capability}` }
   }
   if (capability === 'embeddings' || capability === 'feature_extraction' || capability === 'sentence_similarity' || capability === 'reranking') {
     return { provider: 'deepinfra', model: `fixture/${capability}` }
   }
-  return { provider: 'groq', model: `fixture/${capability}` }
+  return { provider: 'deepinfra', model: `fixture/${capability}` }
 }
 
 function textResult(payload: WorkerJobData, provider: ProviderKey, model: string): ProcessorResult {
@@ -117,11 +119,15 @@ async function generateFixtureMedia(capability: CapabilityKey): Promise<{ data: 
       await runFile(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x14532d:s=320x180:d=0.1', '-frames:v', '1', '-threads', '1', '-y', output])
       return { data: await readFile(output), mimeType: 'image/png', type: 'image', width: 320, height: 180 }
     }
-    if (capability === 'tts' || capability === 'music_generation') {
+    if (capability === 'tts' || capability === 'music_generation' || capability === 'song_generation') {
       const output = join(dir, 'fixture.wav')
       const frequency = capability === 'tts' ? '660' : '330'
       await runFile(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `sine=frequency=${frequency}:sample_rate=48000:duration=2`, '-ac', '1', '-c:a', 'pcm_s16le', '-y', output])
       return { data: await readFile(output), mimeType: 'audio/wav', type: capability === 'tts' ? 'audio' : 'music', duration: 2 }
+    }
+    if (capability === 'stt') {
+      const transcriptData = JSON.stringify({ text: 'Deterministic fixture transcription.', language: 'en', duration: 2, segments: [] })
+      return { data: Buffer.from(transcriptData), mimeType: 'application/json', type: 'audio', duration: 2 }
     }
     const output = join(dir, 'fixture.mp4')
     await runFile(ffmpeg, [
@@ -145,12 +151,12 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
   if (['image_to_video', 'video_to_video', 'stt'].includes(capability) && !grant?.artifactRead) {
     return { success: false, status: 'failed', provider, model, error: `AppCapabilityGrant denies source-artifact read for '${capability}'.` }
   }
-  if (['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'tts'].includes(capability) && !grant?.artifactWrite) {
+  if (['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'song_generation', 'tts', 'stt'].includes(capability) && !grant?.artifactWrite) {
     return { success: false, status: 'failed', provider, model, error: `AppCapabilityGrant denies artifact write for '${capability}'.` }
   }
   const sourceArtifactId = await verifySourceArtifact(payload)
 
-  if (!['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'tts'].includes(capability)) {
+  if (!['image_generation', 'video_generation', 'image_to_video', 'video_to_video', 'music_generation', 'song_generation', 'tts', 'stt'].includes(capability)) {
     return textResult(payload, provider, model)
   }
 

@@ -21,6 +21,8 @@ export interface GenxVideoRequest {
   aspectRatio?: string
   style?: string
   negativePrompt?: string
+  sourceImageDataUrl?: string
+  referenceVideoUrl?: string
   apiKey?: string
   baseUrl?: string
 }
@@ -151,6 +153,8 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
     aspect_ratio: request.aspectRatio ?? '16:9',
     style: request.style,
     negative_prompt: request.negativePrompt,
+    source_image: request.sourceImageDataUrl,
+    reference_video: request.referenceVideoUrl,
   })
 
   const body = removeUndefined({

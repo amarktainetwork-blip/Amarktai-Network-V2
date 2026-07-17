@@ -6,6 +6,7 @@
 
 import {
   createCanonicalProviderUsage,
+  canReadSourceArtifactForApp,
   evaluateOrchestra,
   normalizeDbCandidates,
   getExecutorRegistration,
@@ -21,7 +22,7 @@ import {
   type OrchestraCandidate,
 } from '@amarktai/core'
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
-import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
+import { findCompletedArtifactByTraceId, getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 import { DIRECT_EXECUTOR_HANDLERS } from './direct-provider-executor.js'
 import { executeReleaseFixture, isReleaseFixtureAdapterEnabled } from './release-fixture-executor.js'
@@ -409,15 +410,10 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
     const vocalsRequested = readBool(payload.input, 'vocalsRequested') === true
       || readBool(payload.input, 'instrumentalOnly') === false
       || typeof payload.input?.lyrics === 'string'
-    if (vocalsRequested) {
-      return {
-        success: false,
-        status: 'failed',
-        error: 'Music generation blocked: vocals_not_proven, lyrics_not_proven.',
-        provider: 'genx',
-        model,
-      }
-    }
+    // Vocals and lyrics are model-dependent, not globally blocked.
+    // Orchestra routes music_generation to instrumental models and
+    // song_generation to lyrics/vocals-capable models.
+    // If a song_generation request reaches this handler, pass lyrics through.
 
     // ── 1. Check for existing completed artifact (idempotency) ────────────
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'music_generation')
@@ -482,14 +478,15 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
 
     // ── 4. Submit once if no remote job exists ─────────────────────────────
     if (!remoteJobId) {
-      // Only send proven fields to GenX: prompt + model.
-      // Unproven fields (duration, instrumental, genre, mood, tempo, negativePrompt)
-      // are kept in internal job input but NOT sent to the provider.
+      const lyrics = typeof payload.input?.lyrics === 'string' ? payload.input.lyrics : undefined
       const submitResult = await genxSubmitMusic({
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
         model,
+        lyrics,
+        vocals: vocalsRequested || undefined,
+        instrumental: vocalsRequested ? false : undefined,
       })
       if (!submitResult.jobId) {
         return {
@@ -782,6 +779,46 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       }
     }
 
+    // ── Load source artifact for i2v/v2v ──────────────────────────────────
+    let sourceImageDataUrl: string | undefined
+    let referenceVideoUrl: string | undefined
+    if (payload.capability === 'image_to_video' || payload.capability === 'video_to_video') {
+      const grant = readAppGrantSnapshot(payload)
+      if (!grant?.artifactRead) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies source-artifact read.' }
+      }
+      const sourceId = payload.capability === 'image_to_video'
+        ? (typeof payload.input?.sourceImageArtifactId === 'string' ? payload.input.sourceImageArtifactId : null)
+        : (typeof payload.input?.sourceVideoArtifactId === 'string' ? payload.input.sourceVideoArtifactId : null)
+      if (!sourceId) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: `${payload.capability} requires a source artifact` }
+      }
+      const source = await getArtifactRecord(sourceId)
+      if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'Authorised source artifact was not found' }
+      }
+      const expectedPrefix = payload.capability === 'image_to_video' ? 'image/' : 'video/'
+      if (!source.mimeType.startsWith(expectedPrefix)) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: `Source artifact must have MIME type ${expectedPrefix}*` }
+      }
+      const file = await getArtifactFile(sourceId)
+      if (!file?.buffer.length) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'Source artifact bytes are missing' }
+      }
+      if (payload.capability === 'image_to_video') {
+        sourceImageDataUrl = `data:${file.mimeType};base64,${file.buffer.toString('base64')}`
+      } else {
+        // For video-to-video, construct a provider-readable URL
+        const publicApiUrl = process.env.PUBLIC_API_URL?.trim() ?? ''
+        const secret = process.env.JWT_SECRET?.trim() ?? ''
+        if (!publicApiUrl || !secret) {
+          return { success: false, status: 'failed', provider: 'genx', model, error: 'PUBLIC_API_URL and JWT_SECRET required for source video' }
+        }
+        const { createProviderMediaUrl } = await import('@amarktai/artifacts')
+        referenceVideoUrl = createProviderMediaUrl({ artifactId: sourceId, publicApiUrl, secret })
+      }
+    }
+
     const result = existingRemoteJobId
       ? await resumeGenxVideoProviderJob({
         remoteJobId: existingRemoteJobId,
@@ -798,6 +835,9 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         duration: readNumber(payload.input, 'duration'),
         aspectRatio: readString(payload.input, 'aspectRatio'),
         style: readString(payload.input, 'style'),
+        negativePrompt: readString(payload.input, 'negativePrompt'),
+        sourceImageDataUrl,
+        referenceVideoUrl,
       }).catch(async (err) => {
         const remoteJobId = extractGenxProviderJobIdFromError(err)
         if (remoteJobId) {
@@ -1056,14 +1096,123 @@ export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
   'genx.stt': executeGenxStt,
 }
 
-async function executeGenxTts(_payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  const model = selectedModel?.trim() ?? ''
-  return { success: false, status: 'failed', provider: 'genx', model, error: 'GenX TTS provider client is not yet implemented. Requires genxGenerateTts in @amarktai/providers.' }
+async function executeGenxTts(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  let apiKey = ''
+  let model = selectedModel?.trim() ?? ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX TTS model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies TTS artifact write.' }
+
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'tts')
+    if (existing) {
+      const meta = safeParseJsonObject(existing.metadata)
+      const duration = readPositiveNumber(meta.duration)
+      if (duration) {
+        return {
+          success: true, status: 'completed', provider: 'genx', model, artifactId: existing.id,
+          output: JSON.stringify({ artifactId: existing.id, artifactUrl: existing.storageUrl, mimeType: existing.mimeType, fileSizeBytes: existing.fileSizeBytes, duration, reused: true }),
+          metadata: { artifactId: existing.id, duration, reused: true, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: duration }), outputValidation: { valid: true, contract: 'reused_tts_artifact' } },
+        }
+      }
+    }
+
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) return { success: false, status: 'failed', provider: 'genx', model, error: claim.error || 'Execution already claimed' }
+
+    const credential = await resolveProviderApiKey('genx')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('genx')
+    const { genxGenerateTts } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+
+    const result = await genxGenerateTts({
+      text: String(payload.input?.text ?? payload.prompt),
+      model,
+      voice: String(payload.input?.voice ?? 'tara'),
+      speed: Number(payload.input?.speed ?? 1),
+      outputFormat: String(payload.input?.outputFormat ?? 'wav'),
+      language: String(payload.input?.language ?? 'en'),
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+    })
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'audio', subType: 'tts', title: `TTS audio for ${payload.appSlug}`,
+        description: 'GenX speech synthesis output', provider: 'genx', model, traceId: payload.traceId, mimeType: result.mimeType,
+        metadata: { capability: 'tts', provider: 'genx', model, duration: result.duration, voice: payload.input?.voice, evidenceSource: 'live_provider', liveProviderProof: true },
+      }, data: result.audioBuffer, explicitMimeType: result.mimeType,
+    })
+
+    return {
+      success: true, status: 'completed', provider: 'genx', model, artifactId: artifact.id,
+      output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration: result.duration }),
+      metadata: { artifactId: artifact.id, duration: result.duration, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'playable_audio_artifact' } },
+    }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    return { success: false, status: 'failed', provider: 'genx', model, error: `GenX TTS failed: ${redactProviderSecrets(err instanceof Error ? err.message : 'unknown', [apiKey])}` }
+  }
 }
 
-async function executeGenxStt(_payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  const model = selectedModel?.trim() ?? ''
-  return { success: false, status: 'failed', provider: 'genx', model, error: 'GenX STT provider client is not yet implemented. Requires genxGenerateStt in @amarktai/providers.' }
+async function executeGenxStt(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  let apiKey = ''
+  let model = selectedModel?.trim() ?? ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX STT model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactRead) return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies STT artifact read.' }
+
+    const sourceId = typeof payload.input?.artifactId === 'string' ? payload.input.artifactId : typeof payload.input?.audioArtifactId === 'string' ? payload.input.audioArtifactId : null
+    if (!sourceId) return { success: false, status: 'failed', provider: 'genx', model, error: 'STT requires an authorised audio source artifact' }
+    const source = await getArtifactRecord(sourceId)
+    if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) {
+      return { success: false, status: 'failed', provider: 'genx', model, error: 'Authorised source artifact was not found' }
+    }
+    if (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/')) {
+      return { success: false, status: 'failed', provider: 'genx', model, error: 'STT source must be audio or video' }
+    }
+    const file = await getArtifactFile(sourceId)
+    if (!file?.buffer.length) return { success: false, status: 'failed', provider: 'genx', model, error: 'Source artifact bytes are missing' }
+
+    const credential = await resolveProviderApiKey('genx')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('genx')
+    const { genxGenerateStt } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+
+    const result = await genxGenerateStt({
+      audioBuffer: file.buffer,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      model,
+      language: String(payload.input?.language),
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+    })
+
+    let artifactId: string | undefined
+    if (payload.input?.persistTranscript !== false) {
+      const artifact = await saveArtifact({
+        input: {
+          appSlug: payload.appSlug, type: 'transcript', subType: 'stt', title: `STT transcript for ${payload.appSlug}`,
+          description: 'GenX speech transcription output', provider: 'genx', model, traceId: payload.traceId, mimeType: 'application/json',
+          metadata: { capability: 'stt', provider: 'genx', model, sourceArtifactId: sourceId, language: result.language, duration: result.duration, evidenceSource: 'live_provider', liveProviderProof: true },
+        }, data: Buffer.from(JSON.stringify({ text: result.text, language: result.language, duration: result.duration, segments: result.segments })), explicitMimeType: 'application/json',
+      })
+      artifactId = artifact.id
+    }
+
+    return {
+      success: true, status: 'completed', provider: 'genx', model, artifactId,
+      output: JSON.stringify({ transcript: result.text, language: result.language, duration: result.duration, segments: result.segments, artifactId: artifactId ?? null }),
+      metadata: { sourceArtifactId: sourceId, artifactId: artifactId ?? null, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'nonempty_authorised_transcript' } },
+    }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    return { success: false, status: 'failed', provider: 'genx', model, error: `GenX STT failed: ${redactProviderSecrets(err instanceof Error ? err.message : 'unknown', [apiKey])}` }
+  }
 }
 
 export async function executeRegisteredRoute(
