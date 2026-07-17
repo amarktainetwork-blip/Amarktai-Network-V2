@@ -205,7 +205,7 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
     data: media.data,
     explicitMimeType: media.mimeType,
   })
-  const output = {
+  const output: Record<string, unknown> = {
     artifactId: artifact.id,
     artifactUrl: artifact.storageUrl,
     mimeType: artifact.mimeType,
@@ -214,6 +214,13 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
     width: media.width,
     height: media.height,
     sourceArtifactId,
+  }
+  // For STT, include the transcript text in the job output so the dashboard can display it
+  if (capability === 'stt') {
+    const transcriptData = JSON.parse(media.data.toString('utf8'))
+    output.transcript = transcriptData.text
+    output.language = transcriptData.language
+    output.segments = transcriptData.segments
   }
   return {
     success: true,
