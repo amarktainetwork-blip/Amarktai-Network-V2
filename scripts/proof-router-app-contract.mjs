@@ -93,7 +93,7 @@ async function run() {
 
   check(CAPABILITY_KEYS.length === 68 && new Set(CAPABILITY_KEYS).size === 68, 'Exactly 68 unique canonical capabilities')
   check(PROVIDER_KEYS.length === 5 && APPROVED_PROVIDER_DEFINITIONS.length === 5, 'Exactly five approved provider definitions')
-  check(RUNTIME_EXECUTION_PROVIDERS.length === 4, 'Exactly four backend runtime providers')
+  check(RUNTIME_EXECUTION_PROVIDERS.length === 3, 'Exactly three backend runtime providers')
   check(CODING_ONLY_PROVIDERS.length === 1 && CODING_ONLY_PROVIDERS[0] === 'mimo', 'MiMo remains coding-agent-only')
   check(EXECUTOR_REGISTRATIONS.length > 0, 'Callable executor registrations are declared')
 

@@ -65,11 +65,11 @@ async function runStatic(core) {
     'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
     'question_answering', 'classification', 'zero_shot_classification', 'extraction',
     'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
-    'table_qa', 'structured_output', 'tool_use', 'tts', 'stt', 'embeddings',
+    'table_qa', 'structured_output', 'tts', 'stt', 'embeddings',
     'reranking', 'image_generation', 'video_generation', 'image_to_video',
     'video_to_video', 'music_generation',
   ]
-  check(JSON.stringify(DIRECT_PROVIDER_CAPABILITIES) === JSON.stringify(expected), 'exact 26-capability direct-provider scope')
+  check(JSON.stringify(DIRECT_PROVIDER_CAPABILITIES) === JSON.stringify(expected), 'exact 25-capability direct-provider scope')
   if (options.capability && !expected.includes(options.capability)) throw new Error(`Unknown direct capability '${options.capability}'`)
   const registrations = EXECUTOR_REGISTRATIONS.filter((registration) =>
     expected.includes(registration.capability)
@@ -96,7 +96,7 @@ async function runStatic(core) {
     const sources = providerSources[registration.provider] ?? []
     check(sources.length > 0 && sources.every((file) => read(file).length > 100), `${key} real provider client exists`)
     const handlerExists = registration.executionMode === 'stream'
-      ? streamRoute.includes(`openAiStreamingChat`) && streamRoute.includes(`groq.streaming-chat`)
+      ? streamRoute.includes(`openAiStreamingChat`) && streamRoute.includes(`deepinfra.chat`)
       : directWorker.includes(registration.handlerName) || worker.includes(registration.handlerName)
     check(handlerExists, `${key} real handler exists`, registration.handlerName)
     check(Boolean(DIRECT_PROVIDER_REQUEST_SCHEMAS[registration.capability]), `${key} request schema exists`)
@@ -143,7 +143,7 @@ async function runStatic(core) {
   check(!worker.includes('infrastructureReady: true'), 'worker has no hardcoded infrastructureReady=true')
   check(orchestraSource.includes('providerConfigured = typeof provider?.apiKey') && orchestraSource.includes('providerHealthReady = HEALTHY_PROVIDER_STATUSES.has'), 'runtime readiness derives from credential and health evidence')
   check(worker.includes("result.provider !== route.provider") && worker.includes("result.model !== route.model"), 'executor rejects hidden provider/model substitution')
-  check(streamRoute.includes("selectedProvider !== 'groq'") && streamRoute.includes('signal: controller.signal'), 'streaming route has exact provider gate and cancellation')
+  check(streamRoute.includes("selectedProvider !== 'deepinfra'") && streamRoute.includes('signal: controller.signal'), 'streaming route has exact provider gate and cancellation')
   check(capabilities.length > 0, 'static proof selected at least one registered capability')
 }
 

@@ -1052,6 +1052,18 @@ export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
   'genx.video-generation': executeGenxVideo,
   'genx.music-generation': executeGenxMusic,
   'genx.song-generation': executeGenxMusic,
+  'genx.tts': executeGenxTts,
+  'genx.stt': executeGenxStt,
+}
+
+async function executeGenxTts(_payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  const model = selectedModel?.trim() ?? ''
+  return { success: false, status: 'failed', provider: 'genx', model, error: 'GenX TTS provider client is not yet implemented. Requires genxGenerateTts in @amarktai/providers.' }
+}
+
+async function executeGenxStt(_payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  const model = selectedModel?.trim() ?? ''
+  return { success: false, status: 'failed', provider: 'genx', model, error: 'GenX STT provider client is not yet implemented. Requires genxGenerateStt in @amarktai/providers.' }
 }
 
 export async function executeRegisteredRoute(

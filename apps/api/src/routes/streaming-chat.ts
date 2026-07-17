@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
   CreateJobRequestSchema,
-  GROQ_BASE_URL,
   TOKEN_COST_MULTIPLIER,
   createCanonicalProviderUsage,
   hasBlockedOverrides,
@@ -67,9 +66,9 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
       ? {
           executionAllowed: true,
           executionId: jobId,
-          selectedProvider: 'groq' as const,
+          selectedProvider: 'deepinfra' as const,
           selectedModel: 'fixture/streaming_chat',
-          selectedExecutorId: 'groq.streaming-chat' as const,
+          selectedExecutorId: 'deepinfra.chat' as const,
           fallbackRoutes: [],
           blockReason: null,
         }
@@ -81,7 +80,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           appGrant: grantResolution.grant,
         }, { databaseReady: true, queueReady: true })
 
-    if (!decision.executionAllowed || decision.selectedProvider !== 'groq' || !decision.selectedModel || decision.selectedExecutorId !== 'groq.streaming-chat') {
+    if (!decision.executionAllowed || decision.selectedProvider !== 'deepinfra' || !decision.selectedModel || decision.selectedExecutorId !== 'deepinfra.chat') {
       return reply.status(503).send({ error: true, message: decision.blockReason ?? 'No streaming chat route is ready', orchestra: decision })
     }
 
@@ -121,7 +120,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
       'X-Accel-Buffering': 'no',
     })
     const send = (event: string, data: Record<string, unknown>) => reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    send('route', { jobId, executionId: decision.executionId, capability: 'streaming_chat', provider: 'groq', model: decision.selectedModel, executorId: decision.selectedExecutorId, routeType: 'primary' })
+    send('route', { jobId, executionId: decision.executionId, capability: 'streaming_chat', provider: 'deepinfra', model: decision.selectedModel, executorId: decision.selectedExecutorId, routeType: 'primary' })
 
     const controller = new AbortController()
     let completed = false
@@ -129,7 +128,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
     reply.raw.once('close', () => { if (!completed && !reply.raw.writableEnded) controller.abort(new Error('client disconnected')) })
     let content = ''
     let upstreamChunks = 0
-    let usage = createCanonicalProviderUsage({ provider: 'groq', model: decision.selectedModel })
+    let usage = createCanonicalProviderUsage({ provider: 'deepinfra', model: decision.selectedModel })
     try {
       if (fixtureMode) {
         for (const delta of ['Deterministic ', 'fixture ', 'stream.']) {
@@ -137,13 +136,13 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           content += delta
           send('chunk', { index: upstreamChunks, delta })
         }
-        usage = createCanonicalProviderUsage({ provider: 'groq', model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
+        usage = createCanonicalProviderUsage({ provider: 'deepinfra', model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
       } else {
-        const credential = await resolveProviderApiKey('groq')
-        const providerStatus = await getProviderCredentialStatus('groq')
+        const credential = await resolveProviderApiKey('deepinfra')
+        const providerStatus = await getProviderCredentialStatus('deepinfra')
         for await (const chunk of openAiStreamingChat({
-          provider: 'groq',
-          baseUrl: providerStatus.baseUrl || GROQ_BASE_URL,
+          provider: 'deepinfra',
+          baseUrl: providerStatus.baseUrl || '',
           apiKey: credential.apiKey,
           model: decision.selectedModel,
           messages: buildMessages(parsed.data.prompt, input),
@@ -157,27 +156,27 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
             send('chunk', { index: upstreamChunks, delta: chunk.content })
           } else if (chunk.type === 'usage' && chunk.usage) {
             usage = createCanonicalProviderUsage({
-              provider: 'groq', model: decision.selectedModel,
+              provider: 'deepinfra', model: decision.selectedModel,
               inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
               providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
             })
           }
         }
       }
-      if (!content.trim() || upstreamChunks === 0) throw new Error('Groq stream completed without content chunks')
+      if (!content.trim() || upstreamChunks === 0) throw new Error('DeepInfra stream completed without content chunks')
       completed = true
       const finalMetadata = {
         ...metadata,
         orchestraExecutionId: decision.executionId,
-        orchestraSelectedProvider: 'groq',
+        orchestraSelectedProvider: 'deepinfra',
         orchestraSelectedModel: decision.selectedModel,
         orchestraSelectedExecutorId: decision.selectedExecutorId,
-        orchestraActualProvider: 'groq',
+        orchestraActualProvider: 'deepinfra',
         orchestraActualModel: decision.selectedModel,
         orchestraActualExecutorId: decision.selectedExecutorId,
         orchestraActualOutcome: 'completed',
         orchestraFallbackCount: decision.fallbackRoutes.length,
-        orchestraRouteAttempts: [{ provider: 'groq', model: decision.selectedModel, executorId: decision.selectedExecutorId, success: true }],
+        orchestraRouteAttempts: [{ provider: 'deepinfra', model: decision.selectedModel, executorId: decision.selectedExecutorId, success: true }],
         directProviderExecutorId: decision.selectedExecutorId,
         directProviderRouteType: 'primary',
         streamingUpstreamChunkCount: upstreamChunks,
@@ -247,9 +246,9 @@ async function recordStreamingUsage(appSlug: string, model: string, usage: Retur
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const costUsdCents = usage.providerReportedCost !== null && (!usage.currency || usage.currency.toUpperCase() === 'USD') ? Math.round(usage.providerReportedCost * 100) : null
   await prisma.usageMeter.upsert({
-    where: { usage_meter_unique: { appSlug, date: today, capability: 'streaming_chat', provider: 'groq', model } },
+    where: { usage_meter_unique: { appSlug, date: today, capability: 'streaming_chat', provider: 'deepinfra', model } },
     update: { requestCount: { increment: 1 }, successCount: { increment: 1 }, inputTokens: { increment: usage.inputTokens }, outputTokens: { increment: usage.outputTokens }, ...(costUsdCents !== null ? { costUsdCents: { increment: costUsdCents } } : {}) },
-    create: { appSlug, date: today, capability: 'streaming_chat', provider: 'groq', model, requestCount: 1, successCount: 1, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(costUsdCents !== null ? { costUsdCents } : {}) },
+    create: { appSlug, date: today, capability: 'streaming_chat', provider: 'deepinfra', model, requestCount: 1, successCount: 1, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(costUsdCents !== null ? { costUsdCents } : {}) },
   })
 }
 

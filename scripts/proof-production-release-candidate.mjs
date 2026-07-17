@@ -205,7 +205,7 @@ await runCheck('unimplemented_capability_rejected', async () => {
 const cheapCapabilities = [
   'chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification',
   'zero_shot_classification', 'extraction', 'token_classification', 'fill_mask', 'feature_extraction',
-  'sentence_similarity', 'table_qa', 'structured_output', 'tool_use', 'embeddings', 'reranking', 'tts',
+  'sentence_similarity', 'table_qa', 'structured_output', 'embeddings', 'reranking', 'tts',
 ]
 for (const capability of cheapCapabilities) {
   if (capabilityFilter && !capabilityFilter.has(capability)) continue
@@ -433,7 +433,6 @@ function capabilityInput(capability) {
     sentence_similarity: { sourceSentence: text, comparisonSentences: ['Release proof input.', 'Unrelated sentence.'] },
     table_qa: { question: 'Which service owns routing?', table: { Service: ['Orchestra'], Responsibility: ['Routing'] } },
     structured_output: { context: text, schema: { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] } },
-    tool_use: { allowedTools: ['calculator'], maxIterations: 2 },
     embeddings: { texts: [text, 'Second embedding input'], normalize: true },
     reranking: { query: 'central router', documents: ['Orchestra is the central router.', 'A different topic.'], topN: 2 },
     tts: { text: 'AmarktAI production release proof.', voice: 'tara', speed: 1, outputFormat: 'wav', language: 'en' },
