@@ -1027,12 +1027,9 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         return reply.status(404).send({ error: true, message: 'No preview job found for this scene. Use the preview endpoint to create one.' })
       }
 
-      if (existingPreview.status === 'completed') {
-        return reply.status(409).send({ error: true, message: 'Preview already completed. Cannot retry a completed preview.' })
-      }
-
-      if (['queued', 'processing'].includes(existingPreview.status)) {
-        return reply.status(409).send({ error: true, message: `Preview is already '${existingPreview.status}'. Cannot retry an active preview.` })
+      // Explicit allowlist: only failed and cancelled previews may be retried
+      if (!['failed', 'cancelled'].includes(existingPreview.status)) {
+        return reply.status(409).send({ error: true, message: `Preview is in status '${existingPreview.status}'. Only failed or cancelled previews can be retried.` })
       }
 
       // 3. Validate persisted preview metadata against request
@@ -1058,7 +1055,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       const newRetryCount = currentRetryCount + 1
       const newRetryGeneration = (typeof existingMeta.retryGeneration === 'number' ? existingMeta.retryGeneration : 0) + 1
 
-      // 5. Update the job with incremented retryCount and metadata
+      // 5. Update the job: increment retryCount, clear queueJobId and stale fields
       const updatedJob = await prisma.job.update({
         where: { id: existingPreview.id },
         data: {
@@ -1067,6 +1064,8 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
           progress: 0,
           error: null,
           completedAt: null,
+          startedAt: null,
+          queueJobId: '',
           metadataJson: JSON.stringify({
             ...existingMeta,
             retryGeneration: newRetryGeneration,
@@ -1101,6 +1100,25 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         })
       }
 
+      // If enqueueSceneJob skipped (shouldn't happen after clearing queueJobId, but handle defensively)
+      if (!enqueueResult.queued) {
+        await prisma.job.update({
+          where: { id: updatedJob.id },
+          data: {
+            status: 'failed',
+            error: enqueueResult.error ? `Enqueue skipped: ${enqueueResult.error}` : 'Enqueue skipped for unknown reason',
+            workflowPhase: 'scene_preview_retry_enqueue_skipped',
+            completedAt: new Date(),
+          },
+        })
+        return reply.status(500).send({
+          error: true,
+          message: 'Preview retry was not queued',
+          details: enqueueResult.error ?? 'enqueue_skipped',
+          retryGeneration: newRetryGeneration,
+        })
+      }
+
       const routingMode = normalizeRoutingMode(existingMeta.routingMode ?? 'balanced')
       return reply.status(202).send({
         success: true,
@@ -1109,14 +1127,10 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
         planId: existingMeta.sourcePlanId,
         versionHash: existingMeta.sourcePlanVersionHash,
         routingMode,
-        status: enqueueResult.queued ? 'queued' : enqueueResult.skipped ? 'skipped' : 'failed_to_queue',
+        status: 'queued',
         retryGeneration: newRetryGeneration,
         retryCount: newRetryCount,
-        message: enqueueResult.queued
-          ? `Scene ${sceneNumber} preview retry #${newRetryGeneration} queued.`
-          : enqueueResult.skipped
-            ? `Scene ${sceneNumber} preview retry skipped.`
-            : `Failed to queue scene ${sceneNumber} preview retry.`,
+        message: `Scene ${sceneNumber} preview retry #${newRetryGeneration} queued.`,
       })
     } catch (error) {
       return reply.status(400).send({
