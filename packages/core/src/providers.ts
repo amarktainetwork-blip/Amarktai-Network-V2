@@ -31,7 +31,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     credentialEnvKey: 'GROQ_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
     defaultBaseUrl: 'https://api.groq.com/openai/v1',
-    backendExecutionAllowed: true,
+    backendExecutionAllowed: false,
     codingOnly: false,
   },
   {

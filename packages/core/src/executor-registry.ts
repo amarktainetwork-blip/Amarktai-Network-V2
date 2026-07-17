@@ -2,13 +2,8 @@ import { CAPABILITY_BY_KEY, type CapabilityKey } from './capabilities.js'
 import type { ProviderKey } from './providers.js'
 
 export type ExecutorId =
-  | 'groq.chat'
-  | 'groq.streaming-chat'
-  | 'groq.text-transform'
-  | 'groq.tool-use'
-  | 'groq.tts'
-  | 'groq.stt'
   | 'deepinfra.chat'
+  | 'deepinfra.streaming-chat'
   | 'deepinfra.text-transform'
   | 'deepinfra.task-inference'
   | 'deepinfra.embeddings'
@@ -16,12 +11,13 @@ export type ExecutorId =
   | 'together.embeddings'
   | 'together.reranking'
   | 'together.image-generation'
-  | 'together.video-generation'
-  | 'together.image-to-video'
-  | 'together.video-to-video'
-  | 'deepinfra.video-generation'
   | 'genx.video-generation'
+  | 'genx.image-to-video'
+  | 'genx.video-to-video'
   | 'genx.music-generation'
+  | 'genx.song-generation'
+  | 'genx.tts'
+  | 'genx.stt'
 
 export interface ExecutorCompatibilityProfile {
   categories: readonly string[]
@@ -60,7 +56,6 @@ export interface ExecutorRegistration {
   executionMode: 'sync' | 'queued' | 'stream'
 }
 
-const GROQ_GENERAL_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] as const
 const DEEPINFRA_GENERAL_MODELS = [
   'meta-llama/Meta-Llama-3.1-8B-Instruct',
   'meta-llama/Llama-3.3-70B-Instruct',
@@ -154,30 +149,20 @@ const GENX_MUSIC_PROFILE: ExecutorCompatibilityProfile = {
   outputModality: 'audio',
 }
 
-const TOGETHER_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['video', 'text-to-video'],
+const GENX_TTS_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['audio', 'voice', 'tts'],
   transportProfiles: ['async_job_poll'],
-  endpointFamilies: ['together_v2_videos'],
+  endpointFamilies: ['genx_generation_v1'],
   requiredInputModalities: ['text'],
-  outputModality: 'video',
+  outputModality: 'audio',
 }
 
-const TOGETHER_IMAGE_TO_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
-  ...TOGETHER_VIDEO_PROFILE,
-  requiredInputModalities: ['text', 'image'],
-}
-
-const TOGETHER_VIDEO_TO_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
-  ...TOGETHER_VIDEO_PROFILE,
-  requiredInputModalities: ['text', 'video'],
-}
-
-const DEEPINFRA_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['video', 'text-to-video'],
-  transportProfiles: ['native_inference_json'],
-  endpointFamilies: ['deepinfra_v1_inference'],
-  requiredInputModalities: ['text'],
-  outputModality: 'video',
+const GENX_STT_PROFILE: ExecutorCompatibilityProfile = {
+  categories: ['audio', 'transcription', 'stt'],
+  transportProfiles: ['async_job_poll'],
+  endpointFamilies: ['genx_generation_v1'],
+  requiredInputModalities: ['audio'],
+  outputModality: 'text',
 }
 
 /**
@@ -185,16 +170,8 @@ const DEEPINFRA_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
  * client and callable capability handler exist. Discovery alone never adds a row.
  */
 export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
-  registration('groq.chat', 'groq', 'chat', 'executeGroqChat', GROQ_GENERAL_MODELS),
-  registration('groq.streaming-chat', 'groq', 'streaming_chat', 'executeStreamingChat', GROQ_GENERAL_MODELS, 'stream'),
-  ...GENERAL_TEXT_CAPABILITIES.map((capability) =>
-    registration('groq.text-transform', 'groq', capability, 'executeValidatedTextCapability', GROQ_GENERAL_MODELS),
-  ),
-  registration('groq.tool-use', 'groq', 'tool_use', 'executeGroqToolUse', GROQ_GENERAL_MODELS),
-  registration('groq.tts', 'groq', 'tts', 'executeGroqTts', ['canopylabs/orpheus-v1-english']),
-  registration('groq.stt', 'groq', 'stt', 'executeGroqStt', ['whisper-large-v3', 'whisper-large-v3-turbo']),
-
-  registration('deepinfra.chat', 'deepinfra', 'chat', 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS),
+  registration('deepinfra.chat', 'deepinfra', 'chat', 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS, 'stream'),
+  registration('deepinfra.chat', 'deepinfra', 'streaming_chat', 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS, 'stream'),
   ...GENERAL_TEXT_CAPABILITIES.map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS),
   ),
@@ -212,12 +189,18 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   registration('together.reranking', 'together', 'reranking', 'executeRerankingCapability', ['Salesforce/Llama-Rank-v1']),
   registration('together.image-generation', 'together', 'image_generation', 'executeTogetherImage', ['black-forest-labs/FLUX.1-schnell']),
 
+  // GenX exclusive video
   mediaRegistration('genx.video-generation', 'genx', 'video_generation', 'executeGenxVideo', GENX_VIDEO_PROFILE),
+  mediaRegistration('genx.video-generation', 'genx', 'image_to_video', 'executeGenxVideo', { ...GENX_VIDEO_PROFILE, requiredInputModalities: ['text', 'image'] }),
+  mediaRegistration('genx.video-generation', 'genx', 'video_to_video', 'executeGenxVideo', { ...GENX_VIDEO_PROFILE, requiredInputModalities: ['text', 'video'] }),
+
+  // GenX music and songs
   mediaRegistration('genx.music-generation', 'genx', 'music_generation', 'executeGenxMusic', GENX_MUSIC_PROFILE),
-  mediaRegistration('together.video-generation', 'together', 'video_generation', 'executeTogetherVideo', TOGETHER_VIDEO_PROFILE),
-  mediaRegistration('together.image-to-video', 'together', 'image_to_video', 'executeTogetherVideo', TOGETHER_IMAGE_TO_VIDEO_PROFILE),
-  mediaRegistration('together.video-to-video', 'together', 'video_to_video', 'executeTogetherVideo', TOGETHER_VIDEO_TO_VIDEO_PROFILE),
-  mediaRegistration('deepinfra.video-generation', 'deepinfra', 'video_generation', 'executeDeepInfraVideo', DEEPINFRA_VIDEO_PROFILE),
+  mediaRegistration('genx.song-generation', 'genx', 'song_generation', 'executeGenxMusic', { ...GENX_MUSIC_PROFILE, categories: ['audio', 'music', 'text-to-music', 'song'] }),
+
+  // GenX voice
+  mediaRegistration('genx.tts', 'genx', 'tts', 'executeGenxTts', GENX_TTS_PROFILE),
+  mediaRegistration('genx.stt', 'genx', 'stt', 'executeGenxStt', GENX_STT_PROFILE),
 ] as const
 
 export function getExecutorRegistrations(capability?: CapabilityKey, provider?: ProviderKey): ExecutorRegistration[] {

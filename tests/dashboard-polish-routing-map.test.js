@@ -207,7 +207,7 @@ describe('dashboard polish and routing map contract', () => {
     it('canonical registrations map verified video transports without changing Orchestra authority', async () => {
       const { getExecutorRegistrations } = await import('../packages/core/src/index.ts')
       expect(getExecutorRegistrations('image_generation').map(entry => entry.provider)).toEqual(['together'])
-      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx', 'together', 'deepinfra'])
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
     })
 
     it('public job contracts block provider/model overrides', async () => {
@@ -228,11 +228,11 @@ describe('dashboard polish and routing map contract', () => {
       expect(truth.capabilities.filter((capability) => capability.capability.startsWith('adult_')).every((capability) => capability.classification === 'POLICY_RESTRICTED')).toBe(true)
     })
 
-    it('chat has Groq with DeepInfra fallback and long-form/research remain not live-proven', async () => {
+    it('chat has DeepInfra as primary and long-form/research remain not live-proven', async () => {
       const { getExecutorRegistrations, getRuntimeTruth } = await import('../packages/core/src/index.ts')
       const chatProviders = getExecutorRegistrations('chat').map(entry => entry.provider)
       const truth = getRuntimeTruth()
-      expect(chatProviders).toEqual(['groq', 'deepinfra'])
+      expect(chatProviders).toEqual(['deepinfra'])
       expect(truth.capabilities.find((capability) => capability.capability === 'long_form_video')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'research')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'embeddings')?.classification).not.toBe('LIVE_PROVEN')

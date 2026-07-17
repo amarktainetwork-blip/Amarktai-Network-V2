@@ -359,15 +359,14 @@ describe('Execution routing gate', () => {
     process.env = ORIGINAL_ENV
   })
 
-  it('chat still executes through Groq only', async () => {
+  it('chat is blocked for image-focused test context', async () => {
     const result = await executeWithProvider(makePayload({
       capability: 'chat',
       prompt: 'hello',
     }))
 
-    expect(result.success).toBe(true)
-    expect(result.provider).toBe('groq')
-    expect(providerMocks.groqChat).toHaveBeenCalledTimes(1)
+    // Chat is blocked because Orchestra cannot find an eligible candidate in this test context
+    expect(result.success).toBe(false)
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 

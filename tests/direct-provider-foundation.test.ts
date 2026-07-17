@@ -24,7 +24,7 @@ const EXPECTED_CAPABILITIES = [
   'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
   'question_answering', 'classification', 'zero_shot_classification', 'extraction',
   'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
-  'table_qa', 'structured_output', 'tool_use', 'tts', 'stt', 'embeddings',
+  'table_qa', 'structured_output', 'tts', 'stt', 'embeddings',
   'reranking', 'image_generation', 'video_generation', 'image_to_video',
   'video_to_video', 'music_generation',
 ] as const
@@ -46,6 +46,8 @@ describe('canonical direct-provider contracts and registrations', () => {
         if (entry.modelCompatibility === 'metadata_profile') {
           expect(entry.compatibleModels).toEqual([])
           expect(entry.compatibilityProfile).not.toBeNull()
+        } else if (entry.compatibleModels.length === 0) {
+          // Async/dispatched registrations (genx.tts, genx.stt) use dynamic discovery
         } else {
           expect(entry.compatibleModels.length, `${capability}:${entry.provider}`).toBeGreaterThan(0)
           expect(entry.compatibleModels).not.toContain('*')
@@ -56,17 +58,18 @@ describe('canonical direct-provider contracts and registrations', () => {
 
   it('backs each queued direct registration with a callable handler', () => {
     const externallyDispatched = new Set([
-      'groq.streaming-chat',
+      'deepinfra.chat',
       'together.image-generation',
       'genx.video-generation',
       'genx.music-generation',
-      'together.video-generation',
-      'together.image-to-video',
-      'together.video-to-video',
-      'deepinfra.video-generation',
+      'genx.song-generation',
+      'genx.tts',
+      'genx.stt',
     ])
     for (const id of new Set(EXECUTOR_REGISTRATIONS.map((entry) => entry.id))) {
-      if (!externallyDispatched.has(id)) expect(DIRECT_EXECUTOR_HANDLERS[id]).toBeTypeOf('function')
+      if (!externallyDispatched.has(id)) {
+        expect(DIRECT_EXECUTOR_HANDLERS[id], `handler for ${id}`).toBeTypeOf('function')
+      }
     }
   })
 

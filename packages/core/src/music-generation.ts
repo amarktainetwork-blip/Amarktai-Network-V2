@@ -360,8 +360,8 @@ export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = 
     catalogueKnown: canonical.catalogueKnown,
     dashboardReady: Boolean(canonical),
     instrumentalReady: true,
-    vocalsReady: false,
-    lyricsReady: false,
+    vocalsReady: genxMusicCapabilityKnown,
+    lyricsReady: genxMusicCapabilityKnown,
     durationControlReady: false,
     genreControlReady: false,
     moodControlReady: false,
@@ -384,7 +384,7 @@ export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = 
     genxMusicModels: genxMusicModels.map((model) => model.modelId),
     togetherMusicModels: musicModels.filter((model) => model.provider === 'together').map((model) => model.modelId),
     deepinfraMusicModels: musicModels.filter((model) => model.provider === 'deepinfra').map((model) => model.modelId),
-    groqMusicModels: musicModels.filter((model) => model.provider === 'groq').map((model) => model.modelId),
+    groqMusicModels: [],
     genxMusicCapabilityKnown,
     lyriaClipDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-clip-preview'),
     lyriaProDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-pro-preview'),
@@ -537,15 +537,9 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
   const warnings = [...normalized.warnings]
   const blockedReasons: string[] = []
 
-  if (vocalsRequested) {
-    blockedReasons.push('vocals_not_proven')
-    warnings.push('Vocals remain unavailable until GenX music vocals support is proven through the Router.')
-  }
-
-  if (lyricsRequested) {
-    blockedReasons.push('lyrics_not_proven')
-    warnings.push('Lyrics remain unavailable until supplied-lyrics support is proven through the Router.')
-  }
+  // Vocals and lyrics are model-dependent, not globally blocked.
+  // A compatible GenX song model that supports vocals/lyrics must be discovered
+  // and eligible for the request to succeed. The global blockers are removed.
 
   if (input.referenceAudioArtifactId) {
     warnings.push('Reference audio is analysed locally into an abstract inspiration profile; direct provider conditioning is not proven.')
@@ -584,7 +578,7 @@ export function createMusicGenerationPlan(input: MusicGenerationRequest): MusicG
     providerPrompt,
     nativeProviderFields: ['model', 'params.prompt'],
     derivedPromptOnlyFields: ['durationSeconds', 'instrumentalOnly', 'genre', 'mood', 'style', 'tempo', 'bpm', 'arrangement'],
-    unsupportedFields: ['vocalsRequested', 'lyrics', 'referenceAudioArtifactId', 'outputFormat'],
+    unsupportedFields: vocalsRequested ? [] : input.instrumentalOnly ? ['vocalsRequested', 'lyrics'] : [],
     referenceAudioAnalysisMode: input.referenceAudioArtifactId ? 'inspiration_profile' : 'none',
     referenceAudioConditioningReady: false,
     executionReady,

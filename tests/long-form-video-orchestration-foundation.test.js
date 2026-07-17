@@ -280,7 +280,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
     })
 
     it('video_generation retains the GenX short-clip executor', () => {
-      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx', 'together', 'deepinfra'])
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
     })
   })
 
@@ -331,8 +331,6 @@ describe('Long-Form Video Orchestration Foundation', () => {
     it('keeps per-scene execution support tied to a real executor registration', () => {
       expect(getExecutorRegistrations('video_generation')).toEqual(expect.arrayContaining([
         expect.objectContaining({ provider: 'genx', handlerName: 'executeGenxVideo' }),
-        expect.objectContaining({ provider: 'together', handlerName: 'executeTogetherVideo' }),
-        expect.objectContaining({ provider: 'deepinfra', handlerName: 'executeDeepInfraVideo' }),
       ]))
     })
 

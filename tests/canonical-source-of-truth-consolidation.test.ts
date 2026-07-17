@@ -54,11 +54,11 @@ function grant(overrides: Partial<AppCapabilityGrantContext> = {}): AppCapabilit
 
 function candidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCandidate {
   return {
-    provider: 'groq',
+    provider: 'deepinfra',
     model: 'primary-model',
     displayName: 'Primary',
     capability: 'chat',
-    executorId: 'groq.chat',
+    executorId: 'deepinfra.chat',
     providerConfigured: true,
     providerEnabled: true,
     providerHealth: 'live',
@@ -114,10 +114,10 @@ describe('canonical source-of-truth consolidation', () => {
     expect(summary.category).toBe(CAPABILITY_BY_KEY.image_generation.category)
   })
 
-  it('defines five approved providers, four runtime providers, and MiMo as coding-only', () => {
+  it('defines five approved providers, three runtime providers, and MiMo as coding-only', () => {
     expect(APPROVED_PROVIDER_DEFINITIONS).toHaveLength(5)
     expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(RUNTIME_EXECUTION_PROVIDERS).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(RUNTIME_EXECUTION_PROVIDERS).toEqual(['genx', 'together', 'deepinfra'])
     expect(CODING_ONLY_PROVIDERS).toEqual(['mimo'])
     expect(APPROVED_PROVIDER_DEFINITIONS.find((provider) => provider.key === 'mimo')).toMatchObject({
       backendExecutionAllowed: false,
@@ -128,12 +128,18 @@ describe('canonical source-of-truth consolidation', () => {
   it('derives support from callable registrations, never capability allowlists', () => {
     expect(getExecutorRegistration('image_generation', 'together')?.id).toBe('together.image-generation')
     expect(getExecutorRegistration('image_edit', 'together')).toBeUndefined()
-    expect(getExecutorRegistration('image_to_video', 'genx')).toBeUndefined()
-    expect(getExecutorRegistration('tts', 'groq')?.id).toBe('groq.tts')
+    expect(getExecutorRegistration('image_to_video', 'genx')?.id).toBe('genx.video-generation')
+    expect(getExecutorRegistration('tts', 'genx')?.id).toBe('genx.tts')
+    expect(getExecutorRegistration('tts', 'groq')).toBeUndefined()
     expect(getExecutorRegistration('campaign_generation', 'groq')).toBeUndefined()
+    // Executors dispatched externally (streaming, media/async) don't need DIRECT_EXECUTOR_HANDLERS
+    const externallyDispatched = new Set([
+      'deepinfra.chat', 'together.image-generation', 'genx.video-generation',
+      'genx.music-generation', 'genx.song-generation', 'genx.tts', 'genx.stt',
+    ])
     for (const registration of EXECUTOR_REGISTRATIONS) {
-      if (registration.executionMode !== 'stream') {
-        expect(typeof EXECUTOR_HANDLERS[registration.id]).toBe('function')
+      if (registration.executionMode !== 'stream' && !externallyDispatched.has(registration.id)) {
+        expect(typeof EXECUTOR_HANDLERS[registration.id], `handler for ${registration.id}`).toBe('function')
       }
     }
   })
@@ -154,7 +160,7 @@ describe('canonical source-of-truth consolidation', () => {
       candidate({ provider: 'deepinfra', model: 'fallback-model', displayName: 'Fallback', executorId: 'deepinfra.chat', estimatedCost: 2 }),
     ])
     expect(decision.selectedModel).toBe('primary-model')
-    expect(decision.selectedExecutorId).toBe('groq.chat')
+    expect(decision.selectedExecutorId).toBe('deepinfra.chat')
     expect(decision.fallbackRoutes[0]).toMatchObject({
       provider: 'deepinfra',
       model: 'fallback-model',
@@ -172,35 +178,36 @@ describe('canonical source-of-truth consolidation', () => {
   })
 
   it('propagates the exact route model and rejects provider/model substitution', async () => {
-    const original = EXECUTOR_HANDLERS['groq.chat']
+    // Use deepinfra.text-transform (queued mode) for route propagation test
+    const original = EXECUTOR_HANDLERS['deepinfra.text-transform']
     const handler = vi.fn(async (_payload, model: string) => ({
       success: true,
       status: 'completed' as const,
-      provider: 'groq',
+      provider: 'deepinfra',
       model,
       output: 'ok',
     }))
-    EXECUTOR_HANDLERS['groq.chat'] = handler
+    EXECUTOR_HANDLERS['deepinfra.text-transform'] = handler
     try {
       const payload = {
-        jobId: 'job', appSlug: 'test-app', capability: 'chat', prompt: 'hello', traceId: 'trace', appGrantSnapshot: grant(),
+        jobId: 'job', appSlug: 'test-app', capability: 'summarization', prompt: 'hello', traceId: 'trace', appGrantSnapshot: grant({ capability: 'summarization' }),
       }
       const result = await executeRegisteredRoute(payload, {
-        provider: 'groq', model: 'llama-3.3-70b-versatile', executorId: 'groq.chat', routeKind: 'primary',
+        provider: 'deepinfra', model: 'meta-llama/Meta-Llama-3.1-8B-Instruct', executorId: 'deepinfra.text-transform', routeKind: 'primary',
       })
-      expect(handler).toHaveBeenCalledWith(payload, 'llama-3.3-70b-versatile')
-      expect(result).toMatchObject({ success: true, provider: 'groq', model: 'llama-3.3-70b-versatile' })
+      expect(handler).toHaveBeenCalledWith(payload, 'meta-llama/Meta-Llama-3.1-8B-Instruct')
+      expect(result).toMatchObject({ success: true, provider: 'deepinfra', model: 'meta-llama/Meta-Llama-3.1-8B-Instruct' })
 
-      EXECUTOR_HANDLERS['groq.chat'] = vi.fn(async () => ({
-        success: true, status: 'completed' as const, provider: 'deepinfra', model: 'other-model', output: 'bad',
+      EXECUTOR_HANDLERS['deepinfra.text-transform'] = vi.fn(async () => ({
+        success: true, status: 'completed' as const, provider: 'genx', model: 'other-model', output: 'bad',
       }))
       const rejected = await executeRegisteredRoute(payload, {
-        provider: 'groq', model: 'llama-3.3-70b-versatile', executorId: 'groq.chat', routeKind: 'primary',
+        provider: 'deepinfra', model: 'meta-llama/Meta-Llama-3.1-8B-Instruct', executorId: 'deepinfra.text-transform', routeKind: 'primary',
       })
       expect(rejected.success).toBe(false)
       expect(rejected.error).toContain('attempted to change provider')
     } finally {
-      EXECUTOR_HANDLERS['groq.chat'] = original
+      EXECUTOR_HANDLERS['deepinfra.text-transform'] = original
     }
   })
 

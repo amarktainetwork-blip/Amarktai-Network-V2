@@ -1,39 +1,27 @@
 import {
   createCanonicalProviderUsage,
-  canReadSourceArtifactForApp,
   DIRECT_PROVIDER_OUTPUT_SCHEMAS,
   validateDirectProviderRequest,
   validateJsonSchemaValue,
-  type AppCapabilityGrantContext,
   type CapabilityKey,
   type ExecutorId,
   type ProviderKey,
 } from '@amarktai/core'
 import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey } from '@amarktai/db'
-import { findCompletedArtifactByTraceId, getArtifactFile, getArtifactRecord, saveArtifact } from '@amarktai/artifacts'
 import {
   CanonicalProviderError,
   deepinfraTaskInference,
-  groqChat,
-  groqStt,
-  groqTts,
   providerEmbeddings,
   providerRerank,
   type OpenAiTransportMessage,
 } from '@amarktai/providers'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
-import { executeInternalTool, getInternalToolDefinitions } from '../tools/tool-registry.js'
 
 type DirectHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
-type TextProvider = Extract<ProviderKey, 'groq' | 'deepinfra'>
+type TextProvider = Extract<ProviderKey, 'deepinfra'>
 type RetrievalProvider = Extract<ProviderKey, 'together' | 'deepinfra'>
 
 export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>> = {
-  'groq.chat': executeGroqChat,
-  'groq.text-transform': (payload, model) => executeValidatedTextCapability('groq', payload, model),
-  'groq.tool-use': executeGroqToolUse,
-  'groq.tts': executeGroqTts,
-  'groq.stt': executeGroqStt,
   'deepinfra.chat': (payload, model) => executeValidatedTextCapability('deepinfra', payload, model),
   'deepinfra.text-transform': (payload, model) => executeValidatedTextCapability('deepinfra', payload, model),
   'deepinfra.task-inference': executeDeepInfraTaskCapability,
@@ -41,31 +29,6 @@ export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>
   'deepinfra.reranking': (payload, model) => executeRerankingCapability('deepinfra', payload, model),
   'together.embeddings': (payload, model) => executeEmbeddingsCapability('together', payload, model),
   'together.reranking': (payload, model) => executeRerankingCapability('together', payload, model),
-}
-
-async function executeGroqChat(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
-  const validation = validatedInput(payload)
-  if (!validation.success) return failure(validation.error!)
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    const input = validation.data!
-    const result = await groqChat({
-      prompt: payload.prompt,
-      apiKey: credential.apiKey,
-      model: selectedModel,
-      systemPrompt: stringValue(input.system),
-      messages: chatMessages(input.messages),
-      maxTokens: numberValue(input.maxOutputTokens),
-      temperature: numberValue(input.temperature),
-    })
-    if (!result.content.trim()) throw malformed('groq', 'chat returned empty text')
-    return success(result.content, 'groq', selectedModel, result.usage.promptTokens, result.usage.completionTokens, {
-      finishReason: result.finishReason,
-      outputValidation: { valid: true, contract: 'nonempty_chat_text' },
-    })
-  } catch (error) {
-    return providerFailure('groq', selectedModel, error)
-  }
 }
 
 async function executeValidatedTextCapability(
@@ -83,23 +46,9 @@ async function executeValidatedTextCapability(
     const providerStatus = await getProviderCredentialStatus(provider)
     const plan = buildTextPlan(capability, payload.prompt, input)
     const responseFormat = plan.schema
-      ? provider === 'deepinfra'
-        ? { type: 'json_schema', json_schema: { name: `${capability}_output`, strict: true, schema: plan.schema } }
-        : { type: 'json_object' }
+      ? { type: 'json_schema', json_schema: { name: `${capability}_output`, strict: true, schema: plan.schema } }
       : undefined
-    const result = provider === 'groq'
-      ? await groqChat({
-        prompt: plan.prompt,
-        apiKey: credential.apiKey,
-        model: selectedModel,
-        systemPrompt: plan.system,
-        messages: chatMessages(input.messages),
-        maxTokens: numberValue(input.maxOutputTokens),
-        temperature: numberValue(input.temperature) ?? 0,
-        responseFormat,
-        reasoningEffort: capability === 'reasoning' ? effortValue(input.effort) : undefined,
-      })
-      : await import('@amarktai/providers').then(({ deepinfraChat }) => deepinfraChat({
+    const result = await import('@amarktai/providers').then(({ deepinfraChat }) => deepinfraChat({
         prompt: plan.prompt,
         apiKey: credential.apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
@@ -273,169 +222,6 @@ async function executeRerankingCapability(
   }
 }
 
-async function executeGroqToolUse(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
-  const validation = validatedInput(payload)
-  if (!validation.success) return failure(validation.error!, 'groq', selectedModel)
-  const input = validation.data!
-  const grant = readGrant(payload)
-  if (!grant) return failure('Immutable AppCapabilityGrant snapshot is missing or invalid', 'groq', selectedModel)
-  const allowedTools = input.allowedTools as string[]
-  const tools = getInternalToolDefinitions(allowedTools)
-  const maxIterations = Number(input.maxIterations ?? 3)
-  const trace: Array<{ iteration: number; tool: string; callId: string; outcome: 'completed' | 'failed'; error?: string }> = []
-  let inputTokens = 0
-  let outputTokens = 0
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    const messages: OpenAiTransportMessage[] = [{ role: 'user', content: payload.prompt }]
-    for (let iteration = 1; iteration <= maxIterations; iteration++) {
-      const result = await groqChat({
-        prompt: '',
-        apiKey: credential.apiKey,
-        model: selectedModel,
-        systemPrompt: 'Use only the registered tools supplied by the server. Do not invent tools. Return a final answer after tool results are available.',
-        messages,
-        tools,
-        toolChoice: 'auto',
-        temperature: 0,
-      })
-      inputTokens += result.usage.promptTokens
-      outputTokens += result.usage.completionTokens
-      if (result.toolCalls.length === 0) {
-        if (!result.content.trim()) throw malformed('groq', 'tool loop ended without a final response')
-        return success(JSON.stringify({ answer: result.content, toolCalls: trace }), 'groq', selectedModel, inputTokens, outputTokens, {
-          toolTrace: trace,
-          toolIterations: iteration,
-          outputValidation: { valid: true, contract: 'registered_tool_loop_final_answer' },
-        })
-      }
-      messages.push({ role: 'assistant', content: result.content || null, tool_calls: result.toolCalls })
-      for (const call of result.toolCalls) {
-        if (!allowedTools.includes(call.function.name)) throw new Error(`Tool '${call.function.name}' is not authorised for this request`)
-        try {
-          const toolResult = await executeInternalTool(call.function.name, call.function.arguments, { appSlug: payload.appSlug, grant })
-          trace.push({ iteration, tool: call.function.name, callId: call.id, outcome: 'completed' })
-          messages.push({ role: 'tool', content: JSON.stringify(toolResult), tool_call_id: call.id })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'tool execution failed'
-          trace.push({ iteration, tool: call.function.name, callId: call.id, outcome: 'failed', error: message })
-          messages.push({ role: 'tool', content: JSON.stringify({ error: message }), tool_call_id: call.id })
-        }
-      }
-    }
-    throw new Error(`Tool loop exceeded maxIterations=${maxIterations}`)
-  } catch (error) {
-    return providerFailure('groq', selectedModel, error, { toolTrace: trace })
-  }
-}
-
-async function executeGroqTts(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
-  const validation = validatedInput(payload)
-  if (!validation.success) return failure(validation.error!, 'groq', selectedModel)
-  const input = validation.data!
-  const grant = readGrant(payload)
-  if (!grant?.artifactWrite) return failure('AppCapabilityGrant denies artifact write for TTS', 'groq', selectedModel)
-  try {
-    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'tts')
-    if (existing) {
-      const reused = reusedArtifact(existing, 'groq', selectedModel)
-      if (reused) return reused
-    }
-    const credential = await resolveProviderApiKey('groq')
-    const result = await groqTts({
-      text: String(input.text),
-      apiKey: credential.apiKey,
-      model: selectedModel,
-      voice: String(input.voice),
-      speed: Number(input.speed),
-      outputFormat: input.outputFormat as 'wav' | 'mp3' | 'flac' | 'ogg',
-    })
-    const duration = result.duration > 0 ? result.duration : Math.max(0.1, String(input.text).split(/\s+/).length / (2.5 * Number(input.speed)))
-    const artifact = await saveArtifact({
-      input: {
-        appSlug: payload.appSlug,
-        type: 'audio',
-        subType: 'tts',
-        title: `TTS audio for ${payload.appSlug}`,
-        description: 'Groq speech synthesis output',
-        provider: 'groq',
-        model: selectedModel,
-        traceId: payload.traceId,
-        mimeType: result.mimeType,
-        metadata: {
-          capability: 'tts', provider: 'groq', model: selectedModel, voice: result.voice,
-          duration, durationSource: result.duration > 0 ? 'wav_header' : 'estimated_from_text',
-          chunkCount: result.chunkCount, outputFormat: result.outputFormat,
-        },
-      },
-      data: result.audioBuffer,
-      explicitMimeType: result.mimeType,
-    })
-    return {
-      success: true, status: 'completed', provider: 'groq', model: selectedModel, artifactId: artifact.id,
-      output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration }),
-      metadata: {
-        artifactId: artifact.id, duration,
-        usage: createCanonicalProviderUsage({ provider: 'groq', model: selectedModel, audioSeconds: duration }),
-        outputValidation: { valid: true, contract: 'playable_audio_artifact' },
-      },
-    }
-  } catch (error) {
-    return providerFailure('groq', selectedModel, error)
-  }
-}
-
-async function executeGroqStt(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
-  const validation = validatedInput(payload)
-  if (!validation.success) return failure(validation.error!, 'groq', selectedModel)
-  const input = validation.data!
-  const grant = readGrant(payload)
-  if (!grant?.artifactRead) return failure('AppCapabilityGrant denies artifact read for STT', 'groq', selectedModel)
-  try {
-    const source = await getArtifactRecord(String(input.artifactId))
-    if (!source || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source artifact was not found' })
-    if (source.status !== 'completed' || (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/'))) {
-      throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source must be a completed audio or video artifact' })
-    }
-    const file = await getArtifactFile(source.id)
-    if (!file?.buffer.length) throw new CanonicalProviderError({ code: 'artifact_validation', provider: 'groq', message: 'STT source file is missing or empty' })
-    const credential = await resolveProviderApiKey('groq')
-    const result = await groqStt(file.buffer, file.filename, {
-      apiKey: credential.apiKey,
-      model: selectedModel,
-      language: stringValue(input.language),
-      timestamps: input.timestamps as 'none' | 'segment' | 'word' | 'both',
-      translateToEnglish: input.translateToEnglish === true,
-      mimeType: file.mimeType,
-    })
-    let artifactId: string | undefined
-    if (input.persistTranscript !== false) {
-      if (!grant.artifactWrite) return failure('AppCapabilityGrant denies transcript artifact write', 'groq', selectedModel)
-      const artifact = await saveArtifact({
-        input: {
-          appSlug: payload.appSlug, type: 'transcript', subType: 'stt', title: `STT transcript for ${payload.appSlug}`,
-          description: 'Groq speech transcription output', provider: 'groq', model: selectedModel, traceId: payload.traceId,
-          mimeType: 'application/json', metadata: { capability: 'stt', sourceArtifactId: source.id, language: result.language, duration: result.duration },
-        },
-        data: Buffer.from(JSON.stringify({ text: result.text, language: result.language, duration: result.duration, segments: result.segments, words: result.words })),
-        explicitMimeType: 'application/json',
-      })
-      artifactId = artifact.id
-    }
-    return {
-      success: true, status: 'completed', provider: 'groq', model: selectedModel, artifactId,
-      output: JSON.stringify({ transcript: result.text, language: result.language, duration: result.duration, segments: result.segments, words: result.words, artifactId: artifactId ?? null }),
-      metadata: {
-        sourceArtifactId: source.id, artifactId: artifactId ?? null,
-        usage: createCanonicalProviderUsage({ provider: 'groq', model: selectedModel, audioSeconds: result.duration }),
-        outputValidation: { valid: true, contract: 'nonempty_authorised_transcript' },
-      },
-    }
-  } catch (error) {
-    return providerFailure('groq', selectedModel, error)
-  }
-}
-
 function buildTextPlan(capability: CapabilityKey, prompt: string, input: Record<string, unknown>): { system: string; prompt: string; schema?: Record<string, unknown> } {
   if (capability === 'reasoning') return { system: 'Return a concise final answer and a concise rationale. Never reveal hidden chain-of-thought.', prompt: joinPrompt(prompt, input.context, input.constraints), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.reasoning }
   if (capability === 'code') return { system: `Produce nonempty ${input.outputFormat} output in ${input.language}.`, prompt: joinPrompt(input.task, input.existingCode, input.context), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.code }
@@ -543,32 +329,6 @@ function malformed(provider: string, message: string): CanonicalProviderError {
   return new CanonicalProviderError({ code: 'malformed_response', provider, message })
 }
 
-function readGrant(payload: WorkerJobData): AppCapabilityGrantContext | null {
-  const grant = payload.appGrantSnapshot ?? payload.metadata?.appGrantSnapshot
-  return grant && typeof grant === 'object' && !Array.isArray(grant) ? grant as AppCapabilityGrantContext : null
-}
-
-function reusedArtifact(artifact: Awaited<ReturnType<typeof findCompletedArtifactByTraceId>> & {}, provider: ProviderKey, model: string): ProcessorResult | null {
-  const artifactMetadata = parseJsonRecord(artifact.metadata)
-  const duration = nullableFinite(artifactMetadata.duration)
-  if (duration === null || duration <= 0) return null
-  return {
-    success: true, status: 'completed', provider, model, artifactId: artifact.id,
-    output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration, reused: true }),
-    metadata: { artifactId: artifact.id, duration, reused: true, usage: createCanonicalProviderUsage({ provider, model, audioSeconds: duration }), outputValidation: { valid: true, contract: 'reused_playable_audio_artifact' } },
-  }
-}
-
-function parseJsonRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'string' || !value.trim()) return {}
-  try {
-    const parsed = JSON.parse(value)
-    return isRecord(parsed) ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
 function chatMessages(value: unknown): OpenAiTransportMessage[] {
   if (!Array.isArray(value)) return []
   return value.filter(isRecord).map((message) => ({
@@ -608,7 +368,6 @@ function isRecord(value: unknown): value is Record<string, unknown> { return typ
 function arrayRecords(value: unknown): Record<string, unknown>[] { return Array.isArray(value) ? value.filter(isRecord) : [] }
 function arrayStrings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [] }
 function numberArray(value: unknown): number[] { return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [] }
-function stringValue(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value : undefined }
 function numberValue(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined }
 function effortValue(value: unknown): 'low' | 'medium' | 'high' | undefined { return value === 'low' || value === 'medium' || value === 'high' ? value : undefined }
 function nullableFinite(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null }

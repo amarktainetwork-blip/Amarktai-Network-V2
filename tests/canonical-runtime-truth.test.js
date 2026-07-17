@@ -80,7 +80,7 @@ describe('canonical runtime truth', () => {
     const runtimeTruth = truth()
 
     expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(runtimeTruth.providerPolicy.runtimeExecutionProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(runtimeTruth.providerPolicy.runtimeExecutionProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(runtimeTruth.providerPolicy.codingOnlyProviders).toEqual(['mimo'])
     expect(runtimeTruth.providerPolicy.qwenRuntimeEligible).toBe(false)
   })
@@ -104,10 +104,10 @@ describe('canonical runtime truth', () => {
     const toolUse = capability(runtimeTruth, 'tool_use')
 
     expect(toolUse.catalogueKnown).toBe(true)
-    expect(toolUse.implementationReady).toBe(true)
-    expect(toolUse.classification).toBe('EXECUTOR_PRESENT')
-    expect(toolUse.blockedReasons).toContain('credentials_missing')
-    expect(toolUse.blockedReasons).toContain('infrastructure_missing')
+    // tool_use was registered to Groq which is no longer a runtime provider
+    expect(toolUse.implementationReady).toBe(false)
+    expect(toolUse.classification).toBe('CATALOGUE_ONLY')
+    expect(toolUse.blockedReasons.length).toBeGreaterThan(0)
   })
 
   it('implementationReady does not imply configured', () => {
@@ -306,10 +306,10 @@ describe('canonical runtime truth', () => {
     const validText = proofJob({
       id: 'job-chat-valid',
       capability: 'chat',
-      provider: 'groq',
-      model: 'llama-3.3-70b-versatile',
+      provider: 'deepinfra',
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
       artifactId: null,
-      output: 'Groq Brain runtime proof passed.',
+      output: 'DeepInfra runtime proof passed.',
       traceId: 'trace-chat-valid',
     })
 

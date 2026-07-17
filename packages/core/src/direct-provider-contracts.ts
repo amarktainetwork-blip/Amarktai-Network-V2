@@ -19,7 +19,6 @@ export const DIRECT_PROVIDER_CAPABILITIES = [
   'sentence_similarity',
   'table_qa',
   'structured_output',
-  'tool_use',
   'tts',
   'stt',
   'embeddings',
@@ -129,10 +128,6 @@ export const DIRECT_PROVIDER_REQUEST_SCHEMAS: Record<DirectProviderCapability, z
     schema: JsonSchemaSchema,
     context: z.string().max(100_000).optional(),
   }),
-  tool_use: z.object({
-    allowedTools: z.array(z.enum(['calculator', 'platform_health', 'artifact_metadata'])).min(1).max(3),
-    maxIterations: z.number().int().min(1).max(5).default(3),
-  }),
   tts: z.object({
     text: z.string().trim().min(1).max(50_000).optional(),
     voice: z.string().trim().min(1).max(100).default('tara'),
@@ -231,7 +226,6 @@ export const DIRECT_PROVIDER_OUTPUT_SCHEMAS: Record<DirectProviderCapability, Re
   sentence_similarity: outputObject({ scores: { type: 'array', minItems: 1, items: outputObject({ index: { type: 'integer', minimum: 0 }, score: { type: 'number', minimum: -1, maximum: 1 } }, ['index', 'score']) } }, ['scores']),
   table_qa: outputObject({ answer: nonemptyText, coordinates: { type: 'array' }, cells: { type: 'array' } }, ['answer']),
   structured_output: { type: 'object' },
-  tool_use: outputObject({ answer: nonemptyText, toolCalls: { type: 'array', minItems: 1 } }, ['answer', 'toolCalls']),
   tts: artifactOutput({ duration: { type: 'number', exclusiveMinimum: 0 } }, ['duration']),
   stt: outputObject({ transcript: nonemptyText, language: nonemptyText, duration: { type: 'number', minimum: 0 }, artifactId: { anyOf: [nonemptyText, { type: 'null' }] } }, ['transcript', 'duration']),
   embeddings: outputObject({ vectors: { type: 'array', minItems: 1, items: { type: 'array', minItems: 1, items: finiteNumberSchema } }, dimensions: { type: 'integer', minimum: 1 }, count: { type: 'integer', minimum: 1 } }, ['vectors', 'dimensions', 'count']),

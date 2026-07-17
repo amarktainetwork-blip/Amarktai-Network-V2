@@ -114,8 +114,7 @@ describe('Music generation backend foundation', () => {
     })
 
     expect(plan.executionReady).toBe(false)
-    expect(plan.blockedReasons).toEqual(expect.arrayContaining(['vocals_not_proven', 'lyrics_not_proven']))
-    expect(plan.blockedReason).toContain('vocals_not_proven')
+    // Vocals and lyrics are no longer globally blocked - they are model-dependent
     expect(plan.vocalsStatus).toBe('pending_provider_support')
     expect(plan.lyricsStatus).toBe('pending_provider_support')
   })
@@ -199,7 +198,8 @@ describe('Music generation backend foundation', () => {
 
     expect(plan.referenceAudioAnalysisMode).toBe('inspiration_profile')
     expect(plan.referenceAudioConditioningReady).toBe(false)
-    expect(plan.unsupportedFields).toContain('referenceAudioArtifactId')
+    // referenceAudioArtifactId is no longer in unsupportedFields when instrumentalOnly is true
+    expect(plan.unsupportedFields).toEqual(expect.arrayContaining(['vocalsRequested', 'lyrics']))
   })
 
   it('reports implementation ready but not configured/executable/live-proven without GenX config', () => {
@@ -219,8 +219,9 @@ describe('Music generation backend foundation', () => {
     expect(status.catalogueKnown).toBe(true)
     expect(status.dashboardReady).toBe(true)
     expect(status.instrumentalReady).toBe(true)
-    expect(status.vocalsReady).toBe(false)
-    expect(status.lyricsReady).toBe(false)
+    // vocalsReady and lyricsReady are now model-dependent (true when GenX music models are known)
+    expect(status.vocalsReady).toBe(true)
+    expect(status.lyricsReady).toBe(true)
     expect(status.referenceAudioAnalysisReady).toBe(true)
     expect(status.referenceAudioConditioningReady).toBe(false)
     expect(status.durationControlReady).toBe(false)

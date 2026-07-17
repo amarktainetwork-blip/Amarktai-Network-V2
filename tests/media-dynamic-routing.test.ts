@@ -24,13 +24,12 @@ const grant = (overrides: Partial<AppCapabilityGrantContext> = {}): AppCapabilit
 })
 
 describe('dynamic media routing', () => {
-  it('accepts newly discovered compatible GenX and Together models without registry model edits', () => {
-    const models = [genx('provider-new-video-2030'), together('provider/new-video-2030')]
-    const candidates = normalizeDbCandidates(models, [readyProvider('genx'), readyProvider('together')], 'video_generation', { databaseReady: true, queueReady: true })
-    expect(candidates).toHaveLength(2)
+  it('accepts newly discovered compatible GenX models without registry model edits', () => {
+    const models = [genx('provider-new-video-2030')]
+    const candidates = normalizeDbCandidates(models, [readyProvider('genx')], 'video_generation', { databaseReady: true, queueReady: true })
+    expect(candidates).toHaveLength(1)
     expect(candidates.every((candidate) => candidate.modelCompatible && candidate.executionReady)).toBe(true)
     expect(getExecutorRegistration('video_generation', 'genx')?.compatibleModels).toEqual([])
-    expect(getExecutorRegistration('video_generation', 'together')?.compatibleModels).toEqual([])
   })
 
   it('blocks endpoint-incompatible, unhealthy, and unconfigured routes', () => {
@@ -43,14 +42,15 @@ describe('dynamic media routing', () => {
     expect(unconfigured.providerConfigured).toBe(false)
   })
 
-  it('Orchestra selects either provider and carries exact authorised fallbacks', () => {
+  it('Orchestra selects GenX video and carries exact authorised fallbacks', () => {
     const models = [
       { ...genx('genx-dynamic-video'), costTier: 'premium', latencyTier: 'high', estimatedUnitCost: 0.1 },
-      { ...together('together/dynamic-video'), costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.01 },
+      { ...genx('genx-cheap-video'), costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.01 },
     ]
-    const candidates = normalizeDbCandidates(models, [readyProvider('genx'), readyProvider('together')], 'video_generation', { databaseReady: true, queueReady: true })
+    const candidates = normalizeDbCandidates(models, [readyProvider('genx')], 'video_generation', { databaseReady: true, queueReady: true })
     const economy = evaluateOrchestra({ capability: 'video_generation', routingMode: 'economy', appGrant: grant() }, candidates)
-    expect(economy.selectedProvider).toBe('together')
+    expect(economy.selectedProvider).toBe('genx')
+    expect(economy.selectedModel).toBe('genx-cheap-video')
     expect(economy.fallbackRoutes[0]).toMatchObject({ provider: 'genx', model: 'genx-dynamic-video', executorId: 'genx.video-generation' })
     const denied = evaluateOrchestra({ capability: 'video_generation', appGrant: grant({ allowFallback: false }) }, candidates)
     expect(denied.fallbackRoutes).toEqual([])

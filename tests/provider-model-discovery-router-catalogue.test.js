@@ -163,7 +163,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(report.liveDiscoveryAttempted).toBe(false)
     expect(report.mode).toBe('safe_static')
     expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(report.runtimeExecutableProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(93)
     expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
     expect(report.deepinfraPublicDiscoverySucceeded).toBe(false)

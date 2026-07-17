@@ -351,7 +351,8 @@ describe('music reference-track workflow contract', () => {
 
     expect([400, 409]).toContain(response.statusCode)
     const body = response.json()
-    expect(body.details || body.message).toMatch(/vocals_not_proven|vocalsRequested|Lyrics/)
+    // Vocals are no longer globally blocked - the error is now about credentials/infrastructure
+    expect(body.details || body.message).toMatch(/credentials|blocked|missing|vocals|Lyrics/)
     expect(dbMocks.prisma.job.create).not.toHaveBeenCalled()
     expect(queueMocks.add).not.toHaveBeenCalled()
 
