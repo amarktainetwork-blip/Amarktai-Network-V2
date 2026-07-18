@@ -12,6 +12,7 @@ import {
   runtimeProofStatusLabel,
 } from '@/lib/runtime-proof-status'
 import { Bot, Database, FileText, Globe, Image as ImageIcon, MessageSquare, Music, Settings, ShieldAlert, Sparkles, User, Video, Zap } from 'lucide-react'
+import { operatorMessage } from '@/packages/core/src/operator-messages'
 
 const ICONS = {
   Language: MessageSquare,
@@ -68,7 +69,7 @@ export default function CapabilitiesPage() {
                           : ready
                             ? 'Dashboard execution is enabled; deployed live proof remains separate.'
                             : proof.blockedReasons.length > 0
-                              ? `Blocked: ${proof.blockedReasons.join(', ')}`
+                              ? proof.blockedReasons.map(operatorMessage).join(' ')
                               : 'No callable executor or durable release workflow is registered.'}
                       </p>
                     </div>

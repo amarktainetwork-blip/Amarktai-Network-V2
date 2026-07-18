@@ -3,6 +3,10 @@ import {
   DIRECT_PROVIDER_OUTPUT_SCHEMAS,
   validateDirectProviderRequest,
   validateJsonSchemaValue,
+  getProviderDefaultBaseUrl,
+  resolveStructuredOutputContract,
+  structuredResponseFormat,
+  downgradeStructuredOutput,
   type CapabilityKey,
   type ExecutorId,
   type ProviderKey,
@@ -11,6 +15,7 @@ import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey
 import {
   CanonicalProviderError,
   deepinfraTaskInference,
+  openAiChatCompletion,
   providerEmbeddings,
   providerRerank,
   type OpenAiTransportMessage,
@@ -18,7 +23,7 @@ import {
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 
 type DirectHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
-type TextProvider = Extract<ProviderKey, 'deepinfra'>
+type TextProvider = Extract<ProviderKey, 'deepinfra' | 'together' | 'genx'>
 type RetrievalProvider = Extract<ProviderKey, 'together' | 'deepinfra'>
 
 export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>> = {
@@ -27,6 +32,8 @@ export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>
   'deepinfra.task-inference': executeDeepInfraTaskCapability,
   'deepinfra.embeddings': (payload, model) => executeEmbeddingsCapability('deepinfra', payload, model),
   'deepinfra.reranking': (payload, model) => executeRerankingCapability('deepinfra', payload, model),
+  'together.chat': (payload, model) => executeValidatedTextCapability('together', payload, model),
+  'genx.chat': (payload, model) => executeValidatedTextCapability('genx', payload, model),
   'together.embeddings': (payload, model) => executeEmbeddingsCapability('together', payload, model),
   'together.reranking': (payload, model) => executeRerankingCapability('together', payload, model),
 }
@@ -45,37 +52,68 @@ async function executeValidatedTextCapability(
     const credential = await resolveProviderApiKey(provider)
     const providerStatus = await getProviderCredentialStatus(provider)
     const plan = buildTextPlan(capability, payload.prompt, input)
-    const responseFormat = plan.schema
-      ? { type: 'json_schema', json_schema: { name: `${capability}_output`, strict: true, schema: plan.schema } }
-      : undefined
-    const result = await import('@amarktai/providers').then(({ deepinfraChat }) => deepinfraChat({
-        prompt: plan.prompt,
-        apiKey: credential.apiKey,
-        baseUrl: providerStatus.baseUrl || undefined,
-        model: selectedModel,
-        systemPrompt: plan.system,
-        messages: chatMessages(input.messages),
-        maxTokens: numberValue(input.maxOutputTokens),
-        temperature: numberValue(input.temperature) ?? 0,
-        responseFormat,
-        reasoningEffort: capability === 'reasoning' ? effortValue(input.effort) : undefined,
-      }))
+    const compatibility = isRecord(payload.metadata?.routeModelCompatibility) ? payload.metadata!.routeModelCompatibility as Record<string, unknown> : {}
+    let structuredContract = resolveStructuredOutputContract(arrayStrings(compatibility.structuredOutputModes))
+    const messages = chatMessages(input.messages)
+    const baseUrl = (providerStatus.baseUrl || getProviderDefaultBaseUrl(provider)).replace(/\/$/, '')
+    const call = async (prompt: string) => openAiChatCompletion({
+      provider,
+      apiKey: credential.apiKey,
+      baseUrl,
+      model: selectedModel,
+      messages: [
+        { role: 'system', content: plan.schema && structuredContract.selectedMode !== 'json_schema'
+          ? `${plan.system}\nReturn only one JSON object matching this schema: ${JSON.stringify(plan.schema)}`
+          : plan.system },
+        ...messages,
+        { role: 'user', content: prompt },
+      ],
+      maxOutputTokens: numberValue(input.maxOutputTokens),
+      temperature: numberValue(input.temperature) ?? 0,
+      responseFormat: plan.schema ? structuredResponseFormat(structuredContract, `${capability}_output`, plan.schema) : undefined,
+      reasoningEffort: capability === 'reasoning' && arrayStrings(compatibility.supportedParameters).includes('reasoning_effort') ? effortValue(input.effort) : undefined,
+    })
+
+    let result
+    try {
+      result = await call(plan.prompt)
+    } catch (error) {
+      const downgrade = plan.schema && isUnsupportedResponseFormat(error) ? downgradeStructuredOutput(structuredContract) : null
+      if (!downgrade) throw error
+      structuredContract = downgrade
+      result = await call(plan.prompt)
+    }
 
     let output: unknown = result.content
     if (plan.schema) {
-      output = parseJsonObject(result.content, `${capability} returned invalid JSON`)
-      const schemaValidation = validateJsonSchemaValue(output, plan.schema)
-      if (!schemaValidation.valid) throw malformed(provider, `${capability} output schema failed: ${schemaValidation.errors.join('; ')}`)
+      let schemaValidation
+      try {
+        output = parseJsonObject(result.content, `${capability} returned invalid JSON`)
+        schemaValidation = validateJsonSchemaValue(output, plan.schema)
+        if (!schemaValidation.valid) throw malformed(provider, `${capability} output schema failed: ${schemaValidation.errors.join('; ')}`)
+      } catch (firstError) {
+        const repair = await call(`Repair this invalid ${capability} response. Return only a JSON object matching the required schema.\nInvalid response:\n${result.content}`)
+        output = parseJsonObject(repair.content, `${capability} repair returned invalid JSON`)
+        schemaValidation = validateJsonSchemaValue(output, plan.schema)
+        if (!schemaValidation.valid) throw malformed(provider, `${capability} repaired output schema failed: ${schemaValidation.errors.join('; ')}`)
+        result = repair
+        void firstError
+      }
       validateTextSemantics(capability, output, input, provider)
     } else if (!result.content.trim()) {
       throw malformed(provider, `${capability} returned empty text`)
     }
 
-    const rationale = 'reasoningSummary' in result ? result.reasoningSummary : null
-    return success(typeof output === 'string' ? output : JSON.stringify(output), provider, selectedModel, result.usage.promptTokens, result.usage.completionTokens, {
+    const rationale = result.reasoningSummary
+    return success(typeof output === 'string' ? output : JSON.stringify(output), provider, selectedModel, result.usage.inputTokens, result.usage.outputTokens, {
       finishReason: result.finishReason,
       reasoningSummary: capability === 'reasoning' ? rationale : undefined,
-      outputValidation: { valid: true, contract: plan.schema ? `${capability}_json_schema` : `${capability}_nonempty_text` },
+      outputValidation: {
+        valid: true,
+        contract: plan.schema ? `${capability}_canonical_schema` : `${capability}_nonempty_text`,
+        mode: plan.schema ? structuredContract.validationMode : 'nonempty_text',
+        providerEnforcedSchema: plan.schema ? structuredContract.providerEnforcedSchema : false,
+      },
     })
   } catch (error) {
     return providerFailure(provider, selectedModel, error)
@@ -211,6 +249,9 @@ async function executeRerankingCapability(
       documents,
       topN: numberValue(input.topN),
       baseUrl: providerStatus.baseUrl || undefined,
+      requestContract: provider === 'deepinfra' && arrayStrings((isRecord(payload.metadata?.routeModelCompatibility) ? payload.metadata!.routeModelCompatibility as Record<string, unknown> : {}).supportedParameters).includes('queries')
+        ? 'queries_documents'
+        : 'query_documents',
     })
     return success(JSON.stringify({ results: result.results }), provider, selectedModel, result.usage.inputTokens, 0, {
       outputValidation: { valid: true, contract: 'ordered_finite_rerank_scores' },
@@ -371,3 +412,6 @@ function numberArray(value: unknown): number[] { return Array.isArray(value) ? v
 function numberValue(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined }
 function effortValue(value: unknown): 'low' | 'medium' | 'high' | undefined { return value === 'low' || value === 'medium' || value === 'high' ? value : undefined }
 function nullableFinite(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null }
+function isUnsupportedResponseFormat(error: unknown): boolean {
+  return /response[_ -]?format|json_schema|unsupported.*schema|unprocessable/i.test(error instanceof Error ? error.message : String(error))
+}

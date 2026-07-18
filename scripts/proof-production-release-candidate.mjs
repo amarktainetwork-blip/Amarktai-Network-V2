@@ -270,7 +270,7 @@ if (includeLongForm && (!capabilityFilter || capabilityFilter.has('long_form_vid
 await runCheck('provider_model_override_rejected', async () => {
   const { response } = await request('/api/admin/studio/jobs', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ capability: 'chat', prompt: 'override proof', input: { provider: 'groq', model: 'manual' } }),
+    body: JSON.stringify({ capability: 'chat', prompt: 'override proof', input: { provider: 'together', model: 'manual' } }),
   })
   if (response.status !== 400) throw new Error(`expected 400, received ${response.status}`)
 })
@@ -435,7 +435,7 @@ function capabilityInput(capability) {
     structured_output: { context: text, schema: { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] } },
     embeddings: { texts: [text, 'Second embedding input'], normalize: true },
     reranking: { query: 'central router', documents: ['Orchestra is the central router.', 'A different topic.'], topN: 2 },
-    tts: { text: 'AmarktAI production release proof.', voice: 'tara', speed: 1, outputFormat: 'wav', language: 'en' },
+    tts: { text: 'AmarktAI production release proof.', speed: 1, outputFormat: 'wav', language: 'en' },
     image_generation: { width: 512, height: 512, steps: 4 },
     video_generation: { duration: 3, aspectRatio: '16:9', style: 'cinematic' },
   })[capability] || {}

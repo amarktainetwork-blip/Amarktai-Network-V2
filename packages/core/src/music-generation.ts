@@ -159,7 +159,6 @@ export interface MusicCapabilityStatus {
   genxMusicModels: string[]
   togetherMusicModels: string[]
   deepinfraMusicModels: string[]
-  groqMusicModels: string[]
   genxMusicCapabilityKnown: boolean
   lyriaClipDiscovered: boolean
   lyriaProDiscovered: boolean
@@ -384,7 +383,6 @@ export function getMusicCapabilityStatus(runtime: MusicCapabilityRuntimeState = 
     genxMusicModels: genxMusicModels.map((model) => model.modelId),
     togetherMusicModels: musicModels.filter((model) => model.provider === 'together').map((model) => model.modelId),
     deepinfraMusicModels: musicModels.filter((model) => model.provider === 'deepinfra').map((model) => model.modelId),
-    groqMusicModels: [],
     genxMusicCapabilityKnown,
     lyriaClipDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-clip-preview'),
     lyriaProDiscovered: genxMusicModels.some((model) => model.modelId === 'lyria-3-pro-preview'),

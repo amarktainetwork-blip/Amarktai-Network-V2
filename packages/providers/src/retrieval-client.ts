@@ -29,6 +29,7 @@ export interface ProviderRerankRequest {
   topN?: number
   baseUrl?: string
   timeoutMs?: number
+  requestContract?: 'query_documents' | 'queries_documents'
 }
 
 export interface ProviderRerankResponse {
@@ -61,9 +62,12 @@ export async function providerRerank(request: ProviderRerankRequest): Promise<Pr
   const configuredBase = request.baseUrl?.trim() || defaultBase
   const baseUrl = (isTogether ? configuredBase : configuredBase.replace(/\/openai\/?$/, '')).replace(/\/$/, '')
   const url = isTogether ? `${baseUrl}/rerank` : `${baseUrl}/inference/${request.model}`
+  const queryField = !isTogether && request.requestContract === 'queries_documents'
+    ? { queries: [request.query] }
+    : { query: request.query }
   const payload: Record<string, unknown> = {
     ...(isTogether ? { model: request.model } : {}),
-    query: request.query,
+    ...queryField,
     documents: request.documents.map((document) => document.text),
   }
   if (request.topN !== undefined && isTogether) payload.top_n = request.topN
@@ -77,7 +81,8 @@ export async function providerRerank(request: ProviderRerankRequest): Promise<Pr
       score: Number(item.relevance_score ?? item.score),
     }))
   } else if (Array.isArray(data.scores)) {
-    results = data.scores.map((score, index) => ({ index, documentId: request.documents[index]?.id ?? null, score: Number(score) }))
+    const scores = Array.isArray(data.scores[0]) ? data.scores[0] as unknown[] : data.scores
+    results = scores.map((score, index) => ({ index, documentId: request.documents[index]?.id ?? null, score: Number(score) }))
   } else {
     throw new CanonicalProviderError({ code: 'malformed_response', provider: request.provider, message: `${request.provider} reranking response had no results or scores` })
   }

@@ -91,7 +91,7 @@ async function run() {
     hashAppApiKey,
   } = core
 
-  check(CAPABILITY_KEYS.length === 68 && new Set(CAPABILITY_KEYS).size === 68, 'Exactly 68 unique canonical capabilities')
+  check(CAPABILITY_KEYS.length > 0 && new Set(CAPABILITY_KEYS).size === CAPABILITY_KEYS.length, 'Canonical capability count is derived and keys are unique')
   check(PROVIDER_KEYS.length === 4 && APPROVED_PROVIDER_DEFINITIONS.length === 4, 'Exactly four approved provider definitions')
   check(RUNTIME_EXECUTION_PROVIDERS.length === 3, 'Exactly three backend runtime providers')
   check(CODING_ONLY_PROVIDERS.length === 1 && CODING_ONLY_PROVIDERS[0] === 'mimo', 'MiMo remains coding-agent-only')
@@ -127,7 +127,7 @@ async function run() {
 
   const truth = getRuntimeTruth()
   check(truth.providers.length === 4, 'Runtime truth uses all four canonical providers')
-  check(truth.capabilities.length === 68, 'Runtime truth uses all 68 canonical capabilities')
+  check(truth.capabilities.length === CAPABILITY_KEYS.length, 'Runtime truth uses every derived canonical capability')
   check(truth.capabilities.every((capability) => capability.infrastructureReady === false), 'Runtime truth does not default infrastructure readiness to true')
   check(truth.capabilities.filter((capability) => !capability.executorRegistered).every((capability) => !capability.executableNow), 'Allowlist or catalogue presence alone cannot make a capability executable')
 

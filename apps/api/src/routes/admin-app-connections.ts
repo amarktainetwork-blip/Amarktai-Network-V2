@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
-import { getReleaseCandidateCapabilityKeys } from '@amarktai/core'
-import { randomUUID, createHash } from 'crypto'
+import { CAPABILITY_KEYS, encryptProviderKey } from '@amarktai/core'
+import { randomBytes, randomUUID, createHash } from 'crypto'
 
-const RELEASE_CAPABILITY_SET = new Set<string>(getReleaseCandidateCapabilityKeys())
+const RELEASE_CAPABILITY_SET = new Set<string>(CAPABILITY_KEYS)
 
 function parseReleaseCapabilities(value: unknown): { values: string[]; invalid: string[] } {
   const values = Array.isArray(value)
@@ -40,6 +40,32 @@ function maskApiKey(rawKey: string): string {
   return rawKey.slice(0, 4) + '****' + rawKey.slice(-4)
 }
 
+function parseWebhookUrl(value: unknown): { value: string; error?: string } {
+  if (value === undefined || value === null || value === '') return { value: '' }
+  if (typeof value !== 'string' || value.length > 191) {
+    return { value: '', error: 'webhookUrl must be a URL no longer than 191 characters' }
+  }
+  try {
+    const parsed = new URL(value)
+    const fixtureLocalhost = process.env.RELEASE_FIXTURE_MODE === '1'
+      && parsed.protocol === 'http:'
+      && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1')
+    if (parsed.protocol !== 'https:' && !fixtureLocalhost) {
+      return { value: '', error: 'webhookUrl must use HTTPS' }
+    }
+    if (parsed.username || parsed.password || parsed.hash) {
+      return { value: '', error: 'webhookUrl cannot contain credentials or a fragment' }
+    }
+    return { value: parsed.toString() }
+  } catch {
+    return { value: '', error: 'webhookUrl must be a valid absolute URL' }
+  }
+}
+
+function createWebhookSecret(): string {
+  return `whsec_${randomBytes(32).toString('base64url')}`
+}
+
 export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<void> {
   // List app connections
   app.get('/api/admin/app-connections', async (request, reply) => {
@@ -59,6 +85,13 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
         id: c.id,
         appSlug: c.appSlug,
         appName: c.appName,
+        appType: c.appType,
+        website: c.website,
+        description: c.description,
+        environment: c.environment,
+        onboardingState: c.onboardingState,
+        webhookUrl: c.webhookUrl,
+        connectionHealth: c.connectionHealth,
         status: c.status,
         allowedCapabilities: JSON.parse(c.allowedCapabilities || '[]'),
         dailyBudgetCents: c.dailyBudgetCents,
@@ -78,6 +111,10 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
     const appName = typeof body.appName === 'string' ? body.appName.trim() : ''
     const allowedCapabilities = parseReleaseCapabilities(body.allowedCapabilities)
     const dailyBudgetCents = body.dailyBudgetCents as number | undefined
+    const monthlyBudgetCents = body.monthlyBudgetCents as number | undefined
+    const requestsPerMinute = body.requestsPerMinute as number | undefined
+    const requestsPerDay = body.requestsPerDay as number | undefined
+    const webhook = parseWebhookUrl(body.webhookUrl)
 
     if (!appSlug || !appName) {
       return reply.status(400).send({ error: true, message: 'appSlug and appName are required' })
@@ -88,17 +125,27 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
     if (allowedCapabilities.invalid.length > 0) {
       return reply.status(400).send({ error: true, message: `Capabilities are not in the release-candidate set: ${allowedCapabilities.invalid.join(', ')}` })
     }
+    if (webhook.error) {
+      return reply.status(400).send({ error: true, message: webhook.error })
+    }
 
     const existing = await prisma.appConnection.findUnique({ where: { appSlug } })
     if (existing) {
       return reply.status(409).send({ error: true, message: `App connection '${appSlug}' already exists` })
     }
 
+    const rawWebhookSecret = webhook.value ? createWebhookSecret() : null
     const connection = await prisma.$transaction(async (transaction) => {
       const created = await transaction.appConnection.create({
         data: {
           appSlug,
-          appName,
+        appName,
+          appType: typeof body.appType === 'string' ? body.appType : 'general',
+          website: typeof body.website === 'string' ? body.website : '',
+          description: typeof body.description === 'string' ? body.description : '',
+          environment: typeof body.environment === 'string' ? body.environment : 'production',
+          onboardingState: typeof body.onboardingState === 'string' ? body.onboardingState : 'identity',
+          webhookUrl: webhook.value,
           allowedCapabilities: JSON.stringify(allowedCapabilities.values),
           dailyBudgetCents: Number.isSafeInteger(dailyBudgetCents) && Number(dailyBudgetCents) >= 0 ? Number(dailyBudgetCents) : 0,
         },
@@ -109,10 +156,55 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
             appSlug,
             capability,
             enabled: true,
+            routingMode: typeof body.routingMode === 'string' ? body.routingMode : 'automatic',
+            qualityTarget: typeof body.qualityTarget === 'string' ? body.qualityTarget : 'standard',
+            spendStrategy: typeof body.spendStrategy === 'string' ? body.spendStrategy : 'best_value',
             adultPermission: false,
             passthroughModelAllowed: false,
+            approvalRequired: body.approvalRequired === true,
+            artifactRead: body.artifactRead !== false,
+            artifactWrite: body.artifactWrite !== false,
+            memoryRead: body.memoryRead === true,
+            memoryWrite: body.memoryWrite === true,
             policyProfile: 'standard',
           })),
+        })
+      }
+      await transaction.appAiProfile.upsert({
+        where: { appSlug },
+        create: {
+          appSlug, appName, appType: typeof body.appType === 'string' ? body.appType : 'general',
+          domain: typeof body.domain === 'string' ? body.domain : 'general',
+          businessContext: JSON.stringify({ purpose: body.description ?? '', website: body.website ?? '', users: body.users ?? '', brand: body.brand ?? '' }),
+          productInstructions: typeof body.productInstructions === 'string' ? body.productInstructions : '',
+          defaultQualityTarget: typeof body.qualityTarget === 'string' ? body.qualityTarget : 'standard',
+          defaultSpendStrategy: typeof body.spendStrategy === 'string' ? body.spendStrategy : 'best_value',
+          enabledCapabilities: JSON.stringify(allowedCapabilities.values),
+        },
+        update: {},
+      })
+      await transaction.appBudgetConfig.upsert({
+        where: { appSlug },
+        create: {
+          appSlug,
+          dailyBudgetCents: Number.isSafeInteger(dailyBudgetCents) && Number(dailyBudgetCents) >= 0 ? Number(dailyBudgetCents) : 0,
+          monthlyBudgetCents: Number.isSafeInteger(monthlyBudgetCents) && Number(monthlyBudgetCents) >= 0 ? Number(monthlyBudgetCents) : 0,
+          requestsPerMinute: Number.isSafeInteger(requestsPerMinute) && Number(requestsPerMinute) > 0 ? Number(requestsPerMinute) : 100,
+          requestsPerDay: Number.isSafeInteger(requestsPerDay) && Number(requestsPerDay) > 0 ? Number(requestsPerDay) : 10000,
+        },
+        update: {},
+      })
+      if (webhook.value && rawWebhookSecret) {
+        await transaction.webhookRegistrationRecord.create({
+          data: {
+            id: randomUUID(),
+            appSlug,
+            url: webhook.value,
+            secret: encryptProviderKey(rawWebhookSecret),
+            events: JSON.stringify(['job.completed', 'job.failed']),
+            active: true,
+            metadata: JSON.stringify({ secretFormat: 'aes-256-gcm-v1', managedBy: 'app-connection' }),
+          },
         })
       }
       return created
@@ -123,6 +215,10 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
       appSlug: connection.appSlug,
       appName: connection.appName,
       status: connection.status,
+      webhookSigningSecret: rawWebhookSecret,
+      webhookSigningSecretMessage: rawWebhookSecret
+        ? 'Store this signing secret securely. It will not be shown again.'
+        : undefined,
     })
   })
 
@@ -142,12 +238,27 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
     if (requestedCapabilities && requestedCapabilities.invalid.length > 0) {
       return reply.status(400).send({ error: true, message: `Capabilities are not in the release-candidate set: ${requestedCapabilities.invalid.join(', ')}` })
     }
+    const webhook = body.webhookUrl === undefined ? null : parseWebhookUrl(body.webhookUrl)
+    if (webhook?.error) {
+      return reply.status(400).send({ error: true, message: webhook.error })
+    }
+    const existingWebhook = webhook?.value
+      ? await prisma.webhookRegistrationRecord.findFirst({ where: { appSlug, active: true }, orderBy: { createdAt: 'desc' } })
+      : null
+    const rawWebhookSecret = webhook?.value && !existingWebhook ? createWebhookSecret() : null
     const updateData: Record<string, unknown> = {}
     if (body.appName !== undefined) updateData.appName = body.appName
     if (body.status !== undefined) updateData.status = body.status
     if (requestedCapabilities) updateData.allowedCapabilities = JSON.stringify(requestedCapabilities.values)
     if (body.dailyBudgetCents !== undefined) updateData.dailyBudgetCents = body.dailyBudgetCents
     if (body.tokenBalance !== undefined) updateData.tokenBalance = body.tokenBalance
+    if (body.appType !== undefined) updateData.appType = body.appType
+    if (body.website !== undefined) updateData.website = body.website
+    if (body.description !== undefined) updateData.description = body.description
+    if (body.environment !== undefined) updateData.environment = body.environment
+    if (body.onboardingState !== undefined) updateData.onboardingState = body.onboardingState
+    if (webhook) updateData.webhookUrl = webhook.value
+    if (body.connectionHealth !== undefined) updateData.connectionHealth = body.connectionHealth
 
     const updated = await prisma.$transaction(async (transaction) => {
       const changed = await transaction.appConnection.update({ where: { appSlug }, data: updateData })
@@ -157,8 +268,34 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
           await transaction.appCapabilityGrant.upsert({
             where: { app_capability_grant_unique: { appSlug, capability } },
             create: { appSlug, capability, enabled: true, adultPermission: false, passthroughModelAllowed: false, policyProfile: 'standard' },
-            update: { enabled: true, adultPermission: false, passthroughModelAllowed: false },
+            update: { enabled: true },
           })
+        }
+      }
+      if (webhook) {
+        await transaction.webhookRegistrationRecord.updateMany({
+          where: { appSlug },
+          data: { active: false },
+        })
+        if (webhook.value) {
+          if (existingWebhook) {
+            await transaction.webhookRegistrationRecord.update({
+              where: { id: existingWebhook.id },
+              data: { url: webhook.value, active: true },
+            })
+          } else if (rawWebhookSecret) {
+            await transaction.webhookRegistrationRecord.create({
+              data: {
+                id: randomUUID(),
+                appSlug,
+                url: webhook.value,
+                secret: encryptProviderKey(rawWebhookSecret),
+                events: JSON.stringify(['job.completed', 'job.failed']),
+                active: true,
+                metadata: JSON.stringify({ secretFormat: 'aes-256-gcm-v1', managedBy: 'app-connection' }),
+              },
+            })
+          }
         }
       }
       return changed
@@ -172,6 +309,11 @@ export async function adminAppConnectionRoutes(app: FastifyInstance): Promise<vo
       allowedCapabilities: JSON.parse(updated.allowedCapabilities || '[]'),
       dailyBudgetCents: updated.dailyBudgetCents,
       tokenBalance: updated.tokenBalance,
+      webhookUrl: updated.webhookUrl,
+      webhookSigningSecret: rawWebhookSecret,
+      webhookSigningSecretMessage: rawWebhookSecret
+        ? 'Store this signing secret securely. It will not be shown again.'
+        : undefined,
     })
   })
 

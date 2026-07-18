@@ -38,6 +38,7 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
   dailyBudgetCents?: number
   tokenBalance?: number
   connectionId?: string
+  webhookUrl?: string
 }> {
   if (!bearerHeader) {
     return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
@@ -61,6 +62,7 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
           status: true,
           allowedCapabilities: true,
           tokenBalance: true,
+          webhookUrl: true,
         },
       },
     },
@@ -100,6 +102,7 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
     dailyBudgetCents: budget?.dailyBudgetCents ?? 0,
     tokenBalance: conn.tokenBalance,
     connectionId: conn.id,
+    webhookUrl: conn.webhookUrl,
   }
 }
 
@@ -148,7 +151,16 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const { capability, prompt, input, metadata, callbackUrl } = parsed.data
+    const { capability, prompt, input, metadata, callbackUrl, route } = parsed.data
+
+    const configuredWebhookUrl = auth.webhookUrl || undefined
+    if (callbackUrl && callbackUrl !== configuredWebhookUrl) {
+      return reply.status(400).send({
+        error: true,
+        message: 'callbackUrl must exactly match the app webhook configured by an administrator.',
+      })
+    }
+    const effectiveCallbackUrl = configuredWebhookUrl
 
     const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
     if (!capabilityRequest.success) {
@@ -176,6 +188,13 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
       })
     }
+    if (route) {
+      const routeKey = `${route.provider}/${route.model}`
+      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist'
+          || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
+        return reply.status(403).send({ error: true, message: `Route '${routeKey}' is not approved for this app and capability.` })
+      }
+    }
 
     const grantSnapshotAt = new Date().toISOString()
     const immutableMetadata = {
@@ -184,6 +203,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       appGrantSnapshot: grantResolution.grant,
       appGrantSnapshotSource: grantResolution.source,
       appGrantSnapshotAt: grantSnapshotAt,
+      requestedRoute: route ?? null,
     }
 
     // 5. Check daily budget
@@ -228,7 +248,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
-        callbackUrl: callbackUrl ?? null,
+        callbackUrl: effectiveCallbackUrl ?? null,
       },
     })
 
@@ -251,7 +271,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       input: validatedInput,
       metadata: immutableMetadata,
       traceId,
-      callbackUrl,
+      callbackUrl: effectiveCallbackUrl,
       routingMode,
       appGrantSnapshot: grantResolution.grant,
     }

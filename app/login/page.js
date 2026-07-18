@@ -40,7 +40,7 @@ export default function LoginPage() {
       localStorage.setItem('amarktai_token', data.token)
       localStorage.setItem('amarktai_user', JSON.stringify(data.user))
       const next = new URLSearchParams(window.location.search).get('next')
-      router.replace(next?.startsWith('/dashboard') ? next : '/dashboard/command-center')
+      router.replace(next?.startsWith('/dashboard') ? next : '/dashboard')
     } catch {
       setError('Network error. Please try again.')
       setLoading(false)

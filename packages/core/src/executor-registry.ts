@@ -1,6 +1,8 @@
 import { CAPABILITY_BY_KEY, type CapabilityKey } from './capabilities.js'
 import type { ProviderKey } from './providers.js'
 
+export type StructuredOutputMode = 'none' | 'json_object' | 'json_schema'
+
 export type ExecutorId =
   | 'deepinfra.chat'
   | 'deepinfra.streaming-chat'
@@ -8,9 +10,13 @@ export type ExecutorId =
   | 'deepinfra.task-inference'
   | 'deepinfra.embeddings'
   | 'deepinfra.reranking'
+  | 'together.chat'
+  | 'together.streaming-chat'
   | 'together.embeddings'
   | 'together.reranking'
   | 'together.image-generation'
+  | 'genx.chat'
+  | 'genx.streaming-chat'
   | 'genx.video-generation'
   | 'genx.image-to-video'
   | 'genx.video-to-video'
@@ -19,7 +25,9 @@ export type ExecutorId =
   | 'genx.tts'
   | 'genx.stt'
 
+/** A reusable transport/task contract. No production model ID belongs here. */
 export interface ExecutorCompatibilityProfile {
+  taskTypes: readonly string[]
   categories: readonly string[]
   transportProfiles: readonly string[]
   endpointFamilies: readonly string[]
@@ -29,6 +37,7 @@ export interface ExecutorCompatibilityProfile {
 
 export interface ExecutorModelMetadata {
   category?: string | null
+  taskType?: string | null
   capabilities?: readonly string[]
   modalitiesIn?: readonly string[]
   modalitiesOut?: readonly string[]
@@ -39,6 +48,9 @@ export interface ExecutorModelMetadata {
   responseShapeKnown?: boolean
   providerClientExists?: boolean
   workerExecutorExists?: boolean
+  streamingSupported?: boolean
+  structuredOutputModes?: readonly StructuredOutputMode[]
+  supportedParameters?: readonly string[]
 }
 
 export interface ExecutorRegistration {
@@ -48,48 +60,53 @@ export interface ExecutorRegistration {
   handlerName: string
   acceptedRequestContract: string
   outputContract: string
-  modelCompatibility: 'exact_model_allowlist' | 'metadata_profile'
+  modelCompatibility: 'transport_task_profile'
+  /** Retained as an empty compatibility field for old snapshots. Never an allowlist. */
   compatibleModels: readonly string[]
-  compatibilityProfile: ExecutorCompatibilityProfile | null
+  compatibilityProfile: ExecutorCompatibilityProfile
   sourceArtifactRequired: boolean
   artifactOutput: string | null
   executionMode: 'sync' | 'queued' | 'stream'
 }
 
-const DEEPINFRA_GENERAL_MODELS = [
-  'meta-llama/Meta-Llama-3.1-8B-Instruct',
-  'meta-llama/Llama-3.3-70B-Instruct',
-] as const
-
 const GENERAL_TEXT_CAPABILITIES: readonly CapabilityKey[] = [
-  'reasoning',
-  'code',
-  'summarization',
-  'translation',
-  'question_answering',
-  'classification',
-  'extraction',
-  'structured_output',
+  'chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering',
+  'classification', 'extraction', 'structured_output', 'tool_use',
 ]
 
-const DEEPINFRA_SPECIALIST_MODELS: Partial<Record<CapabilityKey, readonly string[]>> = {
-  zero_shot_classification: ['facebook/bart-large-mnli'],
-  token_classification: ['dslim/bert-base-NER'],
-  fill_mask: ['bert-base-cased'],
-  table_qa: ['google/tapas-base-finetuned-wtq'],
+const SPECIALIST_CAPABILITIES: readonly CapabilityKey[] = [
+  'zero_shot_classification', 'token_classification', 'fill_mask', 'table_qa',
+  'image_classification', 'object_detection', 'image_segmentation', 'depth_estimation',
+  'keypoint_detection', 'visual_question_answering', 'document_qa', 'ocr',
+  'zero_shot_object_detection', 'mask_generation', 'visual_document_retrieval',
+  'video_understanding', 'video_classification', 'audio_classification',
+  'voice_activity_detection',
+]
+
+const OPENAI_CHAT_PROFILE: ExecutorCompatibilityProfile = {
+  taskTypes: ['text', 'text-generation', 'chat', 'code', 'reasoning'],
+  categories: ['text', 'text-generation', 'chat', 'code'],
+  transportProfiles: ['openai_chat_sse'],
+  endpointFamilies: ['openai_chat'],
+  requiredInputModalities: ['text'],
+  outputModality: 'text',
 }
 
-const EMBEDDING_MODELS = {
-  together: ['intfloat/multilingual-e5-large-instruct', 'togethercomputer/m2-bert-80M-32k-retrieval'],
-  deepinfra: ['Qwen/Qwen3-Embedding-0.6B', 'BAAI/bge-large-en-v1.5'],
-} as const
+const NATIVE_TASK_PROFILE: ExecutorCompatibilityProfile = {
+  taskTypes: [],
+  categories: [],
+  transportProfiles: ['native_inference_json', 'native_inference_binary'],
+  endpointFamilies: ['native_inference'],
+  requiredInputModalities: [],
+  outputModality: '',
+}
 
 function registration(
   id: ExecutorId,
   provider: ProviderKey,
   capability: CapabilityKey,
   handlerName: string,
-  compatibleModels: readonly string[],
+  profile: ExecutorCompatibilityProfile,
   executionMode: 'sync' | 'queued' | 'stream' = 'queued',
 ): ExecutorRegistration {
   const definition = CAPABILITY_BY_KEY[capability]
@@ -100,113 +117,71 @@ function registration(
     handlerName,
     acceptedRequestContract: definition.inputContractReference,
     outputContract: definition.outputContractReference,
-    modelCompatibility: 'exact_model_allowlist',
-    compatibleModels,
-    compatibilityProfile: null,
+    modelCompatibility: 'transport_task_profile',
+    compatibleModels: [],
+    compatibilityProfile: profile,
     sourceArtifactRequired: definition.requiresSourceArtifact || capability === 'stt',
     artifactOutput: definition.artifactType,
     executionMode,
   }
 }
 
-function mediaRegistration(
-  id: ExecutorId,
-  provider: ProviderKey,
-  capability: CapabilityKey,
-  handlerName: string,
-  profile: ExecutorCompatibilityProfile,
-): ExecutorRegistration {
-  const definition = CAPABILITY_BY_KEY[capability]
-  return {
-    id,
-    provider,
-    capability,
-    handlerName,
-    acceptedRequestContract: definition.inputContractReference,
-    outputContract: definition.outputContractReference,
-    modelCompatibility: 'metadata_profile',
-    compatibleModels: [],
-    compatibilityProfile: profile,
-    sourceArtifactRequired: definition.requiresSourceArtifact,
-    artifactOutput: definition.artifactType,
-    executionMode: 'queued',
-  }
+function profile(
+  taskTypes: readonly string[],
+  categories: readonly string[],
+  transports: readonly string[],
+  endpoints: readonly string[],
+  inputs: readonly string[],
+  output: string,
+): ExecutorCompatibilityProfile {
+  return { taskTypes, categories, transportProfiles: transports, endpointFamilies: endpoints, requiredInputModalities: inputs, outputModality: output }
 }
 
-const GENX_VIDEO_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['video'],
-  transportProfiles: ['async_job_poll'],
-  endpointFamilies: ['genx_generation_v1'],
-  requiredInputModalities: ['text'],
-  outputModality: 'video',
-}
-
-const GENX_MUSIC_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['audio', 'music', 'text-to-music'],
-  transportProfiles: ['async_job_poll'],
-  endpointFamilies: ['genx_generation_v1'],
-  requiredInputModalities: ['text'],
-  outputModality: 'audio',
-}
-
-const GENX_TTS_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['audio', 'voice', 'tts'],
-  transportProfiles: ['async_job_poll'],
-  endpointFamilies: ['genx_generation_v1'],
-  requiredInputModalities: ['text'],
-  outputModality: 'audio',
-}
-
-const GENX_STT_PROFILE: ExecutorCompatibilityProfile = {
-  categories: ['audio', 'transcription', 'stt'],
-  transportProfiles: ['async_job_poll'],
-  endpointFamilies: ['genx_generation_v1'],
-  requiredInputModalities: ['audio'],
-  outputModality: 'text',
-}
+const DEEPINFRA_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'] }
+const TOGETHER_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'together_openai_v1'] }
+const GENX_TEXT = { ...OPENAI_CHAT_PROFILE, transportProfiles: ['openai_chat_sse', 'anthropic_messages_sse'], endpointFamilies: ['openai_chat', 'anthropic_messages'] }
+const EMBEDDINGS = profile(['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'], ['embedding', 'embeddings'], ['native_inference_json'], ['embeddings'], ['text'], 'embedding')
+const RERANK = profile(['rerank', 'reranker'], ['rerank', 'reranker', 'reranking'], ['native_inference_json'], ['rerank', 'native_inference'], ['text'], 'json')
+const IMAGE = profile(['image', 'text-to-image', 'image-generation'], ['image', 'text-to-image'], ['native_inference_json', 'native_inference_binary'], ['image_generation', 'native_inference'], ['text'], 'image')
+const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>
+  profile(tasks, categories, ['async_job_poll'], ['genx_generation_v1'], inputs, output)
 
 /**
- * Canonical executable support. A row is added only after its shared provider
- * client and callable capability handler exist. Discovery alone never adds a row.
+ * Canonical executable support is transport/task based. Discovery can make a
+ * newly released model compatible without a source change, but only after the
+ * exact request, response, client and worker evidence flags are true.
  */
 export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
-  registration('deepinfra.chat', 'deepinfra', 'chat', 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS, 'stream'),
-  registration('deepinfra.chat', 'deepinfra', 'streaming_chat', 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS, 'stream'),
-  ...GENERAL_TEXT_CAPABILITIES.map((capability) =>
-    registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_GENERAL_MODELS),
+  registration('deepinfra.chat', 'deepinfra', 'chat', 'executeValidatedTextCapability', DEEPINFRA_TEXT),
+  registration('deepinfra.streaming-chat', 'deepinfra', 'streaming_chat', 'executeAuthenticatedStreamingChat', DEEPINFRA_TEXT, 'stream'),
+  ...GENERAL_TEXT_CAPABILITIES.filter((capability) => capability !== 'chat').map((capability) =>
+    registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT),
   ),
-  ...Object.entries(DEEPINFRA_SPECIALIST_MODELS).map(([capability, models]) =>
-    registration('deepinfra.task-inference', 'deepinfra', capability as CapabilityKey, 'executeDeepInfraTaskCapability', models),
+  ...SPECIALIST_CAPABILITIES.map((capability) =>
+    registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
   ),
-  registration('deepinfra.embeddings', 'deepinfra', 'feature_extraction', 'executeEmbeddingsCapability', EMBEDDING_MODELS.deepinfra),
-  registration('deepinfra.embeddings', 'deepinfra', 'sentence_similarity', 'executeSentenceSimilarity', EMBEDDING_MODELS.deepinfra),
-  registration('deepinfra.embeddings', 'deepinfra', 'embeddings', 'executeEmbeddingsCapability', EMBEDDING_MODELS.deepinfra),
-  registration('deepinfra.reranking', 'deepinfra', 'reranking', 'executeRerankingCapability', ['Qwen/Qwen3-Reranker-0.6B', 'BAAI/bge-reranker-large']),
+  ...(['feature_extraction', 'sentence_similarity', 'embeddings'] as const).map((capability) => registration('deepinfra.embeddings', 'deepinfra', capability, 'executeEmbeddingsCapability', EMBEDDINGS)),
+  registration('deepinfra.reranking', 'deepinfra', 'reranking', 'executeRerankingCapability', RERANK),
 
-  registration('together.embeddings', 'together', 'feature_extraction', 'executeEmbeddingsCapability', EMBEDDING_MODELS.together),
-  registration('together.embeddings', 'together', 'sentence_similarity', 'executeSentenceSimilarity', EMBEDDING_MODELS.together),
-  registration('together.embeddings', 'together', 'embeddings', 'executeEmbeddingsCapability', EMBEDDING_MODELS.together),
-  registration('together.reranking', 'together', 'reranking', 'executeRerankingCapability', ['Salesforce/Llama-Rank-v1']),
-  registration('together.image-generation', 'together', 'image_generation', 'executeTogetherImage', ['black-forest-labs/FLUX.1-schnell']),
+  ...GENERAL_TEXT_CAPABILITIES.map((capability) => registration('together.chat', 'together', capability, 'executeValidatedTextCapability', TOGETHER_TEXT)),
+  registration('together.streaming-chat', 'together', 'streaming_chat', 'executeAuthenticatedStreamingChat', TOGETHER_TEXT, 'stream'),
+  ...(['feature_extraction', 'sentence_similarity', 'embeddings'] as const).map((capability) => registration('together.embeddings', 'together', capability, 'executeEmbeddingsCapability', EMBEDDINGS)),
+  registration('together.reranking', 'together', 'reranking', 'executeRerankingCapability', RERANK),
+  registration('together.image-generation', 'together', 'image_generation', 'executeTogetherImage', IMAGE),
 
-  // GenX exclusive video
-  mediaRegistration('genx.video-generation', 'genx', 'video_generation', 'executeGenxVideo', GENX_VIDEO_PROFILE),
-  mediaRegistration('genx.video-generation', 'genx', 'image_to_video', 'executeGenxVideo', { ...GENX_VIDEO_PROFILE, requiredInputModalities: ['text', 'image'] }),
-  mediaRegistration('genx.video-generation', 'genx', 'video_to_video', 'executeGenxVideo', { ...GENX_VIDEO_PROFILE, requiredInputModalities: ['text', 'video'] }),
-
-  // GenX music and songs
-  mediaRegistration('genx.music-generation', 'genx', 'music_generation', 'executeGenxMusic', GENX_MUSIC_PROFILE),
-  mediaRegistration('genx.song-generation', 'genx', 'song_generation', 'executeGenxMusic', { ...GENX_MUSIC_PROFILE, categories: ['audio', 'music', 'text-to-music', 'song'] }),
-
-  // GenX voice
-  mediaRegistration('genx.tts', 'genx', 'tts', 'executeGenxTts', GENX_TTS_PROFILE),
-  mediaRegistration('genx.stt', 'genx', 'stt', 'executeGenxStt', GENX_STT_PROFILE),
+  ...GENERAL_TEXT_CAPABILITIES.map((capability) => registration('genx.chat', 'genx', capability, 'executeValidatedTextCapability', GENX_TEXT)),
+  registration('genx.streaming-chat', 'genx', 'streaming_chat', 'executeAuthenticatedStreamingChat', GENX_TEXT, 'stream'),
+  registration('genx.video-generation', 'genx', 'video_generation', 'executeGenxVideo', GENX_ASYNC(['video', 'text-to-video'], ['video'], ['text'], 'video')),
+  registration('genx.image-to-video', 'genx', 'image_to_video', 'executeGenxVideo', GENX_ASYNC(['video', 'image-to-video'], ['video'], ['text', 'image'], 'video')),
+  registration('genx.video-to-video', 'genx', 'video_to_video', 'executeGenxVideo', GENX_ASYNC(['video', 'video-to-video'], ['video'], ['text', 'video'], 'video')),
+  registration('genx.music-generation', 'genx', 'music_generation', 'executeGenxMusic', GENX_ASYNC(['music', 'text-to-music', 'audio'], ['music', 'audio', 'text-to-music'], ['text'], 'audio')),
+  registration('genx.song-generation', 'genx', 'song_generation', 'executeGenxMusic', GENX_ASYNC(['song', 'music', 'text-to-music'], ['song', 'music', 'audio'], ['text'], 'audio')),
+  registration('genx.tts', 'genx', 'tts', 'executeGenxTts', GENX_ASYNC(['text-to-speech', 'tts', 'voice'], ['tts', 'voice', 'audio'], ['text'], 'audio')),
+  registration('genx.stt', 'genx', 'stt', 'executeGenxStt', GENX_ASYNC(['automatic-speech-recognition', 'transcription', 'stt'], ['transcription', 'stt', 'audio'], ['audio'], 'text')),
 ] as const
 
 export function getExecutorRegistrations(capability?: CapabilityKey, provider?: ProviderKey): ExecutorRegistration[] {
-  return EXECUTOR_REGISTRATIONS.filter((entry) =>
-    (!capability || entry.capability === capability) && (!provider || entry.provider === provider),
-  )
+  return EXECUTOR_REGISTRATIONS.filter((entry) => (!capability || entry.capability === capability) && (!provider || entry.provider === provider))
 }
 
 export function getExecutorRegistration(capability: CapabilityKey, provider: ProviderKey): ExecutorRegistration | undefined {
@@ -217,23 +192,27 @@ export function hasExecutorRegistration(capability: CapabilityKey, provider: Pro
   return getExecutorRegistration(capability, provider) !== undefined
 }
 
-export function isExecutorModelCompatible(
-  registration: ExecutorRegistration,
-  model: string,
-  metadata?: ExecutorModelMetadata,
-): boolean {
-  if (registration.modelCompatibility === 'exact_model_allowlist') {
-    return registration.compatibleModels.includes(model)
-  }
-
-  const profile = registration.compatibilityProfile
-  if (!profile || !metadata) return false
+export function isExecutorModelCompatible(registration: ExecutorRegistration, _model: string, metadata?: ExecutorModelMetadata): boolean {
+  const contract = registration.compatibilityProfile
+  if (!metadata) return false
   if (!metadata.endpointShapeKnown || !metadata.requestShapeKnown || !metadata.responseShapeKnown) return false
   if (!metadata.providerClientExists || !metadata.workerExecutorExists) return false
   if (!metadata.capabilities?.includes(registration.capability)) return false
-  if (!profile.categories.includes(metadata.category ?? '')) return false
-  if (!profile.transportProfiles.includes(metadata.transportProfile ?? '')) return false
-  if (!profile.endpointFamilies.includes(metadata.endpointFamily ?? '')) return false
-  if (!profile.requiredInputModalities.every((modality) => metadata.modalitiesIn?.includes(modality))) return false
-  return metadata.modalitiesOut?.includes(profile.outputModality) === true
+  if (registration.executionMode === 'stream' && metadata.streamingSupported !== true) return false
+  if (!matches(contract.taskTypes, metadata.taskType)) return false
+  if (!matches(contract.categories, metadata.category)) return false
+  if (!matches(contract.transportProfiles, metadata.transportProfile)) return false
+  if (!matchesEndpoint(contract.endpointFamilies, metadata.endpointFamily)) return false
+  if (!contract.requiredInputModalities.every((modality) => metadata.modalitiesIn?.includes(modality))) return false
+  return !contract.outputModality || metadata.modalitiesOut?.includes(contract.outputModality) === true
+}
+
+function matches(allowed: readonly string[], value: string | null | undefined): boolean {
+  return allowed.length === 0 || (typeof value === 'string' && allowed.includes(value.toLowerCase()))
+}
+
+function matchesEndpoint(allowed: readonly string[], value: string | null | undefined): boolean {
+  if (allowed.length === 0) return true
+  const normalized = String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '_')
+  return allowed.some((entry) => normalized.includes(entry.toLowerCase()))
 }

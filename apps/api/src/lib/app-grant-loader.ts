@@ -34,6 +34,14 @@ function toGrantContext(grant: NonNullable<GrantRecord>): AppCapabilityGrantCont
     dataRetentionPolicy: grant.dataRetentionPolicy,
     passthroughModelAllowed: grant.passthroughModelAllowed,
     providerResidencyConstraints: parseJsonArray(grant.providerResidencyConstraints),
+    routingMode: grant.routingMode as AppCapabilityGrantContext['routingMode'],
+    qualityTarget: grant.qualityTarget as AppCapabilityGrantContext['qualityTarget'],
+    spendStrategy: grant.spendStrategy as AppCapabilityGrantContext['spendStrategy'],
+    fixedRoute: grant.fixedProvider && grant.fixedModel ? `${grant.fixedProvider}/${grant.fixedModel}` : null,
+    preferredPool: parseJsonArray(grant.preferredPool),
+    selectableAllowlist: parseJsonArray(grant.selectableAllowlist),
+    restrictedPool: parseJsonArray(grant.restrictedPool),
+    workflowStepOverrides: parseJsonObject(grant.workflowStepOverrides),
   }
 }
 
@@ -96,6 +104,8 @@ export async function resolveAppCapabilityGrantSnapshot(
     dataRetentionPolicy: 'default',
     passthroughModelAllowed: false,
     providerResidencyConstraints: [],
+    routingMode: 'automatic', qualityTarget: 'standard', spendStrategy: 'best_value', fixedRoute: null,
+    preferredPool: [], selectableAllowlist: [], restrictedPool: [], workflowStepOverrides: {},
   }
   return { grant: Object.freeze(migrated), source: 'legacy_migration' }
 }
@@ -137,6 +147,14 @@ export async function resolveInternalDashboardCapabilityGrantSnapshot(
     dataRetentionPolicy: stored?.dataRetentionPolicy ?? 'default',
     passthroughModelAllowed: false,
     providerResidencyConstraints: [],
+    routingMode: stored?.routingMode ?? 'automatic',
+    qualityTarget: stored?.qualityTarget ?? 'standard',
+    spendStrategy: stored?.spendStrategy ?? 'best_value',
+    fixedRoute: stored?.fixedRoute ?? null,
+    preferredPool: stored?.preferredPool ?? [],
+    selectableAllowlist: stored?.selectableAllowlist ?? [],
+    restrictedPool: stored?.restrictedPool ?? [],
+    workflowStepOverrides: stored?.workflowStepOverrides ?? {},
   }
   return { grant: Object.freeze(grant), source: 'internal_dashboard' }
 }
@@ -199,6 +217,15 @@ export async function upsertAppCapabilityGrant(
       dataRetentionPolicy: data.dataRetentionPolicy ?? 'default',
       passthroughModelAllowed: data.passthroughModelAllowed ?? false,
       providerResidencyConstraints: JSON.stringify(data.providerResidencyConstraints ?? []),
+      routingMode: data.routingMode ?? 'automatic',
+      qualityTarget: data.qualityTarget ?? 'standard',
+      spendStrategy: data.spendStrategy ?? 'best_value',
+      fixedProvider: data.fixedRoute?.split('/')[0] ?? '',
+      fixedModel: data.fixedRoute?.split('/').slice(1).join('/') ?? '',
+      preferredPool: JSON.stringify(data.preferredPool ?? []),
+      selectableAllowlist: JSON.stringify(data.selectableAllowlist ?? []),
+      restrictedPool: JSON.stringify(data.restrictedPool ?? []),
+      workflowStepOverrides: JSON.stringify(data.workflowStepOverrides ?? {}),
     },
     update: {
       enabled: data.enabled,
@@ -221,6 +248,15 @@ export async function upsertAppCapabilityGrant(
       dataRetentionPolicy: data.dataRetentionPolicy,
       passthroughModelAllowed: data.passthroughModelAllowed,
       providerResidencyConstraints: data.providerResidencyConstraints ? JSON.stringify(data.providerResidencyConstraints) : undefined,
+      routingMode: data.routingMode,
+      qualityTarget: data.qualityTarget,
+      spendStrategy: data.spendStrategy,
+      fixedProvider: data.fixedRoute === undefined ? undefined : data.fixedRoute?.split('/')[0] ?? '',
+      fixedModel: data.fixedRoute === undefined ? undefined : data.fixedRoute?.split('/').slice(1).join('/') ?? '',
+      preferredPool: data.preferredPool ? JSON.stringify(data.preferredPool) : undefined,
+      selectableAllowlist: data.selectableAllowlist ? JSON.stringify(data.selectableAllowlist) : undefined,
+      restrictedPool: data.restrictedPool ? JSON.stringify(data.restrictedPool) : undefined,
+      workflowStepOverrides: data.workflowStepOverrides ? JSON.stringify(data.workflowStepOverrides) : undefined,
     },
   })
 
@@ -255,5 +291,14 @@ function parseJsonArray(value: string): string[] {
     return Array.isArray(parsed) ? parsed : []
   } catch {
     return []
+  }
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
   }
 }

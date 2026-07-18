@@ -61,7 +61,7 @@ export interface GenXPricingResult {
   error: string | null
 }
 
-const GENX_MODEL_CATEGORIES = ['', 'video', 'image', 'avatar', 'audio', 'voice', 'multimodal']
+const GENX_MODEL_CATEGORIES = ['', 'text', 'image', 'video', 'avatar', 'transcription', 'stt', 'voice', 'audio', 'music', 'multimodal']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -376,7 +376,7 @@ export async function discoverDeepInfraModels(apiKey: string): Promise<Discovery
   const discoveredAt = new Date().toISOString()
 
   try {
-    const response = await fetchJson('https://api.deepinfra.com/v1/openai/models', apiKey)
+    const response = await fetchJson('https://api.deepinfra.com/v1/models', apiKey)
     if (!response.ok) {
       return { provider: 'deepinfra', models: [], totalDiscovered: 0, source: 'provider_api', catalogCompleteness: 'discovery_failed', discoveredAt, error: `DeepInfra API returned ${response.status}` }
     }
@@ -403,7 +403,7 @@ export async function discoverDeepInfraModels(apiKey: string): Promise<Discovery
         modelOwner: asString(item.owned_by) || id.split('/')[0] || '',
         providerRawType: asString(item.object),
         providerRawCategory: task,
-        notes: 'Discovered from DeepInfra OpenAI-compatible models endpoint. Non-chat categories are mapped when returned; this endpoint is not treated as complete DeepInfra coverage.',
+        notes: 'Discovered from the authenticated DeepInfra /v1/models inventory. Endpoint and task metadata determine route compatibility; documentation fallback is display-only.',
         rawMetadata: item,
         discoveredAt,
         costTier: costTierFromPricing(pricing.estimatedUnitCost),
@@ -420,6 +420,7 @@ export async function discoverDeepInfraModels(apiKey: string): Promise<Discovery
 function mapGenXCategory(rawCategory: string, id: string): { category: string; role: string; capabilities: Record<string, boolean> } {
   const category = rawCategory.toLowerCase()
   const idLower = id.toLowerCase()
+  if (category.includes('transcri') || category.includes('speech-to-text') || category === 'stt' || idLower.includes('whisper') || idLower.includes('transcri')) return { category: 'audio', role: 'stt', capabilities: { supportsStt: true } }
   if (category.includes('image') || idLower.includes('image')) return { category: 'image', role: 'image_generation', capabilities: { supportsImageGeneration: true } }
   if (category.includes('avatar') || idLower.includes('avatar')) return { category: 'video', role: 'avatar_generation', capabilities: { supportsVideoGeneration: true } }
   if (category.includes('audio') || category.includes('voice') || idLower.includes('tts') || idLower.includes('voice')) {
@@ -499,69 +500,6 @@ export async function discoverGenXModels(apiKey: string, baseUrl?: string): Prom
   })
 
   return { provider: 'genx', models, totalDiscovered: models.length, source: 'provider_api', catalogCompleteness: completeness, discoveredAt, error: errors.length ? errors.join('; ') : null }
-}
-
-export async function discoverGroqModels(apiKey: string): Promise<DiscoveryResult> {
-  const discoveredAt = new Date().toISOString()
-
-  try {
-    const response = await fetchJson('https://api.groq.com/openai/v1/models', apiKey)
-    if (!response.ok) {
-      return { provider: 'groq', models: [], totalDiscovered: 0, source: 'provider_api', catalogCompleteness: 'discovery_failed', discoveredAt, error: `Groq API returned ${response.status}` }
-    }
-
-    const items = modelListFromPayload(response.payload)
-    const models = items.map((item) => {
-      const id = asString(item.id)
-      const lowerId = id.toLowerCase()
-      let category = 'text'
-      let role = 'chat'
-      const capabilities: Record<string, boolean> = { supportsChat: true, supportsText: true }
-
-      if (lowerId.includes('whisper') || lowerId.includes('distil-whisper')) {
-        category = 'audio'; role = 'stt'; delete capabilities.supportsChat; delete capabilities.supportsText; capabilities.supportsStt = true
-      } else if (lowerId.includes('tts') || lowerId.includes('playai') || lowerId.includes('orpheus')) {
-        category = 'audio'; role = 'tts'; delete capabilities.supportsChat; delete capabilities.supportsText; capabilities.supportsTts = true
-      } else if (lowerId.includes('vision') || lowerId.includes('llama-3.2')) {
-        capabilities.supportsMultimodal = true
-      } else if (lowerId.includes('tool') || lowerId.includes('compound')) {
-        capabilities.supportsToolUse = true
-      }
-
-      if (isRecord(item.capabilities)) {
-        if (item.capabilities.structured_output) capabilities.supportsStructuredOutput = true
-        if (item.capabilities.tool_use) capabilities.supportsToolUse = true
-        if (item.capabilities.vision) capabilities.supportsMultimodal = true
-      }
-
-      const pricing = pricingFromProviderMetadata(item.pricing)
-      return makeModel({
-        provider: 'groq',
-        modelId: id,
-        displayName: id,
-        family: id.split('-')[0] || 'groq',
-        category,
-        primaryRole: role,
-        capabilities,
-        contextWindow: asNumber(item.context_window) ?? 4096,
-        latencyTier: 'ultra_low',
-        source: 'provider_api',
-        catalogCompleteness: payloadProvesComplete(response.payload, items.length) ? 'complete_from_provider_api' : 'partial_from_provider_api',
-        isLiveDiscovered: true,
-        modelOwner: asString(item.owned_by) || 'groq',
-        providerRawType: asString(item.object),
-        notes: `Discovered from Groq models API. Active: ${String(item.active ?? 'unknown')}.`,
-        rawMetadata: item,
-        discoveredAt,
-        costTier: costTierFromPricing(pricing.estimatedUnitCost),
-        ...pricing,
-      })
-    })
-
-    return { provider: 'groq', models, totalDiscovered: models.length, source: 'provider_api', catalogCompleteness: models[0]?.catalogCompleteness ?? 'unknown', discoveredAt, error: null }
-  } catch (err) {
-    return { provider: 'groq', models: [], totalDiscovered: 0, source: 'provider_api', catalogCompleteness: 'discovery_failed', discoveredAt, error: err instanceof Error ? err.message : 'Unknown error' }
-  }
 }
 
 export async function discoverGenXPricing(apiKey: string, baseUrl?: string): Promise<GenXPricingResult> {

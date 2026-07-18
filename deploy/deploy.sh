@@ -232,8 +232,6 @@ AMARKTAI_DISCOVERY_OUTPUT_ROOT="$DISCOVERY_OUTPUT_ROOT" npm run discover:models:
 npm run proof:authenticated-discovery
 node scripts/proof-direct-provider-capabilities.mjs --live --strict
 npm run proof
-npm run proof
-npm run proof
 
 PRODUCTION_PROOF_FILE="$BACKUP_DIR/release-proof-${DEPLOY_SHA}-$(date -u +%Y%m%dT%H%M%SZ).json"
 node scripts/proof-production-release-candidate.mjs \

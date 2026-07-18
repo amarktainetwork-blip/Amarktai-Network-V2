@@ -1,6 +1,6 @@
 import type { ProviderKey } from './providers.js'
 import type { CapabilityKey } from './capabilities.js'
-import { hasExecutorRegistration } from './executor-registry.js'
+import { getExecutorRegistrations, isExecutorModelCompatible } from './executor-registry.js'
 import type { ModelDiscoverySource, ProviderDiscoveredModel } from './provider-model-discovery.js'
 import generatedProviderModels from './generated/provider-model-catalogue.generated.json' with { type: 'json' }
 
@@ -259,56 +259,6 @@ export const STATIC_MODEL_CATALOGUE: readonly ModelRecord[] = [
     supportsBatch: false,
     executable: false,
     notes: 'coding_tools_only. Never selected for runtime capability execution.',
-  },
-  {
-    provider: 'genx',
-    modelId: 'genx-tts-v1',
-    displayName: 'GenX TTS V1',
-    capabilities: ['tts'],
-    status: 'available',
-    qualityTier: 'balanced',
-    latencyTier: 'medium',
-    costTier: 'medium',
-    supportsArtifacts: true,
-    supportsStreaming: false,
-    supportsBatch: false,
-    executable: false,
-    category: 'audio',
-    modalitiesIn: ['text'],
-    modalitiesOut: ['audio'],
-    transportProfile: 'async_job_poll',
-    endpointFamily: 'genx_generation_v1',
-    endpointShapeKnown: true,
-    requestShapeKnown: true,
-    responseShapeKnown: true,
-    providerClientExists: true,
-    workerExecutorExists: true,
-    notes: 'GenX asynchronous TTS contract; submits text, polls for completion, downloads audio artifact.',
-  },
-  {
-    provider: 'genx',
-    modelId: 'genx-stt-v1',
-    displayName: 'GenX STT V1',
-    capabilities: ['stt'],
-    status: 'available',
-    qualityTier: 'balanced',
-    latencyTier: 'medium',
-    costTier: 'low',
-    supportsArtifacts: false,
-    supportsStreaming: false,
-    supportsBatch: false,
-    executable: false,
-    category: 'audio',
-    modalitiesIn: ['audio'],
-    modalitiesOut: ['text'],
-    transportProfile: 'async_job_poll',
-    endpointFamily: 'genx_generation_v1',
-    endpointShapeKnown: true,
-    requestShapeKnown: true,
-    responseShapeKnown: true,
-    providerClientExists: true,
-    workerExecutorExists: true,
-    notes: 'GenX asynchronous STT contract; uploads audio, polls for transcription, returns transcript.',
   },
   {
     provider: 'together',
@@ -586,10 +536,31 @@ export function getModelsByCapability(capability: CapabilityKey): ModelRecord[] 
 }
 
 export function getExecutableModels(): ModelRecord[] {
-  return MODEL_CATALOGUE.filter((model) =>
-    model.status === 'available'
-    && model.capabilities.some((capability) => hasExecutorRegistration(capability, model.provider)),
-  )
+  return MODEL_CATALOGUE.filter((model) => model.capabilities.some((capability) => isModelRouteCompatible(model, capability)))
+}
+
+export function isModelRouteCompatible(model: ModelRecord, capability: CapabilityKey): boolean {
+  if (model.status !== 'available' || model.policyRestrictedByApp) return false
+  if (!model.liveDiscovered && model.source !== 'static_verified') return false
+  const raw = model.rawMetadata ?? {}
+  const metadata = {
+    category: model.category,
+    taskType: typeof raw.taskType === 'string' ? raw.taskType : model.providerCategory ?? model.category,
+    capabilities: model.capabilities,
+    modalitiesIn: model.modalitiesIn,
+    modalitiesOut: model.modalitiesOut,
+    transportProfile: model.transportProfile,
+    endpointFamily: model.endpointFamily,
+    endpointShapeKnown: model.endpointShapeKnown,
+    requestShapeKnown: model.requestShapeKnown,
+    responseShapeKnown: model.responseShapeKnown,
+    providerClientExists: model.providerClientExists,
+    workerExecutorExists: model.workerExecutorExists,
+    streamingSupported: model.supportsStreaming,
+    structuredOutputModes: Array.isArray(raw.structuredOutputModes) ? raw.structuredOutputModes.filter((value): value is 'none' | 'json_object' | 'json_schema' => typeof value === 'string' && ['none', 'json_object', 'json_schema'].includes(value)) : [],
+    supportedParameters: Array.isArray(raw.supportedParameters) ? raw.supportedParameters.filter((value): value is string => typeof value === 'string') : [],
+  }
+  return getExecutorRegistrations(capability, model.provider).some((registration) => isExecutorModelCompatible(registration, model.modelId, metadata))
 }
 
 export function getPlannedModels(): ModelRecord[] {

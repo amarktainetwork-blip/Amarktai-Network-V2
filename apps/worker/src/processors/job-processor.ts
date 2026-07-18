@@ -5,7 +5,7 @@
  * - Loads DB Job row and verifies ownership
  * - Updates status to processing with startedAt
  * - Delegates execution to the provider executor
- * - Currently proven execution paths are Groq chat, Together image generation,
+ * - Runtime execution paths are selected dynamically from approved providers,
  *   and GenX video generation
  * - Fails closed when no canonical executor is registered
  * - Successful text jobs may store output
@@ -17,6 +17,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma, refreshLongFormParentState } from '@amarktai/db'
 import { QUEUE_NAMES, isValidCapability, type AppCapabilityGrantContext, type ExecutionProfile } from '@amarktai/core'
+import { deliverTerminalJobWebhook } from '../webhook-delivery.js'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -166,6 +167,46 @@ async function refreshParentFromPayload(payload: WorkerJobData, advance?: (paren
   }
 }
 
+async function deliverWebhookSafely(
+  payload: WorkerJobData,
+  status: 'completed' | 'failed',
+  result: ProcessorResult | undefined,
+  error?: string,
+): Promise<void> {
+  if (!payload.callbackUrl) return
+  try {
+    const delivery = await deliverTerminalJobWebhook({
+      jobId: payload.jobId,
+      appSlug: payload.appSlug,
+      capability: payload.capability,
+      status,
+      callbackUrl: payload.callbackUrl,
+      traceId: payload.traceId,
+      provider: result?.provider,
+      model: result?.model,
+      artifactId: result?.artifactId,
+      output: result?.output,
+      error: status === 'failed' ? (error ?? result?.error ?? 'Execution failed') : null,
+      completedAt: new Date(),
+    })
+    console.info('[worker] terminal webhook delivery', {
+      dbJobId: payload.jobId,
+      eventId: delivery.eventId ?? null,
+      attempted: delivery.attempted,
+      delivered: delivery.delivered,
+      attempts: delivery.attempts,
+      reason: delivery.reason ?? null,
+    })
+  } catch (deliveryError) {
+    // Webhook delivery has its own durable attempt log. It must never rewrite a
+    // truthful provider result or cause BullMQ to retry paid provider execution.
+    console.error('[worker] terminal webhook delivery failed unexpectedly', {
+      dbJobId: payload.jobId,
+      message: deliveryError instanceof Error ? deliveryError.message : 'Unknown webhook delivery error',
+    })
+  }
+}
+
 async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
   payload: WorkerJobData
   dbJob: Awaited<ReturnType<typeof prisma.job.findUnique>> | null
@@ -207,7 +248,7 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
 }
 
 // ── Default execution — delegates to provider executor ────────────────────────
-// Delegates to the provider executor, which currently supports Groq chat,
+// Delegates to the provider executor, which supports approved runtime routes,
 // Together image generation, and GenX video generation.
 
 async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -295,9 +336,11 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       return durableDeliveryResult(latest ?? job)
     }
 
+    let terminalResult: ProcessorResult | undefined
     try {
       // 6. Call execution (does NOT call providers in Phase 4)
       const result = await executeCapability(payload)
+      terminalResult = result
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
@@ -355,6 +398,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         }
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'completed' })
         await refreshParentFromPayload(payload, advanceWorkflow)
+        await deliverWebhookSafely(payload, 'completed', result)
         return result
       }
 
@@ -400,7 +444,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       // Attempt to update DB to failed state
       // If step 8 already updated it, this is a harmless no-op (same status)
       // If executeCapability threw, this records the error
-      await updateJobMany({
+      const failedTerminalUpdate = await updateJobMany({
         where: { id: jobId, status: { notIn: ['completed', 'cancelled', 'cancelling'] } },
         data: {
           status: 'failed',
@@ -409,8 +453,12 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         },
       }).catch(() => {
         // If DB update fails, the original error is more important
+        return { count: 0 }
       })
       await refreshParentFromPayload(payload, advanceWorkflow)
+      if (failedTerminalUpdate.count === 1) {
+        await deliverWebhookSafely(payload, 'failed', terminalResult, errorMessage)
+      }
 
       // Re-throw so BullMQ records the failure
       throw err

@@ -102,6 +102,14 @@ export async function appGrantRoutes(app: FastifyInstance): Promise<void> {
       dataRetentionPolicy: body.dataRetentionPolicy as string,
       passthroughModelAllowed: body.passthroughModelAllowed as boolean,
       providerResidencyConstraints: body.providerResidencyConstraints as string[],
+      routingMode: body.routingMode as never,
+      qualityTarget: body.qualityTarget as never,
+      spendStrategy: body.spendStrategy as never,
+      fixedRoute: body.fixedRoute as string | null,
+      preferredPool: body.preferredPool as string[],
+      selectableAllowlist: body.selectableAllowlist as string[],
+      restrictedPool: body.restrictedPool as string[],
+      workflowStepOverrides: body.workflowStepOverrides as Record<string, unknown>,
     })
 
     return reply.send(grant)

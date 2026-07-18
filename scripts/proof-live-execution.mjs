@@ -138,7 +138,7 @@ async function getGitSha() {
 // ── Proofs ─────────────────────────────────────────────────────────────────────
 
 async function proofChat(appApiKey, adminToken) {
-  section('Groq/DeepInfra Chat')
+  section('Dynamically Routed Chat')
   const { status, body } = await submitJob(appApiKey, 'chat', 'Reply with exactly: PROOF_OK')
   if (status !== 201) {
     fail('Chat job submission', `status=${status}`)
@@ -264,7 +264,7 @@ async function proofMusicGeneration(appApiKey, adminToken) {
 
 async function proofOverrideBlocking(appApiKey) {
   section('Provider/Model Override Blocking')
-  const providerRes = await submitJob(appApiKey, 'chat', 'test', { provider: 'groq' })
+  const providerRes = await submitJob(appApiKey, 'chat', 'test', { provider: 'together' })
   if (providerRes.status === 400) {
     pass('Provider override blocked with 400')
   } else {

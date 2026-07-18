@@ -105,7 +105,21 @@ function parseParent(job: DbJob): { request: LongFormVideoRequest; plan: LongFor
   }
 }
 
-function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
+function numericCostEvidence(job: DbJob): number | null {
+  const output = safeJson(job.output)
+  const metadata = safeJson(job.metadataJson)
+  const candidates = [
+    output.costUsdCents,
+    (output.usage as Record<string, unknown> | undefined)?.costUsdCents,
+    (output.executionEvidence as Record<string, unknown> | undefined)?.costUsdCents,
+    metadata.costUsdCents,
+    (metadata.executionEvidence as Record<string, unknown> | undefined)?.costUsdCents,
+  ]
+  const value = candidates.find((candidate) => typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0)
+  return typeof value === 'number' ? value : null
+}
+
+function deriveStatus(parent: DbJob, sceneJobs: DbJob[], componentJobs: DbJob[] = sceneJobs) {
   const { request, plan, metadata } = parseParent(parent)
   const state = metadata.componentState as LongFormComponentState
   const scenes = state?.scenes
@@ -130,6 +144,7 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
     (job) => (job.status === 'cancelled' || job.status === 'cancelling') && (job.providerClaimAt || !!(safeJson(job.metadataJson).genxProviderJobId))
   )
 
+  const componentCosts = componentJobs.map((job) => ({ jobId: job.id, capability: job.capability, costUsdCents: numericCostEvidence(job) }))
   return {
     parent: {
       id: parent.id,
@@ -185,6 +200,12 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
     assemblyAllowed: finalAssemblyReadiness && !locallyCancelled,
     blockedReasons: state?.blockedReasons ?? [],
     componentState: state,
+    costEvidence: {
+      knownCostUsdCents: componentCosts.reduce((total, item) => total + (item.costUsdCents ?? 0), 0),
+      unknownCostComponentCount: componentCosts.filter((item) => item.costUsdCents === null).length,
+      complete: componentCosts.length > 0 && componentCosts.every((item) => item.costUsdCents !== null),
+      components: componentCosts,
+    },
     assemblyHandoff: {
       parentJobId: parent.id,
       executionId: parent.executionId,
@@ -575,7 +596,7 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
             inputJson: JSON.stringify({
               text: scene.voiceoverText,
               sceneNumber: scene.sceneNumber,
-              voice: voiceProfile.voice ?? 'tara',
+              ...(voiceProfile.voice ? { voice: voiceProfile.voice } : {}),
               speed: voiceProfile.speed ?? 1,
               outputFormat: voiceProfile.outputFormat ?? 'wav',
               language: voiceProfile.language ?? 'en',
@@ -1188,7 +1209,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     return reply.status(200).send({
       success: true,
-      execution: deriveStatus(loaded.parent, loaded.sceneJobs),
+      execution: deriveStatus(loaded.parent, loaded.sceneJobs, loaded.childJobs),
       message: 'Durable long-form status loaded from parent and linked scene jobs.',
     })
   })

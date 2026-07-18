@@ -394,34 +394,65 @@ function canonicalCapabilitiesFromFlags(flags: Record<string, boolean>): Capabil
     .map(([capability]) => capability as CapabilityKey)
 }
 
+function canonicalCapabilitiesForDiscovered(model: DiscoveryResult['models'][number]): CapabilityKey[] {
+  const task = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
+  const byTask: Record<string, CapabilityKey[]> = {
+    'zero-shot-classification': ['zero_shot_classification'], 'token-classification': ['token_classification'],
+    'fill-mask': ['fill_mask'], 'table-question-answering': ['table_qa'], 'question-answering': ['question_answering'],
+    'feature-extraction': ['feature_extraction', 'embeddings'], embeddings: ['feature_extraction', 'sentence_similarity', 'embeddings'],
+    'sentence-similarity': ['sentence_similarity'], reranker: ['reranking'], rerank: ['reranking'],
+    'text-to-image': ['image_generation'], 'image-to-image': ['image_edit', 'image_to_image'],
+    'image-classification': ['image_classification'], 'object-detection': ['object_detection'],
+    'image-segmentation': ['image_segmentation'], 'depth-estimation': ['depth_estimation'],
+    'visual-question-answering': ['visual_question_answering'], 'document-question-answering': ['document_qa'], ocr: ['ocr'],
+    'text-to-video': ['video_generation'], 'image-to-video': ['image_to_video'], 'video-to-video': ['video_to_video'],
+    'automatic-speech-recognition': ['stt'], transcription: ['stt'], 'text-to-speech': ['tts'],
+    'text-to-music': ['music_generation'], music: ['music_generation'], song: ['song_generation'],
+  }
+  if (byTask[task]) return byTask[task]
+  if (['text-generation', 'chat', 'text'].includes(task)) return ['chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification', 'extraction', 'structured_output', 'tool_use']
+  return canonicalCapabilitiesFromFlags(model.capabilities)
+}
+
 function discoveredCompatibility(model: DiscoveryResult['models'][number], capabilities: CapabilityKey[]): Record<string, unknown> | null {
   const category = (model.providerRawCategory || model.category).toLowerCase()
-  const identifier = model.modelId.toLowerCase()
-  if (model.provider === 'genx' && category === 'video') {
-    const sourceAware = /(?:^|[-_/])(i2v|r2v|videoedit)(?:$|[-_/])/.test(identifier)
-    if (sourceAware) return null
+  const taskType = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
+  if (model.provider === 'deepinfra' && capabilities.length > 0) {
+    const text = ['text-generation', 'chat', 'text'].includes(taskType)
+    const embeddings = ['embeddings', 'feature-extraction', 'sentence-similarity'].includes(taskType)
+    const rerank = ['reranker', 'rerank'].includes(taskType)
     return {
-      category: 'video', capabilities, modalitiesIn: ['text'], modalitiesOut: ['video'],
+      taskType, category: taskType, capabilities,
+      modalitiesIn: embeddings || text || rerank ? ['text'] : [],
+      modalitiesOut: embeddings ? ['embedding'] : text ? ['text'] : ['json'],
+      transportProfile: text ? 'openai_chat_sse' : 'native_inference_json',
+      endpointFamily: text ? 'deepinfra_openai_v1/openai_chat' : embeddings ? 'deepinfra_openai_v1/embeddings' : rerank ? 'deepinfra_native_v1/rerank/native_inference' : 'deepinfra_native_v1/native_inference',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true, streamingSupported: text,
+      structuredOutputModes: Array.isArray(model.rawMetadata?.structured_output_modes) ? model.rawMetadata.structured_output_modes : ['none'],
+      supportedParameters: Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : [],
+    }
+  }
+  if (model.provider === 'together' && capabilities.length > 0) {
+    const text = ['text', 'chat', 'language', 'code'].includes(taskType)
+    return { taskType, category, capabilities, modalitiesIn: ['text'], modalitiesOut: text ? ['text'] : category === 'image' ? ['image'] : category === 'embedding' ? ['embedding'] : ['json'], transportProfile: text ? 'openai_chat_sse' : 'native_inference_json', endpointFamily: text ? 'together_openai_v1/openai_chat' : category === 'embedding' ? 'embeddings' : category === 'rerank' ? 'rerank' : 'image_generation', endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true, streamingSupported: text }
+  }
+  if (model.provider === 'genx' && category === 'video') {
+    return {
+      taskType, category: 'video', capabilities, modalitiesIn: taskType === 'image-to-video' ? ['text','image'] : taskType === 'video-to-video' ? ['text','video'] : ['text'], modalitiesOut: ['video'],
       transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
       providerClientExists: true, workerExecutorExists: true,
     }
   }
   if (model.provider === 'genx' && (category === 'audio' || category === 'music')) {
-    const isMusic = identifier.includes('music') || identifier.includes('lyria') || capabilities.includes('music_generation')
+    const isMusic = capabilities.includes('music_generation')
     return {
-      category: 'audio', capabilities, modalitiesIn: ['text'], modalitiesOut: ['audio'],
+      taskType, category: isMusic ? 'music' : category, capabilities, modalitiesIn: capabilities.includes('stt') ? ['audio'] : ['text'], modalitiesOut: capabilities.includes('stt') ? ['text'] : ['audio'],
       transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
       providerClientExists: true, workerExecutorExists: true,
       ...(isMusic ? { primaryRole: 'music_generation' } : {}),
-    }
-  }
-  if (model.provider === 'groq' && capabilities.includes('tts')) {
-    return {
-      category: 'audio', capabilities, modalitiesIn: ['text'], modalitiesOut: ['audio'],
-      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
-      providerClientExists: true, workerExecutorExists: true,
     }
   }
   return null
@@ -439,7 +470,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         where: { provider_modelId: { provider: model.provider, modelId: model.modelId } },
       })
 
-      const canonicalCapabilities = canonicalCapabilitiesFromFlags(model.capabilities)
+      const canonicalCapabilities = canonicalCapabilitiesForDiscovered(model)
       const compatibility = discoveredCompatibility(model, canonicalCapabilities)
       const rawMetadata = stringifyMetadataSafely({
         ...model.rawMetadata,
@@ -454,6 +485,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         category: model.category,
         primaryRole: model.primaryRole,
         costTier: model.costTier,
+        qualityTier: model.qualityTier,
         latencyTier: model.latencyTier,
         contextWindow: model.contextWindow,
         estimatedUnitCost: model.estimatedUnitCost,
@@ -464,6 +496,15 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         providerRawType: model.providerRawType,
         providerRawCategory: model.providerRawCategory,
         rawMetadata: rawMetadata.json,
+        currentAvailability: model.isLiveDiscovered ? 'available' : 'defined',
+        accountAccess: model.isLiveDiscovered ? 'accessible' : 'unknown',
+        endpointFamily: typeof compatibility?.endpointFamily === 'string' ? compatibility.endpointFamily : '',
+        transportProfile: typeof compatibility?.transportProfile === 'string' ? compatibility.transportProfile : '',
+        structuredOutputModes: JSON.stringify(Array.isArray(model.rawMetadata?.structuredOutputModes) ? model.rawMetadata.structuredOutputModes : ['none']),
+        supportedParameters: JSON.stringify(Array.isArray(model.rawMetadata?.supportedParameters) ? model.rawMetadata.supportedParameters : []),
+        compatibilityVersion: compatibility ? 'transport-task-v1' : '',
+        deprecated: model.rawMetadata?.deprecated === true,
+        replacementModel: typeof model.rawMetadata?.replacedBy === 'string' ? model.rawMetadata.replacedBy : '',
         discoveredAt: new Date(model.discoveredAt),
         lastSyncedAt: new Date(model.lastSyncedAt),
         pricingSource: model.pricingSource,
@@ -499,7 +540,18 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
     }
   }
 
+  await reconcileStoredProviderDefault(result.provider).catch(() => {})
+
   return { providerKey: result.provider, totalFetched: result.models.length, created, updated, failedRows, errors }
+}
+
+async function reconcileStoredProviderDefault(provider: string): Promise<void> {
+  const [stored, accessible] = await Promise.all([
+    prisma.aiProvider.findUnique({ where: { providerKey: provider } }),
+    prisma.modelRegistryEntry.findMany({ where: { provider, enabled: true, isLiveDiscovered: true }, orderBy: [{ qualityTier: 'desc' }, { modelId: 'asc' }] }),
+  ])
+  if (!stored?.defaultModel || accessible.some((model) => model.modelId === stored.defaultModel)) return
+  await prisma.aiProvider.update({ where: { providerKey: provider }, data: { defaultModel: accessible[0]?.modelId ?? '' } })
 }
 
 export async function seedCuratedFallback(): Promise<{ created: number; updated: number }> {

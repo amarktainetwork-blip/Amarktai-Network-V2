@@ -29,6 +29,8 @@ import { modelRegistryRoutes } from './routes/model-registry.js'
 import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
 import { appGrantRoutes } from './routes/admin-app-grants.js'
+import { appPlatformRoutes } from './routes/app-platform.js'
+import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
 import { assertDatabaseSchemaCurrent } from '@amarktai/db'
@@ -75,6 +77,8 @@ async function main(): Promise<void> {
   await app.register(appGrantRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
+  await app.register(appPlatformRoutes)
+  await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
   await bootstrapInternalDashboardApps(app.log)

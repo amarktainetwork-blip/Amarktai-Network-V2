@@ -22,6 +22,10 @@ export {
   type CapabilityCategory,
   type CapabilityKey,
   type CapabilityDefinition,
+  CAPABILITY_KINDS,
+  COMPOSITE_CAPABILITY_KEYS,
+  ATOMIC_CAPABILITY_KEYS,
+  type CapabilityKind,
 } from './capabilities.js'
 
 // Provider definitions
@@ -151,6 +155,7 @@ export {
   getModelsByProvider,
   getModelsByCapability,
   getExecutableModels,
+  isModelRouteCompatible,
   getPlannedModels,
   getBlockedModels,
   getModelRecord,
@@ -192,7 +197,16 @@ export {
   type ExecutorRegistration,
   type ExecutorCompatibilityProfile,
   type ExecutorModelMetadata,
+  type StructuredOutputMode,
 } from './executor-registry.js'
+
+export {
+  resolveStructuredOutputContract,
+  structuredResponseFormat,
+  downgradeStructuredOutput,
+  type StructuredOutputContract,
+} from './structured-output.js'
+export { operatorMessage } from './operator-messages.js'
 
 // Direct provider capability contracts and normalized execution evidence
 export {
@@ -234,6 +248,12 @@ export {
   type DbProviderRecord,
   type RuntimeInfrastructureEvidence,
   type AppCapabilityGrantContext,
+  APP_ROUTE_POLICY_MODES,
+  APP_QUALITY_TARGETS,
+  APP_SPEND_STRATEGIES,
+  type AppRoutePolicyMode,
+  type AppQualityTarget,
+  type AppSpendStrategy,
 } from './orchestra.js'
 
 // Budget policy
@@ -252,6 +272,7 @@ export {
 // Canonical runtime truth
 export {
   CAPABILITY_RUNTIME_CLASSIFICATIONS,
+  CAPABILITY_OPERATIONAL_STATES,
   getProviderRuntimeTruth,
   getCapabilityRuntimeTruth,
   getRuntimeTruth,
@@ -263,6 +284,8 @@ export {
   type ProviderRuntimeTruth,
   type CapabilityRuntimeTruth,
   type RuntimeTruth,
+  type RuntimeTruthMetrics,
+  type CapabilityOperationalState,
 } from './runtime-truth.js'
 
 // Provider credential security

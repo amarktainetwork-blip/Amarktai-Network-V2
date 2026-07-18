@@ -207,7 +207,7 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
         strict,
         results,
         summary: discoverySummary(models),
-        message: 'Strict live model discovery requires successful model-list discovery for genx, groq, together, and deepinfra. MiMo is excluded by coding-agent-only policy.',
+        message: 'Strict live model discovery requires successful authenticated model-list discovery for GenX, Together, and DeepInfra. MiMo is excluded by coding-agent-only policy.',
       })
     }
     return reply.send({

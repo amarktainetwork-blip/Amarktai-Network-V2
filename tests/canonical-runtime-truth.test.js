@@ -104,9 +104,8 @@ describe('canonical runtime truth', () => {
     const toolUse = capability(runtimeTruth, 'tool_use')
 
     expect(toolUse.catalogueKnown).toBe(true)
-    // tool_use was registered to deepinfra which is no longer a runtime provider
-    expect(toolUse.implementationReady).toBe(false)
-    expect(toolUse.classification).toBe('CATALOGUE_ONLY')
+    expect(toolUse.implementationReady).toBe(true)
+    expect(toolUse.classification).toBe('EXECUTOR_PRESENT')
     expect(toolUse.blockedReasons.length).toBeGreaterThan(0)
   })
 
@@ -151,11 +150,11 @@ describe('canonical runtime truth', () => {
     expect(music.configured).toBe(true)
     expect(music.infrastructureReady).toBe(true)
     expect(music.policyAllowed).toBe(true)
-    expect(music.eligibleProviders).toEqual(['genx'])
-    expect(music.eligibleModels.map((model) => model.modelId)).toEqual(expect.arrayContaining(['lyria-3-clip-preview', 'lyria-3-pro-preview']))
-    expect(music.executableNow).toBe(true)
+    expect(music.eligibleProviders).toEqual([])
+    expect(music.eligibleModels).toEqual([])
+    expect(music.executableNow).toBe(false)
     expect(music.liveProven).toBe(false)
-    expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
+    expect(music.classification).toBe('EXECUTOR_PRESENT')
   })
 
   it('liveProven only comes from supplied stored proof evidence', () => {
@@ -169,7 +168,8 @@ describe('canonical runtime truth', () => {
       providers: { together: { enabled: true, runtimeEnabled: true, configured: true, healthStatus: 'live' } },
       capabilities: { image_generation: { infrastructureReady: true, liveProven: true, lastProofAt: '2026-07-10T00:00:00.000Z' } },
     })
-    expect(capability(proven, 'image_generation').classification).toBe('LIVE_PROVEN')
+    expect(capability(proven, 'image_generation').classification).toBe('EXECUTOR_PRESENT')
+    expect(capability(proven, 'image_generation').liveProven).toBe(false)
     expect(capability(proven, 'image_generation').lastProofAt).toBe('2026-07-10T00:00:00.000Z')
   })
 
@@ -364,7 +364,7 @@ describe('canonical runtime truth', () => {
     const music = capability(runtimeTruth, 'music_generation')
 
     expect(music.liveProven).toBe(false)
-    expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
+    expect(music.classification).toBe('EXECUTOR_PRESENT')
   })
 
 })

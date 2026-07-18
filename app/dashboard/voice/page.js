@@ -14,7 +14,8 @@ import { Mic, Volume2 } from 'lucide-react'
 export default function VoiceStudioPage() {
   const [mode, setMode] = useState('tts')
   const [text, setText] = useState('')
-  const [voice, setVoice] = useState('tara')
+  const [voice, setVoice] = useState('')
+  const [voices, setVoices] = useState([])
   const [outputFormat, setOutputFormat] = useState('wav')
   const [language, setLanguage] = useState('en')
   const [artifacts, setArtifacts] = useState([])
@@ -23,9 +24,10 @@ export default function VoiceStudioPage() {
   const [running, setRunning] = useState(false)
 
   const loadArtifacts = async () => {
-    const response = await adminFetch('/api/admin/artifacts?limit=100')
-    const data = await response.json()
+    const [response, voicesResponse] = await Promise.all([adminFetch('/api/admin/artifacts?limit=100'), adminFetch('/api/admin/voices')])
+    const [data, voicesData] = await Promise.all([response.json(), voicesResponse.json()])
     setArtifacts((data.artifacts || []).filter((artifact) => artifact.status === 'completed' && (artifact.mimeType?.startsWith('audio/') || artifact.mimeType?.startsWith('video/'))))
+    setVoices((voicesData.voices || []).filter((item) => item.enabled))
   }
   useEffect(() => { loadArtifacts() }, [])
 
@@ -33,7 +35,7 @@ export default function VoiceStudioPage() {
     setRunning(true); setResult(null)
     try {
       const input = mode === 'tts'
-        ? { text: text.trim(), voice, outputFormat, speed: 1, language }
+        ? { text: text.trim(), ...(voice ? { voiceProfileId: voice } : {}), outputFormat, speed: 1, language }
         : { artifactId: sourceArtifactId, language, timestamps: 'both', persistTranscript: true, translateToEnglish: false }
       const prompt = mode === 'tts' ? text.trim() : 'Transcribe the authorised source artifact'
       const submitted = await useStudioStore.getState().submitJob(mode, { ...input, prompt })
@@ -62,7 +64,7 @@ export default function VoiceStudioPage() {
     <Card className="space-y-4 border-white/[0.07] bg-white/[0.02] p-5">
       {mode === 'tts' ? <>
         <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Text to speak" className="min-h-32" />
-        <div className="grid gap-3 sm:grid-cols-3"><select value={voice} onChange={(event) => setVoice(event.target.value)} className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"><option value="tara">Tara (supported)</option></select><select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value)} className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm">{['wav', 'mp3', 'flac', 'ogg'].map((format) => <option key={format}>{format}</option>)}</select><Input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language hint" /></div>
+        <div className="grid gap-3 sm:grid-cols-3"><select aria-label="Verified voice" value={voice} onChange={(event) => setVoice(event.target.value)} className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"><option value="">Automatic verified voice</option>{voices.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.language || item.locale || item.provider}</option>)}</select><select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value)} className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm">{['wav', 'mp3', 'flac', 'ogg'].map((format) => <option key={format}>{format}</option>)}</select><Input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language hint" /></div>
       </> : <>
         <select value={sourceArtifactId} onChange={(event) => setSourceArtifactId(event.target.value)} className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm"><option value="">Select authorised audio/video artifact</option>{artifacts.map((artifact) => <option key={artifact.id} value={artifact.id}>{artifact.title || artifact.id} · {artifact.mimeType}</option>)}</select>
         {sourceArtifactId && (sourceArtifact?.mimeType?.startsWith('video/')

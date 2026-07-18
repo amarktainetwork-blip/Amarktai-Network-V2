@@ -6,19 +6,18 @@ const ROOT = path.join(import.meta.dirname, '..')
 
 describe('dashboard polish and routing map contract', () => {
   describe('main nav remains simple', () => {
-    it('DASHBOARD_PAGES contains the 9 release workspaces', async () => {
+    it('DASHBOARD_PAGES contains the production operator workspaces', async () => {
       const { DASHBOARD_PAGES } = await import('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
-      expect(labels).toContain('Chat')
-      expect(labels).toContain('Image')
-      expect(labels).toContain('Video')
-      expect(labels).toContain('Music')
-      expect(labels).toContain('Voice')
-      expect(labels).toContain('Research')
-      expect(labels).toContain('Library')
-      expect(labels).toContain('Operations')
+      expect(labels).toContain('Overview')
+      expect(labels).toContain('Apps')
+      expect(labels).toContain('Capabilities')
+      expect(labels).toContain('Models')
+      expect(labels).toContain('Voices')
+      expect(labels).toContain('Jobs & Workflows')
+      expect(labels).toContain('Providers')
       expect(labels).toContain('Settings')
-      expect(DASHBOARD_PAGES.length).toBe(9)
+      expect(DASHBOARD_PAGES.length).toBeGreaterThanOrEqual(13)
     })
   })
 
@@ -28,11 +27,11 @@ describe('dashboard polish and routing map contract', () => {
       expect(fs.existsSync(pagePath)).toBe(true)
     })
 
-    it('Capability Lab is in ADVANCED_NAV', async () => {
+    it('Model Lab is in advanced navigation', async () => {
       const { ADVANCED_PAGES } = await import('../lib/dashboard-contract.js')
-      const capLab = ADVANCED_PAGES.find((p) => p.id === 'capability-lab')
+      const capLab = ADVANCED_PAGES.find((p) => p.id === 'model-lab')
       expect(capLab).toBeDefined()
-      expect(capLab.href).toBe('/dashboard/capability-lab')
+      expect(capLab.href).toBe('/dashboard/model-lab')
     })
 
     it('Capability Lab derives the callable release set from canonical truth', () => {
@@ -53,12 +52,11 @@ describe('dashboard polish and routing map contract', () => {
   })
 
   describe('Advanced does not make old Studio look like the main dashboard', () => {
-    it('Studio is labeled as Developer Studio / Legacy in nav', async () => {
-      const { ADVANCED_PAGES } = await import('../lib/dashboard-contract.js')
-      const studio = ADVANCED_PAGES.find((p) => p.id === 'studio')
+    it('Studio is a first-class operator workspace', async () => {
+      const { DASHBOARD_PAGES } = await import('../lib/dashboard-contract.js')
+      const studio = DASHBOARD_PAGES.find((p) => p.id === 'studio')
       expect(studio).toBeDefined()
-      expect(studio.label).toContain('Developer Studio')
-      expect(studio.label).toContain('Legacy')
+      expect(studio.label).toBe('Studio')
     })
 
     it('Studio page header says Developer Studio / Legacy', () => {
@@ -232,7 +230,7 @@ describe('dashboard polish and routing map contract', () => {
       const { getExecutorRegistrations, getRuntimeTruth } = await import('../packages/core/src/index.ts')
       const chatProviders = getExecutorRegistrations('chat').map(entry => entry.provider)
       const truth = getRuntimeTruth()
-      expect(chatProviders).toEqual(['deepinfra'])
+      expect(chatProviders).toEqual(expect.arrayContaining(['genx', 'together', 'deepinfra']))
       expect(truth.capabilities.find((capability) => capability.capability === 'long_form_video')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'research')?.liveProven).toBe(false)
       expect(truth.capabilities.find((capability) => capability.capability === 'embeddings')?.classification).not.toBe('LIVE_PROVEN')

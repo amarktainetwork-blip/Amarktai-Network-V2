@@ -1,0 +1,53 @@
+{
+  "identity": {
+    "appName": "Avatar Studio Acceptance",
+    "appSlug": "avatar-studio-acceptance",
+    "appType": "avatar_video_platform",
+    "website": "https://avatar-acceptance.invalid",
+    "description": "Deterministic thin-app onboarding fixture for an avatar-video product.",
+    "environment": "test"
+  },
+  "businessContext": {
+    "purpose": "Create governed presenter-led media from scripts and approved source assets.",
+    "users": "Marketing and learning teams",
+    "domain": "avatar video production",
+    "brand": "Fixture Brand",
+    "productInstructions": "Require approval before final media execution."
+  },
+  "defaultPolicy": {
+    "qualityTarget": "premium",
+    "spendStrategy": "best_value",
+    "allowFallback": true
+  },
+  "capabilities": [
+    "chat",
+    "streaming_chat",
+    "image_generation",
+    "image_edit",
+    "tts",
+    "voice_clone",
+    "stt",
+    "avatar_generation",
+    "lip_sync",
+    "video_generation",
+    "image_to_video",
+    "long_form_video",
+    "music_generation"
+  ],
+  "permissions": {
+    "voiceSelection": true,
+    "voiceCloneConsentRequired": true,
+    "artifactRead": true,
+    "artifactWrite": true,
+    "memoryRead": true,
+    "memoryWrite": true,
+    "approvalRequired": true,
+    "webhooks": true
+  },
+  "budget": {
+    "dailyLimitUsdCents": 2500,
+    "monthlyLimitUsdCents": 25000,
+    "paused": false
+  },
+  "webhookUrl": "https://avatar-acceptance.invalid/webhooks/amarktai"
+}

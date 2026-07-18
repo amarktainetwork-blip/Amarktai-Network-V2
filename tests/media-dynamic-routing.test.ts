@@ -12,7 +12,7 @@ const mediaModel = (provider: string, modelId: string, compatibility: Record<str
   rawMetadata: JSON.stringify({ compatibility: { capabilities: [capability], endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true, ...compatibility } }),
 })
 
-const genx = (id: string) => mediaModel('genx', id, { category: 'video', modalitiesIn: ['text'], modalitiesOut: ['video'], transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1' })
+const genx = (id: string) => mediaModel('genx', id, { taskType: 'text-to-video', category: 'video', modalitiesIn: ['text'], modalitiesOut: ['video'], transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1' })
 const together = (id: string) => mediaModel('together', id, { category: 'text-to-video', modalitiesIn: ['text'], modalitiesOut: ['video'], transportProfile: 'async_job_poll', endpointFamily: 'together_v2_videos' })
 
 const grant = (overrides: Partial<AppCapabilityGrantContext> = {}): AppCapabilityGrantContext => ({
@@ -61,12 +61,12 @@ describe('dynamic media routing', () => {
   it('keeps music dynamic but transport-specific', () => {
     const registration = getExecutorRegistration('music_generation', 'genx')!
     expect(isExecutorModelCompatible(registration, 'future-instrumental-model', {
-      category: 'music', capabilities: ['music_generation'], modalitiesIn: ['text'], modalitiesOut: ['audio'],
+      taskType: 'music', category: 'music', capabilities: ['music_generation'], modalitiesIn: ['text'], modalitiesOut: ['audio'],
       transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1', endpointShapeKnown: true,
       requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true,
     })).toBe(true)
     expect(isExecutorModelCompatible(registration, 'future-instrumental-model', {
-      category: 'music', capabilities: ['music_generation'], modalitiesIn: ['text'], modalitiesOut: ['audio'],
+      taskType: 'music', category: 'music', capabilities: ['music_generation'], modalitiesIn: ['text'], modalitiesOut: ['audio'],
       transportProfile: 'native_inference_json', endpointFamily: 'unknown', endpointShapeKnown: true,
       requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true,
     })).toBe(false)

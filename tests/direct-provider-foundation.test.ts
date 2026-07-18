@@ -43,15 +43,9 @@ describe('canonical direct-provider contracts and registrations', () => {
       const registrations = EXECUTOR_REGISTRATIONS.filter((entry) => entry.capability === capability)
       expect(registrations.length, capability).toBeGreaterThan(0)
       for (const entry of registrations) {
-        if (entry.modelCompatibility === 'metadata_profile') {
-          expect(entry.compatibleModels).toEqual([])
-          expect(entry.compatibilityProfile).not.toBeNull()
-        } else if (entry.compatibleModels.length === 0) {
-          // Async/dispatched registrations (genx.tts, genx.stt) use dynamic discovery
-        } else {
-          expect(entry.compatibleModels.length, `${capability}:${entry.provider}`).toBeGreaterThan(0)
-          expect(entry.compatibleModels).not.toContain('*')
-        }
+        expect(entry.modelCompatibility).toBe('transport_task_profile')
+        expect(entry.compatibleModels).toEqual([])
+        expect(entry.compatibilityProfile).not.toBeNull()
       }
     }
   })
@@ -59,8 +53,13 @@ describe('canonical direct-provider contracts and registrations', () => {
   it('backs each queued direct registration with a callable handler', () => {
     const externallyDispatched = new Set([
       'deepinfra.chat',
+      'deepinfra.streaming-chat',
+      'together.streaming-chat',
+      'genx.streaming-chat',
       'together.image-generation',
       'genx.video-generation',
+      'genx.image-to-video',
+      'genx.video-to-video',
       'genx.music-generation',
       'genx.song-generation',
       'genx.tts',

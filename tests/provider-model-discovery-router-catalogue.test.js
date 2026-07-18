@@ -364,7 +364,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(catalogue).toContainEqual(expect.objectContaining({ provider: 'together', modelId: 'together-tts-streaming', executableNow: false }))
   })
 
-  it('DeepInfra safe discovery uses the public model list without requiring a key', async () => {
+  it('DeepInfra safe discovery makes no unauthenticated catalogue call', async () => {
     const calls = []
     global.fetch = vi.fn(async (url, init) => {
       calls.push({ url: String(url), headers: init?.headers })
@@ -383,38 +383,27 @@ describe('provider model discovery and router catalogue rebuild', () => {
     })
 
     const result = await discoverDeepInfraProviderModels({ now: '2026-01-01T00:00:00.000Z' })
-    expect(calls).toHaveLength(1)
-    expect(calls[0].url).toBe('https://api.deepinfra.com/models/list')
-    expect(calls[0].headers.Authorization).toBeUndefined()
-    expect(result.publicDiscoveryAttempted).toBe(true)
-    expect(result.publicDiscoverySucceeded).toBe(true)
+    expect(calls).toHaveLength(0)
+    expect(result.liveDiscoveryAttempted).toBe(false)
     expect(result.apiKeyPresent).toBe(false)
-    expect(result.models.length).toBeGreaterThanOrEqual(7)
-    expect(result.models.find((model) => model.modelId === 'deepinfra/text').inferredCapabilities).toContain('chat')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/embed').inferredCapabilities).toContain('embeddings')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/rerank').inferredCapabilities).toContain('reranking')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/image').inferredCapabilities).toContain('image_generation')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/voice').inferredCapabilities).toContain('tts')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/video').inferredCapabilities).toContain('video_generation')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/music').inferredCapabilities).toContain('music_generation')
-    expect(result.models.filter((model) => model.modelId.startsWith('deepinfra/')).every((model) => !model.executableNow)).toBe(true)
+    expect(result.models).toEqual([])
+    expect(result.notes.join(' ')).toContain('Authenticated GET /v1/models')
   })
 
-  it('DeepInfra live mode succeeds through public discovery and fails honestly when the public endpoint fails', async () => {
+  it('DeepInfra live mode requires authentication and fails honestly when the authenticated endpoint fails', async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ([{ model_name: 'deepinfra/text', reported_type: 'text-generation', tags: ['llama'] }]),
     }))
     const live = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
-    expect(live.liveDiscoveryAttempted).toBe(true)
-    expect(live.liveDiscoverySucceeded).toBe(true)
+    expect(live.liveDiscoveryAttempted).toBe(false)
+    expect(live.liveDiscoverySucceeded).toBe(false)
     expect(live.apiKeyPresent).toBe(false)
 
     global.fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }))
-    const failed = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
+    const failed = await discoverDeepInfraProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
     expect(failed.liveDiscoveryAttempted).toBe(true)
     expect(failed.liveDiscoverySucceeded).toBe(false)
-    expect(failed.publicDiscoverySucceeded).toBe(false)
     expect(failed.error).toContain('503')
   })
 
@@ -430,13 +419,13 @@ describe('provider model discovery and router catalogue rebuild', () => {
 
     const safe = await discoverDeepInfraProviderModels()
     expect(safe.liveDiscoveryAttempted).toBe(false)
-    expect(safe.publicDiscoveryAttempted).toBe(true)
+    expect(calls).toHaveLength(0)
     const callsBeforeLive = calls.length
 
     const live = await discoverDeepInfraProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
     expect(live.liveDiscoveryAttempted).toBe(true)
     expect(calls.length).toBeGreaterThan(callsBeforeLive)
-    expect(calls.some((url) => url.includes('deepinfra') && url.includes('models'))).toBe(true)
+    expect(calls).toContain('https://api.deepinfra.com/v1/models')
     expect(live.models[0].modelId).toBe('llama-test-model')
   })
 
@@ -549,7 +538,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
       providers: { genx: { enabled: true, configured: true } },
       capabilities: { music_generation: { infrastructureReady: true } },
     }).capabilities.find(item => item.capability === 'music_generation')
-    expect(configuredMusic.executableNow).toBe(true)
+    expect(configuredMusic.executableNow).toBe(false)
     expect(getExecutorRegistrations('music_generation').map(entry => entry.provider)).toEqual(['genx'])
   })
 

@@ -130,7 +130,7 @@ export const DIRECT_PROVIDER_REQUEST_SCHEMAS: Record<DirectProviderCapability, z
   }),
   tts: z.object({
     text: z.string().trim().min(1).max(50_000).optional(),
-    voice: z.string().trim().min(1).max(100).default('tara'),
+    voice: z.string().trim().min(1).max(100).optional(),
     speed: z.number().min(0.5).max(5).default(1),
     outputFormat: z.enum(['wav', 'mp3', 'flac', 'ogg']).default('wav'),
     language: z.string().trim().min(2).max(20).optional(),

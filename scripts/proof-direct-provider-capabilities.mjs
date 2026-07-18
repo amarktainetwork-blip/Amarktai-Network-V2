@@ -95,14 +95,14 @@ async function runStatic(core) {
     const sources = providerSources[registration.provider] ?? []
     check(sources.length > 0 && sources.every((file) => read(file).length > 100), `${key} real provider client exists`)
     const handlerExists = registration.executionMode === 'stream'
-      ? streamRoute.includes(`openAiStreamingChat`) && streamRoute.includes(`deepinfra.chat`)
+      ? streamRoute.includes('openAiStreamingChat') && streamRoute.includes('.streaming-chat')
       : directWorker.includes(registration.handlerName) || worker.includes(registration.handlerName)
     check(handlerExists, `${key} real handler exists`, registration.handlerName)
     check(Boolean(DIRECT_PROVIDER_REQUEST_SCHEMAS[registration.capability]), `${key} request schema exists`)
     check(Boolean(DIRECT_PROVIDER_OUTPUT_SCHEMAS[registration.capability]), `${key} output schema exists`)
-    const modelContractKnown = registration.modelCompatibility === 'exact_model_allowlist'
-      ? registration.compatibleModels.length > 0
-      : registration.modelCompatibility === 'metadata_profile' && registration.compatibleModels.length === 0 && Boolean(registration.compatibilityProfile)
+    const modelContractKnown = registration.modelCompatibility === 'transport_task_profile'
+      && registration.compatibleModels.length === 0
+      && Boolean(registration.compatibilityProfile)
     check(modelContractKnown, `${key} canonical model compatibility contract exists`)
 
     const candidate = readyCandidate(registration)
@@ -121,9 +121,9 @@ async function runStatic(core) {
     const noCredential = normalizeDbCandidates([model], [{ ...healthyProvider, apiKey: '' }], registration.capability, { databaseReady: true, queueReady: true })[0]
     const noHealth = normalizeDbCandidates([model], [{ ...healthyProvider, healthStatus: 'configured' }], registration.capability, { databaseReady: true, queueReady: true })[0]
     const noDatabase = normalizeDbCandidates([model], [healthyProvider], registration.capability, { databaseReady: false, queueReady: true })[0]
-    const incompatible = normalizeDbCandidates([registration.modelCompatibility === 'metadata_profile'
-      ? { ...model, modelId: 'transport-incompatible-model', rawMetadata: JSON.stringify({ compatibility: { ...proofCompatibilityMetadata(registration), endpointFamily: 'unsupported_endpoint' } }) }
-      : { ...model, modelId: 'unregistered-model' }], [healthyProvider], registration.capability, { databaseReady: true, queueReady: true })[0]
+    const incompatible = normalizeDbCandidates([
+      { ...model, modelId: 'transport-incompatible-model', rawMetadata: JSON.stringify({ compatibility: { ...proofCompatibilityMetadata(registration), endpointFamily: 'unsupported_endpoint' } }) },
+    ], [healthyProvider], registration.capability, { databaseReady: true, queueReady: true })[0]
     check(noCredential && !noCredential.executionReady && !noCredential.providerConfigured, `${key} missing credential fails closed`)
     check(noHealth && !noHealth.executionReady && !noHealth.providerHealthReady, `${key} unproven health fails closed`)
     check(noDatabase && !noDatabase.executionReady && !noDatabase.databaseReady, `${key} missing database evidence fails closed`)
@@ -142,7 +142,7 @@ async function runStatic(core) {
   check(!worker.includes('infrastructureReady: true'), 'worker has no hardcoded infrastructureReady=true')
   check(orchestraSource.includes('providerConfigured = typeof provider?.apiKey') && orchestraSource.includes('providerHealthReady = HEALTHY_PROVIDER_STATUSES.has'), 'runtime readiness derives from credential and health evidence')
   check(worker.includes("result.provider !== route.provider") && worker.includes("result.model !== route.model"), 'executor rejects hidden provider/model substitution')
-  check(streamRoute.includes("selectedProvider !== 'deepinfra'") && streamRoute.includes('signal: controller.signal'), 'streaming route has exact provider gate and cancellation')
+  check(streamRoute.includes('`${selectedProvider}.streaming-chat`') && streamRoute.includes('signal: controller.signal'), 'streaming route has transport-specific provider gate and cancellation')
   check(capabilities.length > 0, 'static proof selected at least one registered capability')
 }
 
@@ -388,7 +388,7 @@ function liveInput(capability, ttsArtifactId) {
     table_qa: { question: 'What is the total for order B?', table: { order: ['A', 'B'], total: [10, 25] } },
     structured_output: { context: 'Return status ready and count 2.', schema: { type: 'object', properties: { status: { type: 'string', enum: ['ready'] }, count: { type: 'integer', minimum: 2, maximum: 2 } }, required: ['status', 'count'], additionalProperties: false } },
     tool_use: { allowedTools: ['calculator'], maxIterations: 3 },
-    tts: { text: 'AmarktAI direct provider runtime proof is active.', voice: 'tara', outputFormat: 'wav' },
+    tts: { text: 'AmarktAI direct provider runtime proof is active.', outputFormat: 'wav' },
     stt: { artifactId: ttsArtifactId, timestamps: 'segment', persistTranscript: true },
     embeddings: { texts: ['provider runtime proof', 'exact model evidence'] },
     reranking: { query: 'exact provider execution evidence', documents: [{ id: 'a', text: 'A cooking recipe.' }, { id: 'b', text: 'Provider, model, executor, usage and cost evidence.' }], topN: 2 },

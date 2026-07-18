@@ -445,6 +445,7 @@ model ModelRegistryEntry {
   category      String @default("text") // text|image|video|voice|code|multimodal|embeddings|reranking|research
   primaryRole   String @default("chat") @map("primary_role")
   costTier      String @default("low") @map("cost_tier") // free|very_low|low|medium|high|premium
+  qualityTier   String @default("standard") @map("quality_tier") // independent route quality evidence
   latencyTier   String @default("medium") @map("latency_tier") // ultra_low|low|medium|high
   contextWindow Int    @default(4096) @map("context_window")
 
@@ -478,6 +479,17 @@ model ModelRegistryEntry {
   providerRawType      String @default("") @map("provider_raw_type")
   providerRawCategory  String @default("") @map("provider_raw_category")
   rawMetadata          String @default("{}") @map("raw_metadata") @db.LongText // JSON
+  currentAvailability  String @default("defined") @map("current_availability")
+  accountAccess        String @default("unknown") @map("account_access")
+  endpointFamily       String @default("") @map("endpoint_family")
+  transportProfile     String @default("") @map("transport_profile")
+  structuredOutputModes String @default("[]") @map("structured_output_modes")
+  supportedParameters  String @default("[]") @map("supported_parameters")
+  compatibilityVersion String @default("") @map("compatibility_version")
+  deprecated           Boolean @default(false)
+  replacementModel     String @default("") @map("replacement_model")
+  lastProofAt          DateTime? @map("last_proof_at")
+  liveProvenRouteCount Int @default(0) @map("live_proven_route_count")
   discoveredAt         DateTime? @map("discovered_at")
   lastSyncedAt         DateTime? @map("last_synced_at")
   pricingSource        String @default("unknown") @map("pricing_source") // provider_api | admin_manual | unknown
@@ -513,6 +525,11 @@ model AppAiProfile {
   appName String @map("app_name")
   appType String @default("general") @map("app_type")
   domain  String @default("general")
+  businessContext String @default("{}") @map("business_context") @db.LongText
+  productInstructions String @default("") @map("product_instructions") @db.LongText
+  defaultQualityTarget String @default("standard") @map("default_quality_target")
+  defaultSpendStrategy String @default("best_value") @map("default_spend_strategy")
+  defaultRoutePool String @default("[]") @map("default_route_pool") @db.LongText
 
   // Routing
   defaultRoutingMode String @default("direct") @map("default_routing_mode")
@@ -1035,6 +1052,15 @@ model AppCapabilityGrant {
   capability              String   // chat, image_generation, video_generation, tts, etc.
 
   enabled                 Boolean  @default(true)
+  routingMode             String   @default("automatic") @map("routing_mode")
+  qualityTarget           String   @default("standard") @map("quality_target")
+  spendStrategy           String   @default("best_value") @map("spend_strategy")
+  fixedProvider           String   @default("") @map("fixed_provider")
+  fixedModel              String   @default("") @map("fixed_model")
+  preferredPool           String   @default("[]") @map("preferred_pool") @db.LongText
+  selectableAllowlist     String   @default("[]") @map("selectable_allowlist") @db.LongText
+  restrictedPool          String   @default("[]") @map("restricted_pool") @db.LongText
+  workflowStepOverrides   String   @default("{}") @map("workflow_step_overrides") @db.LongText
 
   qualityFloor            String   @default("balanced") @map("quality_floor") // budget, balanced, premium
   budgetPolicy            String   @default("balanced") @map("budget_policy") // premium, budget, mix
@@ -1394,7 +1420,7 @@ model CapabilityRegistry {
 /// Each row represents a provider's ability to fulfill a specific capability.
 model ProviderCapabilityMap {
   id              String   @id @default(cuid())
-  /// Provider key (e.g. 'genx', 'groq', 'deepinfra')
+  /// Approved runtime provider key (genx, together, or deepinfra)
   providerKey     String   @map("provider_key")
   /// Capability key reference
   capabilityKey   String   @map("capability_key")
@@ -1522,16 +1548,18 @@ model VoiceLibrary {
   voiceId     String   @unique @map("voice_id")
   /// Human-readable name
   name        String
-  /// Provider that hosts this voice (e.g. 'genx', 'groq', 'deepinfra')
+  /// Approved runtime provider that hosts this voice
   provider    String   @default("genx")
   /// Model used for this voice
   model       String   @default("")
+  compatibleModels String @default("[]") @map("compatible_models") @db.LongText
   /// Gender: male | female | neutral
   gender      String   @default("neutral")
   /// Accent (e.g. 'american', 'british', 'australian')
   accent      String   @default("")
   /// Language code (e.g. 'en', 'es', 'fr')
   language    String   @default("en")
+  locale      String   @default("")
   /// Style (e.g. 'warm', 'professional', 'energetic')
   style       String   @default("neutral")
   /// URL to preview audio
@@ -1540,6 +1568,11 @@ model VoiceLibrary {
   enabled     Boolean  @default(true)
   /// JSON metadata blob for voice-specific details
   metadata    String   @default("{}")
+  useCaseTags String   @default("[]") @map("use_case_tags") @db.LongText
+  sourceType  String   @default("catalogue") @map("source_type")
+  consentStatus String @default("provider_catalogue") @map("consent_status")
+  ownershipReference String @default("") @map("ownership_reference")
+  lastVerifiedAt DateTime? @map("last_verified_at")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -1827,6 +1860,14 @@ model AppConnection {
   id                   String   @id @default(uuid())
   appSlug              String   @unique @map("app_slug")
   appName              String   @map("app_name")
+  appType              String   @default("general") @map("app_type")
+  website              String   @default("")
+  description          String   @default("") @db.Text
+  environment          String   @default("production")
+  onboardingState      String   @default("identity") @map("onboarding_state")
+  webhookUrl           String   @default("") @map("webhook_url")
+  connectionHealth     String   @default("not_tested") @map("connection_health")
+  activatedAt          DateTime? @map("activated_at")
   status               String   @default("active") // active | paused | suspended | unconfigured
   /// JSON array of allowed capability keys for this app
   allowedCapabilities  String   @default("[]") @map("allowed_capabilities") @db.VarChar(4096)

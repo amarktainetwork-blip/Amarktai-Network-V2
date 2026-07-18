@@ -10,32 +10,29 @@ function read(rel) {
 
 describe('dashboard creation workspace redesign', () => {
   describe('navigation structure', () => {
-    it('main nav contains Chat, Image, Video, Music, Research, Library, Operations, Settings', () => {
+    it('main nav contains the canonical production sections', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
-      expect(labels).toContain('Chat')
-      expect(labels).toContain('Image')
-      expect(labels).toContain('Video')
-      expect(labels).toContain('Music')
-      expect(labels).toContain('Research')
-      expect(labels).toContain('Library')
-      expect(labels).toContain('Operations')
+      expect(labels).toContain('Overview')
+      expect(labels).toContain('Apps')
+      expect(labels).toContain('Capabilities')
+      expect(labels).toContain('Models')
+      expect(labels).toContain('Jobs & Workflows')
+      expect(labels).toContain('Artifacts')
+      expect(labels).toContain('Monitoring')
       expect(labels).toContain('Settings')
     })
 
-    it('main nav includes the nine release workspaces including Voice', () => {
+    it('main nav includes the complete production workspaces including Voices', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
-      expect(DASHBOARD_PAGES).toHaveLength(9)
-      expect(DASHBOARD_PAGES.map((page) => page.label)).toContain('Voice')
+      expect(DASHBOARD_PAGES.length).toBeGreaterThanOrEqual(13)
+      expect(DASHBOARD_PAGES.map((page) => page.label)).toContain('Voices')
     })
 
-    it('main nav does not show old confusing primary items', () => {
+    it('main nav does not show old duplicate primary items', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
-      expect(labels).not.toContain('Studio')
-      expect(labels).not.toContain('Capabilities')
       expect(labels).not.toContain('Command Center')
-      expect(labels).not.toContain('Apps')
       expect(labels).not.toContain('Brand Library')
       expect(labels).not.toContain('Agents & Learning')
       expect(labels).not.toContain('Work Library')
@@ -44,10 +41,8 @@ describe('dashboard creation workspace redesign', () => {
     it('advanced pages exist for internal/engineering access', () => {
       const { ADVANCED_PAGES } = require('../lib/dashboard-contract.js')
       const ids = ADVANCED_PAGES.map((p) => p.id)
-      expect(ids).toContain('studio')
-      expect(ids).toContain('artifacts')
-      expect(ids).toContain('capabilities')
-      expect(ids).toContain('command-center')
+      expect(ids).toContain('model-lab')
+      expect(ids).toContain('developer')
     })
 
     it('dashboard layout imports NAV and ADVANCED_NAV', () => {
@@ -241,9 +236,9 @@ describe('dashboard creation workspace redesign', () => {
   })
 
   describe('existing routes preserved', () => {
-    it('/dashboard redirects to /dashboard/chat', () => {
+    it('/dashboard renders the canonical overview', () => {
       const index = read('app/dashboard/page.js')
-      expect(index).toContain('/dashboard/chat')
+      expect(index).toContain('Platform overview')
     })
 
     it('existing studio page still exists', () => {

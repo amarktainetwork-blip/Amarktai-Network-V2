@@ -78,7 +78,7 @@ export default function Landing() {
           </p>
 
           <div className="animate-fade-up mt-9 flex flex-col items-center gap-3 sm:flex-row" style={{ animationDelay: '0.28s' }}>
-            <Link href={isAuthed ? '/dashboard/command-center' : '/login'}>
+            <Link href={isAuthed ? '/dashboard' : '/login'}>
               <Button size="lg" className="h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-7 text-black transition-transform duration-200 hover:scale-105 hover:opacity-90 glow-cyan">
                 {isAuthed ? 'Launch Command Center' : 'Get Started'} <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -158,7 +158,7 @@ export default function Landing() {
                 <Boxes className="mx-auto mb-5 h-10 w-10 text-cyan-300" />
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ship AI features without the AI overhead</h2>
                 <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Explore the full operational console — command center, studio, jobs, artifacts and more.</p>
-                <Link href={isAuthed ? '/dashboard/command-center' : '/login'}>
+                <Link href={isAuthed ? '/dashboard' : '/login'}>
                   <Button size="lg" className="mt-8 h-12 bg-white px-8 text-black transition-transform duration-200 hover:scale-105 hover:bg-white/90">
                     {isAuthed ? 'Enter the Console' : 'Sign In to Start'} <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>

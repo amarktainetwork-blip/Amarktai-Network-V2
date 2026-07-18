@@ -5,7 +5,7 @@ import { getAllCapabilityGroupSummaries, buildCapabilityGroupSummary } from '../
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
-import { discoverTogetherModels, discoverDeepInfraModels, discoverGenXModels, discoverGroqModels, discoverGenXPricing } from '../lib/provider-discovery.js'
+import { discoverTogetherModels, discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing } from '../lib/provider-discovery.js'
 
 interface ProviderRefreshRouteSummary {
   providerKey: string
@@ -81,16 +81,6 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
       results.genx = { providerKey: 'genx', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
     }
 
-    // Groq
-    try {
-      const cred = await resolveProviderApiKey('groq')
-      const result = await discoverGroqModels(cred.apiKey)
-      const upsert = await upsertDiscoveredModels(result)
-      results.groq = { ...upsert, discoveryError: result.error }
-    } catch (err) {
-      results.groq = { providerKey: 'groq', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
-    }
-
     // MiMo stays as curated seed
     results.mimo = { providerKey: 'mimo', totalFetched: 1, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: null }
 
@@ -118,9 +108,6 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
           result = await discoverGenXModels(cred.apiKey, status.baseUrl)
           break
         }
-        case 'groq':
-          result = await discoverGroqModels(cred.apiKey)
-          break
         case 'mimo':
           return reply.send({ success: true, total: 1, source: 'curated_seed', note: 'MiMo is coding-tool-only' })
         default:

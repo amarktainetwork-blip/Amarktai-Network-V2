@@ -34,7 +34,7 @@ describe('Phase 1 provider source of truth', () => {
     const deepinfra = PROVIDER_CONTRACTS.find((provider) => provider.id === 'deepinfra')
     expect(deepinfra).toMatchObject({
       finalProvider: true,
-      role: 'language_runtime',
+      role: 'runtime_execution_provider',
       status: 'runtime_policy_allowed',
       proofStatus: 'not_live_proven',
       backendRuntimeAllowed: true,
@@ -192,9 +192,9 @@ describe('Dashboard truth cleanup', () => {
     expect(layoutText).toContain("pathname === '/dashboard/studio'")
   })
 
-  it('dashboard index redirects to Chat workspace', () => {
+  it('dashboard index renders the canonical overview', () => {
     const pageIndex = fs.readFileSync(path.join(ROOT, 'app/dashboard/page.js'), 'utf8')
-    expect(pageIndex).toContain("redirect('/dashboard/chat')")
+    expect(pageIndex).toContain('Platform overview')
   })
 
   it('Studio derives schema keys from the capability catalog', () => {
@@ -232,7 +232,7 @@ describe('Dashboard truth cleanup', () => {
     expect(appText).toContain("fetch('/api/admin/app-connections'")
     expect(appText).toContain("fetch('/api/admin/truth'")
     expect(appText).toContain("method: 'POST'")
-    expect(appText).toContain('releaseCandidateCapabilities')
+    expect(appText).toContain('releaseCapabilities')
     expect(appText).toContain('Empty capability grants deny execution by default')
   })
 
@@ -255,14 +255,14 @@ describe('Dashboard truth cleanup', () => {
     expect(capText).not.toContain('Studio UI ready')
   })
 
-  it('Providers dashboard page is removed', () => {
-    expect(fs.existsSync(path.join(ROOT, 'app/dashboard/providers/page.js'))).toBe(false)
+  it('Providers dashboard page is the canonical provider view', () => {
+    expect(fs.existsSync(path.join(ROOT, 'app/dashboard/providers/page.js'))).toBe(true)
   })
 
-  it('DASHBOARD_PAGES does not include providers', () => {
+  it('DASHBOARD_PAGES includes providers', () => {
     const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
     const providerPage = DASHBOARD_PAGES.find((p) => p.id === 'providers')
-    expect(providerPage).toBeUndefined()
+    expect(providerPage).toBeDefined()
   })
 
   it('Settings page does not use Save local draft toast', () => {

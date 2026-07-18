@@ -101,6 +101,31 @@ export const CAPABILITY_KEYS = [
 
 export type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
 
+export const CAPABILITY_KINDS = ['atomic', 'composite'] as const
+export type CapabilityKind = (typeof CAPABILITY_KINDS)[number]
+
+/**
+ * Stable public operations backed by a durable multi-step workflow. The list is
+ * deliberately semantic: provider models, voices, formats and workflow helper
+ * steps never become capabilities merely to increase a count.
+ */
+export const COMPOSITE_CAPABILITY_KEYS = [
+  'long_form_video',
+  'rag_ingest',
+  'rag_search',
+  'research',
+  'brand_scrape',
+  'document_ingest',
+  'campaign_generation',
+  'social_content_generation',
+] as const satisfies readonly CapabilityKey[]
+
+const COMPOSITE_CAPABILITY_SET = new Set<CapabilityKey>(COMPOSITE_CAPABILITY_KEYS)
+
+export const ATOMIC_CAPABILITY_KEYS = CAPABILITY_KEYS.filter(
+  (key): key is Exclude<CapabilityKey, (typeof COMPOSITE_CAPABILITY_KEYS)[number]> => !COMPOSITE_CAPABILITY_SET.has(key),
+)
+
 /** Canonical ModelRegistryEntry support field for each capability. */
 export const CAPABILITY_FIELD_MAP: Record<CapabilityKey, string> = {
   chat: 'supportsChat',
@@ -348,6 +373,8 @@ export const CapabilityDefinitionSchema = z.object({
   artifactType: z.string().nullable().default(null),
   artifactRequired: z.boolean().default(false),
   orchestrated: z.boolean().default(false),
+  kind: z.enum(CAPABILITY_KINDS).default('atomic'),
+  workflowTemplateId: z.string().nullable().default(null),
   governed: z.boolean().default(false),
   adult: z.boolean().default(false),
   requiresSourceArtifact: z.boolean().default(false),
@@ -378,6 +405,8 @@ const CAPABILITY_METADATA: Record<CapabilityKey, Omit<CapabilityDefinition,
   | 'outputContractReference'
   | 'artifactType'
   | 'orchestrated'
+  | 'kind'
+  | 'workflowTemplateId'
   | 'governed'
   | 'adult'
   | 'requiresSourceArtifact'
@@ -538,17 +567,6 @@ const CAPABILITY_DISPLAY_METADATA: Record<CapabilityKey, Pick<CapabilityDefiniti
   adult_video: { family: 'Adult Governed', schemaKey: 'adult_video', studioMode: 'adult_video', dashboardType: 'adult.video' },
 }
 
-const ORCHESTRATED_CAPABILITIES = new Set<CapabilityKey>([
-  'long_form_video',
-  'rag_ingest',
-  'rag_search',
-  'research',
-  'brand_scrape',
-  'document_ingest',
-  'campaign_generation',
-  'social_content_generation',
-])
-
 function requiresSourceArtifact(key: CapabilityKey): boolean {
   return CAPABILITY_METADATA[key].inputContract.some((field) =>
     /(?:source|image|audio|video|document|sample)/i.test(field),
@@ -570,7 +588,9 @@ export const CAPABILITY_CATALOG: CapabilityDefinition[] = CAPABILITY_KEYS.map((k
     inputContractReference: `capability:${key}:request`,
     outputContractReference: `capability:${key}:response:${metadata.outputType}`,
     artifactType: metadata.artifactRequired ? metadata.outputType : null,
-    orchestrated: ORCHESTRATED_CAPABILITIES.has(key),
+    orchestrated: COMPOSITE_CAPABILITY_SET.has(key),
+    kind: COMPOSITE_CAPABILITY_SET.has(key) ? 'composite' : 'atomic',
+    workflowTemplateId: COMPOSITE_CAPABILITY_SET.has(key) ? `workflow:${key}:v1` : null,
     governed: adult || metadata.policyRequirement !== 'standard',
     adult,
     requiresSourceArtifact: requiresSourceArtifact(key),

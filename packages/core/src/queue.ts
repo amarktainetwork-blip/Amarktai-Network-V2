@@ -33,6 +33,14 @@ export const AppCapabilityGrantSnapshotSchema = z.object({
   dataRetentionPolicy: z.string(),
   passthroughModelAllowed: z.boolean(),
   providerResidencyConstraints: z.array(z.string()),
+  routingMode: z.enum(['automatic', 'fixed_route', 'preferred_pool', 'app_selectable_allowlist', 'automatic_restricted_pool']).optional(),
+  qualityTarget: z.enum(['standard', 'premium']).optional(),
+  spendStrategy: z.enum(['lowest_cost', 'best_value', 'best_available', 'fixed_ceiling']).optional(),
+  fixedRoute: z.string().nullable().optional(),
+  preferredPool: z.array(z.string()).optional(),
+  selectableAllowlist: z.array(z.string()).optional(),
+  restrictedPool: z.array(z.string()).optional(),
+  workflowStepOverrides: z.record(z.string(), z.unknown()).optional(),
 })
 
 // ── Queue Names ──────────────────────────────────────────────────────────────

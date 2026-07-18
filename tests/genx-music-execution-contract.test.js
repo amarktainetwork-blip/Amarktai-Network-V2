@@ -83,7 +83,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
-      { provider: 'genx', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsMusicGeneration: true },
+      { provider: 'genx', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsMusicGeneration: true, capabilitiesJson: '["music_generation"]', rawMetadata: '{"compatibility":{"taskType":"music","category":"music","capabilities":["music_generation"],"modalitiesIn":["text"],"modalitiesOut":["audio"],"transportProfile":"async_job_poll","endpointFamily":"genx_generation_v1","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
     ]),
   },
   aiProvider: {

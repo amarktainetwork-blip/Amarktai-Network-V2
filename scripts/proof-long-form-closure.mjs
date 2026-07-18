@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const strict = process.argv.includes('--strict')
-const staticMode = process.argv.includes('--static')
 const fixtureMode = process.argv.includes('--local-fixture')
+const staticMode = process.argv.includes('--static') || !fixtureMode
 let failed = 0
 
 function check(condition, label, detail = '') {
@@ -35,11 +35,10 @@ function runStaticProof() {
   const route = source('apps/api/src/routes/admin-long-form-video.ts')
   const dashboard = source('app/dashboard/video/page.js')
 
-  check(registry.includes("modelCompatibility: 'metadata_profile'") && (registry.match(/mediaRegistration\(/g) ?? []).length >= 5, 'media executors use metadata compatibility profiles')
-  check(registry.includes("mediaRegistration('genx.video-generation'") && registry.includes("'image_to_video'") && registry.includes("'video_to_video'"), 'GenX is the exclusive video provider with source-aware routes')
-  check(!registry.includes("mediaRegistration('together.video-generation'") && !registry.includes("mediaRegistration('deepinfra.video-generation'"), 'Together and DeepInfra video routes are removed')
+  check(registry.includes("modelCompatibility: 'transport_task_profile'") && registry.includes("registration('genx.image-to-video'") && registry.includes("registration('genx.video-to-video'"), 'media executors use transport/task compatibility profiles')
+  check(registry.includes("registration('genx.video-generation'") && registry.includes("'image_to_video'") && registry.includes("'video_to_video'"), 'GenX source-aware video routes are registered')
   check(orchestra.includes('executorModelMetadataFromDbRecord') && orchestra.includes('isExecutorModelCompatible'), 'Orchestra derives model eligibility from canonical metadata')
-  check(!registry.includes("compatibleModels: ['seedance") && !registry.includes("compatibleModels: ['lyria"), 'executor registry has no fixed one-model media allowlist')
+  check(registry.includes('compatibleModels: []') && !registry.includes("compatibleModels: ['seedance") && !registry.includes("compatibleModels: ['lyria"), 'executor registry has no fixed one-model media allowlist')
   check(!videoClient.includes('DEFAULT_GENX_VIDEO_MODEL') && !videoClient.includes('GENX_ROUTER_VIDEO_MODEL_PREFERENCE'), 'GenX video transport has no model default or preference policy')
   check(!musicClient.includes('DEFAULT_GENX_MUSIC_MODEL') && !musicClient.includes('GENX_ROUTER_MUSIC_MODEL_PREFERENCE'), 'GenX music transport has no model default or preference policy')
   check(videoClient.includes('exact Orchestra-selected model') && musicClient.includes('exact Orchestra-selected model'), 'GenX transports fail closed without the routed model')

@@ -16,7 +16,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
-      { provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.003, pricingConfidence: 'known', supportsImageGeneration: true },
+      { provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.003, pricingConfidence: 'known', supportsImageGeneration: true, capabilitiesJson: '["image_generation"]', rawMetadata: '{"compatibility":{"taskType":"text-to-image","category":"image","capabilities":["image_generation"],"modalitiesIn":["text"],"modalitiesOut":["image"],"transportProfile":"native_inference_json","endpointFamily":"image_generation","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
       { provider: 'deepinfra', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
     ]),
   },

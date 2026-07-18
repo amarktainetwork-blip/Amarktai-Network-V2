@@ -298,7 +298,7 @@ async function resumeGenxVideoProviderJob(input: {
   throw new Error(`GenX video generation timed out after ${input.providers.GENX_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${input.remoteJobId}; model=${input.model}`)
 }
 
-// ── Groq Text Capabilities ───────────────────────────────────────────────────
+// ── Runtime Text Capabilities ────────────────────────────────────────────────
 
 // ── Together Image Generation ────────────────────────────────────────────────
 
@@ -1010,8 +1010,17 @@ async function resolveOrchestraDecision(
     executionId: payload.jobId,
     appSlug: payload.appSlug,
     appGrant,
+    requestedRoute: readRequestedRoute(durableMetadata),
   }, orchestraCandidates)
   return { decision, reusedPersistedRoute }
+}
+
+function readRequestedRoute(metadata: Record<string, unknown>): { provider: ProviderKey; model: string } | undefined {
+  const route = metadata.requestedRoute
+  if (!route || typeof route !== 'object' || Array.isArray(route)) return undefined
+  const value = route as Record<string, unknown>
+  if (!['genx', 'together', 'deepinfra'].includes(String(value.provider)) || typeof value.model !== 'string' || !value.model.trim()) return undefined
+  return { provider: value.provider as ProviderKey, model: value.model }
 }
 
 export interface ProviderExecutionRoute {
@@ -1125,14 +1134,15 @@ async function executeGenxTts(payload: WorkerJobData, selectedModel?: string): P
     const providerStatus = await getProviderCredentialStatus('genx')
     const { genxGenerateTts } = await import('@amarktai/providers')
     const { saveArtifact } = await import('@amarktai/artifacts')
+    const selectedVoice = await resolveGenxVoice(model, payload.input)
 
     const result = await genxGenerateTts({
       text: String(payload.input?.text ?? payload.prompt),
       model,
-      voice: String(payload.input?.voice ?? 'tara'),
+      voice: selectedVoice.voiceId,
       speed: Number(payload.input?.speed ?? 1),
       outputFormat: String(payload.input?.outputFormat ?? 'wav'),
-      language: String(payload.input?.language ?? 'en'),
+      language: selectedVoice.locale || selectedVoice.language,
       apiKey,
       baseUrl: providerStatus.baseUrl || undefined,
     })
@@ -1141,7 +1151,7 @@ async function executeGenxTts(payload: WorkerJobData, selectedModel?: string): P
       input: {
         appSlug: payload.appSlug, type: 'audio', subType: 'tts', title: `TTS audio for ${payload.appSlug}`,
         description: 'GenX speech synthesis output', provider: 'genx', model, traceId: payload.traceId, mimeType: result.mimeType,
-        metadata: { capability: 'tts', provider: 'genx', model, duration: result.duration, voice: payload.input?.voice, evidenceSource: 'live_provider', liveProviderProof: true },
+        metadata: { capability: 'tts', provider: 'genx', model, duration: result.duration, voice: selectedVoice.voiceId, voiceProfileId: selectedVoice.id, evidenceSource: 'live_provider', liveProviderProof: true },
       }, data: result.audioBuffer, explicitMimeType: result.mimeType,
     })
 
@@ -1215,6 +1225,33 @@ async function executeGenxStt(payload: WorkerJobData, selectedModel?: string): P
   }
 }
 
+async function resolveGenxVoice(model: string, input: Record<string, unknown> | undefined): Promise<{
+  id: string; voiceId: string; language: string; locale: string
+}> {
+  const requested = readString(input, 'voiceProfileId') ?? readString(input, 'voice')
+  const voices = requested
+    ? await prisma.voiceLibrary.findMany({ where: { enabled: true, provider: 'genx', OR: [{ id: requested }, { voiceId: requested }] } })
+    : await prisma.voiceLibrary.findMany({ where: { enabled: true, provider: 'genx' } })
+  const language = readString(input, 'language')
+  const accent = readString(input, 'accent')?.toLowerCase()
+  const style = readString(input, 'tone')?.toLowerCase() ?? readString(input, 'style')?.toLowerCase()
+  const compatible = voices.filter((voice) => {
+    const models = safeJsonArray(voice.compatibleModels)
+    if (models.length > 0 && !models.includes(model)) return false
+    if (language && voice.language !== language && voice.locale !== language) return false
+    if (accent && !voice.accent.toLowerCase().includes(accent)) return false
+    if (style && !voice.style.toLowerCase().includes(style)) return false
+    return true
+  })
+  const voice = compatible[0]
+  if (!voice) throw new Error(requested ? `Selected voice '${requested}' is not available for model '${model}'` : `No verified GenX voice is compatible with model '${model}' and the requested profile`)
+  return { id: voice.id, voiceId: voice.voiceId, language: voice.language, locale: voice.locale }
+}
+
+function safeJsonArray(value: string): string[] {
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [] } catch { return [] }
+}
+
 export async function executeRegisteredRoute(
   payload: WorkerJobData,
   route: ProviderExecutionRoute,
@@ -1241,18 +1278,16 @@ export async function executeRegisteredRoute(
     }
   }
 
-  let modelCompatible = registration.modelCompatibility === 'exact_model_allowlist'
-    ? registration.compatibleModels.includes(route.model)
-    : false
-  if (registration.modelCompatibility === 'metadata_profile') {
-    const findUnique = (prisma.modelRegistryEntry as typeof prisma.modelRegistryEntry & { findUnique?: typeof prisma.modelRegistryEntry.findUnique }).findUnique
-    const modelRecord = typeof findUnique === 'function'
-      ? await findUnique.call(prisma.modelRegistryEntry, { where: { provider_modelId: { provider: route.provider, modelId: route.model } } }).catch(() => null)
-      : null
-    const compatibility = executorModelMetadataFromDbRecord(modelRecord ?? { provider: route.provider, modelId: route.model })
-    modelCompatible = (modelRecord ? modelRecord.enabled === true : true)
-      && isExecutorModelCompatible(registration, route.model, compatibility)
-  }
+  const findUnique = (prisma.modelRegistryEntry as typeof prisma.modelRegistryEntry & { findUnique?: typeof prisma.modelRegistryEntry.findUnique }).findUnique
+  const modelRecord = typeof findUnique === 'function'
+    ? await findUnique.call(prisma.modelRegistryEntry, { where: { provider_modelId: { provider: route.provider, modelId: route.model } } }).catch(() => null)
+    : (await prisma.modelRegistryEntry.findMany({ where: { provider: route.provider, modelId: route.model }, take: 1 }).catch(() => []))[0] ?? null
+  const compatibility = executorModelMetadataFromDbRecord(modelRecord ?? { provider: route.provider, modelId: route.model })
+  const modelCompatible = modelRecord !== null
+    && modelRecord.enabled !== false
+    && !['blocked', 'retired', 'deprecated', 'account_inaccessible'].includes(String(modelRecord.currentAvailability ?? '').toLowerCase())
+    && modelRecord.deprecated !== true
+    && isExecutorModelCompatible(registration, route.model, compatibility)
   if (!modelCompatible) {
     return {
       success: false,
@@ -1283,7 +1318,10 @@ export async function executeRegisteredRoute(
   }
 
   try {
-    const result = await handler(payload, route.model)
+    const result = await handler({
+      ...payload,
+      metadata: { ...payload.metadata, routeModelCompatibility: compatibility },
+    }, route.model)
     if (result.provider && result.provider !== route.provider) {
       return {
         success: false,

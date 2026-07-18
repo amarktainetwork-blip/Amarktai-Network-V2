@@ -68,7 +68,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           executionId: jobId,
           selectedProvider: 'deepinfra' as const,
           selectedModel: 'fixture/streaming_chat',
-          selectedExecutorId: 'deepinfra.chat' as const,
+          selectedExecutorId: 'deepinfra.streaming-chat' as const,
           fallbackRoutes: [],
           blockReason: null,
         }
@@ -80,9 +80,12 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           appGrant: grantResolution.grant,
         }, { databaseReady: true, queueReady: true })
 
-    if (!decision.executionAllowed || decision.selectedProvider !== 'deepinfra' || !decision.selectedModel || decision.selectedExecutorId !== 'deepinfra.chat') {
+    const selectedProvider = decision.selectedProvider
+    const expectedExecutor = selectedProvider ? `${selectedProvider}.streaming-chat` : ''
+    if (!decision.executionAllowed || !selectedProvider || !['deepinfra', 'together', 'genx'].includes(selectedProvider) || !decision.selectedModel || decision.selectedExecutorId !== expectedExecutor) {
       return reply.status(503).send({ error: true, message: decision.blockReason ?? 'No streaming chat route is ready', orchestra: decision })
     }
+    const runtimeProvider = selectedProvider as 'deepinfra' | 'together' | 'genx'
 
     await prisma.job.create({
       data: {
@@ -120,7 +123,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
       'X-Accel-Buffering': 'no',
     })
     const send = (event: string, data: Record<string, unknown>) => reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    send('route', { jobId, executionId: decision.executionId, capability: 'streaming_chat', provider: 'deepinfra', model: decision.selectedModel, executorId: decision.selectedExecutorId, routeType: 'primary' })
+    send('route', { jobId, executionId: decision.executionId, capability: 'streaming_chat', provider: runtimeProvider, model: decision.selectedModel, executorId: decision.selectedExecutorId, routeType: 'primary' })
 
     const controller = new AbortController()
     let completed = false
@@ -136,12 +139,12 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
           content += delta
           send('chunk', { index: upstreamChunks, delta })
         }
-        usage = createCanonicalProviderUsage({ provider: 'deepinfra', model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
+        usage = createCanonicalProviderUsage({ provider: runtimeProvider, model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
       } else {
-        const credential = await resolveProviderApiKey('deepinfra')
-        const providerStatus = await getProviderCredentialStatus('deepinfra')
+        const credential = await resolveProviderApiKey(runtimeProvider)
+        const providerStatus = await getProviderCredentialStatus(runtimeProvider)
         for await (const chunk of openAiStreamingChat({
-          provider: 'deepinfra',
+          provider: runtimeProvider,
           baseUrl: providerStatus.baseUrl || '',
           apiKey: credential.apiKey,
           model: decision.selectedModel,
@@ -156,27 +159,27 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
             send('chunk', { index: upstreamChunks, delta: chunk.content })
           } else if (chunk.type === 'usage' && chunk.usage) {
             usage = createCanonicalProviderUsage({
-              provider: 'deepinfra', model: decision.selectedModel,
+              provider: runtimeProvider, model: decision.selectedModel,
               inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
               providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
             })
           }
         }
       }
-      if (!content.trim() || upstreamChunks === 0) throw new Error('DeepInfra stream completed without content chunks')
+      if (!content.trim() || upstreamChunks < 2) throw new Error(`${selectedProvider} stream completed without at least two upstream content chunks`)
       completed = true
       const finalMetadata = {
         ...metadata,
         orchestraExecutionId: decision.executionId,
-        orchestraSelectedProvider: 'deepinfra',
+        orchestraSelectedProvider: selectedProvider,
         orchestraSelectedModel: decision.selectedModel,
         orchestraSelectedExecutorId: decision.selectedExecutorId,
-        orchestraActualProvider: 'deepinfra',
+        orchestraActualProvider: selectedProvider,
         orchestraActualModel: decision.selectedModel,
         orchestraActualExecutorId: decision.selectedExecutorId,
         orchestraActualOutcome: 'completed',
         orchestraFallbackCount: decision.fallbackRoutes.length,
-        orchestraRouteAttempts: [{ provider: 'deepinfra', model: decision.selectedModel, executorId: decision.selectedExecutorId, success: true }],
+        orchestraRouteAttempts: [{ provider: selectedProvider, model: decision.selectedModel, executorId: decision.selectedExecutorId, success: true }],
         directProviderExecutorId: decision.selectedExecutorId,
         directProviderRouteType: 'primary',
         streamingUpstreamChunkCount: upstreamChunks,
@@ -195,7 +198,7 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
         where: { id: jobId },
         data: { status: 'completed', output: content, progress: 100, completedAt: new Date(), metadataJson: JSON.stringify(finalMetadata) },
       })
-      await recordStreamingUsage(auth.app!.slug, decision.selectedModel, usage)
+      await recordStreamingUsage(auth.app!.slug, runtimeProvider, decision.selectedModel, usage)
       send('complete', { jobId, executionId: decision.executionId, chunks: upstreamChunks, usage })
       reply.raw.end()
     } catch (error) {
@@ -242,13 +245,13 @@ function buildMessages(prompt: string, input: Record<string, unknown>): OpenAiTr
   return messages
 }
 
-async function recordStreamingUsage(appSlug: string, model: string, usage: ReturnType<typeof createCanonicalProviderUsage>): Promise<void> {
+async function recordStreamingUsage(appSlug: string, provider: 'deepinfra' | 'together' | 'genx', model: string, usage: ReturnType<typeof createCanonicalProviderUsage>): Promise<void> {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const costUsdCents = usage.providerReportedCost !== null && (!usage.currency || usage.currency.toUpperCase() === 'USD') ? Math.round(usage.providerReportedCost * 100) : null
   await prisma.usageMeter.upsert({
-    where: { usage_meter_unique: { appSlug, date: today, capability: 'streaming_chat', provider: 'deepinfra', model } },
+    where: { usage_meter_unique: { appSlug, date: today, capability: 'streaming_chat', provider, model } },
     update: { requestCount: { increment: 1 }, successCount: { increment: 1 }, inputTokens: { increment: usage.inputTokens }, outputTokens: { increment: usage.outputTokens }, ...(costUsdCents !== null ? { costUsdCents: { increment: costUsdCents } } : {}) },
-    create: { appSlug, date: today, capability: 'streaming_chat', provider: 'deepinfra', model, requestCount: 1, successCount: 1, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(costUsdCents !== null ? { costUsdCents } : {}) },
+    create: { appSlug, date: today, capability: 'streaming_chat', provider, model, requestCount: 1, successCount: 1, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(costUsdCents !== null ? { costUsdCents } : {}) },
   })
 }
 

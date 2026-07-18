@@ -29,6 +29,7 @@ export const CreateJobRequestSchema = z.object({
   input: z.record(z.string(), z.unknown()).default({}),
   metadata: z.record(z.string(), z.unknown()).default({}),
   callbackUrl: z.string().url().optional(),
+  route: z.object({ provider: z.enum(['genx', 'together', 'deepinfra']), model: z.string().min(1) }).optional(),
 })
 
 export type CreateJobRequest = z.infer<typeof CreateJobRequestSchema>

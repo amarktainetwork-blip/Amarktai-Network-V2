@@ -347,7 +347,7 @@ fi
 echo "[unmanaged] Inserting sample data..."
 docker exec "$UNMANAGED_CONTAINER" mariadb -u root -p"$ROOT_PASS" "$UNMANAGED_DB" -e "
 INSERT INTO jobs (id, app_slug, capability, prompt, input_json, metadata_json, trace_id, status, provider, model, progress, created_at, updated_at)
-VALUES ('sample-job-001', 'test-app', 'chat', 'test prompt', '{}', '{}', 'trace-001', 'completed', 'groq', 'llama-3.1-8b-instant', 100, NOW(3), NOW(3));
+VALUES ('sample-job-001', 'test-app', 'chat', 'test prompt', '{}', '{}', 'trace-001', 'completed', 'deepinfra', 'fixture-model', 100, NOW(3), NOW(3));
 "
 
 echo "[unmanaged] Verifying jobs table does NOT have orchestration columns..."

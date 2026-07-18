@@ -17,7 +17,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
   {
     key: 'genx',
     displayName: 'GenX',
-    runtimeRole: 'media_runtime',
+    runtimeRole: 'runtime_execution_provider',
     credentialEnvKey: 'GENX_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
     defaultBaseUrl: 'https://query.genx.sh',
@@ -27,7 +27,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
   {
     key: 'together',
     displayName: 'Together',
-    runtimeRole: 'media_runtime',
+    runtimeRole: 'runtime_execution_provider',
     credentialEnvKey: 'TOGETHER_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
     defaultBaseUrl: 'https://api.together.xyz/v1',
@@ -47,7 +47,7 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
   {
     key: 'deepinfra',
     displayName: 'DeepInfra',
-    runtimeRole: 'language_runtime',
+    runtimeRole: 'runtime_execution_provider',
     credentialEnvKey: 'DEEPINFRA_API_KEY',
     discoveryPolicy: 'live_with_docs_fallback',
     defaultBaseUrl: 'https://api.deepinfra.com/v1',

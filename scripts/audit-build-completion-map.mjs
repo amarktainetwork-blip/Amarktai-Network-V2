@@ -787,8 +787,8 @@ async function runAudit() {
     redeployReadiness.warnings.push(`long_form_missing_${longFormReadiness.missingParts.length}_parts`)
   }
   
-  if (providers.providers.length !== 5) {
-    redeployReadiness.warnings.push('provider_list_not_exactly_5')
+  if (providers.providers.length !== APPROVED_PROVIDER_DEFINITIONS.length) {
+    redeployReadiness.warnings.push('provider_list_differs_from_canonical_definitions')
   }
   
   if (blockedModels.length === 0) {

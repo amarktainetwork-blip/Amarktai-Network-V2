@@ -24,7 +24,7 @@ export interface OpenAiToolCall {
 }
 
 export interface OpenAiChatTransportRequest {
-  provider: Extract<ProviderKey, 'groq' | 'together' | 'deepinfra' | 'genx'>
+  provider: Extract<ProviderKey, 'together' | 'deepinfra' | 'genx'>
   baseUrl: string
   apiKey: string
   model: string

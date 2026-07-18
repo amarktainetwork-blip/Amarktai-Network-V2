@@ -19,6 +19,12 @@ import { getModelRecord } from './model-catalog.js'
 
 export const ORCHESTRA_ROUTING_MODES = ['balanced', 'quality', 'economy', 'fast'] as const
 export type OrchestraRoutingMode = (typeof ORCHESTRA_ROUTING_MODES)[number]
+export const APP_ROUTE_POLICY_MODES = ['automatic', 'fixed_route', 'preferred_pool', 'app_selectable_allowlist', 'automatic_restricted_pool'] as const
+export type AppRoutePolicyMode = (typeof APP_ROUTE_POLICY_MODES)[number]
+export const APP_QUALITY_TARGETS = ['standard', 'premium'] as const
+export type AppQualityTarget = (typeof APP_QUALITY_TARGETS)[number]
+export const APP_SPEND_STRATEGIES = ['lowest_cost', 'best_value', 'best_available', 'fixed_ceiling'] as const
+export type AppSpendStrategy = (typeof APP_SPEND_STRATEGIES)[number]
 export const EXECUTION_PROFILES = ['internal_dashboard', 'external_app'] as const
 export type ExecutionProfile = (typeof EXECUTION_PROFILES)[number]
 
@@ -56,6 +62,14 @@ export interface AppCapabilityGrantContext {
   dataRetentionPolicy: string
   passthroughModelAllowed: boolean
   providerResidencyConstraints: string[]
+  routingMode?: AppRoutePolicyMode
+  qualityTarget?: AppQualityTarget
+  spendStrategy?: AppSpendStrategy
+  fixedRoute?: string | null
+  preferredPool?: string[]
+  selectableAllowlist?: string[]
+  restrictedPool?: string[]
+  workflowStepOverrides?: Record<string, unknown>
 }
 
 export interface OrchestraRequest {
@@ -70,6 +84,7 @@ export interface OrchestraRequest {
   executionId?: string
   appGrant?: AppCapabilityGrantContext
   infrastructureReady?: boolean
+  requestedRoute?: { provider: ProviderKey; model: string }
 }
 
 // ── Request Validation ─────────────────────────────────────────
@@ -179,6 +194,7 @@ export function checkCandidateEligibility(
   capability: CapabilityKey,
   appGrant?: AppCapabilityGrantContext,
   executionProfile: ExecutionProfile = 'external_app',
+  requestedRoute?: { provider: ProviderKey; model: string },
 ): string[] {
   const blockers: string[] = []
 
@@ -200,6 +216,19 @@ export function checkCandidateEligibility(
     if (appGrant.providerResidencyConstraints.length > 0 &&
         !appGrant.providerResidencyConstraints.includes(candidate.provider)) {
       blockers.push('app_provider_residency_constraint')
+    }
+
+    const route = `${candidate.provider}/${candidate.model}`
+    const policyMode = appGrant.routingMode ?? 'automatic'
+    if (policyMode === 'fixed_route' && appGrant.fixedRoute !== route) blockers.push('app_fixed_route_mismatch')
+    if (policyMode === 'preferred_pool' && (appGrant.preferredPool?.length ?? 0) > 0 && !appGrant.preferredPool!.includes(route)) blockers.push('app_preferred_pool_mismatch')
+    if (policyMode === 'automatic_restricted_pool' && !appGrant.restrictedPool?.includes(route)) blockers.push('app_restricted_pool_mismatch')
+    if (policyMode === 'app_selectable_allowlist') {
+      if (!requestedRoute) blockers.push('app_route_selection_required')
+      else if (!appGrant.selectableAllowlist?.includes(`${requestedRoute.provider}/${requestedRoute.model}`)) blockers.push('app_requested_route_not_approved')
+      else if (candidate.provider !== requestedRoute.provider || candidate.model !== requestedRoute.model) blockers.push('app_requested_route_mismatch')
+    } else if (requestedRoute) {
+      blockers.push('app_route_selection_not_allowed')
     }
   }
 
@@ -443,7 +472,7 @@ export function evaluateOrchestra(
   candidates: OrchestraCandidate[],
 ): OrchestraDecision {
   const capability = request.capability
-  const routingMode = request.routingMode ?? 'balanced'
+  const routingMode = request.routingMode ?? routingModeForAppPolicy(request.appGrant)
   const executionProfile = request.executionProfile ?? 'external_app'
   const executionId = request.executionId ?? `exec_${Date.now()}`
   const weights = getWeights(routingMode)
@@ -453,7 +482,7 @@ export function evaluateOrchestra(
   const blockersRejected: Array<{ provider: string; model: string; blockers: string[] }> = []
 
   for (const candidate of candidates) {
-    const blockers = checkCandidateEligibility(candidate, capability, appGrant, executionProfile)
+    const blockers = checkCandidateEligibility(candidate, capability, appGrant, executionProfile, request.requestedRoute)
     if (blockers.length > 0) {
       blockersRejected.push({
         provider: candidate.provider,
@@ -475,8 +504,16 @@ export function evaluateOrchestra(
       }
     }
 
+    if (executionProfile === 'external_app' && appGrant?.qualityTarget === 'premium' && !['premium', 'high'].includes(candidate.qualityTier)) {
+      blockersRejected.push({ provider: candidate.provider, model: candidate.model, blockers: ['below_app_quality_target'] })
+      continue
+    }
+
     const { score, breakdown } = scoreCandidate(candidate, weights)
-    candidate.score = score
+    const preferredIndex = appGrant?.preferredPool?.indexOf(`${candidate.provider}/${candidate.model}`) ?? -1
+    const preferenceBonus = preferredIndex >= 0 ? Math.max(1, 100 - preferredIndex) : 0
+    candidate.score = score + preferenceBonus
+    if (preferenceBonus) breakdown.appPoolPreference = preferenceBonus
     candidate.scoreBreakdown = breakdown
     eligible.push(candidate)
   }
@@ -531,6 +568,12 @@ export function evaluateOrchestra(
   }
 }
 
+function routingModeForAppPolicy(grant: AppCapabilityGrantContext | undefined): OrchestraRoutingMode {
+  if (grant?.spendStrategy === 'lowest_cost') return 'economy'
+  if (grant?.spendStrategy === 'best_available') return 'quality'
+  return 'balanced'
+}
+
 // ── Shared DB-Record Normalizer ────────────────────────────────
 // Pure function: converts DB model/provider records into OrchestraCandidate[].
 // Both API loader and worker use this to avoid duplicate normalization logic.
@@ -541,12 +584,14 @@ export interface DbModelRecord {
   displayName?: string | null
   status?: string
   costTier?: string | null
+  qualityTier?: string | null
   latencyTier?: string | null
   estimatedUnitCost?: number | null
   pricingConfidence?: string | null
   capabilitiesJson?: string | null
   rawMetadata?: string | null
   category?: string | null
+  taskType?: string | null
   providerRawCategory?: string | null
   providerRawType?: string | null
   [key: string]: unknown
@@ -607,13 +652,8 @@ export function normalizeDbCandidates(
     const adapterSupported = executorRegistration !== undefined
     const executorSupported = executorRegistration !== undefined
     const compatibilityMetadata = executorModelMetadataFromDbRecord(model, exactCapabilities)
-    const profileCompatibility = executorRegistration?.modelCompatibility === 'metadata_profile'
-    const requestShapeKnown = profileCompatibility
-      ? compatibilityMetadata.requestShapeKnown === true
-      : executorRegistration !== undefined
-    const responseShapeKnown = profileCompatibility
-      ? compatibilityMetadata.responseShapeKnown === true
-      : executorRegistration !== undefined
+    const requestShapeKnown = compatibilityMetadata.requestShapeKnown === true
+    const responseShapeKnown = compatibilityMetadata.responseShapeKnown === true
     const modelCompatible = executorRegistration !== undefined
       && isExecutorModelCompatible(executorRegistration, model.modelId, compatibilityMetadata)
     const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
@@ -663,7 +703,7 @@ export function normalizeDbCandidates(
       liveProven,
       estimatedCost: model.estimatedUnitCost ?? null,
       costTier: model.costTier ?? 'medium',
-      qualityTier: model.costTier ?? 'balanced',
+      qualityTier: model.qualityTier ?? stringValue(parseJsonRecord(model.rawMetadata).qualityTier) ?? 'balanced',
       latencyTier: model.latencyTier ?? 'medium',
       pricingConfidence: model.pricingConfidence ?? 'unknown',
       score: 0,
@@ -686,18 +726,22 @@ export function executorModelMetadataFromDbRecord(
     : undefined
   return {
     category: stringValue(compatibility.category) ?? canonical?.category ?? model.providerRawCategory ?? model.category ?? model.providerRawType,
+    taskType: stringValue(compatibility.taskType) ?? stringValue(compatibility.providerTaskType) ?? model.taskType ?? model.providerRawCategory ?? model.providerRawType ?? model.category,
     capabilities: stringArray(compatibility.capabilities).length > 0
       ? stringArray(compatibility.capabilities)
       : parsedCapabilities.length > 0 ? parsedCapabilities : canonical?.capabilities,
     modalitiesIn: stringArray(compatibility.modalitiesIn).length ? stringArray(compatibility.modalitiesIn) : canonical?.modalitiesIn,
     modalitiesOut: stringArray(compatibility.modalitiesOut).length ? stringArray(compatibility.modalitiesOut) : canonical?.modalitiesOut,
-    transportProfile: stringValue(compatibility.transportProfile) ?? canonical?.transportProfile,
-    endpointFamily: stringValue(compatibility.endpointFamily) ?? canonical?.endpointFamily,
+    transportProfile: stringValue(compatibility.transportProfile) ?? stringValue(model.transportProfile) ?? canonical?.transportProfile,
+    endpointFamily: stringValue(compatibility.endpointFamily) ?? stringValue(model.endpointFamily) ?? canonical?.endpointFamily,
     endpointShapeKnown: compatibility.endpointShapeKnown === true || canonical?.endpointShapeKnown === true,
     requestShapeKnown: compatibility.requestShapeKnown === true || canonical?.requestShapeKnown === true,
     responseShapeKnown: compatibility.responseShapeKnown === true || canonical?.responseShapeKnown === true,
     providerClientExists: compatibility.providerClientExists === true || canonical?.providerClientExists === true,
     workerExecutorExists: compatibility.workerExecutorExists === true || canonical?.workerExecutorExists === true,
+    streamingSupported: compatibility.streamingSupported === true || canonical?.supportsStreaming === true,
+    structuredOutputModes: stringArray(compatibility.structuredOutputModes) as Array<'none' | 'json_object' | 'json_schema'>,
+    supportedParameters: stringArray(compatibility.supportedParameters),
   }
 }
 

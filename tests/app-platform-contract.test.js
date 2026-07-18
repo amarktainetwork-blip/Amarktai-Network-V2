@@ -72,7 +72,7 @@ describe('app platform contract', () => {
   it('admin app connections persist explicit release-candidate grants', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-app-connections.ts')
     const content = fs.readFileSync(routePath, 'utf8')
-    expect(content).toContain('getReleaseCandidateCapabilityKeys')
+    expect(content).toContain('CAPABILITY_KEYS')
     expect(content).toContain('appCapabilityGrant.createMany')
     expect(content).toContain('appCapabilityGrant.upsert')
     expect(content).toContain('passthroughModelAllowed: false')

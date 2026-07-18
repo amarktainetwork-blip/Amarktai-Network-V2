@@ -230,7 +230,8 @@ export async function genxDownloadTts(
 ): Promise<GenxTtsResult> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
-  const model = request.model?.trim() ?? 'genx-tts-v1'
+  const model = request.model?.trim()
+  if (!model) throw new Error('GenX TTS download requires the exact Orchestra-selected model')
 
   const fullUrl = resultUrl.startsWith('http') ? resultUrl : `${baseUrl}${resultUrl}`
   const response = await fetch(fullUrl, {
@@ -259,7 +260,8 @@ export async function genxDownloadTts(
 export async function genxGenerateTts(request: GenxTtsRequest): Promise<GenxTtsResult> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
-  const model = request.model?.trim() ?? 'genx-tts-v1'
+  const model = request.model?.trim()
+  if (!model) throw new Error('GenX TTS transport requires the exact Orchestra-selected model')
 
   const submitResult = await genxSubmitTts(request)
   if (!submitResult.jobId) throw new Error('GenX TTS did not return a job ID')
@@ -364,7 +366,8 @@ export async function genxPollStt(
 export async function genxGenerateStt(request: GenxSttRequest): Promise<GenxSttResult> {
   const apiKey = resolveGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
-  const model = request.model?.trim() ?? 'genx-stt-v1'
+  const model = request.model?.trim()
+  if (!model) throw new Error('GenX STT transport requires the exact Orchestra-selected model')
 
   const submitResult = await genxSubmitStt(request)
   if (!submitResult.jobId) throw new Error('GenX STT did not return a job ID')

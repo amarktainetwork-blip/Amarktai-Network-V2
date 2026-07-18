@@ -56,7 +56,7 @@ const prismaMock = vi.hoisted(() => ({
   },
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
-      { provider: 'genx', modelId: 'seedance-v1-fast', displayName: 'Seedance', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsVideoGeneration: true },
+      { provider: 'genx', modelId: 'seedance-v1-fast', displayName: 'Seedance', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsVideoGeneration: true, capabilitiesJson: '["video_generation"]', rawMetadata: '{"compatibility":{"taskType":"text-to-video","category":"video","capabilities":["video_generation"],"modalitiesIn":["text"],"modalitiesOut":["video"],"transportProfile":"async_job_poll","endpointFamily":"genx_generation_v1","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
     ]),
   },
 }))
