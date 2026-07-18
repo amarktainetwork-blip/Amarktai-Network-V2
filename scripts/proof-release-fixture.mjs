@@ -130,6 +130,20 @@ async function loginFixtureAdmin() {
   return result.body.token
 }
 
+async function seedFixtureModelCatalogue(token) {
+  const result = await apiRequest('/api/admin/model-catalog/seed', token, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  const changed = Number(result.body.created ?? 0) + Number(result.body.updated ?? 0)
+  invariant(
+    result.response.ok && result.body.success === true && changed > 0,
+    result.body.message || `Fixture model-catalog seed returned ${result.response.status}`,
+  )
+  console.log(`FIXTURE_MODEL_CATALOGUE=PASS changed=${changed}`)
+}
+
 function queueControl(action, jobId = '') {
   const args = [
     ...compose,
@@ -264,13 +278,14 @@ try {
     ADMIN_PASSWORD: generated.FIXTURE_ADMIN_PASSWORD,
     RELEASE_FIXTURE_BASE_URL: 'http://127.0.0.1:3210',
   }
+  const recoveryToken = await loginFixtureAdmin()
+  await seedFixtureModelCatalogue(recoveryToken)
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
     '--fixture', '--strict', '--long-form', '--json-output', proofReportFile,
   ], { env: proofEnv })
   const proofReport = JSON.parse(await readFile(proofReportFile, 'utf8'))
-  const recoveryToken = await loginFixtureAdmin()
   await proveQueueAndRestartRecovery(recoveryToken, proofReport)
   run(docker, [...compose, 'up', '--detach', '--wait', '--wait-timeout', '300', 'api', 'worker', 'dashboard'])
   run(npm, ['run', 'test:browser'], {

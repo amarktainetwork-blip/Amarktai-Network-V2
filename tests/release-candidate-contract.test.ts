@@ -108,6 +108,10 @@ describe('production release-candidate canonical contract', () => {
     expect(runner).toContain("queueControl('redeliver'")
     expect(runner).toContain("queueControl('prepare-cancelled'")
     expect(runner).toContain("const tsx = join(root, 'node_modules', '.bin'")
+    expect(runner).toContain("apiRequest('/api/admin/model-catalog/seed'")
+    expect(runner.indexOf('await seedFixtureModelCatalogue(recoveryToken)')).toBeLessThan(
+      runner.indexOf("'scripts/proof-production-release-candidate.mjs'"),
+    )
     expect(runner).toContain('Queued job was not visible after API restart')
     expect(runner).toContain('Long-form final assembly was not exactly once')
   })
