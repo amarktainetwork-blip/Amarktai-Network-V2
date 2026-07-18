@@ -3,8 +3,10 @@ import {
   APPROVED_PROVIDER_DEFINITIONS,
   CAPABILITY_FIELD_MAP,
   MODEL_CATALOGUE,
+  hasExecutorRegistration,
   type CapabilityKey,
   type ModelRecord,
+  type ProviderDiscoveryResult,
 } from '@amarktai/core'
 import type { DiscoveryResult, GenXPricingResult } from './provider-discovery.js'
 
@@ -395,6 +397,10 @@ function canonicalCapabilitiesFromFlags(flags: Record<string, boolean>): Capabil
 }
 
 function canonicalCapabilitiesForDiscovered(model: DiscoveryResult['models'][number]): CapabilityKey[] {
+  const explicit = Array.isArray(model.rawMetadata?.canonicalCapabilities)
+    ? model.rawMetadata.canonicalCapabilities.filter((value): value is CapabilityKey => typeof value === 'string' && value in CAPABILITY_FIELD_MAP)
+    : []
+  if (explicit.length > 0) return [...new Set(explicit)]
   const task = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
   const byTask: Record<string, CapabilityKey[]> = {
     'zero-shot-classification': ['zero_shot_classification'], 'token-classification': ['token_classification'],
@@ -419,8 +425,10 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
   const taskType = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
   if (model.provider === 'deepinfra' && capabilities.length > 0) {
     const text = ['text-generation', 'chat', 'text'].includes(taskType)
-    const embeddings = ['embeddings', 'feature-extraction', 'sentence-similarity'].includes(taskType)
+    const embeddings = ['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'].includes(taskType)
     const rerank = ['reranker', 'rerank'].includes(taskType)
+    const specialist = ['zero-shot-classification', 'token-classification', 'fill-mask', 'table-question-answering'].includes(taskType)
+    if (!text && !embeddings && !rerank && !specialist) return null
     return {
       taskType, category: taskType, capabilities,
       modalitiesIn: embeddings || text || rerank ? ['text'] : [],
@@ -428,14 +436,34 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
       transportProfile: text ? 'openai_chat_sse' : 'native_inference_json',
       endpointFamily: text ? 'deepinfra_openai_v1/openai_chat' : embeddings ? 'deepinfra_openai_v1/embeddings' : rerank ? 'deepinfra_native_v1/rerank/native_inference' : 'deepinfra_native_v1/native_inference',
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
-      providerClientExists: true, workerExecutorExists: true, streamingSupported: text,
-      structuredOutputModes: Array.isArray(model.rawMetadata?.structured_output_modes) ? model.rawMetadata.structured_output_modes : ['none'],
-      supportedParameters: Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : [],
+      providerClientExists: true,
+      workerExecutorExists: capabilities.some((capability) => hasExecutorRegistration(capability, 'deepinfra')),
+      streamingSupported: text,
+      structuredOutputModes: Array.isArray(model.rawMetadata?.structuredOutputModes)
+        ? model.rawMetadata.structuredOutputModes
+        : Array.isArray(model.rawMetadata?.structured_output_modes) ? model.rawMetadata.structured_output_modes : ['none'],
+      supportedParameters: Array.isArray(model.rawMetadata?.supportedParameters)
+        ? model.rawMetadata.supportedParameters
+        : Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : [],
     }
   }
   if (model.provider === 'together' && capabilities.length > 0) {
-    const text = ['text', 'chat', 'language', 'code'].includes(taskType)
-    return { taskType, category, capabilities, modalitiesIn: ['text'], modalitiesOut: text ? ['text'] : category === 'image' ? ['image'] : category === 'embedding' ? ['embedding'] : ['json'], transportProfile: text ? 'openai_chat_sse' : 'native_inference_json', endpointFamily: text ? 'together_openai_v1/openai_chat' : category === 'embedding' ? 'embeddings' : category === 'rerank' ? 'rerank' : 'image_generation', endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true, streamingSupported: text }
+    const text = ['text', 'text-generation', 'chat', 'language', 'code', 'reasoning'].includes(taskType)
+    const embeddings = ['embedding', 'embeddings'].includes(taskType) || ['embedding', 'embeddings'].includes(category)
+    const rerank = ['rerank', 'reranker', 'reranking'].includes(taskType) || ['rerank', 'reranker', 'reranking'].includes(category)
+    const image = ['image', 'text-to-image', 'image-generation'].includes(taskType) || ['image', 'text-to-image'].includes(category)
+    if (!text && !embeddings && !rerank && !image) return null
+    return {
+      taskType, category: text ? 'text' : embeddings ? 'embeddings' : rerank ? 'reranking' : 'image', capabilities,
+      modalitiesIn: ['text'], modalitiesOut: text ? ['text'] : embeddings ? ['embedding'] : image ? ['image'] : ['json'],
+      transportProfile: text ? 'openai_chat_sse' : 'native_inference_json',
+      endpointFamily: text ? 'together_openai_v1/openai_chat' : embeddings ? 'embeddings' : rerank ? 'rerank' : 'image_generation',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true,
+      workerExecutorExists: capabilities.some((capability) => hasExecutorRegistration(capability, 'together')),
+      streamingSupported: text,
+      structuredOutputModes: Array.isArray(model.rawMetadata?.structuredOutputModes) ? model.rawMetadata.structuredOutputModes : ['none'],
+      supportedParameters: Array.isArray(model.rawMetadata?.supportedParameters) ? model.rawMetadata.supportedParameters : [],
+    }
   }
   if (model.provider === 'genx' && category === 'video') {
     return {
@@ -516,6 +544,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         pricingBlocker: appendBlocker(model.pricingBlocker, metadataWarning),
         notes: appendNote(model.notes, metadataWarning),
         capabilitiesJson: JSON.stringify(canonicalCapabilities),
+        ...defaultCapabilityFlags(),
         ...model.capabilities,
       }
 
@@ -545,6 +574,75 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
   return { providerKey: result.provider, totalFetched: result.models.length, created, updated, failedRows, errors }
 }
 
+/** Persist authenticated provider discovery into the registry used by Orchestra. */
+export async function upsertCanonicalProviderDiscovery(result: ProviderDiscoveryResult): Promise<ModelCatalogRefreshSummary> {
+  const liveModels = result.models.filter((model) => model.liveDiscovered)
+  const legacy: DiscoveryResult = {
+    provider: result.provider,
+    totalDiscovered: liveModels.length,
+    source: result.source,
+    catalogCompleteness: result.providerUniverseKnown ? 'complete_from_provider_api' : 'partial_from_provider_api',
+    discoveredAt: result.discoveredAt,
+    error: result.error,
+    models: liveModels.map((model) => {
+      const capabilities: Record<string, boolean> = {}
+      const persistedFlags = defaultCapabilityFlags() as Record<string, boolean>
+      for (const capability of model.inferredCapabilities) {
+        const field = CAPABILITY_FIELD_MAP[capability]
+        if (field in persistedFlags) capabilities[field] = true
+      }
+      return {
+        provider: model.provider,
+        modelId: model.modelId,
+        displayName: model.displayName,
+        family: model.upstreamProvider || model.modelId.split('/')[0] || model.provider,
+        category: model.category,
+        primaryRole: model.inferredCapabilities[0] ?? 'contract_unknown',
+        costTier: 'unknown',
+        latencyTier: 'medium',
+        contextWindow: model.contextWindow ?? 0,
+        capabilities,
+        estimatedUnitCost: model.inputPrice,
+        qualityTier: 'standard',
+        source: model.discoverySource,
+        catalogCompleteness: result.providerUniverseKnown ? 'complete_from_provider_api' : 'partial_from_provider_api',
+        isLiveDiscovered: true,
+        modelOwner: model.upstreamProvider || model.provider,
+        providerRawType: model.rawProviderType,
+        providerRawCategory: model.providerCategory || model.rawProviderType,
+        notes: result.notes.join(' ') || `Authenticated ${model.provider} discovery`,
+        rawMetadata: {
+          ...(model.rawMetadata ?? {}),
+          taskType: model.rawProviderType,
+          category: model.category,
+          capabilities: model.inferredCapabilities,
+          canonicalCapabilities: model.inferredCapabilities,
+          modalitiesIn: model.modalitiesIn,
+          modalitiesOut: model.modalitiesOut,
+          transportProfile: model.transportProfile,
+          endpointFamily: model.endpointFamily,
+          endpointShapeKnown: model.endpointShapeKnown,
+          requestShapeKnown: model.requestShapeKnown,
+          responseShapeKnown: model.responseShapeKnown,
+          providerClientExists: model.providerClientExists,
+          workerExecutorExists: model.workerExecutorExists,
+          streamingSupported: model.streamingSupported,
+        },
+        discoveredAt: model.lastDiscoveredAt,
+        lastSyncedAt: model.lastDiscoveredAt,
+        pricingSource: model.inputPrice !== null || model.outputPrice !== null ? 'provider_api' : 'unknown',
+        pricingConfidence: model.inputPrice !== null || model.outputPrice !== null ? 'known' : 'unknown',
+        pricingUnit: '',
+        pricingCurrency: '',
+        pricingRawMetadata: {},
+        lastPricingSyncedAt: null,
+        pricingBlocker: model.inputPrice !== null || model.outputPrice !== null ? '' : 'pricing_unknown',
+      }
+    }),
+  }
+  return upsertDiscoveredModels(legacy)
+}
+
 async function reconcileStoredProviderDefault(provider: string): Promise<void> {
   const [stored, accessible] = await Promise.all([
     prisma.aiProvider.findUnique({ where: { providerKey: provider } }),
@@ -567,6 +665,13 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
     const shouldBeEnabled = statusModel?.status === 'available'
 
     if (existing) {
+      // Curated fallback may supplement an absent catalogue, but it must never
+      // erase authenticated discovery timestamps, source, access, or transport
+      // compatibility from a live registry row.
+      if (existing.isLiveDiscovered) {
+        updated++
+        continue
+      }
       await prisma.modelRegistryEntry.update({
         where: { id: existing.id },
         data: {

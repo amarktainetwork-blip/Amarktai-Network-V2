@@ -74,13 +74,11 @@ const GENERAL_TEXT_CAPABILITIES: readonly CapabilityKey[] = [
   'classification', 'extraction', 'structured_output', 'tool_use',
 ]
 
+// Only tasks with a real request builder and validated response normalizer are
+// registered. Other discovered specialist tasks remain visible with the exact
+// provider task metadata, but do not falsely acquire a callable executor.
 const SPECIALIST_CAPABILITIES: readonly CapabilityKey[] = [
   'zero_shot_classification', 'token_classification', 'fill_mask', 'table_qa',
-  'image_classification', 'object_detection', 'image_segmentation', 'depth_estimation',
-  'keypoint_detection', 'visual_question_answering', 'document_qa', 'ocr',
-  'zero_shot_object_detection', 'mask_generation', 'visual_document_retrieval',
-  'video_understanding', 'video_classification', 'audio_classification',
-  'voice_activity_detection',
 ]
 
 const OPENAI_CHAT_PROFILE: ExecutorCompatibilityProfile = {
@@ -93,12 +91,12 @@ const OPENAI_CHAT_PROFILE: ExecutorCompatibilityProfile = {
 }
 
 const NATIVE_TASK_PROFILE: ExecutorCompatibilityProfile = {
-  taskTypes: [],
-  categories: [],
+  taskTypes: ['zero-shot-classification', 'token-classification', 'fill-mask', 'table-question-answering'],
+  categories: ['zero-shot-classification', 'token-classification', 'fill-mask', 'table-question-answering'],
   transportProfiles: ['native_inference_json', 'native_inference_binary'],
   endpointFamilies: ['native_inference'],
   requiredInputModalities: [],
-  outputModality: '',
+  outputModality: 'json',
 }
 
 function registration(
@@ -140,7 +138,11 @@ function profile(
 const DEEPINFRA_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'] }
 const TOGETHER_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'together_openai_v1'] }
 const GENX_TEXT = { ...OPENAI_CHAT_PROFILE, transportProfiles: ['openai_chat_sse', 'anthropic_messages_sse'], endpointFamilies: ['openai_chat', 'anthropic_messages'] }
-const EMBEDDINGS = profile(['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'], ['embedding', 'embeddings'], ['native_inference_json'], ['embeddings'], ['text'], 'embedding')
+const EMBEDDINGS = profile(
+  ['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'],
+  ['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'],
+  ['native_inference_json'], ['embeddings'], ['text'], 'embedding',
+)
 const RERANK = profile(['rerank', 'reranker'], ['rerank', 'reranker', 'reranking'], ['native_inference_json'], ['rerank', 'native_inference'], ['text'], 'json')
 const IMAGE = profile(['image', 'text-to-image', 'image-generation'], ['image', 'text-to-image'], ['native_inference_json', 'native_inference_binary'], ['image_generation', 'native_inference'], ['text'], 'image')
 const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>

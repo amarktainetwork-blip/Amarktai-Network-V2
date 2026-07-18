@@ -349,6 +349,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         cost: jobMetadata.directProviderCostEvidence ?? null,
         outputValidation: jobMetadata.directProviderOutputValidation ?? null,
         errorClassification: jobMetadata.directProviderErrorClassification ?? null,
+        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId),
       },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,

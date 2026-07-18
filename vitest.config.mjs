@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   test: {
+    setupFiles: ['./tests/setup-unit-environment.ts'],
     exclude: ['tests/browser/**', 'node_modules/**'],
     environment: 'node',
     testTimeout: 30000,

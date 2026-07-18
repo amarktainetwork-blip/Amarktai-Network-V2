@@ -66,6 +66,7 @@ export interface JobStatusResponse {
     cost: unknown
     outputValidation: unknown
     errorClassification: unknown
+    sourceArtifactId: string | null
   }
   createdAt: string
   startedAt: string | null

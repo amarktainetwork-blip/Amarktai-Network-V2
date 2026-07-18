@@ -782,6 +782,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
     // ── Load source artifact for i2v/v2v ──────────────────────────────────
     let sourceImageDataUrl: string | undefined
     let referenceVideoUrl: string | undefined
+    let sourceArtifactId: string | null = null
     if (payload.capability === 'image_to_video' || payload.capability === 'video_to_video') {
       const grant = readAppGrantSnapshot(payload)
       if (!grant?.artifactRead) {
@@ -793,6 +794,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       if (!sourceId) {
         return { success: false, status: 'failed', provider: 'genx', model, error: `${payload.capability} requires a source artifact` }
       }
+      sourceArtifactId = sourceId
       const source = await getArtifactRecord(sourceId)
       if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) {
         return { success: false, status: 'failed', provider: 'genx', model, error: 'Authorised source artifact was not found' }
@@ -862,15 +864,15 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       input: {
         appSlug: payload.appSlug,
         type: 'video',
-        subType: 'video_generation',
-        title: `video_generation output for ${payload.appSlug}`,
-        description: 'GenX video_generation artifact',
+        subType: payload.capability,
+        title: `${payload.capability} output for ${payload.appSlug}`,
+        description: `GenX ${payload.capability} artifact`,
         provider: 'genx',
         model: result.model || model,
         traceId: payload.traceId,
         mimeType: result.mimeType,
         metadata: {
-          capability: 'video_generation',
+          capability: payload.capability,
           provider: 'genx',
           model: result.model || model,
           width: result.width,
@@ -881,6 +883,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
           parentJobId: typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : undefined,
           executionId: typeof payload.metadata?.executionId === 'string' ? payload.metadata.executionId : undefined,
           sceneNumber: typeof payload.metadata?.sceneNumber === 'number' ? payload.metadata.sceneNumber : undefined,
+          sourceArtifactId,
         },
       },
       data: result.videoBuffer,
@@ -897,6 +900,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       duration: result.duration,
       providerJobId: result.providerJobId,
       selectedModel: result.model || model,
+      sourceArtifactId,
     }
 
     if (result.providerJobId) {
@@ -1463,6 +1467,7 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
         : null,
       directProviderOutputValidation: result.metadata?.outputValidation ?? null,
       directProviderErrorClassification: result.metadata?.errorClassification ?? null,
+      directProviderSourceArtifactId: result.metadata?.sourceArtifactId ?? null,
     }).catch(() => {})
     await recordCanonicalUsage(payload, route, result).catch(() => {})
 

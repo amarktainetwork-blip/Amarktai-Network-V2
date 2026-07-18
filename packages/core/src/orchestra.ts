@@ -13,7 +13,7 @@ import {
   type ExecutorId,
   type ExecutorModelMetadata,
 } from './executor-registry.js'
-import { getModelRecord } from './model-catalog.js'
+import { getModelRecord, type ModelRecord, type ModelCostTier, type ModelLatencyTier, type QualityTier } from './model-catalog.js'
 
 // ── Routing Modes ──────────────────────────────────────────────
 
@@ -664,6 +664,9 @@ export function normalizeDbCandidates(
     const queueReady = executorRegistration?.executionMode === 'stream' || executorRegistration?.executionMode === 'sync'
       ? true
       : evidence.queueReady === true
+    // Infrastructure is service and credential truth. Executor/contract/model
+    // compatibility are independent gates and must not masquerade as an
+    // infrastructure outage.
     const infrastructureReady = databaseReady
       && queueReady
       && providerConfigured
@@ -672,8 +675,6 @@ export function normalizeDbCandidates(
       && providerAccountAllowed
       && providerPolicyAllowed
       && endpointReady
-      && executorSupported
-      && modelCompatible
     const modelLifecycleAllowed = model.status !== 'blocked' && model.status !== 'retired'
     const liveProven = evidence.liveProvenRoutes?.has(`${model.provider}/${model.modelId}/${capability}`) === true
 
@@ -699,7 +700,13 @@ export function normalizeDbCandidates(
       queueReady,
       modelCompatible,
       infrastructureReady,
-      executionReady: adapterSupported && executorSupported && modelLifecycleAllowed && infrastructureReady,
+      executionReady: adapterSupported
+        && executorSupported
+        && modelLifecycleAllowed
+        && requestShapeKnown
+        && responseShapeKnown
+        && modelCompatible
+        && infrastructureReady,
       liveProven,
       estimatedCost: model.estimatedUnitCost ?? null,
       costTier: model.costTier ?? 'medium',
@@ -713,6 +720,70 @@ export function normalizeDbCandidates(
   }
 
   return candidates
+}
+
+/**
+ * Projects persisted ModelRegistryEntry rows into the model shape consumed by
+ * runtime truth. Orchestra and dashboard truth therefore use the same stored
+ * discovery facts and the same compatibility metadata parser.
+ */
+export function normalizeDbModelRecords(models: DbModelRecord[]): ModelRecord[] {
+  return models.flatMap((model) => {
+    if (!(PROVIDER_KEYS as readonly string[]).includes(model.provider)) return []
+    const capabilities = parseCapabilityList(model.capabilitiesJson)
+    const metadata = executorModelMetadataFromDbRecord(model, capabilities)
+    const record = model as Record<string, unknown>
+    const availability = String(record.currentAvailability ?? 'defined')
+    const deprecated = record.deprecated === true
+    const enabled = record.enabled !== false
+    const status: ModelRecord['status'] = deprecated || ['blocked', 'unavailable', 'retired'].includes(availability)
+      ? 'blocked'
+      : enabled ? 'available' : 'disabled'
+    const source = record.isLiveDiscovered === true
+      ? 'live_endpoint'
+      : String(record.source ?? '').includes('static') ? 'static_verified' : 'manual_seed'
+    const quality = String(model.qualityTier ?? 'balanced')
+    const qualityTier: QualityTier = quality === 'premium' || quality === 'budget' || quality === 'experimental' ? quality : 'balanced'
+    const latency = String(model.latencyTier ?? 'medium')
+    const latencyTier: ModelLatencyTier = ['ultra_low', 'low', 'medium', 'high'].includes(latency) ? latency as ModelLatencyTier : 'medium'
+    const cost = String(model.costTier ?? 'medium')
+    const costTier: ModelCostTier = ['free', 'very_low', 'low', 'medium', 'high', 'premium'].includes(cost) ? cost as ModelCostTier : 'medium'
+    const outputModalities = metadata.modalitiesOut ?? []
+    return [{
+      provider: model.provider as ProviderKey,
+      modelId: model.modelId,
+      displayName: model.displayName ?? model.modelId,
+      discoverySource: source,
+      source,
+      docsKnown: record.isLiveDiscovered !== true,
+      liveDiscovered: record.isLiveDiscovered === true,
+      discoveredModel: true,
+      category: metadata.category ?? model.category ?? 'contract-unknown',
+      providerCategory: model.providerRawCategory ?? metadata.taskType ?? '',
+      modalitiesIn: [...(metadata.modalitiesIn ?? [])],
+      modalitiesOut: [...outputModalities],
+      transportProfile: metadata.transportProfile ?? '',
+      endpointFamily: metadata.endpointFamily ?? '',
+      capabilities,
+      status,
+      qualityTier,
+      latencyTier,
+      costTier,
+      supportsArtifacts: outputModalities.some((value) => ['image', 'video', 'audio', 'document'].includes(value)),
+      supportsStreaming: metadata.streamingSupported === true,
+      supportsBatch: false,
+      executable: false,
+      notes: String(record.notes ?? ''),
+      endpointShapeKnown: metadata.endpointShapeKnown,
+      requestShapeKnown: metadata.requestShapeKnown,
+      responseShapeKnown: metadata.responseShapeKnown,
+      providerClientExists: metadata.providerClientExists,
+      workerExecutorExists: metadata.workerExecutorExists,
+      executableNow: false,
+      blockedReason: deprecated ? 'deprecated' : availability === 'account_inaccessible' ? 'account_inaccessible' : '',
+      rawMetadata: parseJsonRecord(model.rawMetadata),
+    }]
+  })
 }
 
 export function executorModelMetadataFromDbRecord(

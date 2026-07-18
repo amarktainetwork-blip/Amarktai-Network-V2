@@ -219,6 +219,12 @@ async function runLive(core) {
   const requested = selectedLiveCapabilities(core)
   const adminToken = await adminLogin(baseUrl, email, password)
   const appSlug = process.env.PROOF_APP_SLUG || 'direct-provider-proof'
+  const discovery = await requestJson(`${baseUrl}/api/admin/models/discovery/run`, {
+    method: 'POST', token: adminToken, body: { live: true, strict: false },
+  })
+  const activated = (discovery.persistence ?? []).filter((entry) => ['together', 'deepinfra'].includes(entry.providerKey) && entry.totalFetched > 0)
+  if (activated.length === 0) throw new Error('Authenticated discovery returned no persisted Together or DeepInfra models for the canonical registry')
+  console.log(`CANONICAL_DISCOVERY_ACTIVATED=${activated.map((entry) => `${entry.providerKey}:${entry.totalFetched}`).join(',')}`)
   const appKey = await prepareProofApp(baseUrl, adminToken, appSlug, requested)
   await requestJson(`${baseUrl}/api/admin/model-catalog/seed`, { method: 'POST', token: adminToken, body: {} }).catch((error) => {
     check(false, 'canonical model catalogue seed', safeError(error))
@@ -226,18 +232,25 @@ async function runLive(core) {
 
   const results = []
   let ttsArtifactId = process.env.PROOF_STT_ARTIFACT_ID || ''
+  let imageArtifactId = ''
+  let videoArtifactId = ''
   const ordered = [...requested].sort((left, right) => orderCapability(left) - orderCapability(right))
   for (const capability of ordered) {
     try {
       let result
       if (capability === 'streaming_chat') result = await proveStreaming(baseUrl, appKey, appSlug)
       else {
-        const input = liveInput(capability, ttsArtifactId)
+        const input = liveInput(capability, { ttsArtifactId, imageArtifactId, videoArtifactId })
         result = await submitAndPoll(baseUrl, appKey, appSlug, capability, input)
       }
       validateLiveResult(core, capability, result, appSlug)
       if (options.provider && result.provider !== options.provider) throw new Error(`Orchestra selected ${result.provider}; requested proof provider was ${options.provider}`)
       if (capability === 'tts' && result.artifactId) ttsArtifactId = result.artifactId
+      if (capability === 'image_generation' && result.artifactId) imageArtifactId = result.artifactId
+      if ((capability === 'video_generation' || capability === 'image_to_video') && result.artifactId) videoArtifactId = result.artifactId
+      if (capability === 'image_to_video' && result.executionEvidence?.sourceArtifactId !== imageArtifactId) throw new Error('image_to_video did not preserve same-run image provenance')
+      if (capability === 'video_to_video' && result.executionEvidence?.sourceArtifactId !== videoArtifactId) throw new Error('video_to_video did not preserve same-run video provenance')
+      if (capability === 'stt' && result.executionEvidence?.sourceArtifactId !== ttsArtifactId) throw new Error('stt did not preserve same-run TTS provenance')
       results.push({ capability, ok: true, ...proofSummary(result) })
       check(true, `${capability} live authenticated execution`, `${result.provider}/${result.model}/${result.executionEvidence?.executorId ?? 'unknown-executor'}`)
     } catch (error) {
@@ -371,7 +384,8 @@ function proofSummary(result) {
   }
 }
 
-function liveInput(capability, ttsArtifactId) {
+function liveInput(capability, dependencies) {
+  const { ttsArtifactId, imageArtifactId, videoArtifactId } = dependencies
   const inputs = {
     chat: {}, reasoning: { context: 'Use arithmetic and provide a concise rationale.', effort: 'low' },
     code: { language: 'javascript', task: 'Write a function add(a, b) that returns their sum.' },
@@ -394,10 +408,14 @@ function liveInput(capability, ttsArtifactId) {
     reranking: { query: 'exact provider execution evidence', documents: [{ id: 'a', text: 'A cooking recipe.' }, { id: 'b', text: 'Provider, model, executor, usage and cost evidence.' }], topN: 2 },
     image_generation: { width: 512, height: 512, steps: 4 },
     video_generation: { duration: 4, aspectRatio: '16:9' },
+    image_to_video: imageArtifactId ? { sourceImageArtifactId: imageArtifactId, duration: 4 } : null,
+    video_to_video: videoArtifactId ? { sourceVideoArtifactId: videoArtifactId, duration: 4 } : null,
     music_generation: { instrumentalOnly: true, vocalsRequested: false },
   }
   const input = inputs[capability]
-  if (!input) throw new Error(`No live input fixture for '${capability}'`)
+  if (capability === 'image_to_video' && !imageArtifactId) throw new Error('image_to_video blocked: upstream_dependency_failed:image_generation_artifact_unavailable')
+  if (capability === 'video_to_video' && !videoArtifactId) throw new Error('video_to_video blocked: upstream_dependency_failed:video_artifact_unavailable')
+  if (!input) throw new Error(`No live input contract for '${capability}'`)
   if (capability === 'stt' && !ttsArtifactId) throw new Error('STT requires a proven authorised artifact; run TTS in the same proof or set PROOF_STT_ARTIFACT_ID')
   return input
 }
@@ -412,8 +430,12 @@ function livePrompt(capability) {
 }
 
 function orderCapability(capability) {
-  if (capability === 'tts') return 1
-  if (capability === 'stt') return 2
+  if (capability === 'image_generation') return 1
+  if (capability === 'video_generation') return 2
+  if (capability === 'image_to_video') return 3
+  if (capability === 'video_to_video') return 4
+  if (capability === 'tts') return 5
+  if (capability === 'stt') return 6
   return 0
 }
 

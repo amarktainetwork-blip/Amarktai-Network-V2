@@ -367,9 +367,15 @@ function mapDeepInfraTask(taskInput: string, idInput: string): { category: strin
   if (text.includes('automatic-speech-recognition') || text.includes('speech-to-text') || text.includes('whisper')) return { category: 'audio', role: 'stt', capabilities: { supportsStt: true } }
   if (text.includes('embedding') || text.includes('feature-extraction')) return { category: 'embeddings', role: 'embeddings', capabilities: { supportsEmbeddings: true } }
   if (text.includes('rerank')) return { category: 'reranking', role: 'reranking', capabilities: { supportsReranking: true } }
+  if (task === 'zero-shot-classification') return { category: task, role: 'zero_shot_classification', capabilities: {} }
+  if (task === 'token-classification') return { category: task, role: 'token_classification', capabilities: {} }
+  if (task === 'fill-mask') return { category: task, role: 'fill_mask', capabilities: {} }
+  if (task === 'table-question-answering') return { category: task, role: 'table_qa', capabilities: {} }
   if (text.includes('ocr') || text.includes('vision') || text.includes('multimodal')) return { category: 'multimodal', role: 'ocr', capabilities: { supportsMultimodal: true } }
   if (text.includes('code')) return { category: 'text', role: 'code', capabilities: { supportsCode: true, supportsText: true } }
-  return { category: 'text', role: 'chat', capabilities: { supportsChat: true, supportsText: true } }
+  if (['text-generation', 'text', 'chat'].includes(task)) return { category: 'text', role: 'chat', capabilities: { supportsChat: true, supportsText: true } }
+  if (!task && /(?:instruct|chat|llama|qwen|mistral)/.test(id)) return { category: 'text', role: 'chat', capabilities: { supportsChat: true, supportsText: true } }
+  return { category: 'contract_unknown', role: 'contract_unknown', capabilities: {} }
 }
 
 export async function discoverDeepInfraModels(apiKey: string): Promise<DiscoveryResult> {

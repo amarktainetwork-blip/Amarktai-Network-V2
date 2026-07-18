@@ -11,6 +11,7 @@ import {
   getExecutorRegistrations,
   getReleaseCandidateCapabilityKeys,
   hasExecutorRegistration,
+  normalizeDbModelRecords,
   type CapabilityKey,
   type LongFormComponentRuntimeState,
   type RuntimeTruth,
@@ -240,12 +241,13 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
   let providerStatuses: Awaited<ReturnType<typeof listProviderCredentialStatuses>> = []
   let completedJobs: ProofJob[] = []
   let appGrantRows: Array<{ appSlug: string; capability: string; enabled: boolean }> = []
+  let registryModels: Awaited<ReturnType<typeof prisma.modelRegistryEntry.findMany>> = []
   let evidenceAvailable = true
   let jobPersistenceReady = false
 
   try {
     jobPersistenceReady = typeof prisma.job.create === 'function' && typeof prisma.job.update === 'function'
-    ;[providerStatuses, completedJobs, appGrantRows] = await Promise.all([
+    ;[providerStatuses, completedJobs, appGrantRows, registryModels] = await Promise.all([
       listProviderCredentialStatuses(),
       prisma.job.findMany({
         where: { status: 'completed' },
@@ -269,6 +271,7 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
         where: { capability: { in: getReleaseCandidateCapabilityKeys() } },
         select: { appSlug: true, capability: true, enabled: true },
       }),
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
     ])
   } catch {
     evidenceAvailable = false
@@ -345,6 +348,12 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
     existing[grant.capability as CapabilityKey] = true
     appGrants[grant.appSlug] = existing
   }
-  const truth = getRuntimeTruth({ providers, capabilities, longFormComponents, appGrants })
+  const truth = getRuntimeTruth({
+    providers,
+    capabilities,
+    longFormComponents,
+    appGrants,
+    models: normalizeDbModelRecords(registryModels),
+  })
   return { ...truth, evidenceAvailable: proofResult.evidenceAvailable && evidenceAvailable }
 }

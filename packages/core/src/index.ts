@@ -231,6 +231,7 @@ export {
   evaluateOrchestra,
   checkCandidateEligibility,
   normalizeDbCandidates,
+  normalizeDbModelRecords,
   executorModelMetadataFromDbRecord,
   validateOrchestraRequest,
   ORCHESTRA_BLOCKED_REQUEST_FIELDS,

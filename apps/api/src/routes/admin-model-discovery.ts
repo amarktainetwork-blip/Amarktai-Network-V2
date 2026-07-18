@@ -1,10 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
   DISCOVERED_PROVIDER_MODELS,
-  MODEL_CATALOGUE,
   PROVIDER_KEYS,
   RUNTIME_EXECUTION_PROVIDERS,
   hasExecutorRegistration,
+  isModelRouteCompatible,
+  normalizeDbModelRecords,
   isProviderKey,
   type ModelRecord,
   type ProviderDiscoveredModel,
@@ -13,12 +14,9 @@ import {
 import { runProviderModelDiscovery } from '@amarktai/providers'
 import { getProviderCredentialStatus, resolveProviderApiKey } from '@amarktai/db'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+import { getModelCatalog, upsertCanonicalProviderDiscovery } from '../lib/model-registry.js'
 
 const RUNTIME_EXECUTABLE_PROVIDERS = RUNTIME_EXECUTION_PROVIDERS
-
-function hasRegisteredExecutor(model: Pick<ModelRecord, 'provider' | 'capabilities'>): boolean {
-  return model.capabilities.some((capability) => hasExecutorRegistration(capability, model.provider))
-}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -40,8 +38,8 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
 }
 
 function summarizeModels(models: readonly ModelRecord[]) {
-  const executable = models.filter((model) => hasRegisteredExecutor(model) && model.status === 'available')
-  const catalogueOnly = models.filter((model) => !hasRegisteredExecutor(model) || model.status !== 'available')
+  const executable = models.filter((model) => model.status === 'available' && model.capabilities.some((capability) => isModelRouteCompatible(model, capability)))
+  const catalogueOnly = models.filter((model) => !executable.includes(model))
   const blocked = models.filter((model) => model.status === 'blocked')
   const missingClient = models.filter((model) => model.providerClientExists === false)
   const missingExecutor = models.filter((model) => model.workerExecutorExists === false)
@@ -72,7 +70,8 @@ function summarizeModels(models: readonly ModelRecord[]) {
   }
 }
 
-function discoverySummary(models: ProviderDiscoveredModel[]) {
+function discoverySummary(models: ProviderDiscoveredModel[], canonicalModels: readonly ModelRecord[] = []) {
+  const effectiveModels = canonicalModels.length > 0 ? canonicalModels : models
   const musicModels = models.filter((model) => model.inferredCapabilities.includes('music_generation'))
   const genxMusicModels = musicModels.filter((model) => model.provider === 'genx')
   const providerStatuses = PROVIDER_KEYS.map((provider) => {
@@ -104,11 +103,11 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
   const providersUsingDocsFallback = providerStatuses.filter((status) => status.docsFallbackUsed).map((status) => status.provider)
   return {
     totalDiscovered: models.length,
-    totalLiveDiscoveredModels: models.filter((model) => model.liveDiscovered).length,
+    totalLiveDiscoveredModels: effectiveModels.filter((model) => model.liveDiscovered).length,
     totalDocsFallbackModels: models.filter((model) => model.docsKnown).length,
-    totalEffectiveCatalogueModels: models.length,
-    modelsExecutableNow: 0,
-    modelsKnownButBlocked: models.length,
+    totalEffectiveCatalogueModels: effectiveModels.length,
+    modelsExecutableNow: canonicalModels.filter((model) => model.capabilities.some((capability) => isModelRouteCompatible(model, capability))).length,
+    modelsKnownButBlocked: effectiveModels.length - canonicalModels.filter((model) => model.capabilities.some((capability) => isModelRouteCompatible(model, capability))).length,
     policyRestrictedModels: models.filter((model) => model.policyRestrictedByApp).length,
     transportProfilesPresent: [...new Set(models.map((model) => model.transportProfile).filter(Boolean))],
     providerDiscoveryStatus: providerStatuses,
@@ -171,11 +170,12 @@ async function storedRuntimeCredentials(): Promise<{
 export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/models/discovery/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const truth = await buildAdminRuntimeTruth(app)
+    const [truth, storedModels] = await Promise.all([buildAdminRuntimeTruth(app), getModelCatalog({ enabled: true })])
+    const canonicalModels = normalizeDbModelRecords(storedModels)
     return reply.send({
       success: true,
-      generatedLayer: discoverySummary(DISCOVERED_PROVIDER_MODELS),
-      catalogue: summarizeModels(MODEL_CATALOGUE),
+      generatedLayer: discoverySummary(DISCOVERED_PROVIDER_MODELS, canonicalModels),
+      catalogue: summarizeModels(canonicalModels),
       canonicalTruth: {
         providerPolicy: truth.providerPolicy,
         countsByClassification: truth.countsByClassification,
@@ -197,6 +197,8 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
       genxBaseUrl: credentials.genxBaseUrl,
     })
     const models = results.flatMap((result) => result.models)
+    const persistence = await Promise.all(results.map((result) => upsertCanonicalProviderDiscovery(result)))
+    const canonicalModels = normalizeDbModelRecords(await getModelCatalog({ enabled: true }))
     const strictFailures = strict
       ? results.filter((result) => RUNTIME_EXECUTABLE_PROVIDERS.includes(result.provider as (typeof RUNTIME_EXECUTABLE_PROVIDERS)[number]) && result.liveDiscoverySucceeded !== true)
       : []
@@ -206,7 +208,9 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
         live,
         strict,
         results,
-        summary: discoverySummary(models),
+        summary: discoverySummary(models, canonicalModels),
+        persistence,
+        canonicalRegistry: summarizeModels(canonicalModels),
         message: 'Strict live model discovery requires successful authenticated model-list discovery for GenX, Together, and DeepInfra. MiMo is excluded by coding-agent-only policy.',
       })
     }
@@ -215,7 +219,9 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
       live,
       strict,
       results,
-      summary: discoverySummary(models),
+      summary: discoverySummary(models, canonicalModels),
+      persistence,
+      canonicalRegistry: summarizeModels(canonicalModels),
       note: live
         ? 'Live discovery called provider model-list endpoints only; no generation calls were made.'
         : 'Safe discovery used repo/static truth only; live provider calls were skipped.',
@@ -224,11 +230,12 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
 
   app.get('/api/admin/models/catalogue', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const truth = await buildAdminRuntimeTruth(app)
+    const [truth, storedModels] = await Promise.all([buildAdminRuntimeTruth(app), getModelCatalog({ enabled: true })])
+    const canonicalModels = normalizeDbModelRecords(storedModels)
     return reply.send({
       success: true,
-      summary: summarizeModels(MODEL_CATALOGUE),
-      models: MODEL_CATALOGUE,
+      summary: summarizeModels(canonicalModels),
+      models: canonicalModels,
       canonicalTruth: {
         providers: truth.providers,
         capabilities: truth.capabilities,
@@ -252,10 +259,11 @@ export async function adminModelDiscoveryRoutes(app: FastifyInstance): Promise<v
     if (!isProviderKey(provider)) {
       return reply.status(400).send({ error: true, message: 'Invalid provider key' })
     }
+    const storedModels = normalizeDbModelRecords(await getModelCatalog({ provider, enabled: true }))
     return reply.send({
       success: true,
       provider,
-      models: MODEL_CATALOGUE.filter((model) => model.provider === provider),
+      models: storedModels,
       discoveredModels: DISCOVERED_PROVIDER_MODELS.filter((model) => model.provider === provider),
     })
   })

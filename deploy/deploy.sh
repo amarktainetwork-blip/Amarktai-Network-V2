@@ -25,6 +25,24 @@ export GIT_SHA="$DEPLOY_SHA"
 export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export APP_VERSION ADMIN_EMAIL ADMIN_PASSWORD
 export REPO_DIR DEPLOY_BRANCH BACKUP_DIR DEPLOY_SHA
+
+playwright_preflight() {
+  local version revision executable
+  version="$(node -p "require('playwright/package.json').version" 2>/dev/null)" || {
+    echo "ERROR: Playwright is not installed. Run: npm ci && npx playwright install chromium" >&2
+    return 2
+  }
+  revision="$(node -e "const fs=require('node:fs'),p=require('node:path');const d=p.dirname(require.resolve('playwright-core/package.json'));const b=JSON.parse(fs.readFileSync(p.join(d,'browsers.json'),'utf8')).browsers.find(x=>x.name==='chromium');process.stdout.write(String(b?.revision||''))")"
+  executable="$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
+  [[ -n "$revision" ]] || { echo 'ERROR: required Playwright Chromium revision could not be determined' >&2; return 2; }
+  [[ -x "$executable" ]] || {
+    echo "ERROR: Playwright $version requires Chromium revision $revision, but its executable is absent: $executable" >&2
+    echo 'Install it before deployment with: npx playwright install chromium' >&2
+    return 2
+  }
+  echo "[preflight] Playwright $version Chromium revision $revision: present"
+}
+
 bash "$REPO_DIR/deploy/preflight.sh"
 
 cd "$REPO_DIR"
@@ -37,9 +55,6 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 CURRENT_REPO_SHA="$(git rev-parse HEAD)"
-export GIT_SHA="$DEPLOY_SHA"
-export BUILD_TIME="preflight"
-export APP_VERSION ADMIN_EMAIL ADMIN_PASSWORD
 
 echo "[preflight] repository SHA: $CURRENT_REPO_SHA"
 echo "[preflight] requested branch: origin/$DEPLOY_BRANCH"
@@ -52,6 +67,9 @@ REMOTE_SHA="$(git rev-parse "origin/$DEPLOY_BRANCH")"
   exit 2
 }
 git cat-file -e "$DEPLOY_SHA^{commit}"
+
+# Browser availability is checked before any database/artifact backup or build.
+playwright_preflight
 
 # Confirm host and current infrastructure before changing code or schema.
 AVAILABLE_KB="$(df -Pk "$REPO_DIR" | awk 'NR==2 {print $4}')"
@@ -92,6 +110,18 @@ docker tag "$WORKER_IMAGE_ID" "amarktai/worker:$ROLLBACK_SHA"
 docker tag "$DASHBOARD_IMAGE_ID" "amarktai/dashboard:$ROLLBACK_SHA"
 
 DEPLOY_STARTED=false
+API_PAUSED_FOR_BACKUP=false
+WORKER_PAUSED_FOR_BACKUP=false
+resume_paused_application() {
+  if [[ "${WORKER_PAUSED_FOR_BACKUP:-false}" == true ]]; then
+    docker unpause "$(docker compose ps -q worker)" >/dev/null 2>&1 || true
+    WORKER_PAUSED_FOR_BACKUP=false
+  fi
+  if [[ "${API_PAUSED_FOR_BACKUP:-false}" == true ]]; then
+    docker unpause "$(docker compose ps -q api)" >/dev/null 2>&1 || true
+    API_PAUSED_FOR_BACKUP=false
+  fi
+}
 rollback_application() {
   echo "[rollback] restoring immutable application images for $ROLLBACK_SHA" >&2
   export GIT_SHA="$ROLLBACK_SHA"
@@ -101,6 +131,7 @@ rollback_application() {
 }
 on_error() {
   code=$?
+  resume_paused_application
   echo "ERROR: deployment failed with exit code $code" >&2
   if [[ "${DEPLOY_STARTED:-false}" == true ]]; then
     rollback_application
@@ -109,6 +140,7 @@ on_error() {
   exit "$code"
 }
 trap on_error ERR
+trap resume_paused_application EXIT
 
 confirm_mount() {
   local service="$1"
@@ -156,11 +188,36 @@ docker compose exec -T mariadb sh -c 'mariadb-dump -uroot -p"$MYSQL_ROOT_PASSWOR
 echo "[preflight] MariaDB backup: $BACKUP_FILE"
 
 ARTIFACT_BACKUP_FILE="$BACKUP_DIR/artifacts-${ROLLBACK_SHA}-$(date -u +%Y%m%dT%H%M%SZ).tar"
-docker compose exec -T api tar -C /var/www/amarktai/storage -cf - . > "$ARTIFACT_BACKUP_FILE"
-[[ -s "$ARTIFACT_BACKUP_FILE" ]] || {
-  echo "ERROR: persistent artifact-volume backup is empty" >&2
+ARTIFACT_BACKUP_INCOMPLETE="${ARTIFACT_BACKUP_FILE}.incomplete"
+API_CONTAINER="$(docker compose ps -q api)"
+WORKER_CONTAINER="$(docker compose ps -q worker)"
+ARTIFACT_VOLUME_NAME="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/www/amarktai/storage"}}{{.Name}}{{end}}{{end}}' "$API_CONTAINER")"
+[[ -n "$ARTIFACT_VOLUME_NAME" ]] || { echo 'ERROR: named artifact volume could not be resolved' >&2; exit 2; }
+rm -f -- "$ARTIFACT_BACKUP_INCOMPLETE"
+docker pause "$API_CONTAINER" >/dev/null
+API_PAUSED_FOR_BACKUP=true
+docker pause "$WORKER_CONTAINER" >/dev/null
+WORKER_PAUSED_FOR_BACKUP=true
+set +e
+docker run --rm --entrypoint tar \
+  --mount "type=volume,src=$ARTIFACT_VOLUME_NAME,dst=/source,readonly" \
+  --mount "type=bind,src=$BACKUP_DIR,dst=/backup" \
+  "$API_IMAGE_ID" -C /source -cf "/backup/$(basename "$ARTIFACT_BACKUP_INCOMPLETE")" .
+ARTIFACT_BACKUP_STATUS=$?
+if [[ "$ARTIFACT_BACKUP_STATUS" -eq 0 && -s "$ARTIFACT_BACKUP_INCOMPLETE" ]]; then
+  tar -tf "$ARTIFACT_BACKUP_INCOMPLETE" >/dev/null
+  ARTIFACT_BACKUP_STATUS=$?
+else
+  ARTIFACT_BACKUP_STATUS=1
+fi
+set -e
+resume_paused_application
+if [[ "$ARTIFACT_BACKUP_STATUS" -ne 0 ]]; then
+  rm -f -- "$ARTIFACT_BACKUP_INCOMPLETE"
+  echo 'ERROR: persistent artifact-volume snapshot failed validation; incomplete archive deleted' >&2
   exit 2
-}
+fi
+mv -- "$ARTIFACT_BACKUP_INCOMPLETE" "$ARTIFACT_BACKUP_FILE"
 echo "[preflight] Artifact-volume backup: $ARTIFACT_BACKUP_FILE"
 
 # The worktree is clean and the remote branch head was pinned above. A detached
