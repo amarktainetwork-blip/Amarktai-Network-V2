@@ -38,6 +38,19 @@ describe('final platform recovery contract', () => {
     expect(resolveStructuredOutputContract([])).toMatchObject({ selectedMode: 'none', validationMode: 'prompt_json_local_schema' })
   })
 
+  it('keeps the additive migration native types and Prisma defaults drift-free', () => {
+    const schema = source('prisma/schema.prisma')
+    const migration = source('prisma/migrations/20260718_complete_platform_recovery/migration.sql')
+    expect(schema).toContain('structuredOutputModes String @default("[]") @map("structured_output_modes") @db.LongText')
+    for (const clause of [
+      "`structured_output_modes` LONGTEXT NOT NULL DEFAULT '[]'",
+      "`business_context` LONGTEXT NOT NULL DEFAULT '{}'",
+      "`preferred_pool` LONGTEXT NOT NULL DEFAULT '[]'",
+      "`compatible_models` LONGTEXT NOT NULL DEFAULT '[]'",
+      "`description` TEXT NOT NULL DEFAULT ''",
+    ]) expect(migration).toContain(clause)
+  })
+
   it('contains a complete deterministic avatar app onboarding fixture', () => {
     const avatar = fixture('scripts/fixtures/avatar-app-onboarding.json')
     for (const key of ['chat', 'streaming_chat', 'image_generation', 'image_edit', 'tts', 'voice_clone', 'stt', 'avatar_generation', 'lip_sync', 'video_generation', 'image_to_video', 'long_form_video', 'music_generation']) {

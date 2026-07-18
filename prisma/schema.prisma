@@ -483,8 +483,8 @@ model ModelRegistryEntry {
   accountAccess        String @default("unknown") @map("account_access")
   endpointFamily       String @default("") @map("endpoint_family")
   transportProfile     String @default("") @map("transport_profile")
-  structuredOutputModes String @default("[]") @map("structured_output_modes")
-  supportedParameters  String @default("[]") @map("supported_parameters")
+  structuredOutputModes String @default("[]") @map("structured_output_modes") @db.LongText
+  supportedParameters  String @default("[]") @map("supported_parameters") @db.LongText
   compatibilityVersion String @default("") @map("compatibility_version")
   deprecated           Boolean @default(false)
   replacementModel     String @default("") @map("replacement_model")
