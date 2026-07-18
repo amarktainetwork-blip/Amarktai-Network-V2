@@ -92,7 +92,7 @@ describe('canonical direct-provider contracts and registrations', () => {
 
   it('normalizes usage without inventing provider cost', () => {
     expect(createCanonicalProviderUsage({
-      provider: 'groq', model: 'llama-3.3-70b-versatile', inputTokens: 3, outputTokens: 4,
+      provider: 'deepinfra', model: 'llama-3.3-70b-versatile', inputTokens: 3, outputTokens: 4,
     })).toMatchObject({
       inputTokens: 3,
       outputTokens: 4,
@@ -124,7 +124,7 @@ describe('shared provider transports', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await openAiChatCompletion({
-      provider: 'groq', baseUrl: 'https://provider.example/v1/', apiKey: 'test-key',
+      provider: 'deepinfra', baseUrl: 'https://provider.example/v1/', apiKey: 'test-key',
       model: 'exact-model', messages: [{ role: 'user', content: 'calculate' }], maxOutputTokens: 99,
     })
     expect(result.toolCalls[0]?.function.name).toBe('calculator')
@@ -146,7 +146,7 @@ describe('shared provider transports', () => {
 
     const chunks = []
     for await (const chunk of openAiStreamingChat({
-      provider: 'groq', baseUrl: 'https://provider.example/v1', apiKey: 'test-key',
+      provider: 'deepinfra', baseUrl: 'https://provider.example/v1', apiKey: 'test-key',
       model: 'exact-model', messages: [{ role: 'user', content: 'hello' }],
     })) chunks.push(chunk)
 
@@ -196,12 +196,12 @@ describe('shared provider transports', () => {
   })
 
   it('classifies HTTP failures canonically and redacts credentials', () => {
-    process.env.GROQ_API_KEY = 'super-secret-provider-key'
-    const error = providerHttpError({ provider: 'groq', status: 401, body: 'Bearer super-secret-provider-key' })
+    process.env.deepinfra_API_KEY = 'super-secret-provider-key'
+    const error = providerHttpError({ provider: 'deepinfra', status: 401, body: 'Bearer super-secret-provider-key' })
     expect(error).toBeInstanceOf(CanonicalProviderError)
     expect(error).toMatchObject({ code: 'authentication', retryable: false, status: 401 })
     expect(error.message).not.toContain('super-secret-provider-key')
-    delete process.env.GROQ_API_KEY
+    delete process.env.deepinfra_API_KEY
   })
 })
 

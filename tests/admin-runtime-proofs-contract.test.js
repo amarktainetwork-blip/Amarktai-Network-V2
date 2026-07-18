@@ -6,20 +6,20 @@ vi.mock('../apps/api/src/lib/admin-runtime-truth.js', () => ({
   buildAdminRuntimeTruth: vi.fn().mockResolvedValue({
     generatedAt: new Date().toISOString(),
     providerPolicy: {
-      runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'],
+      runtimeExecutionProviders: ['genx', 'together', 'deepinfra'],
       codingOnlyProviders: ['mimo'],
       qwenRuntimeEligible: false,
     },
     providers: [],
     capabilities: [
-      { capability: 'chat', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'reasoning', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'code', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'summarization', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'translation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'classification', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'extraction', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
-      { capability: 'structured_output', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'chat', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'reasoning', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'code', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'summarization', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'translation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'classification', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'extraction', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'structured_output', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
       { capability: 'image_generation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', liveProven: true }] },
       { capability: 'video_generation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'genx', modelId: 'grok-imagine-video', liveProven: true }] },
       { capability: 'music_generation', liveProven: false, executableNow: false, classification: 'PARTIAL', eligibleModels: [] },
@@ -119,10 +119,10 @@ describe('Admin runtime proof status route', () => {
   it('projects proven capabilities from canonical truth', () => {
     const payload = projectProofStatusFromTruth({
       generatedAt: new Date().toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [
-        { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+        { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
         { capability: 'image_generation', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', liveProven: true }] },
       ],
       releaseReadiness: [
@@ -140,7 +140,7 @@ describe('Admin runtime proof status route', () => {
     const chat = byCapability(payload.provenCapabilities, 'chat')
     expect(chat).toMatchObject({
       status: 'proven',
-      provider: 'groq',
+      provider: 'deepinfra',
       artifactRequired: false,
       proofLevel: 'live_external_app_job',
       readyForDashboardExecution: true,
@@ -157,7 +157,7 @@ describe('Admin runtime proof status route', () => {
     })
   })
 
-  it('keeps Mimo and DeepInfra approved but not proven', async () => {
+  it('keeps Mimo approved but not proven', async () => {
     const app = await makeApp()
     const res = await app.inject({
       method: 'GET',
@@ -170,7 +170,6 @@ describe('Admin runtime proof status route', () => {
     expect(body.providers).toContain('mimo')
     expect(body.providers).toContain('deepinfra')
     expect(serializedProven).not.toContain('"mimo"')
-    expect(serializedProven).not.toContain('"deepinfra"')
   })
 
   it('does not include disallowed providers or secret-like fields', async () => {
@@ -213,7 +212,7 @@ describe('Admin runtime proof status route', () => {
   it('distinguishes zero evidence from evidence unavailable', () => {
     const zeroEvidence = projectProofStatusFromTruth({
       generatedAt: new Date().toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
       releaseReadiness: [],
@@ -226,7 +225,7 @@ describe('Admin runtime proof status route', () => {
 
     const unavailableEvidence = projectProofStatusFromTruth({
       generatedAt: new Date().toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
       releaseReadiness: [],

@@ -221,10 +221,10 @@ describe('dashboard creation workspace redesign', () => {
   })
 
   describe('provider list', () => {
-    it('provider list remains exactly genx, groq, together, mimo, deepinfra', () => {
+    it('provider list remains exactly genx, deepinfra, together, mimo, deepinfra', () => {
       const { PROVIDER_CONTRACTS } = require('../lib/dashboard-contract.js')
       const ids = PROVIDER_CONTRACTS.map((p) => p.id)
-      expect(ids).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect(ids).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
 
     it('MiMo remains coding_tools_only', () => {

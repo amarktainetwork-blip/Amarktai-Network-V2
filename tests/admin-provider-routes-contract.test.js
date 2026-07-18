@@ -28,7 +28,6 @@ const dbMocks = vi.hoisted(() => {
 
 const providerMocks = vi.hoisted(() => ({
   DEFAULT_GENX_VIDEO_MODEL: 'seedance-v1-fast',
-  groqChat: vi.fn(),
   deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
 }))
@@ -40,8 +39,8 @@ const { adminProviderRoutes } = await import('../apps/api/src/routes/admin-provi
 
 function makeStatus(overrides = {}) {
   return {
-    providerKey: 'groq',
-    displayName: 'Groq',
+    providerKey: 'deepinfra',
+    displayName: 'deepinfra',
     enabled: true,
     configured: true,
     source: 'database',
@@ -74,7 +73,7 @@ describe('Admin provider credential routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     dbMocks.resolveProviderApiKey.mockResolvedValue({
-      providerKey: 'groq',
+      providerKey: 'deepinfra',
       apiKey: 'gsk_live_secret_abcd',
       source: 'database',
     })
@@ -85,7 +84,7 @@ describe('Admin provider credential routes', () => {
       healthMessage: input.healthMessage,
       lastCheckedAt: input.lastCheckedAt ?? new Date('2026-07-07T00:00:00Z'),
     }))
-    providerMocks.groqChat.mockResolvedValue({
+    providerMocks.deepinfraChat.mockResolvedValue({
       content: 'AMARKTAI_PROVIDER_TEST_OK',
       model: 'llama-3.3-70b-versatile',
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
@@ -144,7 +143,7 @@ describe('Admin provider credential routes', () => {
     expect(res.statusCode).toBe(200)
     const body = JSON.parse(res.body)
     const serialized = JSON.stringify(body)
-    expect(body.providers.find((provider) => provider.providerKey === 'groq')?.maskedPreview).toBe('gsk_********abcd')
+    expect(body.providers.find((provider) => provider.providerKey === 'deepinfra')?.maskedPreview).toBe('gsk_********abcd')
     expect(serialized).not.toContain('gsk_live_secret_abcd')
     expect(serialized).not.toContain('v1:')
     expect(serialized).not.toContain('apiKey')
@@ -156,7 +155,7 @@ describe('Admin provider credential routes', () => {
 
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/admin/providers/groq',
+      url: '/api/admin/providers/deepinfra',
       headers: { authorization: 'Bearer admin-token' },
       payload: {
         apiKey: 'gsk_live_secret_abcd',
@@ -166,7 +165,7 @@ describe('Admin provider credential routes', () => {
 
     expect(res.statusCode).toBe(200)
     expect(dbMocks.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
-      providerKey: 'groq',
+      providerKey: 'deepinfra',
       apiKey: 'gsk_live_secret_abcd',
       enabled: true,
     }))
@@ -205,19 +204,19 @@ describe('Admin provider credential routes', () => {
 
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/admin/providers/groq/key',
+      url: '/api/admin/providers/deepinfra/key',
       headers: { authorization: 'Bearer admin-token' },
     })
 
     expect(res.statusCode).toBe(200)
-    expect(dbMocks.clearProviderCredential).toHaveBeenCalledWith('groq')
+    expect(dbMocks.clearProviderCredential).toHaveBeenCalledWith('deepinfra')
     expect(res.body).not.toContain('apiKey')
     expect(res.body).not.toContain('v1:')
   })
 
   it('rejects unauthenticated provider test requests', async () => {
     const app = await makeApp()
-    const res = await app.inject({ method: 'POST', url: '/api/admin/providers/groq/test' })
+    const res = await app.inject({ method: 'POST', url: '/api/admin/providers/deepinfra/test' })
 
     expect(res.statusCode).toBe(401)
     expect(dbMocks.resolveProviderApiKey).not.toHaveBeenCalled()
@@ -232,25 +231,25 @@ describe('Admin provider credential routes', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.deepinfraChat).not.toHaveBeenCalled()
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 
-  it('successful Groq test marks provider live without returning raw keys', async () => {
+  it('successful DeepInfra test marks provider live without returning raw keys', async () => {
     const app = await makeApp()
     const res = await app.inject({
       method: 'POST',
-      url: '/api/admin/providers/groq/test',
+      url: '/api/admin/providers/deepinfra/test',
       headers: { authorization: 'Bearer admin-token' },
     })
 
     expect(res.statusCode).toBe(200)
-    expect(providerMocks.groqChat).toHaveBeenCalledWith(expect.objectContaining({
+    expect(providerMocks.deepinfraChat).toHaveBeenCalledWith(expect.objectContaining({
       apiKey: 'gsk_live_secret_abcd',
       maxTokens: 16,
     }))
     expect(dbMocks.updateProviderHealthStatus).toHaveBeenCalledWith(expect.objectContaining({
-      providerKey: 'groq',
+      providerKey: 'deepinfra',
       healthStatus: 'live',
     }))
     expect(res.body).not.toContain('gsk_live_secret_abcd')
@@ -291,14 +290,14 @@ describe('Admin provider credential routes', () => {
 
   it('test failure marks provider failed and stores safe message', async () => {
     process.env.JWT_SECRET = 'jwt-secret-value'
-    providerMocks.groqChat.mockRejectedValueOnce(
-      new Error('Groq chat error 401: gsk_live_secret_abcd jwt-secret-value v1:ciphertext'),
+    providerMocks.deepinfraChat.mockRejectedValueOnce(
+      new Error('DeepInfra chat error 401: gsk_live_secret_abcd jwt-secret-value v1:ciphertext'),
     )
     const app = await makeApp()
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/admin/providers/groq/test',
+      url: '/api/admin/providers/deepinfra/test',
       headers: { authorization: 'Bearer admin-token' },
     })
 

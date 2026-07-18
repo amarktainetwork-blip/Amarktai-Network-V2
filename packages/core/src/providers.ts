@@ -25,16 +25,6 @@ export const APPROVED_PROVIDER_DEFINITIONS = [
     codingOnly: false,
   },
   {
-    key: 'groq',
-    displayName: 'Groq',
-    runtimeRole: 'language_runtime',
-    credentialEnvKey: 'GROQ_API_KEY',
-    discoveryPolicy: 'live_with_docs_fallback',
-    defaultBaseUrl: 'https://api.groq.com/openai/v1',
-    backendExecutionAllowed: false,
-    codingOnly: false,
-  },
-  {
     key: 'together',
     displayName: 'Together',
     runtimeRole: 'media_runtime',
@@ -77,6 +67,13 @@ export type RuntimeExecutionProvider = (typeof RUNTIME_EXECUTION_PROVIDERS)[numb
 export const CODING_ONLY_PROVIDERS = APPROVED_PROVIDER_DEFINITIONS
   .filter((provider) => provider.codingOnly)
   .map((provider) => provider.key) as ProviderKey[]
+
+/**
+ * Providers removed from active runtime. Historical database rows may exist
+ * but must not be visible, selectable, routable, or counted.
+ */
+export const REMOVED_PROVIDERS = ['groq'] as const
+export type RemovedProvider = (typeof REMOVED_PROVIDERS)[number]
 
 export const PROVIDER_ENV_VARS = Object.fromEntries(
   APPROVED_PROVIDER_DEFINITIONS.map((provider) => [provider.key, provider.credentialEnvKey]),

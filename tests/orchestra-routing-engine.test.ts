@@ -12,11 +12,11 @@ import {
 
 function makeCandidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCandidate {
   return {
-    provider: 'groq' as ProviderKey,
+    provider: 'deepinfra' as ProviderKey,
     model: 'llama-3.3-70b-versatile',
-    displayName: 'Groq Llama 3.3 70B',
+    displayName: 'deepinfra Llama 3.3 70B',
     capability: 'chat' as CapabilityKey,
-    executorId: 'groq.chat',
+    executorId: 'deepinfra.chat',
     providerConfigured: true,
     providerEnabled: true,
     providerHealth: 'live',
@@ -133,7 +133,7 @@ describe('Orchestra routing engine', () => {
   describe('scoring', () => {
     it('produces deterministic decisions for identical input', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'llama-3.3-70b' }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'llama-3.3-70b' }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'mixtral-8x7b' }),
       ]
       const request = makeRequest()
@@ -157,8 +157,8 @@ describe('Orchestra routing engine', () => {
 
     it('uses stable tie-breaking for equal scores', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'b-model', estimatedCost: 0.002 }),
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'a-model', estimatedCost: 0.001 }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'b-model', estimatedCost: 0.002 }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'a-model', estimatedCost: 0.001 }),
       ]
       const decision = evaluateOrchestra(makeRequest(), candidates)
 
@@ -166,8 +166,8 @@ describe('Orchestra routing engine', () => {
     })
 
     it('live-proven improves confidence', () => {
-      const liveProven = makeCandidate({ provider: 'groq' as ProviderKey, model: 'proven-model', liveProven: true })
-      const notProven = makeCandidate({ provider: 'groq' as ProviderKey, model: 'unproven-model', liveProven: false })
+      const liveProven = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'proven-model', liveProven: true })
+      const notProven = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'unproven-model', liveProven: false })
 
       const decision = evaluateOrchestra(makeRequest(), [notProven, liveProven])
       expect(decision.selectedModel).toBe('proven-model')
@@ -176,24 +176,24 @@ describe('Orchestra routing engine', () => {
 
   describe('routing modes', () => {
     it('quality mode prefers higher quality candidates', () => {
-      const premium = makeCandidate({ provider: 'groq' as ProviderKey, model: 'premium-model', qualityTier: 'premium', costTier: 'premium' })
-      const budget = makeCandidate({ provider: 'groq' as ProviderKey, model: 'budget-model', qualityTier: 'budget', costTier: 'very_low' })
+      const premium = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'premium-model', qualityTier: 'premium', costTier: 'premium' })
+      const budget = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'budget-model', qualityTier: 'budget', costTier: 'very_low' })
 
       const decision = evaluateOrchestra(makeRequest({ routingMode: 'quality' }), [budget, premium])
       expect(decision.selectedModel).toBe('premium-model')
     })
 
     it('economy mode prefers lower cost candidates', () => {
-      const expensive = makeCandidate({ provider: 'groq' as ProviderKey, model: 'expensive-model', costTier: 'premium', estimatedCost: 0.01 })
-      const cheap = makeCandidate({ provider: 'groq' as ProviderKey, model: 'cheap-model', costTier: 'very_low', estimatedCost: 0.0001 })
+      const expensive = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'expensive-model', costTier: 'premium', estimatedCost: 0.01 })
+      const cheap = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'cheap-model', costTier: 'very_low', estimatedCost: 0.0001 })
 
       const decision = evaluateOrchestra(makeRequest({ routingMode: 'economy' }), [expensive, cheap])
       expect(decision.selectedModel).toBe('cheap-model')
     })
 
     it('fast mode prefers lower latency candidates', () => {
-      const slow = makeCandidate({ provider: 'groq' as ProviderKey, model: 'slow-model', latencyTier: 'high' })
-      const fast = makeCandidate({ provider: 'groq' as ProviderKey, model: 'fast-model', latencyTier: 'ultra_low' })
+      const slow = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'slow-model', latencyTier: 'high' })
+      const fast = makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'fast-model', latencyTier: 'ultra_low' })
 
       const decision = evaluateOrchestra(makeRequest({ routingMode: 'fast' }), [slow, fast])
       expect(decision.selectedModel).toBe('fast-model')
@@ -203,9 +203,9 @@ describe('Orchestra routing engine', () => {
   describe('fallbacks', () => {
     it('generates fallback routes from eligible candidates', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'primary' }),
-        makeCandidate({ provider: 'together' as ProviderKey, model: 'fallback-1' }),
-        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'fallback-2' }),
+        makeCandidate({ provider: 'genx' as ProviderKey, model: 'primary' }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'fallback-1' }),
+        makeCandidate({ provider: 'together' as ProviderKey, model: 'fallback-2' }),
       ]
       const decision = evaluateOrchestra(makeRequest(), candidates)
 
@@ -216,9 +216,9 @@ describe('Orchestra routing engine', () => {
 
     it('each fallback has its own provider and model', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'primary' }),
-        makeCandidate({ provider: 'together' as ProviderKey, model: 'together-fb' }),
+        makeCandidate({ provider: 'genx' as ProviderKey, model: 'primary' }),
         makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'deepinfra-fb' }),
+        makeCandidate({ provider: 'together' as ProviderKey, model: 'together-fb' }),
       ]
       const decision = evaluateOrchestra(makeRequest(), candidates)
 
@@ -231,7 +231,7 @@ describe('Orchestra routing engine', () => {
 
     it('fallback never inherits incompatible primary model', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'groq-only-model' }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'deepinfra-only-model' }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'together-model' }),
       ]
       const decision = evaluateOrchestra(makeRequest(), candidates)
@@ -258,13 +258,13 @@ describe('Orchestra routing engine', () => {
 
     it('rejects candidates with blockers', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'blocked', providerEnabled: false }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'blocked', providerEnabled: false }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'eligible' }),
       ]
       const decision = evaluateOrchestra(makeRequest(), candidates)
 
       expect(decision.blockersRejected.length).toBeGreaterThan(0)
-      expect(decision.blockersRejected[0].provider).toBe('groq')
+      expect(decision.blockersRejected[0].provider).toBe('deepinfra')
     })
   })
 
@@ -293,7 +293,7 @@ describe('Orchestra routing engine', () => {
     })
 
     it('rejects provider field', () => {
-      const input = { capability: 'chat', provider: 'groq' }
+      const input = { capability: 'chat', provider: 'deepinfra' }
       expect(validateOrchestraRequest(input)).toBe('provider')
     })
 
@@ -303,7 +303,7 @@ describe('Orchestra routing engine', () => {
     })
 
     it('rejects providerId field', () => {
-      const input = { capability: 'chat', providerId: 'groq' }
+      const input = { capability: 'chat', providerId: 'deepinfra' }
       expect(validateOrchestraRequest(input)).toBe('providerId')
     })
 
@@ -313,12 +313,12 @@ describe('Orchestra routing engine', () => {
     })
 
     it('rejects adapter field', () => {
-      const input = { capability: 'chat', adapter: 'groq-adapter' }
+      const input = { capability: 'chat', adapter: 'deepinfra-adapter' }
       expect(validateOrchestraRequest(input)).toBe('adapter')
     })
 
     it('rejects endpoint field', () => {
-      const input = { capability: 'chat', endpoint: 'https://api.groq.com' }
+      const input = { capability: 'chat', endpoint: 'https://api.deepinfra.com' }
       expect(validateOrchestraRequest(input)).toBe('endpoint')
     })
 
@@ -333,7 +333,7 @@ describe('Orchestra routing engine', () => {
     })
 
     it('rejects forceProvider field', () => {
-      const input = { capability: 'chat', forceProvider: 'groq' }
+      const input = { capability: 'chat', forceProvider: 'deepinfra' }
       expect(validateOrchestraRequest(input)).toBe('forceProvider')
     })
 

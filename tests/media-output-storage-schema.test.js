@@ -131,15 +131,15 @@ describe('media output storage schema', () => {
     })
   })
 
-  it('Groq chat path still stores small text output', async () => {
+  it('deepinfra chat path still stores small text output', async () => {
     prismaMock.job.findUnique.mockResolvedValueOnce(makeDbJob({ capability: 'chat' }))
     const processor = createJobProcessor({
       executeCapability: vi.fn(async () => ({
         success: true,
         status: 'completed',
-        provider: 'groq',
+        provider: 'deepinfra',
         model: 'llama-3.3-70b-versatile',
-        output: 'Groq Brain runtime proof passed.',
+        output: 'deepinfra Brain runtime proof passed.',
       })),
     })
 
@@ -149,9 +149,9 @@ describe('media output storage schema', () => {
       (call) => call[0].data.status === 'completed',
     )
 
-    expect(completedUpdate[0].data.provider).toBe('groq')
+    expect(completedUpdate[0].data.provider).toBe('deepinfra')
     expect(completedUpdate[0].data.model).toBe('llama-3.3-70b-versatile')
-    expect(completedUpdate[0].data.output).toBe('Groq Brain runtime proof passed.')
+    expect(completedUpdate[0].data.output).toBe('deepinfra Brain runtime proof passed.')
     expect(completedUpdate[0].data.artifactId).toBeUndefined()
   })
 })

@@ -55,27 +55,6 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
       return { provider }
     }
 
-    if (providerKey === 'groq') {
-      const { groqChat } = await import('@amarktai/providers')
-      const result = await groqChat({
-        apiKey,
-        prompt: 'Reply with exactly: AMARKTAI_PROVIDER_TEST_OK',
-        maxTokens: 16,
-        temperature: 0,
-      })
-
-      if (!result.content?.trim()) {
-        throw new Error('Groq returned an empty provider test response')
-      }
-
-      const provider = await updateProviderHealthStatus({
-        providerKey,
-        healthStatus: 'live',
-        healthMessage: `Live test passed through Groq chat (${result.model}).`,
-      })
-      return { provider }
-    }
-
     if (providerKey === 'together') {
       const providerStatus = await getProviderCredentialStatus('together')
       if (!providerStatus.defaultModel?.trim() && !process.env.TOGETHER_IMAGE_MODEL?.trim()) {

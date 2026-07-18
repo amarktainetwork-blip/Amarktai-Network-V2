@@ -185,9 +185,9 @@ describe('app platform contract', () => {
 
   // ── Provider Safety ─────────────────────────────────────────────────────
 
-  it('provider list remains exactly 5', async () => {
+  it('provider list remains Exactly 4', async () => {
     const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
-    expect(PROVIDER_KEYS).toHaveLength(5)
+    expect(PROVIDER_KEYS).toHaveLength(4)
   })
 
   it('MiMo remains coding_tools_only', async () => {

@@ -351,11 +351,11 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
   })
 
   describe('No providers added', () => {
-    it('PROVIDER_KEYS remains exactly 5', async () => {
+    it('PROVIDER_KEYS remains Exactly 4', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
       
-      expect(PROVIDER_KEYS).toHaveLength(5)
-      expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect(PROVIDER_KEYS).toHaveLength(4)
+      expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
 
     it('no banned providers in PROVIDER_KEYS', async () => {

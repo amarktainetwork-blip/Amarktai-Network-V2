@@ -197,9 +197,9 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
   })
 
   describe('Proof script does not require provider keys', () => {
-    it('does not read GROQ_API_KEY', () => {
+    it('does not read deepinfra_API_KEY', () => {
       const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
-      expect(content).not.toContain('GROQ_API_KEY')
+      expect(content).not.toContain('deepinfra_API_KEY')
     })
 
     it('does not read TOGETHER_API_KEY', () => {
@@ -215,7 +215,7 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
     it('does not make direct provider API calls', () => {
       const content = fs.readFileSync(path.join(ROOT, 'scripts/proof-long-form-runtime.mjs'), 'utf-8')
       expect(content).not.toContain('https://api.together.xyz')
-      expect(content).not.toContain('https://api.groq.com')
+      expect(content).not.toContain('https://api.deepinfra.com')
       expect(content).not.toContain('https://query.genx.sh')
       expect(content).not.toContain('https://api.deepinfra.com')
     })
@@ -257,7 +257,7 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
 
     it('assembly module does not require provider keys', () => {
       const content = fs.readFileSync(path.join(ROOT, 'apps/api/src/lib/long-form-assembly.ts'), 'utf-8')
-      expect(content).not.toContain('process.env.GROQ_API_KEY')
+      expect(content).not.toContain('process.env.deepinfra_API_KEY')
       expect(content).not.toContain('process.env.TOGETHER_API_KEY')
       expect(content).not.toContain('process.env.GENX_API_KEY')
     })
@@ -321,10 +321,10 @@ describe('Long-Form Runtime FFmpeg Proof', () => {
   })
 
   describe('No providers added', () => {
-    it('PROVIDER_KEYS remains exactly 5', async () => {
+    it('PROVIDER_KEYS remains Exactly 4', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
-      expect(PROVIDER_KEYS).toHaveLength(5)
-      expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect(PROVIDER_KEYS).toHaveLength(4)
+      expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
   })
 })

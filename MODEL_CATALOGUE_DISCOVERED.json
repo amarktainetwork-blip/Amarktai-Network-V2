@@ -4209,460 +4209,6 @@
     "lastDiscoverySkipReason": "safe_static_mode"
   },
   {
-    "provider": "groq",
-    "modelId": "llama-3.3-70b-versatile",
-    "displayName": "Llama 3.3 70B Versatile",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
-    "modalitiesIn": [
-      "text"
-    ],
-    "modalitiesOut": [
-      "text"
-    ],
-    "modalities": [
-      "text"
-    ],
-    "inferredCapabilities": [
-      "chat",
-      "reasoning",
-      "summarization",
-      "classification",
-      "extraction"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_chat_sse",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": true,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "https://api.groq.com/openai/v1/models",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": true,
-    "responseShapeKnown": true,
-    "providerClientExists": true,
-    "workerExecutorExists": true,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "execution_readiness_not_derived_from_discovery",
-    "blockedReason": "execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "llama-3.1-8b-instant",
-    "displayName": "Llama 3.1 8B Instant",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
-    "modalitiesIn": [
-      "text"
-    ],
-    "modalitiesOut": [
-      "text"
-    ],
-    "modalities": [
-      "text"
-    ],
-    "inferredCapabilities": [
-      "chat",
-      "reasoning",
-      "summarization",
-      "classification",
-      "extraction"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_chat_sse",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": true,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "https://api.groq.com/openai/v1/models",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": true,
-    "responseShapeKnown": true,
-    "providerClientExists": true,
-    "workerExecutorExists": true,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "execution_readiness_not_derived_from_discovery",
-    "blockedReason": "execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "openai/gpt-oss-120b",
-    "displayName": "GPT OSS 120B",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
-    "modalitiesIn": [
-      "text"
-    ],
-    "modalitiesOut": [
-      "text"
-    ],
-    "modalities": [
-      "text"
-    ],
-    "inferredCapabilities": [
-      "chat",
-      "reasoning",
-      "code"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_chat_sse",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": true,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "https://api.groq.com/openai/v1/models",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": false,
-    "workerExecutorExists": false,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "provider_client_missing",
-      "worker_executor_missing",
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "openai/gpt-oss-20b",
-    "displayName": "GPT OSS 20B",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
-    "modalitiesIn": [
-      "text"
-    ],
-    "modalitiesOut": [
-      "text"
-    ],
-    "modalities": [
-      "text"
-    ],
-    "inferredCapabilities": [
-      "chat",
-      "reasoning"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_chat_sse",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": true,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "https://api.groq.com/openai/v1/models",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": false,
-    "workerExecutorExists": false,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "provider_client_missing",
-      "worker_executor_missing",
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "meta-llama/llama-4-scout-17b-16e-instruct",
-    "displayName": "Llama 4 Scout",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "text",
-    "providerCategory": "text",
-    "rawProviderType": "text",
-    "modalitiesIn": [
-      "text",
-      "multimodal"
-    ],
-    "modalitiesOut": [
-      "text",
-      "multimodal"
-    ],
-    "modalities": [
-      "text",
-      "multimodal"
-    ],
-    "inferredCapabilities": [
-      "chat",
-      "multimodal"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_chat_sse",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": true,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "https://api.groq.com/openai/v1/models",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": false,
-    "workerExecutorExists": false,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "provider_client_missing",
-      "worker_executor_missing",
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "whisper-large-v3",
-    "displayName": "Whisper Large V3",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "audio",
-    "providerCategory": "audio",
-    "rawProviderType": "audio",
-    "modalitiesIn": [
-      "audio"
-    ],
-    "modalitiesOut": [
-      "audio"
-    ],
-    "modalities": [
-      "audio"
-    ],
-    "inferredCapabilities": [
-      "stt"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": false,
-    "artifactOutputKnown": false,
-    "artifactPersistenceExists": true,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_audio_transcription_multipart",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": false,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "Groq official docs fallback /openai/v1/audio/transcriptions",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": true,
-    "workerExecutorExists": false,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "worker_executor_missing",
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
-    "provider": "groq",
-    "modelId": "canopylabs/orpheus-v1-english",
-    "displayName": "Orpheus V1 English",
-    "executionProvider": "groq",
-    "upstreamProvider": "groq",
-    "discoverySource": "last_known_good",
-    "docsKnown": true,
-    "liveDiscovered": false,
-    "category": "audio",
-    "providerCategory": "audio",
-    "rawProviderType": "audio",
-    "modalitiesIn": [
-      "audio"
-    ],
-    "modalitiesOut": [
-      "audio"
-    ],
-    "modalities": [
-      "audio"
-    ],
-    "inferredCapabilities": [
-      "tts"
-    ],
-    "contextWindow": null,
-    "maxOutputTokens": null,
-    "inputPrice": null,
-    "outputPrice": null,
-    "artifactOutput": true,
-    "artifactOutputKnown": true,
-    "artifactPersistenceExists": false,
-    "authRequired": true,
-    "providerCapabilityKnown": true,
-    "policyRestrictedByApp": false,
-    "policyBlockedReason": "",
-    "transportProfile": "openai_audio_speech_binary",
-    "endpointFamily": "https://api.groq.com/openai/v1/models",
-    "streamingSupported": false,
-    "toolCallingSupported": false,
-    "functionCallingSupported": false,
-    "batchSupported": false,
-    "webhookSupported": false,
-    "endpointSource": "Groq official docs fallback /openai/v1/audio/speech",
-    "endpointShapeKnown": true,
-    "requestShapeKnown": false,
-    "responseShapeKnown": false,
-    "providerClientExists": true,
-    "workerExecutorExists": false,
-    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
-    "source": "last_known_good",
-    "liveDiscoverySkipped": true,
-    "rawMetadata": {},
-    "executableNow": false,
-    "executableBlockers": [
-      "request_shape_missing",
-      "response_shape_missing",
-      "worker_executor_missing",
-      "artifact_persistence_missing",
-      "execution_readiness_not_derived_from_discovery"
-    ],
-    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
-    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
-    "lastDiscoverySkipReason": "safe_static_mode"
-  },
-  {
     "provider": "together",
     "modelId": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "displayName": "Llama 3.3 70B Instruct Turbo",
@@ -5767,7 +5313,8 @@
         "tools",
         "reasoning",
         "json",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -5779,7 +5326,7 @@
         "rate_per_input_token_cached": 0.25,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -6241,7 +5788,8 @@
         "reasoning",
         "can-disable-reasoning",
         "openai",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -6253,7 +5801,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -6704,6 +6252,7 @@
         "json",
         "structured-output",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -6716,7 +6265,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -7123,6 +6672,7 @@
         "multimodal",
         "input-video",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -7135,7 +6685,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -7318,6 +6868,7 @@
         "priority",
         "input-video",
         "input-audio",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -7330,7 +6881,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -7811,7 +7362,8 @@
         "tools",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -7823,7 +7375,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 32768,
       "deprecated": null,
@@ -8659,7 +8211,8 @@
         "json",
         "openai",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -8671,7 +8224,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 16384,
       "deprecated": null,
@@ -8757,7 +8310,8 @@
         "b200",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -8769,7 +8323,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -9061,7 +8615,8 @@
         "cc-native",
         "structured-output",
         "openai",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -9073,7 +8628,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -9159,7 +8714,8 @@
         "openai",
         "structured-output",
         "tools",
-        "reasoning"
+        "reasoning",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -9171,7 +8727,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 202752,
       "deprecated": null,
@@ -9452,6 +9008,7 @@
         "multimodal",
         "input-video",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -9464,7 +9021,7 @@
         "rate_per_input_token_cached": 0.48888889,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -9548,7 +9105,8 @@
         "json",
         "openai",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -9560,7 +9118,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 32768,
       "deprecated": null,
@@ -9842,6 +9400,7 @@
         "can-disable-reasoning",
         "multimodal",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -9854,7 +9413,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -10328,7 +9887,8 @@
         "openai",
         "multimodal",
         "input-video",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -10340,7 +9900,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -11030,7 +10590,8 @@
         "json",
         "reasoning",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -11042,7 +10603,7 @@
         "rate_per_input_token_cached": 0.86956522,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -11138,6 +10699,7 @@
         "input-audio",
         "input-video",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -11150,7 +10712,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -11247,7 +10809,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -11259,7 +10822,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 1048576,
       "deprecated": null,
@@ -11540,7 +11103,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -11552,7 +11116,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -11835,6 +11399,7 @@
         "tools",
         "json",
         "structured-output",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -11847,7 +11412,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 202752,
       "deprecated": null,
@@ -12035,7 +11600,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -12047,7 +11613,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -12728,7 +12294,8 @@
         "can-disable-reasoning",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -12740,7 +12307,7 @@
         "rate_per_input_token_cached": 0.48148148,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -13118,7 +12685,8 @@
         "tools",
         "reasoning",
         "json",
-        "input-video"
+        "input-video",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -13130,7 +12698,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 524288,
       "deprecated": null,
@@ -13519,8 +13087,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 262144,
-      "deprecated": 1776285489,
-      "replaced_by": "MiniMaxAI/MiniMax-M2.5",
+      "deprecated": 1784320688,
+      "replaced_by": "MiniMaxAI/MiniMax-M2.7",
       "quantization": "fp8",
       "create_ts": "2025-11-11T00:06:55+00:00",
       "private": 0,
@@ -14145,7 +13713,8 @@
         "json",
         "openai",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -14157,7 +13726,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 8192,
       "deprecated": null,
@@ -14417,7 +13986,8 @@
         "tools",
         "reasoning",
         "json",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -14429,7 +13999,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -14516,7 +14086,8 @@
         "json",
         "non-reasoning",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -14528,7 +14099,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 40960,
       "deprecated": null,
@@ -14711,11 +14282,11 @@
         "openai"
       ],
       "pricing": {
-        "short": "$0.0108 / second (480p)",
+        "short": "$0.0250 / second (720p)",
         "full": null,
         "table": null,
         "type": "frame_units",
-        "cents_per_frame_unit": 0.045
+        "cents_per_frame_unit": 0.10417
       },
       "max_tokens": null,
       "deprecated": null,
@@ -14989,7 +14560,8 @@
         "openai",
         "ocr",
         "non-reasoning",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -15001,7 +14573,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -15094,7 +14666,8 @@
         "cc-native",
         "multimodal",
         "input-video",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -15106,7 +14679,7 @@
         "rate_per_input_token_cached": 0.35714286,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -15312,7 +14885,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -15324,7 +14898,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 128000,
       "deprecated": null,
@@ -15508,6 +15082,7 @@
         "json",
         "structured-output",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -15520,7 +15095,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -16756,7 +16331,8 @@
         "b200",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -16768,7 +16344,7 @@
         "rate_per_input_token_cached": 0.7,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -16862,6 +16438,7 @@
         "reasoning",
         "can-disable-reasoning",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -16874,7 +16451,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -17442,7 +17019,8 @@
         "multimodal",
         "cc-native",
         "tools",
-        "input-video"
+        "input-video",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -17454,7 +17032,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -19058,7 +18636,8 @@
         "json",
         "non-reasoning",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -19070,7 +18649,7 @@
         "rate_per_input_token_cached": 0.5625,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -19247,6 +18826,8 @@
         "tools",
         "non-reasoning",
         "priority",
+        "cc-native",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -19259,7 +18840,7 @@
         "rate_per_input_token_cached": 0.07692308,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 1048576,
       "deprecated": null,
@@ -19858,7 +19439,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -19870,7 +19452,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -20491,7 +20073,8 @@
         "json",
         "structured-output",
         "openai",
-        "tools"
+        "tools",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -20503,11 +20086,11 @@
         "rate_per_input_token_cached": 0.5,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
-      "deprecated": null,
-      "replaced_by": null,
+      "deprecated": 1784444677,
+      "replaced_by": "Qwen/Qwen3.6-35B-A3B",
       "quantization": "fp8",
       "create_ts": "2026-06-29T07:37:18+00:00",
       "private": 0,
@@ -22092,7 +21675,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -22104,7 +21688,7 @@
         "rate_per_input_token_cached": 0.55,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -22968,6 +22552,7 @@
         "can-disable-reasoning",
         "input-audio",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -22980,7 +22565,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 1048576,
       "deprecated": null,
@@ -23619,7 +23204,8 @@
         "json",
         "non-reasoning",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -23631,7 +23217,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 40960,
       "deprecated": null,
@@ -23716,7 +23302,8 @@
         "tools",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -23728,7 +23315,7 @@
         "rate_per_input_token_cached": 0.33333333,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -24253,7 +23840,7 @@
     "inferredCapabilities": [
       "chat",
       "reasoning",
-      "structured_output"
+      "code"
     ],
     "contextWindow": 131072,
     "maxOutputTokens": null,
@@ -24266,9 +23853,9 @@
     "providerCapabilityKnown": true,
     "policyRestrictedByApp": false,
     "policyBlockedReason": "",
-    "transportProfile": "native_inference_json",
+    "transportProfile": "openai_chat_sse",
     "endpointFamily": "https://api.deepinfra.com/models/list",
-    "streamingSupported": false,
+    "streamingSupported": true,
     "toolCallingSupported": false,
     "functionCallingSupported": false,
     "batchSupported": false,
@@ -24292,8 +23879,7 @@
         "tools",
         "reasoning",
         "structured-output",
-        "json",
-        "priority"
+        "json"
       ],
       "pricing": {
         "short": null,
@@ -24304,7 +23890,7 @@
         "cents_per_output_token": 0.000017,
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
-        "rate_per_service_tier_priority": 1.5,
+        "rate_per_service_tier_priority": null,
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 131072,
@@ -24498,7 +24084,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -24510,7 +24097,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -25195,7 +24782,7 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 131072,
-      "deprecated": 1784240551,
+      "deprecated": 1784240987,
       "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
       "quantization": "bfloat16",
       "create_ts": "2024-07-23T17:54:23+00:00",
@@ -25282,8 +24869,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 8192,
-      "deprecated": 1725662285,
-      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "deprecated": 1784240987,
+      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
       "quantization": "bfloat16",
       "create_ts": "2024-06-01T00:53:06+00:00",
       "private": 0,
@@ -25363,7 +24950,8 @@
         "json",
         "tools",
         "reasoning",
-        "openai"
+        "openai",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -25375,7 +24963,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 196608,
       "deprecated": null,
@@ -25645,7 +25233,8 @@
         "json",
         "tools",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -25657,7 +25246,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -26106,7 +25695,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -26118,7 +25708,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -26392,6 +25982,7 @@
         "reasoning",
         "priority",
         "flex",
+        "cc-native",
         "featured"
       ],
       "pricing": {
@@ -26488,7 +26079,8 @@
         "json",
         "openai",
         "tools",
-        "non-reasoning"
+        "non-reasoning",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -26500,7 +26092,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -27968,7 +27560,8 @@
         "json",
         "openai",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -27980,7 +27573,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 4096,
       "deprecated": null,
@@ -28455,6 +28048,7 @@
         "json",
         "non-reasoning",
         "structured-output",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -28467,7 +28061,7 @@
         "rate_per_input_token_cached": 0.5,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -28647,7 +28241,8 @@
         "can-disable-reasoning",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -28659,7 +28254,7 @@
         "rate_per_input_token_cached": 0.52,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -28704,8 +28299,7 @@
     ],
     "inferredCapabilities": [
       "chat",
-      "reasoning",
-      "structured_output"
+      "reasoning"
     ],
     "contextWindow": 131072,
     "maxOutputTokens": null,
@@ -28718,9 +28312,9 @@
     "providerCapabilityKnown": true,
     "policyRestrictedByApp": false,
     "policyBlockedReason": "",
-    "transportProfile": "native_inference_json",
+    "transportProfile": "openai_chat_sse",
     "endpointFamily": "https://api.deepinfra.com/models/list",
-    "streamingSupported": false,
+    "streamingSupported": true,
     "toolCallingSupported": false,
     "functionCallingSupported": false,
     "batchSupported": false,
@@ -28745,7 +28339,8 @@
         "reasoning",
         "json",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -28757,7 +28352,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -29620,7 +29215,8 @@
         "structured-output",
         "can-disable-reasoning",
         "input-audio",
-        "input-video"
+        "input-video",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -29632,7 +29228,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -29814,11 +29410,11 @@
         "openai"
       ],
       "pricing": {
-        "short": "$0.0432 / second (480p)",
+        "short": "$0.0500 / second (720p)",
         "full": null,
         "table": null,
         "type": "frame_units",
-        "cents_per_frame_unit": 0.18
+        "cents_per_frame_unit": 0.20833
       },
       "max_tokens": null,
       "deprecated": null,
@@ -30397,7 +29993,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -30409,7 +30006,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -30589,7 +30186,8 @@
         "multimodal",
         "non-reasoning",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -30601,7 +30199,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 163840,
       "deprecated": null,
@@ -30693,7 +30291,8 @@
         "json",
         "structured-output",
         "input-video",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -30705,7 +30304,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -30896,8 +30495,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 4096,
-      "deprecated": 1726163265,
-      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "deprecated": 1784240987,
+      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
       "quantization": "bfloat16",
       "create_ts": "2024-06-13T01:08:24+00:00",
       "private": 0,
@@ -31545,7 +31144,8 @@
         "openai",
         "structured-output",
         "b200",
-        "non-reasoning"
+        "non-reasoning",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -31557,7 +31157,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -31657,8 +31257,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 196608,
-      "deprecated": 1776285489,
-      "replaced_by": "MiniMaxAI/MiniMax-M2.5",
+      "deprecated": 1784320688,
+      "replaced_by": "MiniMaxAI/MiniMax-M2.7",
       "quantization": "fp8",
       "create_ts": "2026-01-05T19:58:25+00:00",
       "private": 0,
@@ -31948,7 +31548,7 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 262144,
-      "deprecated": 1784243173,
+      "deprecated": 1784243393,
       "replaced_by": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
       "quantization": "bfloat16",
       "create_ts": "2026-04-28T05:29:29+00:00",
@@ -32710,8 +32310,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 131072,
-      "deprecated": 1778120330,
-      "replaced_by": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
+      "deprecated": 1784243393,
+      "replaced_by": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
       "quantization": "fp8",
       "create_ts": "2025-10-28T19:24:26+00:00",
       "private": 0,
@@ -32892,6 +32492,7 @@
         "reasoning",
         "can-disable-reasoning",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -32904,7 +32505,7 @@
         "rate_per_input_token_cached": 0.19354839,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 1048576,
       "deprecated": null,
@@ -33101,6 +32702,7 @@
         "structured-output",
         "multimodal",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -33113,7 +32715,7 @@
         "rate_per_input_token_cached": 0.15555556,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -33571,19 +33173,20 @@
         "tools",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
         "full": null,
         "table": null,
         "type": "tokens",
-        "cents_per_input_token": 0.000002,
-        "cents_per_output_token": 0.000004,
+        "cents_per_input_token": 0.0000019,
+        "cents_per_output_token": 0.000003,
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -33767,6 +33370,7 @@
         "can-disable-reasoning",
         "structured-output",
         "json",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -33779,7 +33383,7 @@
         "rate_per_input_token_cached": 0.1952381,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 202752,
       "deprecated": null,
@@ -34244,7 +33848,8 @@
         "reasoning",
         "can-disable-reasoning",
         "structured-output",
-        "json"
+        "json",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -34256,7 +33861,7 @@
         "rate_per_input_token_cached": 0.2,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 202752,
       "deprecated": null,
@@ -34446,6 +34051,7 @@
         "reasoning",
         "json",
         "structured-output",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -34458,7 +34064,7 @@
         "rate_per_input_token_cached": 0.16666667,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 202752,
       "deprecated": null,
@@ -34544,7 +34150,8 @@
         "b200",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -34556,7 +34163,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -34640,7 +34247,8 @@
         "json",
         "openai",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -34652,7 +34260,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -34958,7 +34566,7 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 196608,
-      "deprecated": 1784320259,
+      "deprecated": 1784320688,
       "replaced_by": "MiniMaxAI/MiniMax-M2.7",
       "quantization": "fp8",
       "create_ts": "2026-02-13T16:09:28+00:00",
@@ -35782,7 +35390,8 @@
         "json",
         "non-reasoning",
         "structured-output",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -35794,7 +35403,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 40960,
       "deprecated": null,
@@ -36254,8 +35863,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 131072,
-      "deprecated": 1778120245,
-      "replaced_by": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
+      "deprecated": 1784243393,
+      "replaced_by": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
       "quantization": "fp8",
       "create_ts": "2024-10-16T17:47:08+00:00",
       "private": 0,
@@ -36336,7 +35945,8 @@
         "no-free-anon",
         "json",
         "non-reasoning",
-        "structured-output"
+        "structured-output",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -36348,7 +35958,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": null,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 131072,
       "deprecated": null,
@@ -36736,8 +36346,8 @@
         "rate_per_service_tier_flex": null
       },
       "max_tokens": 8192,
-      "deprecated": 1743551004,
-      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "deprecated": 1784240987,
+      "replaced_by": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
       "quantization": "fp16",
       "create_ts": "2023-11-20T11:34:04+00:00",
       "private": 0,
@@ -36826,6 +36436,7 @@
         "structured-output",
         "reasoning",
         "priority",
+        "flex",
         "featured"
       ],
       "pricing": {
@@ -36838,7 +36449,7 @@
         "rate_per_input_token_cached": 0.2027027,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -37406,7 +37017,8 @@
         "non-reasoning",
         "structured-output",
         "cc-native",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -37418,7 +37030,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 327680,
       "deprecated": null,
@@ -38188,7 +37800,8 @@
         "cc-native",
         "multimodal",
         "input-video",
-        "priority"
+        "priority",
+        "flex"
       ],
       "pricing": {
         "short": null,
@@ -38200,7 +37813,7 @@
         "rate_per_input_token_cached": null,
         "rate_per_input_token_cache_write": null,
         "rate_per_service_tier_priority": 1.5,
-        "rate_per_service_tier_flex": null
+        "rate_per_service_tier_flex": 0.8
       },
       "max_tokens": 262144,
       "deprecated": null,
@@ -38543,5 +38156,679 @@
     "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
     "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
     "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "llama-3.3-70b-versatile",
+    "displayName": "Llama 3.3 70B Versatile",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "last_known_good",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "text",
+    "providerCategory": "text",
+    "rawProviderType": "text",
+    "modalitiesIn": [
+      "text"
+    ],
+    "modalitiesOut": [
+      "text"
+    ],
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat",
+      "reasoning",
+      "summarization",
+      "classification",
+      "extraction"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "openai_chat_sse",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": true,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "last_known_good",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {},
+    "executableNow": false,
+    "executableBlockers": [
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "execution_readiness_not_derived_from_discovery",
+    "blockedReason": "execution_readiness_not_derived_from_discovery",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "llama-3.1-8b-instant",
+    "displayName": "Llama 3.1 8B Instant",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "last_known_good",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "text",
+    "providerCategory": "text",
+    "rawProviderType": "text",
+    "modalitiesIn": [
+      "text"
+    ],
+    "modalitiesOut": [
+      "text"
+    ],
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat",
+      "reasoning",
+      "summarization",
+      "classification",
+      "extraction"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "openai_chat_sse",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": true,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": true,
+    "responseShapeKnown": true,
+    "providerClientExists": true,
+    "workerExecutorExists": true,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "last_known_good",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {},
+    "executableNow": false,
+    "executableBlockers": [
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "execution_readiness_not_derived_from_discovery",
+    "blockedReason": "execution_readiness_not_derived_from_discovery",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "displayName": "Llama 4 Scout",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "last_known_good",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "text",
+    "providerCategory": "text",
+    "rawProviderType": "text",
+    "modalitiesIn": [
+      "text",
+      "multimodal"
+    ],
+    "modalitiesOut": [
+      "text",
+      "multimodal"
+    ],
+    "modalities": [
+      "text",
+      "multimodal"
+    ],
+    "inferredCapabilities": [
+      "chat",
+      "multimodal"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "openai_chat_sse",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": true,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "last_known_good",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {},
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "whisper-large-v3",
+    "displayName": "Whisper Large V3",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "last_known_good",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "audio",
+    "providerCategory": "audio",
+    "rawProviderType": "audio",
+    "modalitiesIn": [
+      "audio"
+    ],
+    "modalitiesOut": [
+      "audio"
+    ],
+    "modalities": [
+      "audio"
+    ],
+    "inferredCapabilities": [
+      "stt"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "openai_audio_transcription_multipart",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "deepinfra official docs fallback /openai/v1/audio/transcriptions",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": true,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "last_known_good",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {},
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "canopylabs/orpheus-v1-english",
+    "displayName": "Orpheus V1 English",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "last_known_good",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "audio",
+    "providerCategory": "audio",
+    "rawProviderType": "audio",
+    "modalitiesIn": [
+      "audio"
+    ],
+    "modalitiesOut": [
+      "audio"
+    ],
+    "modalities": [
+      "audio"
+    ],
+    "inferredCapabilities": [
+      "tts"
+    ],
+    "contextWindow": null,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": true,
+    "artifactOutputKnown": true,
+    "artifactPersistenceExists": false,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "openai_audio_speech_binary",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "deepinfra official docs fallback /openai/v1/audio/speech",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": true,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "last_known_good",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {},
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "worker_executor_missing",
+      "artifact_persistence_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, worker_executor_missing, artifact_persistence_missing, execution_readiness_not_derived_from_discovery",
+    "lastDiscoverySkipReason": "public_discovery_supplemented"
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "google/gemma-4-E4B-it",
+    "displayName": "google/gemma-4-E4B-it",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "docs_fallback",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "text-generation",
+    "providerCategory": "text-generation",
+    "rawProviderType": "text-generation",
+    "modalitiesIn": [
+      "text"
+    ],
+    "modalitiesOut": [
+      "text"
+    ],
+    "modalities": [
+      "text"
+    ],
+    "inferredCapabilities": [
+      "chat",
+      "reasoning",
+      "structured_output"
+    ],
+    "contextWindow": 131072,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "native_inference_json",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "docs_fallback",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {
+      "model_name": "google/gemma-4-E4B-it",
+      "type": "text-generation",
+      "reported_type": "text-generation",
+      "description": "",
+      "tags": [
+        "cc-native",
+        "can-disable-reasoning",
+        "openai",
+        "priority",
+        "tools",
+        "reasoning",
+        "flex"
+      ],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "tokens",
+        "cents_per_input_token": 0.000002,
+        "cents_per_output_token": 0.00001,
+        "rate_per_input_token_cached": null,
+        "rate_per_input_token_cache_write": null,
+        "rate_per_service_tier_priority": 1.5,
+        "rate_per_service_tier_flex": 0.8
+      },
+      "max_tokens": 131072,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": "bfloat16",
+      "create_ts": "2026-07-14T22:46:26+00:00",
+      "private": 0,
+      "is_partner": false
+    },
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "publicEndpointDiscovered": true
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "nvidia/Nemotron-3-Embed-8B",
+    "displayName": "nvidia/Nemotron-3-Embed-8B",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "docs_fallback",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "embeddings",
+    "providerCategory": "embeddings",
+    "rawProviderType": "embeddings",
+    "modalitiesIn": [
+      "retrieval"
+    ],
+    "modalitiesOut": [
+      "retrieval"
+    ],
+    "modalities": [
+      "retrieval"
+    ],
+    "inferredCapabilities": [
+      "embeddings"
+    ],
+    "contextWindow": 32768,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "native_inference_json",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "docs_fallback",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {
+      "model_name": "nvidia/Nemotron-3-Embed-8B",
+      "type": "embeddings",
+      "reported_type": "embeddings",
+      "description": "Nemotron-3-Embed-8B is a multilingual text embedding model from NVIDIA, based on Ministral-3-8B, that maps text into 4096-dimensional dense vectors for retrieval and semantic similarity. Spanning 34 languages, it targets multilingual RAG and question-answering over large corpora and achieves state-of-the-art results on the RTEB leaderboard.",
+      "tags": [],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_tokens",
+        "cents_per_input_token": 0.0000035
+      },
+      "max_tokens": 32768,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": "fp16",
+      "create_ts": "2026-07-16T14:37:05+00:00",
+      "private": 0,
+      "is_partner": false
+    },
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "publicEndpointDiscovered": true
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "nvidia/Nemotron-3-Embed-1B-BF16",
+    "displayName": "nvidia/Nemotron-3-Embed-1B-BF16",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "docs_fallback",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "embeddings",
+    "providerCategory": "embeddings",
+    "rawProviderType": "embeddings",
+    "modalitiesIn": [
+      "retrieval"
+    ],
+    "modalitiesOut": [
+      "retrieval"
+    ],
+    "modalities": [
+      "retrieval"
+    ],
+    "inferredCapabilities": [
+      "embeddings"
+    ],
+    "contextWindow": 32768,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "native_inference_json",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "docs_fallback",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {
+      "model_name": "nvidia/Nemotron-3-Embed-1B-BF16",
+      "type": "embeddings",
+      "reported_type": "embeddings",
+      "description": "Nemotron-3-Embed-1B-BF16 is a compact multilingual text embedding model from NVIDIA, pruned and distilled from Ministral-3 to ~1B parameters, that maps text into 2048-dimensional dense vectors for retrieval and semantic similarity. Spanning 34 languages, it delivers state-of-the-art quality among similarly sized models for RAG and multilingual question-answering while keeping compute cost low.",
+      "tags": [],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_tokens",
+        "cents_per_input_token": 0.0000015
+      },
+      "max_tokens": 32768,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": "fp16",
+      "create_ts": "2026-07-15T12:01:56+00:00",
+      "private": 0,
+      "is_partner": false
+    },
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "publicEndpointDiscovered": true
+  },
+  {
+    "provider": "deepinfra",
+    "modelId": "nvidia/Nemotron-3-Embed-1B-NVFP4",
+    "displayName": "nvidia/Nemotron-3-Embed-1B-NVFP4",
+    "executionProvider": "deepinfra",
+    "upstreamProvider": "deepinfra",
+    "discoverySource": "docs_fallback",
+    "docsKnown": true,
+    "liveDiscovered": false,
+    "category": "embeddings",
+    "providerCategory": "embeddings",
+    "rawProviderType": "embeddings",
+    "modalitiesIn": [
+      "retrieval"
+    ],
+    "modalitiesOut": [
+      "retrieval"
+    ],
+    "modalities": [
+      "retrieval"
+    ],
+    "inferredCapabilities": [
+      "embeddings"
+    ],
+    "contextWindow": 32768,
+    "maxOutputTokens": null,
+    "inputPrice": null,
+    "outputPrice": null,
+    "artifactOutput": false,
+    "artifactOutputKnown": false,
+    "artifactPersistenceExists": true,
+    "authRequired": false,
+    "providerCapabilityKnown": true,
+    "policyRestrictedByApp": false,
+    "policyBlockedReason": "",
+    "transportProfile": "native_inference_json",
+    "endpointFamily": "https://api.deepinfra.com/models/list",
+    "streamingSupported": false,
+    "toolCallingSupported": false,
+    "functionCallingSupported": false,
+    "batchSupported": false,
+    "webhookSupported": false,
+    "endpointSource": "https://api.deepinfra.com/models/list",
+    "endpointShapeKnown": true,
+    "requestShapeKnown": false,
+    "responseShapeKnown": false,
+    "providerClientExists": false,
+    "workerExecutorExists": false,
+    "lastDiscoveredAt": "1970-01-01T00:00:00.000Z",
+    "source": "docs_fallback",
+    "liveDiscoverySkipped": true,
+    "rawMetadata": {
+      "model_name": "nvidia/Nemotron-3-Embed-1B-NVFP4",
+      "type": "embeddings",
+      "reported_type": "embeddings",
+      "description": "Nemotron-3-Embed-1B-NVFP4 is the NVFP4-quantized version of Nemotron-3-Embed-1B-BF16 — a multilingual text embedding model from NVIDIA that maps text into 2048-dimensional dense vectors for retrieval and semantic similarity. Optimized for NVIDIA Blackwell GPUs (e.g. RTX 6000 PRO, GB200), it retains near-BF16 quality (RTEB 72.0 vs 72.4) at a fraction of the memory and compute.",
+      "tags": [],
+      "pricing": {
+        "short": null,
+        "full": null,
+        "table": null,
+        "type": "input_tokens",
+        "cents_per_input_token": 0.000001
+      },
+      "max_tokens": 32768,
+      "deprecated": null,
+      "replaced_by": null,
+      "quantization": "fp4",
+      "create_ts": "2026-07-16T07:47:57+00:00",
+      "private": 0,
+      "is_partner": false
+    },
+    "executableNow": false,
+    "executableBlockers": [
+      "request_shape_missing",
+      "response_shape_missing",
+      "provider_client_missing",
+      "worker_executor_missing",
+      "execution_readiness_not_derived_from_discovery"
+    ],
+    "catalogueOnlyReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "blockedReason": "request_shape_missing, response_shape_missing, provider_client_missing, worker_executor_missing, execution_readiness_not_derived_from_discovery",
+    "publicEndpointDiscovered": true
   }
 ]

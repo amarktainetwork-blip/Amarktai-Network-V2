@@ -29,7 +29,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
   genxSubmitMusic: vi.fn(),
@@ -195,7 +195,7 @@ describe('GenX music executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       GENX_API_KEY: 'genx-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockResolvedValue({
@@ -231,7 +231,7 @@ describe('GenX music executor', () => {
 
   it('rejects provider overrides from the caller', async () => {
     const result = await executeWithProvider(makePayload({
-      input: { genre: 'ambient', instrumental: true, provider: 'groq' },
+      input: { genre: 'ambient', instrumental: true, provider: 'deepinfra' },
     }))
 
     expect(result.success).toBe(true)
@@ -393,7 +393,7 @@ describe('GenX music executor', () => {
   })
 
   it('keeps the approved provider set unchanged', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   // ── Atomic Claim Tests ──────────────────────────────────────────────────

@@ -80,10 +80,9 @@ async function runStatic(core) {
   if (options.capability && registrations.length === 0) check(false, `${options.capability} has registration for requested provider`, options.provider)
 
   const providerSources = {
-    groq: ['packages/providers/src/groq-client.ts', 'packages/providers/src/openai-transport.ts'],
     deepinfra: ['packages/providers/src/deepinfra-client.ts', 'packages/providers/src/deepinfra-task-client.ts', 'packages/providers/src/retrieval-client.ts', 'packages/providers/src/deepinfra-video-client.ts'],
     together: ['packages/providers/src/together-client.ts', 'packages/providers/src/retrieval-client.ts', 'packages/providers/src/together-video-client.ts'],
-    genx: ['packages/providers/src/genx-client.ts'],
+    genx: ['packages/providers/src/genx-client.ts', 'packages/providers/src/genx-voice-client.ts', 'packages/providers/src/genx-music-client.ts'],
   }
   const worker = read('apps/worker/src/providers/provider-executor.ts')
   const directWorker = read('apps/worker/src/providers/direct-provider-executor.ts')

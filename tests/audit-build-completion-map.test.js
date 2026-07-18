@@ -15,7 +15,7 @@ describe('Build Completion Audit', () => {
 
   const auditEnv = {
     ...process.env,
-    GROQ_API_KEY: '',
+    deepinfra_API_KEY: '',
     TOGETHER_API_KEY: '',
     GENX_API_KEY: '',
     DEEPINFRA_API_KEY: '',
@@ -52,12 +52,11 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.providerTruth).toBeDefined()
     expect(auditOutput.providerTruth.approvedProviders).toEqual([
       'genx',
-      'groq',
       'together',
       'mimo',
       'deepinfra'
     ])
-    expect(auditOutput.providerTruth.count).toBe(5)
+    expect(auditOutput.providerTruth.count).toBe(4)
   })
 
   it('audit derives executor presence without inventing live execution', () => {
@@ -174,7 +173,7 @@ describe('Build Completion Audit', () => {
   it('audit console output does not claim execution without runtime evidence', () => {
     const output = auditConsoleOutput
     expect(output).toContain('Total executable: 0')
-    expect(output).toContain('Via text router (Groq/DeepInfra): 0')
+    expect(output).toContain('Via text router (deepinfra/DeepInfra): 0')
     expect(output).toContain('Via media worker (Together/GenX): 0')
   })
 
@@ -353,7 +352,7 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.musicReadiness.lyriaClipDiscovered).toBe(true)
     expect(auditOutput.musicReadiness.lyriaProDiscovered).toBe(true)
     expect(auditOutput.musicReadiness.musicExecutorReady).toBe(true)
-    expect(auditOutput.musicReadiness.providerCapabilityAudit).toHaveLength(5)
+    expect(auditOutput.musicReadiness.providerCapabilityAudit).toHaveLength(4)
     expect(auditOutput.musicReadiness.providerCapabilityAudit.find(p => p.provider === 'mimo')?.note).toContain('coding_tools_only')
     expect(auditOutput.musicReadiness.providerClient).toBeDefined()
     expect(auditOutput.musicReadiness.modelCatalogueEntries).toBeDefined()

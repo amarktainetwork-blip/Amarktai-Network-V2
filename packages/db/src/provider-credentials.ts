@@ -80,7 +80,6 @@ export class ProviderConfigError extends Error {
 
 const PROVIDER_DISPLAY_NAMES: Record<ProviderKey, string> = {
   genx: 'GenX',
-  groq: 'Groq',
   together: 'Together AI',
   mimo: 'Mimo',
   deepinfra: 'DeepInfra',

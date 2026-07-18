@@ -3,7 +3,7 @@ import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
 import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
-import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverGroqModels, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
+import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
 
 const prismaMock = vi.hoisted(() => ({
   modelRegistryEntry: {
@@ -73,7 +73,7 @@ describe('real provider model discovery and catalog truth', () => {
   })
 
   it('keeps provider list exactly final five and never promotes model owners to providers', () => {
-    expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     for (const banned of ['openai', 'anthropic', 'google', 'qwen', 'wan', 'pixverse', 'minimax', 'gemini', 'resemble']) {
       expect(PROVIDER_KEYS).not.toContain(banned)
     }
@@ -331,28 +331,26 @@ describe('real provider model discovery and catalog truth', () => {
     expect(result.error).not.toContain('genx-secret')
   })
 
-  it('Groq discovery returns all models and maps STT/TTS/vision/tool capabilities', async () => {
-    const groqModels = Array.from({ length: 20 }, (_, index) => ({
+  it('deepinfra discovery returns all models and maps chat/vision capabilities', async () => {
+    const deepinfraModels = Array.from({ length: 20 }, (_, index) => ({
       id: [
-        'whisper-large-v3',
-        'playai-tts',
-        'llama-3.2-vision-preview',
-        'compound-beta-tool',
-      ][index] || `llama-model-${index}`,
-      owned_by: 'groq',
+        'meta-llama/Meta-Llama-3.1-8B-Instruct',
+        'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        'Qwen/Qwen3-Reranker-0.6B',
+        'BAAI/bge-reranker-large',
+      ][index] || `model-${index}`,
+      owned_by: 'deepinfra',
       context_window: 8192,
       capabilities: index === 4 ? { structured_output: true, tool_use: true } : {},
     }))
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ data: groqModels, has_more: false })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ data: deepinfraModels, has_more: false })))
 
-    const result = await discoverGroqModels('groq-secret')
+    const result = await discoverDeepInfraModels('deepinfra-secret')
 
     expect(result.totalDiscovered).toBe(20)
     expect(result.totalDiscovered).toBeGreaterThan(7)
-    expect(result.models.find((model) => model.modelId === 'whisper-large-v3')?.capabilities.supportsStt).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'playai-tts')?.capabilities.supportsTts).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'llama-3.2-vision-preview')?.capabilities.supportsMultimodal).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'compound-beta-tool')?.capabilities.supportsToolUse).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'meta-llama/Meta-Llama-3.1-8B-Instruct')?.capabilities.supportsChat).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'meta-llama/Llama-3.2-11B-Vision-Instruct')?.capabilities.supportsMultimodal).toBe(true)
   })
 
   it('GenX pricing refresh updates catalog rows and keeps credit-only pricing out of fake USD estimates', async () => {
@@ -554,7 +552,7 @@ describe('real provider model discovery and catalog truth', () => {
 
   it('does not expose secrets or user provider/model selectors in catalog shapes', () => {
     const catalogEntry = {
-      provider: 'groq',
+      provider: 'deepinfra',
       modelId: 'llama-3.3-70b',
       displayName: 'Llama 3.3 70B',
       pricingSource: 'provider_api',

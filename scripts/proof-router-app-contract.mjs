@@ -13,11 +13,11 @@ function check(condition, label, detail = '') {
 
 function candidate(overrides = {}) {
   return {
-    provider: 'groq',
+    provider: 'deepinfra',
     model: 'primary-model',
     displayName: 'Primary',
     capability: 'chat',
-    executorId: 'groq.chat',
+    executorId: 'deepinfra.chat',
     providerConfigured: true,
     providerEnabled: true,
     providerHealth: 'live',
@@ -92,7 +92,7 @@ async function run() {
   } = core
 
   check(CAPABILITY_KEYS.length === 68 && new Set(CAPABILITY_KEYS).size === 68, 'Exactly 68 unique canonical capabilities')
-  check(PROVIDER_KEYS.length === 5 && APPROVED_PROVIDER_DEFINITIONS.length === 5, 'Exactly five approved provider definitions')
+  check(PROVIDER_KEYS.length === 4 && APPROVED_PROVIDER_DEFINITIONS.length === 4, 'Exactly four approved provider definitions')
   check(RUNTIME_EXECUTION_PROVIDERS.length === 3, 'Exactly three backend runtime providers')
   check(CODING_ONLY_PROVIDERS.length === 1 && CODING_ONLY_PROVIDERS[0] === 'mimo', 'MiMo remains coding-agent-only')
   check(EXECUTOR_REGISTRATIONS.length > 0, 'Callable executor registrations are declared')
@@ -112,9 +112,9 @@ async function run() {
     estimatedCost: 2,
   })
   const decision = evaluateOrchestra({ capability: 'chat', appSlug: 'proof-app', appGrant: grant(), executionId: 'proof' }, [primary, fallback])
-  check(decision.selectedProvider === 'groq', 'Orchestra is the active provider authority')
+  check(decision.selectedProvider === 'deepinfra', 'Orchestra is the active provider authority')
   check(decision.selectedModel === 'primary-model', 'Orchestra preserves the exact primary model')
-  check(decision.selectedExecutorId === 'groq.chat', 'Orchestra selects an exact executor registration')
+  check(decision.selectedExecutorId === 'deepinfra.chat', 'Orchestra selects an exact executor registration')
   check(decision.fallbackRoutes[0]?.model === 'fallback-model', 'Orchestra preserves the exact fallback model')
   check(decision.fallbackRoutes[0]?.executorId === 'deepinfra.chat', 'Fallback preserves its executor registration')
 
@@ -126,7 +126,7 @@ async function run() {
   check(!deniedAdult.executionAllowed, 'Adult execution is denied without the adult grant')
 
   const truth = getRuntimeTruth()
-  check(truth.providers.length === 5, 'Runtime truth uses all five canonical providers')
+  check(truth.providers.length === 4, 'Runtime truth uses all four canonical providers')
   check(truth.capabilities.length === 68, 'Runtime truth uses all 68 canonical capabilities')
   check(truth.capabilities.every((capability) => capability.infrastructureReady === false), 'Runtime truth does not default infrastructure readiness to true')
   check(truth.capabilities.filter((capability) => !capability.executorRegistered).every((capability) => !capability.executableNow), 'Allowlist or catalogue presence alone cannot make a capability executable')

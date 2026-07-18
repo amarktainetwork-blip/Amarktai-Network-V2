@@ -9,7 +9,7 @@ import { DASHBOARD_PAGES } from '../lib/dashboard-contract.js'
 import { DESIGN_QUALITY_GATES } from '../lib/design-quality-contract.js'
 
 const ROOT = process.cwd()
-const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const FINAL_PROVIDERS = ['genx', 'together', 'mimo', 'deepinfra']
 const REQUIRED_TARGET_CAPABILITIES = [
   'chat',
   'reasoning',
@@ -54,7 +54,7 @@ function source(file) {
 function makeMinimalTruth(capabilities = [], evidenceAvailable = true) {
   return {
     generatedAt: new Date().toISOString(),
-    providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+    providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
     providers: [],
     capabilities,
     countsByClassification: {},
@@ -85,7 +85,7 @@ describe('Donor transplant V2 contract', () => {
 
   it('projects proof status from canonical truth with evidence available', () => {
     const truth = makeMinimalTruth([
-      { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'groq', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
     ])
     const payload = projectProofStatusFromTruth(truth)
 

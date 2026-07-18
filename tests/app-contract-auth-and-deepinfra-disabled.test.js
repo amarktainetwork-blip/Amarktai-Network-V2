@@ -10,7 +10,7 @@
  * - Provider/model override still blocked
  * - DeepInfra disabled is skipped by routing/fallback
  * - MiMo coding_tools_only is skipped by runtime routing
- * - Provider list exactly genx, groq, together, mimo, deepinfra
+ * - Provider list exactly genx, deepinfra, together, mimo, deepinfra
  * - No new providers added
  * - Adult generation remains on hold
  */
@@ -52,7 +52,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: class ProviderConfigError extends Error {
-    constructor(message, providerKey = 'groq', code = 'missing-config') {
+    constructor(message, providerKey = 'deepinfra', code = 'missing-config') {
       super(message)
       this.providerKey = providerKey
       this.code = code
@@ -358,7 +358,7 @@ describe('/api/v1/jobs authenticates by hashing bearer token', async () => {
 
 describe('Provider/model override still blocked', () => {
   it('provider field is blocked', () => {
-    expect(hasBlockedOverrides({ capability: 'chat', prompt: 'hi', provider: 'groq' })).toBe('provider')
+    expect(hasBlockedOverrides({ capability: 'chat', prompt: 'hi', provider: 'deepinfra' })).toBe('provider')
   })
 
   it('model field is blocked', () => {
@@ -432,19 +432,19 @@ describe('MiMo coding_tools_only', () => {
   })
 })
 
-// ── Provider List Exactly 5 ──────────────────────────────────────────────────
+// ── Provider List Exactly 4 ──────────────────────────────────────────────────
 
 describe('Provider list integrity', () => {
-  it('PROVIDER_KEYS is exactly genx, groq, together, mimo, deepinfra', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+  it('PROVIDER_KEYS is exactly genx, deepinfra, together, mimo, deepinfra', () => {
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
-  it('PROVIDER_KEYS has exactly 5 entries', () => {
-    expect(PROVIDER_KEYS).toHaveLength(5)
+  it('PROVIDER_KEYS has exactly 4 entries', () => {
+    expect(PROVIDER_KEYS).toHaveLength(4)
   })
 
   it('no new providers added', () => {
-    const allowed = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+    const allowed = ['genx', 'together', 'mimo', 'deepinfra']
     for (const key of PROVIDER_KEYS) {
       expect(allowed).toContain(key)
     }
@@ -528,7 +528,7 @@ describe('Apps cannot choose provider or model', () => {
       method: 'POST',
       url: '/api/v1/jobs',
       headers: { authorization: VALID_BEARER },
-      payload: { capability: 'chat', prompt: 'hello', provider: 'groq' },
+      payload: { capability: 'chat', prompt: 'hello', provider: 'deepinfra' },
     })
 
     expect(res.statusCode).toBe(400)

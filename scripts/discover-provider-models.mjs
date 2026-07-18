@@ -40,17 +40,17 @@ const PROVIDER_TRUTH = {
     policyExecutionDisabled: false,
     policyBlockedReason: null,
   },
-  groq: {
-    provider: 'groq',
+  deepinfra: {
+    provider: 'deepinfra',
     providerRole: 'runtime_execution_provider',
     docsCapabilityKnown: true,
     liveDiscoverySupported: true,
     docsFallbackSupported: true,
-    apiKeyEnvName: 'GROQ_API_KEY',
+    apiKeyEnvName: 'deepinfra_API_KEY',
     apiKeyRequiredForLiveDiscovery: true,
-    baseUrl: 'https://api.groq.com/openai/v1',
+    baseUrl: 'https://api.deepinfra.com/openai/v1',
     alternateBaseUrls: [],
-    modelsEndpoint: 'https://api.groq.com/openai/v1/models',
+    modelsEndpoint: 'https://api.deepinfra.com/openai/v1/models',
     modelsEndpointRequiresAuth: true,
     modelsEndpointScope: 'authenticated_model_list',
     runtimeExecutionAllowed: true,
@@ -532,14 +532,14 @@ const GENX_DOCS_MODELS = GENX_DOCS_FALLBACK_SPEC.flatMap((group) =>
   )
 )
 
-const GROQ_DOCS_MODELS = [
-  textModel('groq', 'llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile', { discoverySource: 'static_verified', requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true }),
-  textModel('groq', 'llama-3.1-8b-instant', 'Llama 3.1 8B Instant', { discoverySource: 'static_verified', requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true }),
-  textModel('groq', 'openai/gpt-oss-120b', 'GPT OSS 120B', { inferredCapabilities: ['chat', 'reasoning', 'code'] }),
-  textModel('groq', 'openai/gpt-oss-20b', 'GPT OSS 20B', { inferredCapabilities: ['chat', 'reasoning'] }),
-  textModel('groq', 'meta-llama/llama-4-scout-17b-16e-instruct', 'Llama 4 Scout', { inferredCapabilities: ['chat', 'multimodal'] }),
-  discovered({ provider: 'groq', modelId: 'whisper-large-v3', displayName: 'Whisper Large V3', category: 'audio', inferredCapabilities: ['stt'], transportProfile: 'openai_audio_transcription_multipart', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, endpointSource: 'Groq official docs fallback /openai/v1/audio/transcriptions', discoverySource: 'docs_fallback' }),
-  discovered({ provider: 'groq', modelId: 'canopylabs/orpheus-v1-english', displayName: 'Orpheus V1 English', category: 'audio', inferredCapabilities: ['tts'], transportProfile: 'openai_audio_speech_binary', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, endpointSource: 'Groq official docs fallback /openai/v1/audio/speech', discoverySource: 'docs_fallback' }),
+const deepinfra_DOCS_MODELS = [
+  textModel('deepinfra', 'llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile', { discoverySource: 'static_verified', requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true }),
+  textModel('deepinfra', 'llama-3.1-8b-instant', 'Llama 3.1 8B Instant', { discoverySource: 'static_verified', requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true, workerExecutorExists: true }),
+  textModel('deepinfra', 'openai/gpt-oss-120b', 'GPT OSS 120B', { inferredCapabilities: ['chat', 'reasoning', 'code'] }),
+  textModel('deepinfra', 'openai/gpt-oss-20b', 'GPT OSS 20B', { inferredCapabilities: ['chat', 'reasoning'] }),
+  textModel('deepinfra', 'meta-llama/llama-4-scout-17b-16e-instruct', 'Llama 4 Scout', { inferredCapabilities: ['chat', 'multimodal'] }),
+  discovered({ provider: 'deepinfra', modelId: 'whisper-large-v3', displayName: 'Whisper Large V3', category: 'audio', inferredCapabilities: ['stt'], transportProfile: 'openai_audio_transcription_multipart', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, endpointSource: 'deepinfra official docs fallback /openai/v1/audio/transcriptions', discoverySource: 'docs_fallback' }),
+  discovered({ provider: 'deepinfra', modelId: 'canopylabs/orpheus-v1-english', displayName: 'Orpheus V1 English', category: 'audio', inferredCapabilities: ['tts'], transportProfile: 'openai_audio_speech_binary', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, providerClientExists: true, workerExecutorExists: false, endpointSource: 'deepinfra official docs fallback /openai/v1/audio/speech', discoverySource: 'docs_fallback' }),
 ]
 
 const TOGETHER_DOCS_MODELS = [
@@ -579,7 +579,7 @@ const MIMO_DOCS_MODELS = [
 
 const DOCS_FALLBACK_MODELS = [
   ...GENX_DOCS_MODELS,
-  ...GROQ_DOCS_MODELS,
+  ...deepinfra_DOCS_MODELS,
   ...TOGETHER_DOCS_MODELS,
   ...DEEPINFRA_DOCS_MODELS,
   ...MIMO_DOCS_MODELS,
@@ -957,7 +957,7 @@ const report = {
     genxMusicModels: genxMusicModels.map((model) => model.modelId),
     togetherMusicModels: models.filter((model) => model.provider === 'together' && model.inferredCapabilities.includes('music_generation')).map((model) => model.modelId),
     deepinfraMusicModels: models.filter((model) => model.provider === 'deepinfra' && model.inferredCapabilities.includes('music_generation')).map((model) => model.modelId),
-    groqMusicModels: models.filter((model) => model.provider === 'groq' && model.inferredCapabilities.includes('music_generation')).map((model) => model.modelId),
+    deepinfraMusicModels: models.filter((model) => model.provider === 'deepinfra' && model.inferredCapabilities.includes('music_generation')).map((model) => model.modelId),
     lyriaLikeModels: genxMusicModels.filter((model) => /lyria/i.test(model.modelId)).map((model) => `${model.provider}/${model.modelId}`),
     endpointShapeKnown: genxMusicModels.some((model) => model.endpointShapeKnown),
     providerClientExists: genxMusicModels.some((model) => model.providerClientExists),

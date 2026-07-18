@@ -15,11 +15,11 @@ import {
 
 function makeCandidate(overrides: Partial<OrchestraCandidate> = {}): OrchestraCandidate {
   return {
-    provider: 'groq' as ProviderKey,
+    provider: 'deepinfra' as ProviderKey,
     model: 'llama-3.3-70b-versatile',
-    displayName: 'Groq Llama 3.3 70B',
+    displayName: 'deepinfra Llama 3.3 70B',
     capability: 'chat' as CapabilityKey,
-    executorId: 'groq.chat',
+    executorId: 'deepinfra.chat',
     providerConfigured: true,
     providerEnabled: true,
     providerHealth: 'live',
@@ -130,15 +130,15 @@ describe('App Grant and Budget Policy', () => {
     })
 
     it('rejects provider not in residency constraints', () => {
-      const candidate = makeCandidate({ provider: 'groq' as ProviderKey })
+      const candidate = makeCandidate({ provider: 'deepinfra' as ProviderKey })
       const grant = makeAppGrant({ providerResidencyConstraints: ['together'] })
       const blockers = checkCandidateEligibility(candidate, 'chat', grant)
       expect(blockers).toContain('app_provider_residency_constraint')
     })
 
     it('allows provider in residency constraints', () => {
-      const candidate = makeCandidate({ provider: 'groq' as ProviderKey })
-      const grant = makeAppGrant({ providerResidencyConstraints: ['groq', 'together'] })
+      const candidate = makeCandidate({ provider: 'deepinfra' as ProviderKey })
+      const grant = makeAppGrant({ providerResidencyConstraints: ['deepinfra', 'together'] })
       const blockers = checkCandidateEligibility(candidate, 'chat', grant)
       expect(blockers).not.toContain('app_provider_residency_constraint')
     })
@@ -235,7 +235,7 @@ describe('App Grant and Budget Policy', () => {
   describe('Orchestra with app grant', () => {
     it('respects app grant fallback limits', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'primary' }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'primary' }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'fallback-1' }),
         makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'fallback-2' }),
       ]
@@ -247,7 +247,7 @@ describe('App Grant and Budget Policy', () => {
 
     it('disables fallbacks when app grant disallows', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'primary' }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'primary' }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'fallback-1' }),
       ]
       const grant = makeAppGrant({ allowFallback: false })
@@ -258,7 +258,7 @@ describe('App Grant and Budget Policy', () => {
 
     it('rejects candidates exceeding app cost limit', () => {
       const candidates = [
-        makeCandidate({ provider: 'groq' as ProviderKey, model: 'expensive', estimatedCost: 100 }),
+        makeCandidate({ provider: 'deepinfra' as ProviderKey, model: 'expensive', estimatedCost: 100 }),
         makeCandidate({ provider: 'together' as ProviderKey, model: 'cheap', estimatedCost: 0.001 }),
       ]
       const grant = makeAppGrant({ maxCostPerRequest: 1 }) // 1 cent limit

@@ -21,6 +21,9 @@ APP_VERSION="${APP_VERSION:-1.0.0}"
 }
 : "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required for authenticated post-deploy proof}"
 
+export GIT_SHA="$DEPLOY_SHA"
+export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+export APP_VERSION ADMIN_EMAIL ADMIN_PASSWORD
 export REPO_DIR DEPLOY_BRANCH BACKUP_DIR DEPLOY_SHA
 bash "$REPO_DIR/deploy/preflight.sh"
 
@@ -135,7 +138,7 @@ for key in MYSQL_ROOT_PASSWORD MYSQL_PASSWORD; do
   }
   echo "[preflight] $key: present (value redacted)"
 done
-for key in GENX_API_KEY GROQ_API_KEY TOGETHER_API_KEY DEEPINFRA_API_KEY; do
+for key in GENX_API_KEY TOGETHER_API_KEY DEEPINFRA_API_KEY; do
   if key_present "$key"; then
     echo "[preflight] $key: present in environment (value redacted)"
   else
@@ -168,14 +171,13 @@ git switch --detach "$DEPLOY_SHA"
 npm ci --ignore-scripts
 npx prisma validate --schema=./prisma/schema.prisma
 npx prisma generate --schema=./prisma/schema.prisma
-npm test
 npm run build:backend
+npm test
 npm run build
 npm run audit
 npm run proof
 node scripts/proof-direct-provider-capabilities.mjs --static --strict
 
-export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 docker compose config >/dev/null
 docker compose build --pull api worker dashboard
 

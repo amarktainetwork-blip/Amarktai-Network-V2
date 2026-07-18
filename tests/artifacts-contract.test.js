@@ -18,7 +18,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
 const ROOT = process.cwd()
-const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const FINAL_PROVIDERS = ['genx', 'together', 'mimo', 'deepinfra']
 
 describe('artifact URL alignment and file access contracts', () => {
   let storageRoot
@@ -277,7 +277,7 @@ describe('artifact URL alignment and file access contracts', () => {
     ].map((file) => fs.readFileSync(path.join(ROOT, file), 'utf8').toLowerCase()).join('\n')
 
     expect(touchedRuntime).not.toContain('genxsubmit')
-    expect(touchedRuntime).not.toContain('groqchat')
+    expect(touchedRuntime).not.toContain('deepinfrachat')
     expect(touchedRuntime).not.toContain('togethergenerate')
     expect(touchedRuntime).not.toContain('simulation')
   })

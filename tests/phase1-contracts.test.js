@@ -8,7 +8,7 @@ import { PROVIDER_CONTRACTS, STUDIO_MODES } from '../lib/dashboard-contract.js'
 import { CAPABILITY_SCHEMAS, REQUIRED_MUSIC_GENRES } from '../lib/studio-capability-schemas.js'
 
 const ROOT = process.cwd()
-const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const FINAL_PROVIDERS = ['genx', 'together', 'mimo', 'deepinfra']
 const BANNED_PROVIDER_IDS = [
   'heygen', 'huggingface', 'hugging-face', 'qwen', 'minimax',
   'gemini', 'openai', 'anthropic', 'replicate', 'lyria',

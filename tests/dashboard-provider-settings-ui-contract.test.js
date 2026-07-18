@@ -21,14 +21,14 @@ const appGatewaySource = fs.readFileSync(path.join(ROOT, 'app/dashboard/app-gate
 
 function provider(overrides = {}) {
   return {
-    providerKey: 'groq',
-    displayName: 'Groq',
+    providerKey: 'genx',
+    displayName: 'GenX',
     enabled: true,
     configured: true,
     source: 'database',
     maskedPreview: 'gsk_********abcd',
     baseUrl: '',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'seedance-v1-fast',
     fallbackModel: '',
     credentialUsagePolicy: 'backend_runtime_allowed',
     healthStatus: 'configured',
@@ -41,7 +41,7 @@ function provider(overrides = {}) {
 }
 
 describe('Dashboard provider settings UI contract', () => {
-  it('renders the final five provider IDs from backend status data only', () => {
+  it('renders the final four provider IDs from backend status data only', () => {
     const statuses = normalizeProviderStatuses([
       provider({ providerKey: 'together', displayName: 'Together AI', sortOrder: 3 }),
       provider({ providerKey: 'deepinfra', displayName: 'DeepInfra', enabled: false, configured: false, source: 'missing', healthStatus: 'unconfigured', sortOrder: 5 }),
@@ -50,8 +50,8 @@ describe('Dashboard provider settings UI contract', () => {
       provider(),
     ])
 
-    expect(FINAL_PROVIDER_IDS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(statuses.map((status) => status.providerKey)).toEqual(FINAL_PROVIDER_IDS)
+    expect(FINAL_PROVIDER_IDS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
+    expect(statuses.map((status) => status.providerKey)).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   it('uses honest credential source labels', () => {
@@ -108,7 +108,7 @@ describe('Dashboard provider settings UI contract', () => {
     const payload = buildProviderUpdatePayload({
       enabled: true,
       apiKey: ' gsk_live_secret_abcd ',
-      baseUrl: 'https://api.groq.com/openai/v1',
+      baseUrl: 'https://api.deepinfra.com/openai/v1',
       defaultModel: 'llama-3.3-70b-versatile',
       fallbackModel: '',
       credentialUsagePolicy: 'backend_runtime_allowed',
@@ -118,7 +118,7 @@ describe('Dashboard provider settings UI contract', () => {
     expect(payload).toMatchObject({
       enabled: true,
       apiKey: 'gsk_live_secret_abcd',
-      baseUrl: 'https://api.groq.com/openai/v1',
+      baseUrl: 'https://api.deepinfra.com/openai/v1',
       defaultModel: 'llama-3.3-70b-versatile',
       fallbackModel: '',
       notes: 'admin metadata',

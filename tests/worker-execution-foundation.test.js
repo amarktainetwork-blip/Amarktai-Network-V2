@@ -17,19 +17,19 @@ const prismaMock = vi.hoisted(() => ({
   },
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
-      { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+      { provider: 'deepinfra', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
     ]),
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
-      { providerKey: 'groq', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))
 
 const credentialMocks = vi.hoisted(() => {
   class ProviderConfigError extends Error {
-    constructor(message, providerKey = 'groq', code = 'missing-config') {
+    constructor(message, providerKey = 'deepinfra', code = 'missing-config') {
       super(message)
       this.providerKey = providerKey
       this.code = code
@@ -624,7 +624,7 @@ describe('Worker does not call providers', () => {
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
-  it('does not import or call Groq adapter', async () => {
+  it('does not import or call deepinfra adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
     await expect(processJob(makePayload())).rejects.toThrow(/blocked|missing configuration|no eligible candidate/)
@@ -632,7 +632,7 @@ describe('Worker does not call providers', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('groqChat')
+    expect(failedUpdate[0].data.error).not.toContain('deepinfraChat')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 

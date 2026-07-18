@@ -78,12 +78,12 @@ async function checkWorkerExecution() {
   return {
     found: true,
     executors: {
-      groqChat: direct?.includes('executeGroqChat') || false,
-      groqText: direct?.includes('executeValidatedTextCapability') || false,
-      groqStreaming: streaming?.includes('openAiStreamingChat') || false,
-      groqToolUse: direct?.includes('executeGroqToolUse') || false,
-      groqTts: direct?.includes('executeGroqTts') || false,
-      groqStt: direct?.includes('executeGroqStt') || false,
+      deepinfraChat: direct?.includes('executedeepinfraChat') || false,
+      deepinfraText: direct?.includes('executeValidatedTextCapability') || false,
+      deepinfraStreaming: streaming?.includes('openAiStreamingChat') || false,
+      deepinfraToolUse: direct?.includes('executedeepinfraToolUse') || false,
+      deepinfraTts: direct?.includes('executedeepinfraTts') || false,
+      deepinfraStt: direct?.includes('executedeepinfraStt') || false,
       deepinfraText: direct?.includes('executeValidatedTextCapability') || false,
       deepinfraTasks: direct?.includes('executeDeepInfraTaskCapability') || false,
       embeddings: direct?.includes('executeEmbeddingsCapability') || false,
@@ -239,7 +239,7 @@ async function checkProviderClients() {
   return {
     found: true,
     clients: {
-      groq: content.includes('groqChat') || content.includes('groq'),
+      deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
       together: content.includes('togetherGenerateImage') || content.includes('together'),
       genx: content.includes('genxGenerateVideo') || content.includes('genx'),
       deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
@@ -521,7 +521,7 @@ async function runAudit() {
     musicExecutorReady: musicTruth.executorRegistered && musicTruth.clientImplemented,
     togetherMusicModels: discoveredMusicModels.filter(model => model.provider === 'together').map(model => model.modelId),
     deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
-    groqMusicModels: discoveredMusicModels.filter(model => model.provider === 'groq').map(model => model.modelId),
+    deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
     endpointShapeKnown: musicEndpointShapeKnown,
     providerCapabilityAudit: baselineRuntimeTruth.providers.map(provider => ({
       provider: provider.provider,
@@ -851,7 +851,7 @@ async function runAudit() {
   const canonicalRuntimeTruth = getRuntimeTruth({
     providers: {
       genx: { enabled: false, configured: false, healthStatus: 'unconfigured' },
-      groq: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      deepinfra: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       together: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       deepinfra: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       mimo: {
@@ -1017,7 +1017,7 @@ async function runAudit() {
   
   console.log('⚡ EXECUTABLE CAPABILITIES')
   console.log(`   Total executable: ${executableCapabilities.length}`)
-  console.log(`   Via text router (Groq/DeepInfra): ${executableViaTextRouter.length}`)
+  console.log(`   Via text router (deepinfra/DeepInfra): ${executableViaTextRouter.length}`)
   for (const cap of executableViaTextRouter) {
     console.log(`     ✓ ${cap.capability} (${cap.status})`)
   }

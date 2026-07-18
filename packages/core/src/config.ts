@@ -47,12 +47,6 @@ export const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 5)
 
 // ── Provider API Keys ─────────────────────────────────────────────────────────
 
-export function getGroqApiKey(): string {
-  const key = process.env.GROQ_API_KEY
-  if (!key) throw new Error('GROQ_API_KEY environment variable is required')
-  return key
-}
-
 export function getTogetherApiKey(): string {
   const key = process.env.TOGETHER_API_KEY
   if (!key) throw new Error('TOGETHER_API_KEY environment variable is required')
@@ -77,19 +71,14 @@ export function getDeepinfraApiKey(): string {
 
 // ── Provider Defaults ─────────────────────────────────────────────────────────
 
-export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const TOGETHER_BASE_URL = 'https://api.together.xyz/v1'
 export const DEEPINFRA_BASE_URL = 'https://api.deepinfra.com/v1'
 export const DEEPINFRA_OPENAI_BASE_URL = 'https://api.deepinfra.com/v1/openai'
 
-export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 export const DEEPINFRA_DEFAULT_CHAT_MODEL = process.env.DEEPINFRA_DEFAULT_MODEL ?? 'meta-llama/Meta-Llama-3.1-8B-Instruct'
-export const GROQ_STT_MODEL = 'whisper-large-v3'
-export const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english'
 // No unsafe repository fallback is set for Together image generation. Configure
 // a serverless-accessible model through the provider defaultModel or env.
 export const TOGETHER_DEFAULT_IMAGE_MODEL = ''
-export const GROQ_TTS_MAX_CHARS = 200
 
 export function getTogetherImageModel(): string {
   return process.env.TOGETHER_IMAGE_MODEL?.trim() || TOGETHER_DEFAULT_IMAGE_MODEL

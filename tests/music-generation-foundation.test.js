@@ -243,7 +243,7 @@ describe('Music generation backend foundation', () => {
     expect(status.lyriaProDiscovered).toBe(true)
     expect(status.liveProven).toBe(false)
     expect(status.lastProofAt).toBeNull()
-    expect(status.approvedProviderAudit).toHaveLength(5)
+    expect(status.approvedProviderAudit).toHaveLength(4)
     expect(status.approvedProviderAudit.find((entry) => entry.provider === 'mimo')?.note).toContain('coding_tools_only')
   })
 
@@ -276,7 +276,7 @@ describe('Music generation backend foundation', () => {
   })
 
   it('keeps the approved provider list unchanged', () => {
-    expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   it('has music catalogue entries without making catalogue presence sufficient for execution', () => {

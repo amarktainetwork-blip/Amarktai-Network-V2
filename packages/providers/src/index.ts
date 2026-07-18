@@ -6,19 +6,6 @@
  * No provider-specific routing logic lives here — that belongs in the worker adapters.
  */
 
-// Groq — text chat, speech-to-text, text-to-speech
-export {
-  groqChat,
-  groqStt,
-  groqTts,
-  type GroqChatRequest,
-  type GroqChatResponse,
-  type GroqSttResponse,
-  type GroqTtsResponse,
-  type GroqSttOptions,
-  type GroqTtsRequest,
-} from './groq-client.js'
-
 // DeepInfra — OpenAI-compatible text fallback/runtime diagnostics
 export {
   deepinfraChat,
@@ -175,7 +162,6 @@ export {
   runProviderModelDiscovery,
   discoverDeepInfraProviderModels,
   discoverGenXProviderModels,
-  discoverGroqProviderModels,
   discoverMimoProviderModels,
   discoverTogetherProviderModels,
   type ProviderModelDiscoveryRunOptions,

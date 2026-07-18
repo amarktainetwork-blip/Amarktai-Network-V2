@@ -52,7 +52,7 @@ describe('production release-candidate canonical contract', () => {
   })
 
   it('keeps MiMo coding-only and derives all provider identities from one definition list', () => {
-    expect(APPROVED_PROVIDER_DEFINITIONS).toHaveLength(5)
+    expect(APPROVED_PROVIDER_DEFINITIONS).toHaveLength(4)
     expect(APPROVED_PROVIDER_DEFINITIONS.filter((provider) => provider.backendExecutionAllowed)).toHaveLength(3)
     expect(APPROVED_PROVIDER_DEFINITIONS.find((provider) => provider.key === 'mimo')).toMatchObject({ codingOnly: true, backendExecutionAllowed: false })
     expect(source('lib/provider-settings-contract.js')).toContain('APPROVED_PROVIDER_DEFINITIONS')

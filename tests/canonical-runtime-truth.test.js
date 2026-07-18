@@ -12,7 +12,7 @@ function truth(overrides = {}) {
   return getRuntimeTruth({
     providers: {
       genx: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
-      groq: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
+      deepinfra: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       together: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       deepinfra: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       mimo: { enabled: false, runtimeEnabled: false, configured: true, credentialUsagePolicy: 'coding_tools_only', healthStatus: 'runtime_restricted' },
@@ -79,7 +79,7 @@ describe('canonical runtime truth', () => {
   it('exposes one provider policy with only approved runtime providers', () => {
     const runtimeTruth = truth()
 
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     expect(runtimeTruth.providerPolicy.runtimeExecutionProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(runtimeTruth.providerPolicy.codingOnlyProviders).toEqual(['mimo'])
     expect(runtimeTruth.providerPolicy.qwenRuntimeEligible).toBe(false)
@@ -104,7 +104,7 @@ describe('canonical runtime truth', () => {
     const toolUse = capability(runtimeTruth, 'tool_use')
 
     expect(toolUse.catalogueKnown).toBe(true)
-    // tool_use was registered to Groq which is no longer a runtime provider
+    // tool_use was registered to deepinfra which is no longer a runtime provider
     expect(toolUse.implementationReady).toBe(false)
     expect(toolUse.classification).toBe('CATALOGUE_ONLY')
     expect(toolUse.blockedReasons.length).toBeGreaterThan(0)
@@ -320,10 +320,10 @@ describe('canonical runtime truth', () => {
 
   it('text proof rejects placeholders and missing trusted execution provenance', () => {
     const empty = { capabilities: {}, evidenceAvailable: true }
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: '', artifactId: null, output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: '', artifactId: null, output: 'real output' })], [])).toEqual(empty)
     expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual(empty)
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual(empty)
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual(empty)
   })
 
   it('music proof requires a valid audio artifact path before liveProven is true', () => {

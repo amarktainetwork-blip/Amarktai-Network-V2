@@ -34,8 +34,8 @@ const SECRET = 'phase-6c-test-secret-with-enough-entropy'
 
 function makeRow(overrides = {}) {
   return {
-    providerKey: 'groq',
-    displayName: 'Groq',
+    providerKey: 'deepinfra',
+    displayName: 'deepinfra',
     enabled: true,
     apiKey: '',
     maskedPreview: '',
@@ -107,20 +107,20 @@ describe('Provider key resolver', () => {
   })
 
   it('validates provider IDs are final five only', async () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     await expect(resolveProviderApiKey('openai')).rejects.toMatchObject({ code: 'invalid-provider' })
   })
 
   it('DB encrypted key resolves before env fallback', async () => {
-    process.env.GROQ_API_KEY = 'env-groq-key'
+    process.env.DEEPINFRA_API_KEY = 'env-deepinfra-key'
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
-      apiKey: encryptProviderKey('db-groq-key'),
+      apiKey: encryptProviderKey('db-deepinfra-key'),
       maskedPreview: 'gsk_********1234',
     }))
 
-    const resolved = await resolveProviderApiKey('groq')
+    const resolved = await resolveProviderApiKey('deepinfra')
 
-    expect(resolved).toEqual({ providerKey: 'groq', apiKey: 'db-groq-key', source: 'database' })
+    expect(resolved).toEqual({ providerKey: 'deepinfra', apiKey: 'db-deepinfra-key', source: 'database' })
   })
 
   it('env fallback works when DB key is missing', async () => {
@@ -145,48 +145,48 @@ describe('Provider key resolver', () => {
   })
 
   it('missing DB and env returns safe missing-config error', async () => {
-    delete process.env.GROQ_API_KEY
+    delete process.env.DEEPINFRA_API_KEY
     prismaMock.aiProvider.findUnique.mockResolvedValue(null)
 
-    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({
+    await expect(resolveProviderApiKey('deepinfra')).rejects.toMatchObject({
       code: 'missing-config',
-      message: "Provider 'groq' is missing configuration",
+      message: "Provider 'deepinfra' is missing configuration",
     })
   })
 
   it('disabled provider blocks DB key use', async () => {
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       enabled: false,
-      apiKey: encryptProviderKey('db-groq-key'),
+      apiKey: encryptProviderKey('db-deepinfra-key'),
     }))
 
-    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({ code: 'disabled' })
+    await expect(resolveProviderApiKey('deepinfra')).rejects.toMatchObject({ code: 'disabled' })
   })
 
   it('disabled provider with empty DB key blocks env fallback', async () => {
-    process.env.GROQ_API_KEY = 'env-groq-key'
+    process.env.DEEPINFRA_API_KEY = 'env-deepinfra-key'
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       enabled: false,
       apiKey: '',
       maskedPreview: '',
     }))
 
-    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({
+    await expect(resolveProviderApiKey('deepinfra')).rejects.toMatchObject({
       code: 'disabled',
-      message: "Provider 'groq' is disabled",
+      message: "Provider 'deepinfra' is disabled",
     })
   })
 
   it('clear key disables provider and prevents env fallback', async () => {
-    process.env.GROQ_API_KEY = 'env-groq-key'
+    process.env.DEEPINFRA_API_KEY = 'env-deepinfra-key'
     prismaMock.aiProvider.findUnique
       .mockResolvedValueOnce(makeRow({ apiKey: 'v1:existing', maskedPreview: 'gsk_********1111' }))
       .mockResolvedValueOnce(makeRow({ enabled: false, apiKey: '', maskedPreview: '' }))
       .mockResolvedValueOnce(makeRow({ enabled: false, apiKey: '', maskedPreview: '' }))
     prismaMock.aiProvider.upsert.mockResolvedValue({})
 
-    const status = await clearProviderCredential('groq')
-    await expect(resolveProviderApiKey('groq')).rejects.toMatchObject({ code: 'disabled' })
+    const status = await clearProviderCredential('deepinfra')
+    await expect(resolveProviderApiKey('deepinfra')).rejects.toMatchObject({ code: 'disabled' })
 
     const updateData = prismaMock.aiProvider.upsert.mock.calls[0][0].update
     expect(updateData.enabled).toBe(false)
@@ -196,16 +196,16 @@ describe('Provider key resolver', () => {
   })
 
   it('enabled provider with empty DB key can use env fallback', async () => {
-    process.env.GROQ_API_KEY = 'env-groq-key'
+    process.env.DEEPINFRA_API_KEY = 'env-deepinfra-key'
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       enabled: true,
       apiKey: '',
       maskedPreview: '',
     }))
 
-    const resolved = await resolveProviderApiKey('groq')
+    const resolved = await resolveProviderApiKey('deepinfra')
 
-    expect(resolved).toEqual({ providerKey: 'groq', apiKey: 'env-groq-key', source: 'env' })
+    expect(resolved).toEqual({ providerKey: 'deepinfra', apiKey: 'env-deepinfra-key', source: 'env' })
   })
 
   it('MiMo defaults to coding tools only and blocks backend runtime resolver', async () => {
@@ -269,8 +269,8 @@ describe('Provider key resolver', () => {
   })
 
   it('disabled errors and status do not expose raw keys or ciphertext', async () => {
-    process.env.GROQ_API_KEY = 'env-groq-key'
-    const encrypted = encryptProviderKey('db-groq-key')
+    process.env.DEEPINFRA_API_KEY = 'env-deepinfra-key'
+    const encrypted = encryptProviderKey('db-deepinfra-key')
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       enabled: false,
       apiKey: encrypted,
@@ -278,35 +278,35 @@ describe('Provider key resolver', () => {
     }))
 
     try {
-      await resolveProviderApiKey('groq')
+      await resolveProviderApiKey('deepinfra')
       throw new Error('expected disabled failure')
     } catch (err) {
       const serialized = JSON.stringify(err)
-      expect(err.message).toBe("Provider 'groq' is disabled")
-      expect(serialized).not.toContain('env-groq-key')
-      expect(serialized).not.toContain('db-groq-key')
+      expect(err.message).toBe("Provider 'deepinfra' is disabled")
+      expect(serialized).not.toContain('env-deepinfra-key')
+      expect(serialized).not.toContain('db-deepinfra-key')
       expect(serialized).not.toContain(encrypted)
     }
 
-    const status = await getProviderCredentialStatus('groq')
+    const status = await getProviderCredentialStatus('deepinfra')
     const serializedStatus = JSON.stringify(status)
-    expect(serializedStatus).not.toContain('env-groq-key')
-    expect(serializedStatus).not.toContain('db-groq-key')
+    expect(serializedStatus).not.toContain('env-deepinfra-key')
+    expect(serializedStatus).not.toContain('db-deepinfra-key')
     expect(serializedStatus).not.toContain(encrypted)
   })
 
   it('status never returns raw key or ciphertext', async () => {
-    const encrypted = encryptProviderKey('db-groq-key')
+    const encrypted = encryptProviderKey('db-deepinfra-key')
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
       apiKey: encrypted,
       maskedPreview: 'gsk_********1234',
     }))
 
-    const status = await getProviderCredentialStatus('groq')
+    const status = await getProviderCredentialStatus('deepinfra')
     const serialized = JSON.stringify(status)
 
     expect(status.maskedPreview).toBe('gsk_********1234')
-    expect(serialized).not.toContain('db-groq-key')
+    expect(serialized).not.toContain('db-deepinfra-key')
     expect(serialized).not.toContain(encrypted)
     expect(status.source).toBe('database')
   })
@@ -322,7 +322,7 @@ describe('Provider key resolver', () => {
     prismaMock.aiProvider.upsert.mockResolvedValue({})
 
     const status = await saveProviderCredential({
-      providerKey: 'groq',
+      providerKey: 'deepinfra',
       apiKey: 'gsk_test_secret_abcd',
       enabled: true,
     })
@@ -343,7 +343,7 @@ describe('Provider key resolver', () => {
       .mockResolvedValueOnce(makeRow({ apiKey: 'v1:existing', maskedPreview: 'gsk_********1111' }))
     prismaMock.aiProvider.upsert.mockResolvedValue({})
 
-    await saveProviderCredential({ providerKey: 'groq', notes: 'updated' })
+    await saveProviderCredential({ providerKey: 'deepinfra', notes: 'updated' })
 
     const updateData = prismaMock.aiProvider.upsert.mock.calls[0][0].update
     expect(updateData.notes).toBe('updated')
@@ -357,7 +357,7 @@ describe('Provider key resolver', () => {
       .mockResolvedValueOnce(makeRow({ enabled: false, apiKey: '', maskedPreview: '' }))
     prismaMock.aiProvider.upsert.mockResolvedValue({})
 
-    const status = await clearProviderCredential('groq')
+    const status = await clearProviderCredential('deepinfra')
     const updateData = prismaMock.aiProvider.upsert.mock.calls[0][0].update
 
     expect(updateData.apiKey).toBe('')
@@ -368,17 +368,17 @@ describe('Provider key resolver', () => {
 
   it('resolver error does not expose raw keys', async () => {
     prismaMock.aiProvider.findUnique.mockResolvedValue(makeRow({
-      apiKey: encryptProviderKey('db-groq-key', SECRET),
+      apiKey: encryptProviderKey('db-deepinfra-key', SECRET),
     }))
     process.env.PROVIDER_KEY_ENCRYPTION_SECRET = 'wrong-secret'
 
     try {
-      await resolveProviderApiKey('groq')
+      await resolveProviderApiKey('deepinfra')
       throw new Error('expected failure')
     } catch (err) {
       expect(err).toBeInstanceOf(ProviderConfigError)
-      expect(JSON.stringify(err)).not.toContain('db-groq-key')
-      expect(err.message).not.toContain('db-groq-key')
+      expect(JSON.stringify(err)).not.toContain('db-deepinfra-key')
+      expect(err.message).not.toContain('db-deepinfra-key')
     }
   })
 })

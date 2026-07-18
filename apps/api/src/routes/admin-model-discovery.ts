@@ -143,7 +143,6 @@ function discoverySummary(models: ProviderDiscoveredModel[]) {
       genxMusicModels: musicModels.filter((model) => model.provider === 'genx').map((model) => model.modelId),
       togetherMusicModels: musicModels.filter((model) => model.provider === 'together').map((model) => model.modelId),
       deepinfraMusicModels: musicModels.filter((model) => model.provider === 'deepinfra').map((model) => model.modelId),
-      groqMusicModels: musicModels.filter((model) => model.provider === 'groq').map((model) => model.modelId),
       endpointShapeKnown: musicModels.some((model) => model.endpointShapeKnown),
       providerClientExists: musicModels.some((model) => model.providerClientExists),
       workerExecutorExists: musicModels.some((model) => model.workerExecutorExists),

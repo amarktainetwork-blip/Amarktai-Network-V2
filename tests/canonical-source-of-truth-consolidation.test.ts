@@ -114,9 +114,9 @@ describe('canonical source-of-truth consolidation', () => {
     expect(summary.category).toBe(CAPABILITY_BY_KEY.image_generation.category)
   })
 
-  it('defines five approved providers, three runtime providers, and MiMo as coding-only', () => {
-    expect(APPROVED_PROVIDER_DEFINITIONS).toHaveLength(5)
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+  it('defines four approved providers, three runtime providers, and MiMo as coding-only', () => {
+    expect(APPROVED_PROVIDER_DEFINITIONS).toHaveLength(4)
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     expect(RUNTIME_EXECUTION_PROVIDERS).toEqual(['genx', 'together', 'deepinfra'])
     expect(CODING_ONLY_PROVIDERS).toEqual(['mimo'])
     expect(APPROVED_PROVIDER_DEFINITIONS.find((provider) => provider.key === 'mimo')).toMatchObject({
@@ -130,8 +130,8 @@ describe('canonical source-of-truth consolidation', () => {
     expect(getExecutorRegistration('image_edit', 'together')).toBeUndefined()
     expect(getExecutorRegistration('image_to_video', 'genx')?.id).toBe('genx.video-generation')
     expect(getExecutorRegistration('tts', 'genx')?.id).toBe('genx.tts')
-    expect(getExecutorRegistration('tts', 'groq')).toBeUndefined()
-    expect(getExecutorRegistration('campaign_generation', 'groq')).toBeUndefined()
+    expect(getExecutorRegistration('tts', 'deepinfra')).toBeUndefined()
+    expect(getExecutorRegistration('campaign_generation', 'deepinfra')).toBeUndefined()
     // Executors dispatched externally (streaming, media/async) don't need DIRECT_EXECUTOR_HANDLERS
     const externallyDispatched = new Set([
       'deepinfra.chat', 'together.image-generation', 'genx.video-generation',

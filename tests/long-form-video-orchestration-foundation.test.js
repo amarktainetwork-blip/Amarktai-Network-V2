@@ -100,7 +100,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'A documentary about space',
         targetDurationSeconds: 120,
-        sceneCount: 4
+        sceneCount: 5
       })
       const plan = createLongFormVideoPlan(request)
       
@@ -108,7 +108,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(plan.prompt).toBe(request.prompt)
       expect(plan.totalDurationSeconds).toBe(120)
       expect(plan.storyboard).toBeDefined()
-      expect(plan.storyboard.scenes).toHaveLength(4)
+      expect(plan.storyboard.scenes).toHaveLength(5)
       expect(plan.renderSteps).toBeDefined()
       expect(plan.artifactPlan).toBeDefined()
       expect(plan.missingDependencies).toBeDefined()
@@ -121,7 +121,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for duration splitting',
         targetDurationSeconds: 120,
-        sceneCount: 4
+        sceneCount: 5
       })
       const plan = createLongFormVideoPlan(request)
       
@@ -131,9 +131,9 @@ describe('Long-Form Video Orchestration Foundation', () => {
       )
       expect(totalSceneDuration).toBe(120)
       
-      // Each scene should have 30 seconds
+      // Each scene should have 24 seconds (120 / 5)
       plan.storyboard.scenes.forEach(scene => {
-        expect(scene.durationSeconds).toBe(30)
+        expect(scene.durationSeconds).toBe(24)
       })
     })
 
@@ -299,8 +299,8 @@ describe('Long-Form Video Orchestration Foundation', () => {
 
   describe('Provider list integrity', () => {
     it('no new providers added', () => {
-      expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-      expect(PROVIDER_KEYS).toHaveLength(5)
+      expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
+      expect(PROVIDER_KEYS).toHaveLength(4)
     })
 
     it('no banned providers', () => {

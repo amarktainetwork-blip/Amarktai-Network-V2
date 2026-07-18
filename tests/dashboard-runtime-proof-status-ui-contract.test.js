@@ -10,7 +10,7 @@ import {
 } from '../lib/runtime-proof-status.js'
 
 const ROOT = process.cwd()
-const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const FINAL_PROVIDERS = ['genx', 'together', 'mimo', 'deepinfra']
 const BANNED_PROVIDER_NAMES = [
   'OpenAI',
   'Anthropic',
@@ -41,13 +41,13 @@ function source(file) {
 function makeTruthWithProof(provenCapabilities = []) {
   return {
     generatedAt: new Date().toISOString(),
-    providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+    providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
     providers: [],
     capabilities: provenCapabilities.map((cap) => ({
       capability: cap,
       liveProven: true,
       classification: 'LIVE_PROVEN',
-      eligibleModels: [{ provider: 'groq', modelId: 'test-model', liveProven: true }],
+      eligibleModels: [{ provider: 'deepinfra', modelId: 'test-model', liveProven: true }],
     })),
     releaseReadiness: provenCapabilities.map((capability) => ({ capability, readyForDashboardExecution: true })),
     countsByClassification: {},
@@ -145,7 +145,7 @@ describe('Dashboard runtime proof status UI contract', () => {
   it('distinguishes zero evidence from unavailable evidence', () => {
     const zeroEvidence = projectProofStatusFromTruth({
       generatedAt: new Date().toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
       countsByClassification: {},
@@ -156,7 +156,7 @@ describe('Dashboard runtime proof status UI contract', () => {
 
     const unavailable = projectProofStatusFromTruth({
       generatedAt: new Date().toISOString(),
-      providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
       providers: [],
       capabilities: [],
       countsByClassification: {},
@@ -170,7 +170,7 @@ describe('Dashboard runtime proof status UI contract', () => {
 function makeMinimalTruth() {
   return {
     generatedAt: new Date().toISOString(),
-    providerPolicy: { runtimeExecutionProviders: ['genx', 'groq', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+    providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
     providers: [],
     capabilities: [],
     countsByClassification: {},

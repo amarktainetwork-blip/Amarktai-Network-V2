@@ -188,7 +188,7 @@ describe('Provider/model override blocking', () => {
   })
 
   it.each([
-    ['providerOverride', { providerOverride: 'groq' }],
+    ['providerOverride', { providerOverride: 'deepinfra' }],
     ['modelOverride', { modelOverride: 'llama-3' }],
     ['provider', { provider: 'genx' }],
     ['model', { model: 'gpt-4' }],
@@ -202,7 +202,7 @@ describe('Provider/model override blocking', () => {
     expect(hasBlockedOverrides({
       capability: 'chat',
       prompt: 'hello',
-      provider: 'groq',
+      provider: 'deepinfra',
     })).toBe('provider')
   })
 
@@ -659,7 +659,7 @@ describe('Job route integration (Fastify inject)', async () => {
       method: 'POST',
       url: '/api/v1/jobs',
       headers: { authorization: VALID_BEARER },
-      payload: { capability: 'chat', prompt: 'hello', provider: 'groq' },
+      payload: { capability: 'chat', prompt: 'hello', provider: 'deepinfra' },
     })
 
     expect(res.statusCode).toBe(400)

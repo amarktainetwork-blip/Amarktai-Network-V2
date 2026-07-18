@@ -17,7 +17,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
   genxPollVideo: vi.fn(),
@@ -119,7 +119,7 @@ describe('GenX video executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       GENX_API_KEY: 'genx-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockResolvedValue({
@@ -299,6 +299,6 @@ describe('GenX video executor', () => {
   })
 
   it('keeps the approved provider set unchanged', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 })

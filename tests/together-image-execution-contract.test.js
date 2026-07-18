@@ -17,13 +17,13 @@ const prismaMock = vi.hoisted(() => ({
   modelRegistryEntry: {
     findMany: vi.fn().mockResolvedValue([
       { provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.003, pricingConfidence: 'known', supportsImageGeneration: true },
-      { provider: 'groq', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+      { provider: 'deepinfra', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
     ]),
   },
   aiProvider: {
     findMany: vi.fn().mockResolvedValue([
       { providerKey: 'together', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
-      { providerKey: 'groq', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
     ]),
   },
 }))
@@ -44,7 +44,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
 }))
@@ -167,7 +167,7 @@ describe('Together image executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       TOGETHER_API_KEY: 'together-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
     }
@@ -214,7 +214,7 @@ describe('Together image executor', () => {
       apiKey: 'db-together-key',
     }))
     expect(JSON.stringify(result)).not.toContain('db-together-key')
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.deepinfraChat).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 
@@ -334,7 +334,7 @@ describe('Execution routing gate', () => {
     vi.clearAllMocks()
     process.env = {
       ...ORIGINAL_ENV,
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
@@ -345,7 +345,7 @@ describe('Execution routing gate', () => {
       source: 'database',
     }))
     mockTogetherProviderStatus()
-    providerMocks.groqChat.mockResolvedValue({
+    providerMocks.deepinfraChat.mockResolvedValue({
       content: 'chat ok',
       model: 'llama-3.3-70b-versatile',
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
@@ -429,7 +429,7 @@ describe('Execution routing gate', () => {
   })
 
   it('keeps the final provider ID set intact', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 })
 
@@ -439,7 +439,7 @@ describe('Artifact persistence and worker completion', () => {
     process.env = {
       ...ORIGINAL_ENV,
       TOGETHER_API_KEY: 'together-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => ({
       providerKey,
@@ -581,12 +581,12 @@ describe('Artifact persistence and worker completion', () => {
     expect(artifactMocks.saveArtifact).not.toHaveBeenCalled()
   })
 
-  it('does not call GenX, Groq, Mimo, or DeepInfra for image jobs', async () => {
+  it('does not call GenX, deepinfra, Mimo, or DeepInfra for image jobs', async () => {
     const processor = createJobProcessor()
     await processor(makePayload())
 
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledTimes(1)
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.deepinfraChat).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 })

@@ -39,7 +39,7 @@ try {
   const discovery = await requestJson('/api/admin/models/discovery/run', {
     method: 'POST', token: login.token, body: { live: true, strict: true },
   })
-  const runtimeProviders = ['genx', 'groq', 'together', 'deepinfra']
+  const runtimeProviders = ['genx', 'together', 'deepinfra']
   const results = Array.isArray(discovery.results) ? discovery.results : []
   for (const provider of runtimeProviders) {
     const result = results.find((entry) => entry.provider === provider)

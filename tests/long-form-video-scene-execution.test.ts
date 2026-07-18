@@ -248,7 +248,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         validateLongFormVideoRequest({
           prompt: 'Test prompt for execution state',
           targetDurationSeconds: 120,
-          sceneCount: 4,
+          sceneCount: 5,
         })
       )
 
@@ -257,8 +257,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(state.executionId).toBeDefined()
       expect(state.planId).toBe(plan.id)
       expect(state.routingMode).toBe('balanced')
-      expect(state.totalScenes).toBe(4)
-      expect(state.scenes).toHaveLength(4)
+      expect(state.totalScenes).toBe(5)
+      expect(state.scenes).toHaveLength(5)
       expect(state.progress).toBe(0)
       expect(state.finalAssemblyReady).toBe(false)
 

@@ -14,7 +14,7 @@ const checks = [
   ['rollback identity', preflight.includes('ROLLBACK_SHA')],
   ['disk check', preflight.includes('5242880')],
   ['environment permissions', preflight.includes("stat -c '%a' .env")],
-  ['canonical runtime provider names', ['GENX_API_KEY', 'GROQ_API_KEY', 'TOGETHER_API_KEY', 'DEEPINFRA_API_KEY'].every((key) => preflight.includes(key)) && !preflight.includes('MIMO_API_KEY')],
+  ['canonical runtime provider names', ['GENX_API_KEY', 'TOGETHER_API_KEY', 'DEEPINFRA_API_KEY'].every((key) => preflight.includes(key)) && !preflight.includes('MIMO_API_KEY') && !preflight.includes('GROQ_API_KEY')],
   ['placeholder public URL rejected', preflight.includes('example.com') && preflight.includes('PUBLIC_API_URL')],
   ['provider base URL and authenticated proof inputs checked', preflight.includes('GENX_BASE_URL') && preflight.includes('ADMIN_PASSWORD must be nonempty')],
   ['compose and nginx validated', preflight.includes('docker compose config --quiet') && preflight.includes('nginx -t')],

@@ -215,9 +215,9 @@ describe('dashboard polish and routing map contract', () => {
       expect(BLOCKED_OVERRIDE_FIELDS).toEqual(expect.arrayContaining(['provider', 'model', 'providerOverride', 'modelOverride']))
     })
 
-    it('provider list remains exactly genx, groq, together, mimo, deepinfra', async () => {
+    it('provider list remains exactly genx, deepinfra, together, mimo, deepinfra', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
-      expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
 
     it('MiMo remains coding_tools_only and adult generation remains on hold', async () => {

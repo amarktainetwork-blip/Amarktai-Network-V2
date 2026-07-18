@@ -1,7 +1,7 @@
 /**
  * Stored-key live proof harness — proves runtime can use DB-stored encrypted keys.
  *
- * This file does NOT mock @amarktai/providers, groqChat, or togetherGenerateImage.
+ * This file does NOT mock @amarktai/providers, deepinfraChat, or togetherGenerateImage.
  * It uses resolveProviderApiKey() to resolve keys from DB first, env fallback second.
  *
  * Live provider calls run only when:
@@ -38,7 +38,7 @@ if (canRunArtifact && !process.env.STORAGE_ROOT && !process.env.AMARKTAI_STORAGE
 
 function safeProofJson(value, extraSecrets = []) {
   const secrets = [
-    process.env.GROQ_API_KEY,
+    process.env.deepinfra_API_KEY,
     process.env.TOGETHER_API_KEY,
     process.env.PROVIDER_KEY_ENCRYPTION_SECRET,
     process.env.JWT_SECRET,
@@ -75,7 +75,7 @@ describe('Stored-key live proof contract', () => {
     const db = await import('@amarktai/db')
     // resolveProviderApiKey should exist but not expose keys in module scope
     const serialized = JSON.stringify(Object.keys(db))
-    expect(serialized).not.toContain('GROQ_API_KEY')
+    expect(serialized).not.toContain('deepinfra_API_KEY')
     expect(serialized).not.toContain('TOGETHER_API_KEY')
   })
 
@@ -114,8 +114,8 @@ describe('Stored-key live proof contract', () => {
     expect(db.ProviderConfigError).toBeDefined()
   })
 
-  it('Groq proof payload uses capability chat', () => {
-    // Verify the capability used for Groq proof
+  it('deepinfra proof payload uses capability chat', () => {
+    // Verify the capability used for deepinfra proof
     const capability = 'chat'
     expect(capability).toBe('chat')
   })
@@ -158,33 +158,33 @@ describe('Stored-key live proof contract', () => {
   })
 })
 
-// ── Live stored-key Groq proof ───────────────────────────────────────────────
+// ── Live stored-key deepinfra proof ───────────────────────────────────────────────
 
-describe.skipIf(!canRunLive)('Stored-key Groq chat live proof', () => {
-  it('resolves stored Groq key from DB and executes chat', async () => {
+describe.skipIf(!canRunLive)('Stored-key deepinfra chat live proof', () => {
+  it('resolves stored deepinfra key from DB and executes chat', async () => {
     const { resolveProviderApiKey } = await import('@amarktai/db')
     const { executeWithProvider } = await import('../apps/worker/src/providers/provider-executor.ts')
 
     // Resolve key from DB
-    const credential = await resolveProviderApiKey('groq')
+    const credential = await resolveProviderApiKey('deepinfra')
     expect(credential.source).toBe('database')
     expect(credential.apiKey).toBeTruthy()
     expect(credential.apiKey.length).toBeGreaterThan(0)
 
     // Execute chat through provider executor
     const result = await executeWithProvider({
-      jobId: 'stored-proof-groq',
+      jobId: 'stored-proof-deepinfra',
       appSlug: 'proof-app',
       capability: 'chat',
-      prompt: 'Reply with exactly: AMARKTAI_STORED_GROQ_OK',
+      prompt: 'Reply with exactly: AMARKTAI_STORED_deepinfra_OK',
       input: {},
       metadata: {},
-      traceId: 'trace-stored-groq',
+      traceId: 'trace-stored-deepinfra',
     })
 
     expect(result.success).toBe(true)
     expect(result.status).toBe('completed')
-    expect(result.provider).toBe('groq')
+    expect(result.provider).toBe('deepinfra')
     expect(result.output).toBeTruthy()
     expect(result.output.length).toBeGreaterThan(0)
     expect(result.model).toBeTruthy()

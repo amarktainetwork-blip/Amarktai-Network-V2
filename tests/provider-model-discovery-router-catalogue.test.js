@@ -14,7 +14,7 @@ import {
 } from '../packages/core/src/index.ts'
 import {
   discoverGenXProviderModels,
-  discoverGroqProviderModels,
+  discoverDeepInfraProviderModels,
   discoverDeepInfraProviderModels,
   discoverMimoProviderModels,
   discoverTogetherProviderModels,
@@ -126,7 +126,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('approved providers remain exactly the final five', () => {
-    expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   it('does not add banned providers', () => {
@@ -162,7 +162,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(output).toContain('Mode: safe_static')
     expect(report.liveDiscoveryAttempted).toBe(false)
     expect(report.mode).toBe('safe_static')
-    expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(report.approvedProviders).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     expect(report.runtimeExecutableProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(93)
     expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
@@ -227,7 +227,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   it('strict live discovery fails when required runtime keys are missing but does not require MiMo', () => {
     const env = { ...process.env }
     delete env.GENX_API_KEY
-    delete env.GROQ_API_KEY
+    delete env.deepinfra_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     delete env.MIMO_API_KEY
@@ -240,13 +240,13 @@ describe('provider model discovery and router catalogue rebuild', () => {
   it('default live mode soft-skips missing runtime keys', () => {
     const env = { ...process.env }
     delete env.GENX_API_KEY
-    delete env.GROQ_API_KEY
+    delete env.deepinfra_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     const { output, report } = runDiscovery(['--live'], { ...env, AMARKTAI_DISCOVERY_TEST: '1' })
     expect(output).toContain('Live discovery is partial')
     expect(report.liveDiscoveryPartial).toBe(true)
-    expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
+    expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'deepinfra', 'together']))
   }, 30000)
 
   it('discovery tests write only temporary output files, not committed catalogues', () => {
@@ -418,7 +418,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(failed.error).toContain('503')
   })
 
-  it('Groq live discovery uses the models endpoint only when live/key are present', async () => {
+  it('deepinfra live discovery uses the models endpoint only when live/key are present', async () => {
     const calls = []
     global.fetch = vi.fn(async (url) => {
       calls.push(String(url))
@@ -428,13 +428,15 @@ describe('provider model discovery and router catalogue rebuild', () => {
       }
     })
 
-    const safe = await discoverGroqProviderModels()
-    expect(safe.liveDiscoverySkipped).toBe(true)
-    expect(calls).toEqual([])
+    const safe = await discoverDeepInfraProviderModels()
+    expect(safe.liveDiscoveryAttempted).toBe(false)
+    expect(safe.publicDiscoveryAttempted).toBe(true)
+    const callsBeforeLive = calls.length
 
-    const live = await discoverGroqProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
+    const live = await discoverDeepInfraProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
     expect(live.liveDiscoveryAttempted).toBe(true)
-    expect(calls).toEqual(['https://api.groq.com/openai/v1/models'])
+    expect(calls.length).toBeGreaterThan(callsBeforeLive)
+    expect(calls.some((url) => url.includes('deepinfra') && url.includes('models'))).toBe(true)
     expect(live.models[0].modelId).toBe('llama-test-model')
   })
 
@@ -479,7 +481,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   it('docs fallback catalogue distinguishes GenX upstream providers from runtime providers', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
-    expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(report.runtimeExecutableProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(catalogue.map((model) => model.provider)).not.toContain('openai')
     expect(catalogue.map((model) => model.provider)).not.toContain('google')
     expect(catalogue.map((model) => model.provider)).not.toContain('xai')
@@ -496,8 +498,8 @@ describe('provider model discovery and router catalogue rebuild', () => {
       modelId: 'grok-imagine-video',
     }))
     const directProviders = [...new Set(catalogue.map((model) => model.provider))]
-    expect(directProviders.sort()).toEqual(['deepinfra', 'genx', 'groq', 'mimo', 'together'])
-    expect(catalogue.filter((model) => model.provider === 'groq').some((model) => /grok/i.test(model.modelId))).toBe(false)
+    expect(directProviders.sort()).toEqual(['deepinfra', 'genx', 'mimo', 'together'])
+    expect(catalogue.filter((model) => model.provider === 'deepinfra').some((model) => /grok/i.test(model.modelId))).toBe(false)
   })
 
   it('GenX docs fallback includes Lyria wiring without claiming runtime execution', () => {
