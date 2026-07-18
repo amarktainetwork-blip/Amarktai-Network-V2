@@ -21,6 +21,7 @@ import {
 } from '@amarktai/core'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
+import { isReleaseFixtureMode } from '../lib/release-fixture-mode.js'
 
 const APP_SLUG = 'dashboard-music'
 const REFERENCE_AUDIO_MULTIPART_LIMIT_BYTES = MAX_REFERENCE_AUDIO_BYTES
@@ -38,13 +39,21 @@ async function getAdminMusicCapabilityStatus(app: FastifyInstance) {
   })
 
   const actionableMusicBlockers = canonical?.blockedReasons?.filter((reason) => reason !== 'live_proof_missing') ?? []
+  const fixtureMode = isReleaseFixtureMode()
+  const fixtureBlockers = actionableMusicBlockers.filter((reason) => reason !== 'no_executor_compatible_catalogued_model')
+  const deterministicFixtureReady = fixtureMode && fixtureBlockers.length === 0
+  const executableNow = canonical?.executableNow === true || deterministicFixtureReady
 
   return {
     ...legacy,
     ...canonical,
-    musicGenerationReady: canonical?.executableNow === true,
-    executionBlocked: canonical?.executableNow !== true,
-    blockedReason: actionableMusicBlockers.length > 0
+    executableNow,
+    deterministicFixtureReady,
+    musicGenerationReady: executableNow,
+    executionBlocked: !executableNow,
+    blockedReason: deterministicFixtureReady
+      ? 'Deterministic local music adapter is ready; this is not live provider proof.'
+      : actionableMusicBlockers.length > 0
       ? `Music execution blocked: ${actionableMusicBlockers.join(', ')}.`
       : legacy.blockedReason,
     canonicalTruth: canonical,

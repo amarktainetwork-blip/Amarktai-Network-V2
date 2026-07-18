@@ -60,6 +60,14 @@ describe('final platform recovery contract', () => {
     expect(source('scripts/proof-avatar-app-onboarding.mjs')).toContain("process.argv.includes('--apply')")
   })
 
+  it('keeps the specialised music endpoint connected to the guarded deterministic adapter', () => {
+    const route = source('apps/api/src/routes/admin-music.ts')
+    expect(route).toContain('isReleaseFixtureMode()')
+    expect(route).toContain("reason !== 'no_executor_compatible_catalogued_model'")
+    expect(route).toContain('deterministicFixtureReady')
+    expect(route).toContain('this is not live provider proof')
+  })
+
   it('keeps both paid advert proofs explicit and materially unrelated', () => {
     const course = fixture('scripts/fixtures/course2career-advert.json')
     const second = fixture('scripts/fixtures/harbourlight-advert.json')
