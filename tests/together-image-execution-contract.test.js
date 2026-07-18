@@ -58,6 +58,7 @@ vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  recordModelAccessibilitySuccess: vi.fn().mockResolvedValue(true),
 }))
 vi.mock('@amarktai/providers', () => providerMocks)
 vi.mock('@amarktai/artifacts', () => artifactMocks)

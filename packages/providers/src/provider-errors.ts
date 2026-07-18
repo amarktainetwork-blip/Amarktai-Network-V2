@@ -3,6 +3,7 @@ export type ProviderErrorCode =
   | 'insufficient_credit'
   | 'rate_limit'
   | 'invalid_request'
+  | 'model_not_available'
   | 'unsupported_model'
   | 'provider_timeout'
   | 'provider_unavailable'
@@ -42,7 +43,8 @@ export function providerHttpError(input: {
   const body = redactProviderErrorMessage(input.body).slice(0, 1_000)
   const lower = body.toLowerCase()
   let code: ProviderErrorCode
-  if (input.status === 401 || input.status === 403) code = 'authentication'
+  if (/model_not_available|non-serverless|non serverless|dedicated endpoint (?:is )?required|unable to access.+model/.test(lower)) code = 'model_not_available'
+  else if (input.status === 401 || input.status === 403) code = 'authentication'
   else if (input.status === 402 || /insufficient|credit|balance|payment/.test(lower)) code = 'insufficient_credit'
   else if (input.status === 429) code = 'rate_limit'
   else if (input.status === 404 || /model.+not found|unsupported model/.test(lower)) code = 'unsupported_model'

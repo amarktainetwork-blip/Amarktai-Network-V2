@@ -14,7 +14,10 @@ function togetherCapabilities(modelId: string, rawType: string): Array<'chat' | 
   if (type === 'rerank') return ['reranking']
   if (type === 'moderation') return ['classification']
   if (type === 'video') return ['video_generation']
-  if (type === 'audio') return /music|text-to-music/.test(text) ? ['music_generation'] : ['tts']
+  if (type === 'audio') {
+    if (/whisper|parakeet|voxtral|speech.to.text|transcri/.test(text)) return ['stt']
+    return /music|text-to-music/.test(text) ? ['music_generation'] : ['tts']
+  }
   return ['chat']
 }
 
@@ -24,6 +27,8 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
     modelFromProviderRecord({ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1 Schnell', rawProviderType: 'image', category: 'image', endpointSource: 'repo_static_together_client', lastDiscoveredAt: timestamp, source: 'static_verified', discoverySource: 'static_verified', providerClientExists: true, workerExecutorExists: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'native_inference_json', batchSupported: true }),
     modelFromProviderRecord({ provider: 'together', modelId: 'intfloat/multilingual-e5-large-instruct', displayName: 'Multilingual E5 Large Instruct', rawProviderType: 'embedding', category: 'embedding', endpointSource: 'Together official embeddings docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, transportProfile: 'native_inference_json', batchSupported: true }),
     modelFromProviderRecord({ provider: 'together', modelId: 'Salesforce/Llama-Rank-v1', displayName: 'Llama Rank V1', rawProviderType: 'rerank', category: 'rerank', endpointSource: 'Together official rerank docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, transportProfile: 'native_inference_json', batchSupported: true }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'canopylabs/orpheus-3b-0.1-ft', displayName: 'Orpheus 3B TTS', rawProviderType: 'audio', category: 'tts', inferredCapabilities: ['tts'], endpointSource: 'Together official text-to-speech docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'openai_audio_speech_binary', modalitiesIn: ['text'], modalitiesOut: ['audio'], batchSupported: false }),
+    modelFromProviderRecord({ provider: 'together', modelId: 'openai/whisper-large-v3', displayName: 'Whisper Large V3', rawProviderType: 'audio', category: 'transcription', inferredCapabilities: ['stt'], endpointSource: 'Together official transcription docs', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: false, transportProfile: 'openai_audio_transcription_multipart', modalitiesIn: ['audio'], modalitiesOut: ['text'], batchSupported: false }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -77,6 +82,12 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
             license: record.license,
             context_length: record.context_length,
             pricing: record.pricing,
+            serverless: record.serverless,
+            availability: record.availability,
+            status: record.status,
+            endpoint_type: record.endpoint_type,
+            dedicated_endpoint_required: record.dedicated_endpoint_required,
+            deprecated: record.deprecated,
           },
           batchSupported: true,
         })

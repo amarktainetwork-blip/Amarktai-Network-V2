@@ -15,6 +15,8 @@ export type ExecutorId =
   | 'together.embeddings'
   | 'together.reranking'
   | 'together.image-generation'
+  | 'together.tts'
+  | 'together.stt'
   | 'genx.chat'
   | 'genx.streaming-chat'
   | 'genx.video-generation'
@@ -145,6 +147,8 @@ const EMBEDDINGS = profile(
 )
 const RERANK = profile(['rerank', 'reranker'], ['rerank', 'reranker', 'reranking'], ['native_inference_json'], ['rerank', 'native_inference'], ['text'], 'json')
 const IMAGE = profile(['image', 'text-to-image', 'image-generation'], ['image', 'text-to-image'], ['native_inference_json', 'native_inference_binary'], ['image_generation', 'native_inference'], ['text'], 'image')
+const TOGETHER_TTS = profile(['text-to-speech', 'tts', 'audio'], ['text-to-speech', 'tts', 'audio'], ['openai_audio_speech_binary'], ['audio_speech'], ['text'], 'audio')
+const TOGETHER_STT = profile(['automatic-speech-recognition', 'transcription', 'stt', 'audio'], ['transcription', 'stt', 'audio'], ['openai_audio_transcription_multipart'], ['audio_transcriptions'], ['audio'], 'text')
 const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>
   profile(tasks, categories, ['async_job_poll'], ['genx_generation_v1'], inputs, output)
 
@@ -170,6 +174,8 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   ...(['feature_extraction', 'sentence_similarity', 'embeddings'] as const).map((capability) => registration('together.embeddings', 'together', capability, 'executeEmbeddingsCapability', EMBEDDINGS)),
   registration('together.reranking', 'together', 'reranking', 'executeRerankingCapability', RERANK),
   registration('together.image-generation', 'together', 'image_generation', 'executeTogetherImage', IMAGE),
+  registration('together.tts', 'together', 'tts', 'executeTogetherTts', TOGETHER_TTS),
+  registration('together.stt', 'together', 'stt', 'executeTogetherStt', TOGETHER_STT),
 
   ...GENERAL_TEXT_CAPABILITIES.map((capability) => registration('genx.chat', 'genx', capability, 'executeValidatedTextCapability', GENX_TEXT)),
   registration('genx.streaming-chat', 'genx', 'streaming_chat', 'executeAuthenticatedStreamingChat', GENX_TEXT, 'stream'),

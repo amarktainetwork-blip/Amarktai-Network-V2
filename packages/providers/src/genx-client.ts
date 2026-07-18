@@ -25,6 +25,7 @@ export interface GenxVideoRequest {
   referenceVideoUrl?: string
   apiKey?: string
   baseUrl?: string
+  onSubmitted?: (jobId: string, model: string) => void | Promise<void>
 }
 
 export interface GenxVideoSubmitResponse {
@@ -314,6 +315,7 @@ export const GENX_POLL_TRANSIENT_MAX_RETRIES = 5
 
 export interface GenxLongPollCallbacks {
   onProgress?: (progress: number, status: string) => void
+  onSubmitted?: (jobId: string, model: string) => void | Promise<void>
 }
 
 export async function genxGenerateVideo(
@@ -328,6 +330,7 @@ export async function genxGenerateVideo(
   if (!submitResult.jobId) {
     throw new Error('GenX did not return a job ID')
   }
+  await (callbacks?.onSubmitted ?? request.onSubmitted)?.(submitResult.jobId, model)
 
   let attempts = 0
   let transientPollFailures = 0

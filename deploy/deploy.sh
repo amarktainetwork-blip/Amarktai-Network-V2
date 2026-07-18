@@ -285,7 +285,9 @@ nginx -t
 
 export PROOF_API_URL="${PROOF_API_URL:-http://127.0.0.1:3001}"
 DISCOVERY_OUTPUT_ROOT="$(mktemp -d)"
+echo "[discovery] UNAUTHENTICATED_HOST_DISCOVERY (environment-only; not canonical registry truth)"
 AMARKTAI_DISCOVERY_OUTPUT_ROOT="$DISCOVERY_OUTPUT_ROOT" npm run discover:models:live
+echo "[discovery] AUTHENTICATED_STORED_KEY_DISCOVERY (canonical persisted registry truth)"
 npm run proof:authenticated-discovery
 node scripts/proof-direct-provider-capabilities.mjs --live --strict
 npm run proof

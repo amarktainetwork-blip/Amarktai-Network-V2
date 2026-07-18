@@ -57,6 +57,8 @@ describe('canonical direct-provider contracts and registrations', () => {
       'together.streaming-chat',
       'genx.streaming-chat',
       'together.image-generation',
+      'together.tts',
+      'together.stt',
       'genx.video-generation',
       'genx.image-to-video',
       'genx.video-to-video',

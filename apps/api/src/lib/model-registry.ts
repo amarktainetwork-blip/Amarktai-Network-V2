@@ -452,12 +452,15 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
     const embeddings = ['embedding', 'embeddings'].includes(taskType) || ['embedding', 'embeddings'].includes(category)
     const rerank = ['rerank', 'reranker', 'reranking'].includes(taskType) || ['rerank', 'reranker', 'reranking'].includes(category)
     const image = ['image', 'text-to-image', 'image-generation'].includes(taskType) || ['image', 'text-to-image'].includes(category)
-    if (!text && !embeddings && !rerank && !image) return null
+    const tts = capabilities.includes('tts')
+    const stt = capabilities.includes('stt')
+    if (!text && !embeddings && !rerank && !image && !tts && !stt) return null
     return {
-      taskType, category: text ? 'text' : embeddings ? 'embeddings' : rerank ? 'reranking' : 'image', capabilities,
-      modalitiesIn: ['text'], modalitiesOut: text ? ['text'] : embeddings ? ['embedding'] : image ? ['image'] : ['json'],
-      transportProfile: text ? 'openai_chat_sse' : 'native_inference_json',
-      endpointFamily: text ? 'together_openai_v1/openai_chat' : embeddings ? 'embeddings' : rerank ? 'rerank' : 'image_generation',
+      taskType: tts ? 'text-to-speech' : stt ? 'automatic-speech-recognition' : taskType,
+      category: text ? 'text' : embeddings ? 'embeddings' : rerank ? 'reranking' : image ? 'image' : tts ? 'tts' : 'stt', capabilities,
+      modalitiesIn: stt ? ['audio'] : ['text'], modalitiesOut: text || stt ? ['text'] : embeddings ? ['embedding'] : image ? ['image'] : tts ? ['audio'] : ['json'],
+      transportProfile: text ? 'openai_chat_sse' : tts ? 'openai_audio_speech_binary' : stt ? 'openai_audio_transcription_multipart' : 'native_inference_json',
+      endpointFamily: text ? 'together_openai_v1/openai_chat' : embeddings ? 'embeddings' : rerank ? 'rerank' : image ? 'image_generation' : tts ? 'audio_speech' : 'audio_transcriptions',
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true,
       workerExecutorExists: capabilities.some((capability) => hasExecutorRegistration(capability, 'together')),
       streamingSupported: text,
@@ -486,6 +489,61 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
   return null
 }
 
+export interface DiscoveredModelAccessibility {
+  currentAvailability: string
+  accountAccess: string
+  serverlessAvailable: boolean | null
+  dedicatedEndpointRequired: boolean
+  executable: boolean
+  blocker: string | null
+  evidenceSource: string
+}
+
+function metadataBoolean(metadata: Record<string, unknown>, names: string[]): boolean | null {
+  for (const name of names) {
+    if (typeof metadata[name] === 'boolean') return metadata[name] as boolean
+  }
+  return null
+}
+
+/** Catalogue presence is deliberately not treated as credential-scoped access. */
+export function deriveDiscoveredModelAccessibility(model: DiscoveryResult['models'][number]): DiscoveredModelAccessibility {
+  if (!model.isLiveDiscovered) {
+    return { currentAvailability: 'defined', accountAccess: 'unknown', serverlessAvailable: null, dedicatedEndpointRequired: false, executable: false, blocker: 'account_access_unknown', evidenceSource: 'non_live_catalogue' }
+  }
+  if (model.provider !== 'together') {
+    return { currentAvailability: 'available', accountAccess: 'accessible', serverlessAvailable: true, dedicatedEndpointRequired: false, executable: true, blocker: null, evidenceSource: 'authenticated_provider_catalogue' }
+  }
+
+  const metadata = model.rawMetadata ?? {}
+  const endpointType = String(metadata.endpoint_type ?? metadata.endpointType ?? '').toLowerCase()
+  const availability = String(metadata.availability ?? metadata.status ?? '').toLowerCase()
+  const explicitServerless = metadataBoolean(metadata, ['serverless', 'serverless_available', 'serverlessAvailable'])
+  const explicitDedicated = metadataBoolean(metadata, ['dedicated_endpoint_required', 'dedicatedEndpointRequired'])
+  const task = String(model.providerRawCategory || model.providerRawType || model.category).toLowerCase()
+  const dedicated = explicitDedicated === true || endpointType.includes('dedicated') || availability.includes('dedicated') || (task.includes('rerank') && explicitServerless !== true)
+  const serverless = dedicated ? false
+    : explicitServerless ?? (endpointType.includes('serverless') || availability.includes('serverless') ? true : null)
+  const deprecated = metadata.deprecated === true || availability.includes('deprecated')
+  const unavailable = ['unavailable', 'disabled', 'retired'].some((value) => availability.includes(value))
+  const executable = serverless === true && !deprecated && !unavailable
+  const blocker = deprecated ? 'deprecated'
+    : unavailable ? 'provider_unavailable'
+      : dedicated ? 'dedicated_endpoint_required'
+        : serverless === null ? 'account_access_unknown' : 'serverless_unavailable'
+  return {
+    currentAvailability: executable ? 'available' : blocker ?? 'unavailable',
+    accountAccess: executable ? 'accessible' : blocker === 'account_access_unknown' ? 'unknown' : 'inaccessible',
+    serverlessAvailable: serverless,
+    dedicatedEndpointRequired: dedicated,
+    executable,
+    blocker,
+    evidenceSource: explicitServerless !== null || explicitDedicated !== null || endpointType || availability
+      ? 'provider_model_metadata'
+      : 'catalogue_only',
+  }
+}
+
 export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<ModelCatalogRefreshSummary> {
   let created = 0
   let updated = 0
@@ -500,9 +558,20 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
 
       const canonicalCapabilities = canonicalCapabilitiesForDiscovered(model)
       const compatibility = discoveredCompatibility(model, canonicalCapabilities)
+      let accessibility = deriveDiscoveredModelAccessibility(model)
+      if (model.provider === 'together'
+          && accessibility.blocker === 'account_access_unknown'
+          && existing?.accountAccess === 'accessible'
+          && (existing.lastProofAt !== null || existing.liveProvenRouteCount > 0)) {
+        accessibility = {
+          currentAvailability: 'available', accountAccess: 'accessible', serverlessAvailable: true,
+          dedicatedEndpointRequired: false, executable: true, blocker: null, evidenceSource: 'persisted_live_provider_proof',
+        }
+      }
       const rawMetadata = stringifyMetadataSafely({
         ...model.rawMetadata,
         ...(compatibility ? { compatibility } : {}),
+        accessibility,
       }, 'raw_metadata')
       const pricingRawMetadata = stringifyMetadataSafely(model.pricingRawMetadata, 'pricing_raw_metadata')
       const metadataWarning = [rawMetadata.warning, pricingRawMetadata.warning].filter(Boolean).join(';')
@@ -524,8 +593,8 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         providerRawType: model.providerRawType,
         providerRawCategory: model.providerRawCategory,
         rawMetadata: rawMetadata.json,
-        currentAvailability: model.isLiveDiscovered ? 'available' : 'defined',
-        accountAccess: model.isLiveDiscovered ? 'accessible' : 'unknown',
+        currentAvailability: accessibility.currentAvailability,
+        accountAccess: accessibility.accountAccess,
         endpointFamily: typeof compatibility?.endpointFamily === 'string' ? compatibility.endpointFamily : '',
         transportProfile: typeof compatibility?.transportProfile === 'string' ? compatibility.transportProfile : '',
         structuredOutputModes: JSON.stringify(Array.isArray(model.rawMetadata?.structuredOutputModes) ? model.rawMetadata.structuredOutputModes : ['none']),
@@ -876,6 +945,9 @@ export async function getCatalogSummary() {
     const modelsByCapability: Record<string, number> = {}
     let pricingKnown = 0
     let pricingUnknown = 0
+    let accountAccessible = 0
+    let executable = 0
+    let liveProven = 0
 
     for (const m of models) {
       modelsByCategory[m.category] = (modelsByCategory[m.category] || 0) + 1
@@ -885,6 +957,9 @@ export async function getCatalogSummary() {
       } else {
         pricingUnknown++
       }
+      if (m.accountAccess === 'accessible') accountAccessible++
+      if (m.accountAccess === 'accessible' && m.currentAvailability === 'available' && !m.deprecated) executable++
+      if (m.liveProvenRouteCount > 0 || m.lastProofAt) liveProven++
 
       // Count capabilities
       const capFields = ['supportsChat', 'supportsText', 'supportsReasoning', 'supportsCode', 'supportsImageGeneration', 'supportsVideoGeneration', 'supportsMusicGeneration', 'supportsStt', 'supportsTts', 'supportsEmbeddings', 'supportsReranking', 'supportsMultimodal']
@@ -903,6 +978,9 @@ export async function getCatalogSummary() {
       catalogSource: models.length > 0 && models[0] ? models[0].source : 'none',
       catalogCompleteness: models.length > 0 && models[0] ? models[0].catalogCompleteness : 'unknown',
       totalModels: models.length,
+      accountAccessibleCount: accountAccessible,
+      executableCount: executable,
+      liveProvenCount: liveProven,
       modelsByCapability,
       modelsByCategory,
       modelsBySource,

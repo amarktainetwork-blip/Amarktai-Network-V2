@@ -7,8 +7,8 @@ import {
   hasBlockedOverrides,
   validateDirectProviderRequest,
 } from '@amarktai/core'
-import { getProviderCredentialStatus, prisma, resolveProviderApiKey } from '@amarktai/db'
-import { openAiStreamingChat, type OpenAiTransportMessage } from '@amarktai/providers'
+import { getProviderCredentialStatus, prisma, recordModelAccessibilityFailure, recordModelAccessibilitySuccess, resolveProviderApiKey } from '@amarktai/db'
+import { CanonicalProviderError, openAiStreamingChat, type OpenAiTransportMessage } from '@amarktai/providers'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 import { loadOrchestraSnapshot } from '../lib/orchestra-loader.js'
 import { authenticateAppKey } from './jobs.js'
@@ -85,7 +85,17 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
     if (!decision.executionAllowed || !selectedProvider || !['deepinfra', 'together', 'genx'].includes(selectedProvider) || !decision.selectedModel || decision.selectedExecutorId !== expectedExecutor) {
       return reply.status(503).send({ error: true, message: decision.blockReason ?? 'No streaming chat route is ready', orchestra: decision })
     }
-    const runtimeProvider = selectedProvider as 'deepinfra' | 'together' | 'genx'
+    let runtimeProvider = selectedProvider as 'deepinfra' | 'together' | 'genx'
+    let runtimeModel = decision.selectedModel
+    let runtimeExecutor = decision.selectedExecutorId
+    let runtimeRouteType: 'primary' | 'fallback' = 'primary'
+    const streamRoutes = [
+      { provider: runtimeProvider, model: runtimeModel, executorId: runtimeExecutor, routeType: 'primary' as const },
+      ...decision.fallbackRoutes
+        .filter((route) => route.executorId === `${route.provider}.streaming-chat` && ['deepinfra', 'together', 'genx'].includes(route.provider))
+        .map((route) => ({ provider: route.provider as 'deepinfra' | 'together' | 'genx', model: route.model, executorId: route.executorId, routeType: 'fallback' as const })),
+    ].filter((route, index, all) => all.findIndex((candidate) => candidate.provider === route.provider && candidate.model === route.model) === index)
+    const routeAttempts: Array<{ provider: string; model: string; executorId: string; success: boolean; error?: string }> = []
 
     await prisma.job.create({
       data: {
@@ -141,47 +151,74 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
         }
         usage = createCanonicalProviderUsage({ provider: runtimeProvider, model: decision.selectedModel, inputTokens: 4, outputTokens: 6, totalTokens: 10 })
       } else {
-        const credential = await resolveProviderApiKey(runtimeProvider)
-        const providerStatus = await getProviderCredentialStatus(runtimeProvider)
-        for await (const chunk of openAiStreamingChat({
-          provider: runtimeProvider,
-          baseUrl: providerStatus.baseUrl || '',
-          apiKey: credential.apiKey,
-          model: decision.selectedModel,
-          messages: buildMessages(parsed.data.prompt, input),
-          maxOutputTokens: numberValue(input.maxOutputTokens),
-          temperature: numberValue(input.temperature),
-          signal: controller.signal,
-        })) {
-          if (chunk.type === 'content' && chunk.content) {
-            upstreamChunks++
-            content += chunk.content
-            send('chunk', { index: upstreamChunks, delta: chunk.content })
-          } else if (chunk.type === 'usage' && chunk.usage) {
-            usage = createCanonicalProviderUsage({
-              provider: runtimeProvider, model: decision.selectedModel,
-              inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
-              providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
-            })
+        let streamed = false
+        for (const route of streamRoutes) {
+          try {
+            const credential = await resolveProviderApiKey(route.provider)
+            const providerStatus = await getProviderCredentialStatus(route.provider)
+            if (route.routeType === 'fallback') send('route', { jobId, executionId: decision.executionId, capability: 'streaming_chat', provider: route.provider, model: route.model, executorId: route.executorId, routeType: route.routeType })
+            for await (const chunk of openAiStreamingChat({
+              provider: route.provider,
+              baseUrl: providerStatus.baseUrl || '',
+              apiKey: credential.apiKey,
+              model: route.model,
+              messages: buildMessages(parsed.data.prompt, input),
+              maxOutputTokens: numberValue(input.maxOutputTokens),
+              temperature: numberValue(input.temperature),
+              signal: controller.signal,
+            })) {
+              if (chunk.type === 'content' && chunk.content) {
+                upstreamChunks++
+                content += chunk.content
+                send('chunk', { index: upstreamChunks, delta: chunk.content })
+              } else if (chunk.type === 'usage' && chunk.usage) {
+                usage = createCanonicalProviderUsage({
+                  provider: route.provider, model: route.model,
+                  inputTokens: chunk.usage.inputTokens, outputTokens: chunk.usage.outputTokens, totalTokens: chunk.usage.totalTokens,
+                  providerReportedCost: chunk.usage.providerReportedCost, currency: chunk.usage.currency,
+                })
+              }
+            }
+            runtimeProvider = route.provider
+            runtimeModel = route.model
+            runtimeExecutor = route.executorId
+            runtimeRouteType = route.routeType
+            routeAttempts.push({ provider: route.provider, model: route.model, executorId: route.executorId, success: true })
+            streamed = true
+            break
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Streaming provider failed'
+            routeAttempts.push({ provider: route.provider, model: route.model, executorId: route.executorId, success: false, error: message })
+            const unavailable = error instanceof CanonicalProviderError && error.code === 'model_not_available'
+            if (!unavailable || upstreamChunks > 0 || controller.signal.aborted) throw error
+            await recordModelAccessibilityFailure({
+              provider: route.provider,
+              modelId: route.model,
+              blocker: /dedicated|non-serverless|non serverless/i.test(message) ? 'dedicated_endpoint_required' : 'model_not_available',
+            }).catch(() => false)
           }
         }
+        if (!streamed) throw new Error('No accessible streaming route succeeded')
       }
       if (!content.trim() || upstreamChunks < 2) throw new Error(`${selectedProvider} stream completed without at least two upstream content chunks`)
       completed = true
       const finalMetadata = {
         ...metadata,
         orchestraExecutionId: decision.executionId,
-        orchestraSelectedProvider: selectedProvider,
-        orchestraSelectedModel: decision.selectedModel,
-        orchestraSelectedExecutorId: decision.selectedExecutorId,
-        orchestraActualProvider: selectedProvider,
-        orchestraActualModel: decision.selectedModel,
-        orchestraActualExecutorId: decision.selectedExecutorId,
+        orchestraInitialSelectedProvider: selectedProvider,
+        orchestraInitialSelectedModel: decision.selectedModel,
+        orchestraInitialSelectedExecutorId: decision.selectedExecutorId,
+        orchestraSelectedProvider: runtimeProvider,
+        orchestraSelectedModel: runtimeModel,
+        orchestraSelectedExecutorId: runtimeExecutor,
+        orchestraActualProvider: runtimeProvider,
+        orchestraActualModel: runtimeModel,
+        orchestraActualExecutorId: runtimeExecutor,
         orchestraActualOutcome: 'completed',
         orchestraFallbackCount: decision.fallbackRoutes.length,
-        orchestraRouteAttempts: [{ provider: selectedProvider, model: decision.selectedModel, executorId: decision.selectedExecutorId, success: true }],
-        directProviderExecutorId: decision.selectedExecutorId,
-        directProviderRouteType: 'primary',
+        orchestraRouteAttempts: routeAttempts.length > 0 ? routeAttempts : [{ provider: runtimeProvider, model: runtimeModel, executorId: runtimeExecutor, success: true }],
+        directProviderExecutorId: runtimeExecutor,
+        directProviderRouteType: runtimeRouteType,
         streamingUpstreamChunkCount: upstreamChunks,
         directProviderUsage: usage,
         directProviderCostEvidence: {
@@ -194,11 +231,14 @@ export async function streamingChatRoutes(app: FastifyInstance): Promise<void> {
         evidenceSource: fixtureMode ? 'local_fixture' : 'live_provider',
         liveProviderProof: !fixtureMode,
       }
+      if (!fixtureMode && typeof recordModelAccessibilitySuccess === 'function') {
+        await recordModelAccessibilitySuccess({ provider: runtimeProvider, modelId: runtimeModel }).catch(() => false)
+      }
       await prisma.job.update({
         where: { id: jobId },
         data: { status: 'completed', output: content, progress: 100, completedAt: new Date(), metadataJson: JSON.stringify(finalMetadata) },
       })
-      await recordStreamingUsage(auth.app!.slug, runtimeProvider, decision.selectedModel, usage)
+      await recordStreamingUsage(auth.app!.slug, runtimeProvider, runtimeModel, usage)
       send('complete', { jobId, executionId: decision.executionId, chunks: upstreamChunks, usage })
       reply.raw.end()
     } catch (error) {

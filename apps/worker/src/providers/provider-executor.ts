@@ -11,6 +11,7 @@ import {
   normalizeDbCandidates,
   getExecutorRegistration,
   getExecutorRegistrations,
+  getProviderDefaultBaseUrl,
   executorModelMetadataFromDbRecord,
   isExecutorModelCompatible,
   type CapabilityKey,
@@ -21,7 +22,7 @@ import {
   type OrchestraDecision,
   type OrchestraCandidate,
 } from '@amarktai/core'
-import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
+import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, recordModelAccessibilityFailure, recordModelAccessibilitySuccess, prisma } from '@amarktai/db'
 import { findCompletedArtifactByTraceId, getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
 import { DIRECT_EXECUTOR_HANDLERS } from './direct-provider-executor.js'
@@ -735,7 +736,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       throw new Error(`Persisted GenX video model '${existingRemoteModel}' does not match Orchestra-selected model '${model}'`)
     }
 
-    const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
+    const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, payload.capability)
     if (existingArtifact) {
       const existingMetadata = safeParseJsonObject(existingArtifact.metadata)
       const duration = readPositiveNumber(existingMetadata.duration)
@@ -807,6 +808,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       if (!file?.buffer.length) {
         return { success: false, status: 'failed', provider: 'genx', model, error: 'Source artifact bytes are missing' }
       }
+      assertMediaSignature(file.buffer, file.mimeType)
       if (payload.capability === 'image_to_video') {
         sourceImageDataUrl = `data:${file.mimeType};base64,${file.buffer.toString('base64')}`
       } else {
@@ -840,6 +842,13 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         negativePrompt: readString(payload.input, 'negativePrompt'),
         sourceImageDataUrl,
         referenceVideoUrl,
+        onSubmitted: async (jobId: string, submittedModel: string) => {
+          await persistJobMetadata(payload.jobId, {
+            genxProviderJobId: jobId,
+            genxProviderModel: submittedModel,
+            genxProviderSubmittedAt: new Date().toISOString(),
+          })
+        },
       }).catch(async (err) => {
         const remoteJobId = extractGenxProviderJobIdFromError(err)
         if (remoteJobId) {
@@ -1102,11 +1111,86 @@ type ExecutorHandler = (payload: WorkerJobData, selectedModel: string) => Promis
 export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
   ...DIRECT_EXECUTOR_HANDLERS,
   'together.image-generation': executeTogetherImage,
+  'together.tts': executeTogetherTts,
+  'together.stt': executeTogetherStt,
   'genx.video-generation': executeGenxVideo,
+  'genx.image-to-video': executeGenxVideo,
+  'genx.video-to-video': executeGenxVideo,
   'genx.music-generation': executeGenxMusic,
   'genx.song-generation': executeGenxMusic,
   'genx.tts': executeGenxTts,
   'genx.stt': executeGenxStt,
+}
+
+async function executeTogetherTts(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
+  try {
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'AppCapabilityGrant denies TTS artifact write.' }
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'tts')
+    if (existing) return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel, artifactId: existing.id,
+      output: JSON.stringify({ artifactId: existing.id, artifactUrl: existing.storageUrl, mimeType: existing.mimeType, fileSizeBytes: existing.fileSizeBytes, reused: true }),
+      metadata: { artifactId: existing.id, reused: true, outputValidation: { valid: true, contract: 'reused_tts_artifact' } },
+    }
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: claim.error || 'Execution already claimed' }
+    const credential = await resolveProviderApiKey('together')
+    const status = await getProviderCredentialStatus('together')
+    const { togetherTextToSpeech } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+    const result = await togetherTextToSpeech({
+      apiKey: credential.apiKey, baseUrl: status.baseUrl || undefined, model: selectedModel,
+      text: String(payload.input?.text ?? payload.prompt),
+      voice: readString(payload.input, 'voice'), responseFormat: readString(payload.input, 'outputFormat'),
+    })
+    assertMediaSignature(result.audioBuffer, result.mimeType)
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'audio', subType: 'tts', title: `TTS audio for ${payload.appSlug}`,
+        description: 'Together speech synthesis output', provider: 'together', model: selectedModel,
+        traceId: payload.traceId, mimeType: result.mimeType,
+        metadata: { capability: 'tts', provider: 'together', model: selectedModel, duration: result.duration, voice: result.voice, evidenceSource: 'live_provider', liveProviderProof: true },
+      }, data: result.audioBuffer, explicitMimeType: result.mimeType,
+    })
+    return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel, artifactId: artifact.id,
+      output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration: result.duration }),
+      metadata: { artifactId: artifact.id, duration: result.duration, usage: createCanonicalProviderUsage({ provider: 'together', model: selectedModel, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'validated_audio_artifact_signature' } },
+    }
+  } catch (error) {
+    const canonical = (await import('@amarktai/providers')).normalizeProviderError('together', error)
+    return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: canonical.message, metadata: { errorClassification: canonical.code, retryable: canonical.retryable, httpStatus: canonical.status } }
+  }
+}
+
+async function executeTogetherStt(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
+  try {
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactRead) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'AppCapabilityGrant denies STT artifact read.' }
+    const sourceId = readString(payload.input, 'artifactId') ?? readString(payload.input, 'audioArtifactId')
+    if (!sourceId) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'STT requires an authorised audio source artifact' }
+    const source = await getArtifactRecord(sourceId)
+    if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'Authorised source artifact was not found' }
+    if (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/')) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'STT source must be audio or video' }
+    const file = await getArtifactFile(sourceId)
+    if (!file?.buffer.length) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'Source artifact bytes are missing' }
+    assertMediaSignature(file.buffer, file.mimeType)
+    const credential = await resolveProviderApiKey('together')
+    const status = await getProviderCredentialStatus('together')
+    const { togetherSpeechToText } = await import('@amarktai/providers')
+    const result = await togetherSpeechToText({
+      apiKey: credential.apiKey, baseUrl: status.baseUrl || undefined, model: selectedModel,
+      audioBuffer: file.buffer, filename: file.filename, mimeType: file.mimeType, language: readString(payload.input, 'language'),
+    })
+    return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel,
+      output: JSON.stringify({ transcript: result.text, language: result.language, duration: result.duration, sourceArtifactId: sourceId }),
+      metadata: { sourceArtifactId: sourceId, usage: createCanonicalProviderUsage({ provider: 'together', model: selectedModel, audioSeconds: result.duration ?? 0 }), outputValidation: { valid: true, contract: 'nonempty_authorised_transcript' } },
+    }
+  } catch (error) {
+    const canonical = (await import('@amarktai/providers')).normalizeProviderError('together', error)
+    return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: canonical.message, metadata: { errorClassification: canonical.code, retryable: canonical.retryable, httpStatus: canonical.status } }
+  }
 }
 
 async function executeGenxTts(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
@@ -1287,9 +1371,19 @@ export async function executeRegisteredRoute(
     ? await findUnique.call(prisma.modelRegistryEntry, { where: { provider_modelId: { provider: route.provider, modelId: route.model } } }).catch(() => null)
     : (await prisma.modelRegistryEntry.findMany({ where: { provider: route.provider, modelId: route.model }, take: 1 }).catch(() => []))[0] ?? null
   const compatibility = executorModelMetadataFromDbRecord(modelRecord ?? { provider: route.provider, modelId: route.model })
+  const togetherStatus = route.provider === 'together' ? await getProviderCredentialStatus('together') : null
+  const dedicatedTogetherEndpoint = togetherStatus?.baseUrl
+    ? togetherStatus.baseUrl.replace(/\/$/, '') !== getProviderDefaultBaseUrl('together').replace(/\/$/, '')
+    : false
+  const accountAccess = String(modelRecord?.accountAccess ?? 'unknown').toLowerCase()
+  const modelAccountAccessible = route.provider === 'together'
+    ? modelRecord?.accountAccess === undefined || accountAccess === 'accessible'
+      || (String(modelRecord?.currentAvailability ?? '').toLowerCase() === 'dedicated_endpoint_required' && dedicatedTogetherEndpoint)
+    : accountAccess !== 'inaccessible'
   const modelCompatible = modelRecord !== null
     && modelRecord.enabled !== false
     && !['blocked', 'retired', 'deprecated', 'account_inaccessible'].includes(String(modelRecord.currentAvailability ?? '').toLowerCase())
+    && modelAccountAccessible
     && modelRecord.deprecated !== true
     && isExecutorModelCompatible(registration, route.model, compatibility)
   if (!modelCompatible) {
@@ -1431,7 +1525,7 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
       provider: orchestraDecision.selectedProvider,
       model: orchestraDecision.selectedModel,
       executorId: orchestraDecision.selectedExecutorId,
-      routeKind: 'primary',
+      routeKind: 'primary' as const,
     },
     ...orchestraDecision.fallbackRoutes.map((fallback) => ({
       provider: fallback.provider,
@@ -1439,7 +1533,7 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
       executorId: fallback.executorId,
       routeKind: 'fallback' as const,
     })),
-  ]
+  ].filter((route, index, all) => all.findIndex((candidate) => candidate.provider === route.provider && candidate.model === route.model && candidate.executorId === route.executorId) === index)
   const attempts: Array<{ provider: ProviderKey; model: string; executorId: ExecutorId; success: boolean; error?: string }> = []
   let lastResult: ProcessorResult | null = null
 
@@ -1447,6 +1541,16 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
     const result = await executeRegisteredRoute(payload, route)
     attempts.push({ provider: route.provider, model: route.model, executorId: route.executorId, success: result.success, error: result.error })
     lastResult = result
+
+    if (result.metadata?.errorClassification === 'model_not_available') {
+      await recordModelAccessibilityFailure({
+        provider: route.provider,
+        modelId: route.model,
+        blocker: /dedicated|non-serverless|non serverless/i.test(result.error ?? '')
+          ? 'dedicated_endpoint_required'
+          : 'model_not_available',
+      }).catch(() => false)
+    }
 
     await persistJobMetadata(payload.jobId, {
       orchestraActualProvider: route.provider,
@@ -1472,6 +1576,17 @@ export async function executeWithProvider(payload: WorkerJobData): Promise<Proce
     await recordCanonicalUsage(payload, route, result).catch(() => {})
 
     if (result.success) {
+      if (typeof recordModelAccessibilitySuccess === 'function') {
+        await recordModelAccessibilitySuccess({ provider: route.provider, modelId: route.model }).catch(() => false)
+      }
+      await persistJobMetadata(payload.jobId, {
+        orchestraInitialSelectedProvider: orchestraDecision.selectedProvider,
+        orchestraInitialSelectedModel: orchestraDecision.selectedModel,
+        orchestraInitialSelectedExecutorId: orchestraDecision.selectedExecutorId,
+        orchestraSelectedProvider: route.provider,
+        orchestraSelectedModel: route.model,
+        orchestraSelectedExecutorId: route.executorId,
+      }).catch(() => {})
       return {
         ...result,
         metadata: { ...result.metadata, orchestra: orchestraDecision, routeAttempts: attempts },

@@ -42,3 +42,9 @@ export {
   advanceLongFormWorkflow,
   longFormAssemblyJobId,
 } from './long-form-workflow.js'
+
+export {
+  recordModelAccessibilityFailure,
+  recordModelAccessibilitySuccess,
+  type ModelAccessibilityBlocker,
+} from './model-accessibility.js'

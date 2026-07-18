@@ -65,6 +65,7 @@ vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  recordModelAccessibilitySuccess: vi.fn().mockResolvedValue(true),
   prisma: prismaMock,
 }))
 

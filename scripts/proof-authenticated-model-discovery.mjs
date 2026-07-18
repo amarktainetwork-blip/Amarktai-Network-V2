@@ -47,7 +47,18 @@ try {
   }
   const mimo = results.find((entry) => entry.provider === 'mimo')
   if (mimo && mimo.runtimeExecutionAllowed !== false) throw new Error('MiMo runtime policy was not restricted')
+  const catalog = await requestJson('/api/admin/model-catalog', { token: login.token })
+  const models = Array.isArray(catalog.models) ? catalog.models : []
+  const persistedCanonical = models.filter((model) => runtimeProviders.includes(model.provider))
+  const accountAccessible = persistedCanonical.filter((model) => model.accountAccess === 'accessible')
+  const executable = accountAccessible.filter((model) => model.currentAvailability === 'available' && model.deprecated !== true)
+  const liveProven = persistedCanonical.filter((model) => Number(model.liveProvenRouteCount || 0) > 0 || model.lastProofAt)
   console.log('AUTHENTICATED_DISCOVERY_RESULT=PASS')
+  console.log(`AUTHENTICATED_STORED_KEY_DISCOVERED_MODELS=${results.reduce((sum, entry) => sum + (Array.isArray(entry.models) ? entry.models.length : 0), 0)}`)
+  console.log(`PERSISTED_CANONICAL_REGISTRY_MODELS=${persistedCanonical.length}`)
+  console.log(`ACCOUNT_ACCESSIBLE_MODELS=${accountAccessible.length}`)
+  console.log(`EXECUTABLE_MODELS=${executable.length}`)
+  console.log(`LIVE_PROVEN_MODELS=${liveProven.length}`)
   console.log(JSON.stringify({
     source: 'normal_authenticated_platform_api',
     providers: runtimeProviders.map((provider) => {

@@ -24,6 +24,13 @@ export {
   type TogetherImageRequest,
   type TogetherImageResponse,
 } from './together-client.js'
+export {
+  resolveTogetherVoice,
+  togetherTextToSpeech,
+  togetherSpeechToText,
+  type TogetherSpeechRequest,
+  type TogetherTranscriptionRequest,
+} from './together-audio-client.js'
 
 // GenX — video generation with long-polling
 export {

@@ -131,6 +131,9 @@ export interface OrchestraCandidate {
   providerAccountAllowed: boolean
   providerPolicyAllowed: boolean
   modelLifecycleAllowed: boolean
+  modelAccountAccessible?: boolean
+  serverlessAvailable?: boolean | null
+  dedicatedEndpointConfigured?: boolean
   adapterSupported: boolean
   executorSupported: boolean
   requestShapeKnown: boolean
@@ -280,6 +283,12 @@ export function checkCandidateEligibility(
 
   if (!candidate.modelLifecycleAllowed) {
     blockers.push('model_lifecycle_blocked')
+  }
+
+  if (candidate.modelAccountAccessible === false) {
+    blockers.push(candidate.serverlessAvailable === false && !candidate.dedicatedEndpointConfigured
+      ? 'dedicated_endpoint_required'
+      : 'model_account_inaccessible')
   }
 
   if (!candidate.adapterSupported) {
@@ -456,8 +465,9 @@ function scoreCandidate(
 // ── Deterministic Tie-Breaking ─────────────────────────────────
 
 function compareCandidates(a: OrchestraCandidate, b: OrchestraCandidate): number {
-  if (a.score !== b.score) return b.score - a.score
   if (a.liveProven !== b.liveProven) return a.liveProven ? -1 : 1
+  if (a.modelAccountAccessible !== b.modelAccountAccessible) return a.modelAccountAccessible === true ? -1 : 1
+  if (a.score !== b.score) return b.score - a.score
   if (a.executionReady !== b.executionReady) return a.executionReady ? -1 : 1
   const aCost = a.estimatedCost ?? Infinity
   const bCost = b.estimatedCost ?? Infinity
@@ -658,6 +668,18 @@ export function normalizeDbCandidates(
       && isExecutorModelCompatible(executorRegistration, model.modelId, compatibilityMetadata)
     const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
     const defaultBaseUrl = getProviderDefaultBaseUrl(model.provider as ProviderKey)
+    const rawMetadata = parseJsonRecord(model.rawMetadata)
+    const accessibility = rawMetadata.accessibility && typeof rawMetadata.accessibility === 'object' && !Array.isArray(rawMetadata.accessibility)
+      ? rawMetadata.accessibility as Record<string, unknown> : {}
+    const serverlessAvailable = typeof accessibility.serverlessAvailable === 'boolean' ? accessibility.serverlessAvailable : null
+    const dedicatedEndpointConfigured = model.provider === 'together'
+      && configuredBaseUrl.length > 0
+      && configuredBaseUrl.replace(/\/$/, '') !== defaultBaseUrl.replace(/\/$/, '')
+    const accountAccess = String(record.accountAccess ?? 'unknown').toLowerCase()
+    const modelAccountAccessible = model.provider === 'together'
+      ? record.accountAccess === undefined || accountAccess === 'accessible'
+      || (accessibility.dedicatedEndpointRequired === true && dedicatedEndpointConfigured)
+      : accountAccess !== 'inaccessible'
     const endpointReady = evidence.endpointReadyByProvider?.[model.provider as ProviderKey]
       ?? isHttpEndpoint(configuredBaseUrl || defaultBaseUrl)
     const databaseReady = evidence.databaseReady === true
@@ -691,6 +713,9 @@ export function normalizeDbCandidates(
       providerAccountAllowed,
       providerPolicyAllowed,
       modelLifecycleAllowed,
+      modelAccountAccessible,
+      serverlessAvailable,
+      dedicatedEndpointConfigured,
       adapterSupported,
       executorSupported,
       requestShapeKnown,
@@ -703,6 +728,7 @@ export function normalizeDbCandidates(
       executionReady: adapterSupported
         && executorSupported
         && modelLifecycleAllowed
+        && modelAccountAccessible
         && requestShapeKnown
         && responseShapeKnown
         && modelCompatible
@@ -734,9 +760,12 @@ export function normalizeDbModelRecords(models: DbModelRecord[]): ModelRecord[] 
     const metadata = executorModelMetadataFromDbRecord(model, capabilities)
     const record = model as Record<string, unknown>
     const availability = String(record.currentAvailability ?? 'defined')
+    const accountAccess = String(record.accountAccess ?? 'unknown')
     const deprecated = record.deprecated === true
     const enabled = record.enabled !== false
-    const status: ModelRecord['status'] = deprecated || ['blocked', 'unavailable', 'retired'].includes(availability)
+    const status: ModelRecord['status'] = deprecated
+      || (model.provider === 'together' ? accountAccess !== 'accessible' : accountAccess === 'inaccessible')
+      || ['blocked', 'unavailable', 'retired', 'account_inaccessible', 'model_not_available', 'dedicated_endpoint_required', 'account_access_unknown'].includes(availability)
       ? 'blocked'
       : enabled ? 'available' : 'disabled'
     const source = record.isLiveDiscovered === true

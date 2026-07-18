@@ -100,7 +100,7 @@ function discovery(provider: ProviderKey, input: {
       catalogueOnlyReason: '',
       blockedReason: '',
       lastDiscoveredAt: timestamp,
-      rawMetadata: { structuredOutputModes: ['none'] },
+      rawMetadata: { structuredOutputModes: ['none'], ...(provider === 'together' ? { serverless: true } : {}) },
     } as any],
     totalDiscovered: 1,
     liveDiscoveryAttempted: true,
