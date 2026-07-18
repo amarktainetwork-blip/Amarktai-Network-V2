@@ -278,14 +278,17 @@ try {
     ADMIN_PASSWORD: generated.FIXTURE_ADMIN_PASSWORD,
     RELEASE_FIXTURE_BASE_URL: 'http://127.0.0.1:3210',
   }
-  const recoveryToken = await loginFixtureAdmin()
-  await seedFixtureModelCatalogue(recoveryToken)
+  const catalogueToken = await loginFixtureAdmin()
+  await seedFixtureModelCatalogue(catalogueToken)
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
     '--fixture', '--strict', '--long-form', '--json-output', proofReportFile,
   ], { env: proofEnv })
   const proofReport = JSON.parse(await readFile(proofReportFile, 'utf8'))
+  // Strict proof logs out and increments the admin token version, so queue and
+  // restart recovery must authenticate again instead of reusing bootstrap JWT.
+  const recoveryToken = await loginFixtureAdmin()
   await proveQueueAndRestartRecovery(recoveryToken, proofReport)
   run(docker, [...compose, 'up', '--detach', '--wait', '--wait-timeout', '300', 'api', 'worker', 'dashboard'])
   run(npm, ['run', 'test:browser'], {
