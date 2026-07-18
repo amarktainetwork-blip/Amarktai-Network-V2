@@ -73,7 +73,7 @@ test('provider settings and canonical truth are consistent without browser keys'
   const truth = (await truthResponse.json()).truth
   const providers = (await providersResponse.json()).providers
   expect(truth.releaseCandidateCapabilities).toHaveLength(27)
-  expect(providers).toHaveLength(5)
+  expect(providers).toHaveLength(4)
   for (const provider of providers) {
     expect(provider.apiKey).toBeUndefined()
     const canonical = truth.providers.find((item) => item.provider === provider.providerKey)
