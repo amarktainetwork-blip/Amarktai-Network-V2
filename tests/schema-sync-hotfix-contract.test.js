@@ -152,7 +152,7 @@ describe('Docker entrypoint safety contract', () => {
     expect(script).not.toMatch(/echo.*password/i)
   })
 
-  it('production migration runbook exists', () => {
+  it('production recovery and migration runbook exists', () => {
     const runbookPath = path.join(ROOT, 'docs/PRODUCTION_MIGRATION_RUNBOOK.md')
     expect(fs.existsSync(runbookPath)).toBe(true)
 
@@ -162,7 +162,7 @@ describe('Docker entrypoint safety contract', () => {
     expect(runbook).not.toContain('prisma db push')
     expect(runbook).not.toContain('--accept-data-loss')
     expect(runbook).toContain('20250701_baseline_fc21a6e')
-    expect(runbook).toContain('20260711_add_job_orchestration')
+    expect(runbook).toContain('20260718_complete_platform_recovery')
   })
 })
 
