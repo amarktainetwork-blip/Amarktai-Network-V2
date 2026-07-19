@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -51,13 +51,29 @@ describe('production activation closure', () => {
     expect(compose).not.toMatch(/-\s*["']?(3306|6379|6333|6334|3001|3002|3000):\1["']?\s*$/m)
   })
 
+  it('restricts production cors instead of reflecting every origin', () => {
+    const server = source('apps/api/src/server.ts')
+    expect(server).toContain('CORS_ALLOWED_ORIGINS')
+    expect(server).toContain('PUBLIC_API_URL')
+    expect(server).toContain('allowedCorsOrigins.has(origin)')
+    expect(server).toContain("process.env.NODE_ENV !== 'production'")
+    expect(server).not.toContain('origin: true')
+  })
+
   it('keeps one canonical operational README and a current recovery runbook', () => {
     const readme = source('README.md')
     const runbook = source('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
     expect(readme).toContain('Groq — removed')
     expect(readme).toContain('Broken or fresh-stack recovery')
-    expect(runbook).toContain('Path B — fresh or broken-stack recovery')
+    expect(readme).toContain('admin-reset-password.mjs')
+    expect(runbook).toContain('Fresh or broken-stack recovery')
     expect(runbook).toContain('20260718_complete_platform_recovery')
+    expect(runbook).toContain('ADMIN_RESET_PASSWORD')
     expect(runbook).not.toContain('Production Migration Runbook — Phase 1')
+  })
+
+  it('removes the obsolete hardcoded production verifier', () => {
+    expect(existsSync(resolve(root, 'deploy/verify.sh'))).toBe(false)
+    expect(source('README.md')).toContain('deploy/verify.sh` was removed')
   })
 })
