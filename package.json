@@ -46,6 +46,7 @@
     "test:browser": "npm run test:browser:release-candidate",
     "test:browser:release-candidate": "playwright test tests/browser/release-candidate.spec.mjs",
     "worker": "node scripts/worker.mjs",
+    "admin:reset-password": "node scripts/admin-reset-password.mjs",
     "db:push": "prisma db push",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
