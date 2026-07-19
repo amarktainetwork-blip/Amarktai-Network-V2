@@ -43,6 +43,14 @@ describe('production activation closure', () => {
     expect(env).toContain('DEEPINFRA_API_KEY=')
   })
 
+  it('binds stateful services and application ports to localhost behind nginx', () => {
+    const compose = source('docker-compose.yml')
+    for (const port of ['3306:3306', '6379:6379', '6333:6333', '6334:6334', '3001:3001', '3002:3002', '3000:3000']) {
+      expect(compose).toContain(`127.0.0.1:${port}`)
+    }
+    expect(compose).not.toMatch(/-\s*["']?(3306|6379|6333|6334|3001|3002|3000):\1["']?\s*$/m)
+  })
+
   it('keeps one canonical operational README and a current recovery runbook', () => {
     const readme = source('README.md')
     const runbook = source('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
