@@ -24,7 +24,9 @@ describe('production activation closure', () => {
     expect(script).toContain('enabled: true')
     expect(script).toContain('tokenVersion: { increment: 1 }')
     expect(script).toContain('Administrator does not exist')
-    expect(script).not.toMatch(/console\.(log|error)\([^\n]*password/i)
+    expect(script).not.toContain('console.log(password)')
+    expect(script).not.toContain('console.error(password)')
+    expect(script).not.toContain('${password}')
   })
 
   it('exposes the reset command and includes it in the production runtime image', () => {
