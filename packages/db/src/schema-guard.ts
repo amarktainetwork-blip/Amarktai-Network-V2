@@ -1,6 +1,6 @@
 import { prisma } from './client.js'
 
-export const REQUIRED_SCHEMA_MIGRATION = '20260714_release_candidate'
+export const REQUIRED_SCHEMA_MIGRATION = '20260718_complete_platform_recovery'
 
 export interface DatabaseSchemaStatus {
   current: boolean
