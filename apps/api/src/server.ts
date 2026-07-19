@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   })
 
   const allowedCorsOrigins = new Set(
-    (process.env.CORS_ALLOWED_ORIGINS ?? '')
+    (process.env.CORS_ALLOWED_ORIGINS ?? process.env.PUBLIC_API_URL ?? '')
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
