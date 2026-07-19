@@ -97,9 +97,10 @@ COPY packages/artifacts/package.json packages/artifacts/package.json
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy migration deploy script (used by migrate service, not by API/worker)
+# Copy controlled operator scripts used by one-shot runtime containers.
 COPY scripts/prisma-migrate-deploy.mjs scripts/prisma-migrate-deploy.mjs
 COPY scripts/release-fixture-queue-control.mjs scripts/release-fixture-queue-control.mjs
+COPY scripts/admin-reset-password.mjs scripts/admin-reset-password.mjs
 
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
