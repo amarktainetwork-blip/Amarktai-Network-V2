@@ -51,7 +51,23 @@ async function main(): Promise<void> {
     trustProxy: true,
   })
 
-  await app.register(cors, { origin: true })
+  const allowedCorsOrigins = new Set(
+    (process.env.CORS_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  )
+  const allowUnrestrictedDevelopmentCors = process.env.NODE_ENV !== 'production' && allowedCorsOrigins.size === 0
+
+  await app.register(cors, {
+    origin(origin, callback) {
+      if (!origin || allowUnrestrictedDevelopmentCors || allowedCorsOrigins.has(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(new Error('Origin is not allowed by CORS policy'), false)
+    },
+  })
   await app.register(rateLimit, {
     max: RATE_LIMIT_MAX,
     timeWindow: RATE_LIMIT_WINDOW_MS,
