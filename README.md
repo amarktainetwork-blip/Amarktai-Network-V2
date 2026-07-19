@@ -109,7 +109,27 @@ The script validates the target SHA, creates backups, builds and tests the candi
 
 ### Broken or fresh-stack recovery
 
-The current upgrade script deliberately refuses to overwrite an unhealthy or unidentified production stack. For a broken or fresh installation, first restore infrastructure and database access, then run the migration and service startup steps in `docs/PRODUCTION_MIGRATION_RUNBOOK.md`. Do not bypass preflight checks by deleting volumes or using `prisma db push`.
+The normal upgrade script deliberately refuses to overwrite an unhealthy or unidentified production stack. Follow `docs/PRODUCTION_MIGRATION_RUNBOOK.md` to preserve existing state, repair database access, apply migrations and start the exact candidate without deleting volumes or using `prisma db push`.
+
+### Existing administrator password recovery
+
+Changing `ADMIN_PASSWORD` in `.env` does not replace the password of an existing administrator. After building the current API image and applying migrations, run:
+
+```bash
+export ADMIN_EMAIL='amarktainetwork@gmail.com'
+export ADMIN_RESET_PASSWORD='<new-strong-password>'
+export CONFIRM_ADMIN_PASSWORD_RESET="$ADMIN_EMAIL"
+
+docker compose run --rm \
+  -e ADMIN_EMAIL \
+  -e ADMIN_RESET_PASSWORD \
+  -e CONFIRM_ADMIN_PASSWORD_RESET \
+  --entrypoint node api scripts/admin-reset-password.mjs
+
+unset ADMIN_RESET_PASSWORD CONFIRM_ADMIN_PASSWORD_RESET
+```
+
+The command only updates an existing administrator, re-enables it and invalidates previous tokens. Fresh databases continue to use normal idempotent administrator bootstrap.
 
 ## Required live release gate
 
@@ -138,6 +158,8 @@ node scripts/proof-production-release-candidate.mjs \
   --json-output /secure/path/release-proof.json
 ```
 
+`deploy/verify.sh` was removed because it was an older, incomplete verification path. Use the strict production proof above.
+
 ## Non-negotiable production rules
 
 - Never run `prisma db push` in production.
@@ -148,6 +170,7 @@ node scripts/proof-production-release-candidate.mjs \
 - Never deploy an unpinned branch name without confirming the exact SHA.
 - Keep database, artifact and Qdrant backups before migration or service replacement.
 - Preserve the previous immutable images until post-deployment proof passes.
+- Keep compose-published ports bound to `127.0.0.1`; Nginx is the public entry point.
 
 ## Supporting documentation
 
