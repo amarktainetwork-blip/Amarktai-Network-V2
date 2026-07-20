@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils'
 import { clearAdminSession, getAdminToken, redirectToLogin } from '@/lib/admin-session'
 import {
   MessageSquare, Image as ImageIcon, Video, Music, Mic, Search, Library, Activity, Settings, Zap, ArrowLeft, Menu, X, LogOut,
-  FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package, ChevronDown, ChevronUp,
+  FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package, Film, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
-const ICONS = { MessageSquare, ImageIcon, Video, Music, Mic, Search, Library, Activity, Settings, FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package }
+const ICONS = { MessageSquare, ImageIcon, Video, Music, Mic, Search, Library, Activity, Settings, FlaskConical, Plug, Palette, Boxes, Cpu, Bot, Package, Film }
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname()
