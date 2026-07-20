@@ -156,7 +156,7 @@ async function buildPlan(input: unknown): Promise<PlannedPremiumAdvert> {
     requireGrant('long_form_video'),
     requireGrant('video_generation'),
     requireGrant('tts'),
-    requireGrant('music_generation'),
+    requireGrant('song_generation'),
     selectPremiumRoute('video_generation', 'video_scene'),
     selectPremiumRoute('tts', 'voiceover'),
     selectPremiumRoute('song_generation', 'full_song'),
