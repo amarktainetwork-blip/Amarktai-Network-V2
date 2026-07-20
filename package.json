@@ -138,8 +138,6 @@
   "overrides": {
     "postcss": "^8.5.12",
     "adm-zip": "0.6.0",
-    "@crawlee/core": {
-      "brace-expansion": "2.1.2"
-    }
+    "brace-expansion@>=2.0.0 <2.1.2": "2.1.2"
   }
 }
