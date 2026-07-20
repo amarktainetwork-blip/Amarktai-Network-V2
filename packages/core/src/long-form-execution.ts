@@ -12,7 +12,7 @@ export const DURABLE_WORKFLOW_REGISTRATIONS = [{
   handlerName: 'createLongFormExecutionState',
   persistence: 'prisma_job_parent_child_state',
   assembly: 'bullmq_exactly_once_handoff',
-  requiredCapabilities: ['video_generation', 'tts', 'music_generation'],
+  requiredCapabilities: ['video_generation', 'tts', 'music_generation', 'song_generation'],
 }] as const satisfies ReadonlyArray<{
   id: string
   capability: 'long_form_video'
@@ -99,102 +99,63 @@ export interface LongFormAssemblyHandoff {
 
 // ── Build Scene Video Prompt ───────────────────────────────────────────────────
 
-/**
- * Builds the video-provider prompt for a single scene.
- *
- * Contains ONLY:
- * - shared visual continuity context
- * - that scene's visual prompt
- * - that scene's negative prompt
- * - that scene's camera direction
- * - limited quality/style instructions
- *
- * Does NOT contain:
- * - voiceover or narration text
- * - subtitle text
- * - music brief
- * - pricing, CTA or legal copy
- * - other scenes' prompts
- * - the full campaign brief
- */
 export function buildSceneVideoPrompt(
   scene: LongFormScene,
-  plan: LongFormVideoPlan
+  plan: LongFormVideoPlan,
 ): string {
-  const parts: string[] = []
-
-  // Shared continuity context
-  parts.push(`${plan.style} style, ${plan.tone} tone`)
-
-  // Scene visual prompt (the core instruction)
-  parts.push(scene.visualPrompt.trim())
-
-  // Camera direction
-  if (scene.cameraDirection) {
-    parts.push(`camera: ${scene.cameraDirection}`)
-  }
-
-  // Negative prompt
-  if (scene.negativePrompt) {
-    parts.push(`avoid: ${scene.negativePrompt}`)
-  }
-
-  // Quality instruction
-  parts.push('high quality, cinematic, professional')
-
-  return parts.join('. ')
+  return [
+    scene.prompt,
+    `Style: ${plan.style}`,
+    `Tone: ${plan.tone}`,
+    scene.cameraDirection ? `Camera: ${scene.cameraDirection}` : null,
+    `Aspect ratio: ${plan.aspectRatio}`,
+    `Duration: ${scene.durationSeconds} seconds`,
+    'Maintain visual continuity with adjacent scenes.',
+    'Do not include text, watermarks, or logos unless explicitly requested.',
+  ].filter(Boolean).join('. ')
 }
 
 // ── Create Scene Execution Payloads ────────────────────────────────────────────
 
 export function createSceneExecutionPayloads(
   plan: LongFormVideoPlan,
-  routingMode: string = 'balanced',
-  executionId: string
 ): SceneExecutionPayload[] {
-  return plan.storyboard.scenes.map((scene) => {
-    const prompt = buildSceneVideoPrompt(scene, plan)
-
-    return {
+  return plan.scenes.map((scene) => ({
+    sceneNumber: scene.sceneNumber,
+    capability: 'video_generation' as const,
+    prompt: buildSceneVideoPrompt(scene, plan),
+    input: {
+      duration: scene.durationSeconds,
+      aspectRatio: plan.aspectRatio,
+      style: plan.style,
+      cameraDirection: scene.cameraDirection,
+    },
+    metadata: {
+      longFormVideo: true as const,
+      longFormExecutionId: plan.id,
+      planId: plan.id,
       sceneNumber: scene.sceneNumber,
-      capability: 'video_generation',
-      prompt,
-      input: {
-        duration: scene.durationSeconds,
-        aspectRatio: plan.aspectRatio,
-        style: plan.style,
-        cameraDirection: scene.cameraDirection,
-      },
-      metadata: {
-        longFormVideo: true,
-        longFormExecutionId: executionId,
-        planId: plan.id,
-        sceneNumber: scene.sceneNumber,
-        sceneTitle: scene.title,
-        sceneDurationSeconds: scene.durationSeconds,
-        routingMode,
-        finalAssemblyPending: true,
-      },
-      routingMode,
-    }
-  })
+      sceneTitle: scene.title,
+      sceneDurationSeconds: scene.durationSeconds,
+      routingMode: plan.routingMode,
+      finalAssemblyPending: true as const,
+    },
+    routingMode: plan.routingMode,
+  }))
 }
 
-// ── Create Execution State ─────────────────────────────────────────────────────
+// ── State Management ───────────────────────────────────────────────────────────
 
 export function createLongFormExecutionState(
   plan: LongFormVideoPlan,
-  routingMode: string = 'balanced'
 ): LongFormExecutionState {
-  const executionId = randomUUID()
   const now = new Date().toISOString()
-
   return {
-    executionId,
+    executionId: plan.id,
     planId: plan.id,
-    routingMode,
-    totalScenes: plan.storyboard.scenes.length,
-    scenes: plan.storyboard.scenes.map((scene) => ({
+    routingMode: plan.routingMode,
+    totalScenes: plan.scenes.length,
+    scenes: plan.scenes.map((scene) => ({
       sceneNumber: scene.sceneNumber,
       sceneTitle: scene.title,
       status: 'queued',
@@ -202,99 +163,54 @@ export function createLongFormExecutionState(
     progress: 0,
     finalAssemblyReady: false,
     finalAssemblyCompleted: false,
-    missingDependencies: [
-      'scene_jobs_pending',
-      ...(plan.missingDependencies || []),
-    ],
+    missingDependencies: ['scene_artifacts'],
     createdAt: now,
     updatedAt: now,
   }
 }
 
-// ── Update Scene Execution State ───────────────────────────────────────────────
-
 export function updateSceneExecutionState(
   state: LongFormExecutionState,
   sceneNumber: number,
-  update: Partial<SceneExecutionState>
+  update: Partial<SceneExecutionState>,
 ): LongFormExecutionState {
-  const sceneIndex = state.scenes.findIndex((s) => s.sceneNumber === sceneNumber)
-  if (sceneIndex === -1) {
-    throw new Error(`Scene ${sceneNumber} not found in execution state`)
-  }
-
-  const updatedScenes = [...state.scenes]
-  const existingScene = updatedScenes[sceneIndex]
-  if (!existingScene) {
-    throw new Error(`Scene ${sceneNumber} not found in execution state`)
-  }
-
-  updatedScenes[sceneIndex] = {
-    ...existingScene,
-    ...update,
-    sceneNumber: update.sceneNumber ?? existingScene.sceneNumber,
-    sceneTitle: update.sceneTitle ?? existingScene.sceneTitle,
-    status: update.status ?? existingScene.status,
-  }
-
-  const progress = calculateLongFormProgress(updatedScenes)
-
+  const scenes = state.scenes.map((scene) =>
+    scene.sceneNumber === sceneNumber ? { ...scene, ...update } : scene,
+  )
+  const completed = scenes.filter((scene) => scene.status === 'completed').length
+  const failed = scenes.filter((scene) => scene.status === 'failed').length
+  const finalAssemblyReady = completed === state.totalScenes && failed === 0
+  const missingDependencies = finalAssemblyReady ? [] : ['scene_artifacts']
   return {
     ...state,
-    scenes: updatedScenes,
-    progress,
+    scenes,
+    progress: Math.round((completed / state.totalScenes) * 90),
+    finalAssemblyReady,
+    missingDependencies,
     updatedAt: new Date().toISOString(),
   }
 }
 
-// ── Calculate Progress ─────────────────────────────────────────────────────────
-
-export function calculateLongFormProgress(
-  scenes: SceneExecutionState[]
-): number {
-  if (scenes.length === 0) return 0
-
-  const weights = {
-    queued: 0,
-    processing: 0.5,
-    completed: 1,
-    failed: 0,
-  }
-
-  const totalWeight = scenes.reduce((sum, scene) => {
-    return sum + (weights[scene.status] || 0)
-  }, 0)
-
-  return Math.round((totalWeight / scenes.length) * 100)
+export function calculateLongFormProgress(state: LongFormExecutionState): number {
+  if (state.finalAssemblyCompleted) return 100
+  const completed = state.scenes.filter((scene) => scene.status === 'completed').length
+  return Math.round((completed / state.totalScenes) * 90)
 }
 
-// ── Get Execution Summary ──────────────────────────────────────────────────────
-
 export function getExecutionSummary(state: LongFormExecutionState): {
-  totalScenes: number
-  completedScenes: number
-  failedScenes: number
-  processingScenes: number
-  queuedScenes: number
+  total: number
+  queued: number
+  processing: number
+  completed: number
+  failed: number
   progress: number
-  canAssemble: boolean
-  missingForAssembly: string[]
 } {
-  const completedScenes = state.scenes.filter((s) => s.status === 'completed').length
-  const failedScenes = state.scenes.filter((s) => s.status === 'failed').length
-  const processingScenes = state.scenes.filter((s) => s.status === 'processing').length
-  const queuedScenes = state.scenes.filter((s) => s.status === 'queued').length
-
-  const canAssemble = completedScenes === state.totalScenes && state.totalScenes > 0
-
   return {
-    totalScenes: state.totalScenes,
-    completedScenes,
-    failedScenes,
-    processingScenes,
-    queuedScenes,
+    total: state.totalScenes,
+    queued: state.scenes.filter((scene) => scene.status === 'queued').length,
+    processing: state.scenes.filter((scene) => scene.status === 'processing').length,
+    completed: state.scenes.filter((scene) => scene.status === 'completed').length,
+    failed: state.scenes.filter((scene) => scene.status === 'failed').length,
     progress: state.progress,
-    canAssemble,
-    missingForAssembly: state.missingDependencies,
   }
 }
