@@ -7,46 +7,36 @@ on:
     branches: [feat/production-activation-music-longform]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-candidate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  refresh-security-lock:
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+  generate-security-lock:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feat/production-activation-music-longform
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Generate the npm security lock
+      - name: Generate package lock from committed security override
         run: npm install --package-lock-only --ignore-scripts
 
       - name: Prove patched production dependencies
         run: npm audit --omit=dev
 
-      - name: Commit only the npm-generated lockfile
-        shell: bash
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo 'package-lock.json already matches package.json overrides'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json
-          git commit -m 'fix: refresh patched production dependency lock'
-          git push origin HEAD:feat/production-activation-music-longform
+      - name: Upload npm-generated package lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-package-lock-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 1
+          path: package-lock.json
 
   static-and-build:
     runs-on: ubuntu-latest
