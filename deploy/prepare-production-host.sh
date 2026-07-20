@@ -6,6 +6,10 @@ umask 077
 
 REPO_DIR="${REPO_DIR:-/var/www/Amarktai-Network-V2}"
 MIN_AVAILABLE_KB="${MIN_AVAILABLE_KB:-5242880}"
+HOST_UID="$(id -u)"
+DEPLOY_CACHE_ROOT="${DEPLOY_CACHE_ROOT:-/var/tmp/amarktai-deploy-${HOST_UID}}"
+NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$DEPLOY_CACHE_ROOT/npm}"
+PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$DEPLOY_CACHE_ROOT/playwright}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -18,10 +22,20 @@ command -v npm >/dev/null || fail 'npm is required'
 command -v docker >/dev/null || fail 'docker is required'
 docker info >/dev/null || fail 'Docker daemon is unavailable'
 
+if [[ -e "$DEPLOY_CACHE_ROOT" && ! -O "$DEPLOY_CACHE_ROOT" ]]; then
+  fail "deployment cache exists but is not owned by uid $HOST_UID: $DEPLOY_CACHE_ROOT"
+fi
+mkdir -p "$NPM_CONFIG_CACHE" "$PLAYWRIGHT_BROWSERS_PATH"
+[[ -w "$NPM_CONFIG_CACHE" ]] || fail "npm deployment cache is not writable: $NPM_CONFIG_CACHE"
+[[ -w "$PLAYWRIGHT_BROWSERS_PATH" ]] || fail "Playwright deployment cache is not writable: $PLAYWRIGHT_BROWSERS_PATH"
+export DEPLOY_CACHE_ROOT NPM_CONFIG_CACHE PLAYWRIGHT_BROWSERS_PATH
+
 echo '[host-prepare] disk before cleanup:'
 df -h "$REPO_DIR"
 echo '[host-prepare] Docker usage before cleanup:'
 docker system df || true
+echo "[host-prepare] isolated npm cache: $NPM_CONFIG_CACHE"
+echo "[host-prepare] isolated Playwright path: $PLAYWRIGHT_BROWSERS_PATH"
 
 rm -rf -- \
   .next \
@@ -47,7 +61,7 @@ AVAILABLE_KB="$(df -Pk "$REPO_DIR" | awk 'NR==2 {print $4}')"
 }
 
 echo '[host-prepare] installing locked Node dependencies'
-npm ci --ignore-scripts
+npm ci --ignore-scripts --cache "$NPM_CONFIG_CACHE"
 
 PLAYWRIGHT_VERSION="$(node -p "require('playwright/package.json').version")"
 PLAYWRIGHT_REVISION="$(node -e "const fs=require('node:fs'),p=require('node:path');const d=p.dirname(require.resolve('playwright-core/package.json'));const b=JSON.parse(fs.readFileSync(p.join(d,'browsers.json'),'utf8')).browsers.find(x=>x.name==='chromium');process.stdout.write(String(b?.revision||''))")"
