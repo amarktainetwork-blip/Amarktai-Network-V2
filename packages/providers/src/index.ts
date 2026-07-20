@@ -50,7 +50,7 @@ export {
   type GenxLongPollCallbacks,
 } from './genx-client.js'
 
-// GenX — music generation with submit/poll/download
+// GenX — enhanced music and full-song generation with submit/poll/download
 export {
   genxSubmitMusic,
   genxPollMusic,
@@ -66,7 +66,7 @@ export {
   type GenxMusicPollResponse,
   type GenxMusicResult,
   type GenxMusicLongPollCallbacks,
-} from './genx-music-client.js'
+} from './genx-song-client.js'
 
 // GenX — voice (TTS and STT) with submit/poll/download
 export {
