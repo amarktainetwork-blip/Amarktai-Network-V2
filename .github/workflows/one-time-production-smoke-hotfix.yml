@@ -1,6 +1,8 @@
 name: one-time-production-smoke-hotfix
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches:
       - feat/production-activation-music-longform
@@ -31,17 +33,19 @@ jobs:
           from pathlib import Path
           from textwrap import dedent
 
-          def replace_once(path: str, old_lines: list[str], new_lines: list[str]) -> None:
+          def replace_or_verify(path: str, old_lines: list[str], new_lines: list[str]) -> None:
               target = Path(path)
               text = target.read_text(encoding='utf-8')
               old = '\n'.join(old_lines)
               new = '\n'.join(new_lines)
+              if new in text:
+                  return
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'{path}: expected exactly one replacement target, found {count}')
+                  raise SystemExit(f'{path}: expected one old target or verified new target; old count={count}')
               target.write_text(text.replace(old, new), encoding='utf-8')
 
-          replace_once(
+          replace_or_verify(
               'apps/api/src/routes/admin-providers.ts',
               [
                   '    const providers = truth.providers.map((provider) => ({',
@@ -61,7 +65,7 @@ jobs:
               ],
           )
 
-          replace_once(
+          replace_or_verify(
               'packages/core/src/model-catalog.ts',
               [
                   "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
@@ -134,9 +138,10 @@ jobs:
             })
           })
           '''), encoding='utf-8')
-
-          Path('.github/workflows/one-time-production-smoke-hotfix.yml').unlink()
           PY
+
+          rm -f .github/workflows/one-time-production-smoke-hotfix.yml
+          git show 88f69ae49b84bac0497e4431c289786d7f4b29df:.github/workflows/release-candidate-checks.yml > .github/workflows/release-candidate-checks.yml
 
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
