@@ -22,6 +22,11 @@ const SPECIALIST_CAPABILITIES: CapabilityKey[] = [
   'zero_shot_classification', 'token_classification', 'fill_mask', 'table_qa',
 ]
 
+const PRODUCTION_TEXT_CAPABILITIES: CapabilityKey[] = [
+  'chat', 'reasoning', 'summarization', 'translation',
+  'question_answering', 'classification', 'extraction', 'structured_output',
+]
+
 const provider = (providerKey: 'deepinfra' | 'together' | 'genx', overrides?: Partial<DbProviderRecord>): DbProviderRecord => ({
   providerKey,
   enabled: true,
@@ -160,32 +165,69 @@ describe('native specialist routing', () => {
   })
 })
 
-// ── 2. No native specialist model → text-transform fallback selected ──
+// ── 2. Text-transform fallback: production-style text model (no specialist claim) ──
 
 describe('text-transform fallback routing', () => {
-  it('selects text-transform fallback when no native specialist model is eligible', () => {
-    for (const capability of SPECIALIST_CAPABILITIES) {
-      const models = [textModel('deepinfra', `test/${capability}-text`, [capability])]
-      const candidates = normalizeDbCandidates(models, [provider('deepinfra')], capability, { databaseReady: true, queueReady: true })
-      const eligible = candidates.filter((c) => c.executionReady)
-      expect(eligible.length, `${capability} has at least one eligible fallback candidate`).toBeGreaterThanOrEqual(1)
-      const best = eligible[0]!
-      expect(best.executorId, `${capability} selects text-transform fallback`).toBe('deepinfra.text-transform')
-      expect(best.routeType, `${capability} route type is text_transform_fallback`).toBe('text_transform_fallback')
-      expect(best.provider, `${capability} provider remains deepinfra`).toBe('deepinfra')
-    }
+  it('production-style DeepInfra text model becomes eligible zero_shot_classification fallback', () => {
+    const models = [textModel('deepinfra', 'meta-llama/Meta-Llama-3.1-8B-Instruct', PRODUCTION_TEXT_CAPABILITIES)]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    const eligible = candidates.filter((c) => c.executionReady)
+    expect(eligible.length).toBeGreaterThanOrEqual(1)
+    const best = eligible[0]!
+    expect(best.executorId).toBe('deepinfra.text-transform')
+    expect(best.routeType).toBe('text_transform_fallback')
+    expect(best.provider).toBe('deepinfra')
+  })
+
+  it('production-style DeepInfra text model becomes eligible token_classification fallback', () => {
+    const models = [textModel('deepinfra', 'meta-llama/Meta-Llama-3.1-8B-Instruct', PRODUCTION_TEXT_CAPABILITIES)]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'token_classification', { databaseReady: true, queueReady: true })
+    const eligible = candidates.filter((c) => c.executionReady)
+    expect(eligible.length).toBeGreaterThanOrEqual(1)
+    expect(eligible[0]!.executorId).toBe('deepinfra.text-transform')
+    expect(eligible[0]!.routeType).toBe('text_transform_fallback')
+  })
+
+  it('production-style DeepInfra text model becomes eligible fill_mask fallback', () => {
+    const models = [textModel('deepinfra', 'meta-llama/Meta-Llama-3.1-8B-Instruct', PRODUCTION_TEXT_CAPABILITIES)]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'fill_mask', { databaseReady: true, queueReady: true })
+    const eligible = candidates.filter((c) => c.executionReady)
+    expect(eligible.length).toBeGreaterThanOrEqual(1)
+    expect(eligible[0]!.executorId).toBe('deepinfra.text-transform')
+    expect(eligible[0]!.routeType).toBe('text_transform_fallback')
+  })
+
+  it('production-style DeepInfra text model becomes eligible table_qa fallback', () => {
+    const models = [textModel('deepinfra', 'meta-llama/Meta-Llama-3.1-8B-Instruct', PRODUCTION_TEXT_CAPABILITIES)]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'table_qa', { databaseReady: true, queueReady: true })
+    const eligible = candidates.filter((c) => c.executionReady)
+    expect(eligible.length).toBeGreaterThanOrEqual(1)
+    expect(eligible[0]!.executorId).toBe('deepinfra.text-transform')
+    expect(eligible[0]!.routeType).toBe('text_transform_fallback')
+  })
+
+  it('text model capability metadata is not mutated by fallback selection', () => {
+    const textModelRecord = textModel('deepinfra', 'test/text-model', PRODUCTION_TEXT_CAPABILITIES)
+    const models = [textModelRecord]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    expect(candidates.length).toBeGreaterThanOrEqual(1)
+    const originalCaps = JSON.parse(textModelRecord.capabilitiesJson ?? '[]')
+    expect(originalCaps).not.toContain('zero_shot_classification')
+    expect(originalCaps).toEqual(PRODUCTION_TEXT_CAPABILITIES)
   })
 
   it('prefers native specialist over text-transform fallback when both exist', () => {
     const models = [
       nativeSpecialistModel('fill_mask', 'test/fill-mask-native'),
-      textModel('deepinfra', 'test/fill-mask-text', ['fill_mask']),
+      textModel('deepinfra', 'test/fill-mask-text', PRODUCTION_TEXT_CAPABILITIES),
     ]
     const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'fill_mask', { databaseReady: true, queueReady: true })
     const eligible = candidates.filter((c) => c.executionReady)
     expect(eligible.length).toBeGreaterThanOrEqual(2)
     expect(eligible[0]!.executorId).toBe('deepinfra.task-inference')
     expect(eligible[0]!.routeType).toBe('native_specialist')
+    expect(eligible[1]!.executorId).toBe('deepinfra.text-transform')
+    expect(eligible[1]!.routeType).toBe('text_transform_fallback')
   })
 })
 
@@ -195,7 +237,7 @@ describe('account-inaccessible native model rejection', () => {
   it('rejects an inaccessible native model and keeps text-transform fallback eligible', () => {
     const models = [
       nativeSpecialistModel('token_classification', 'test/tc-inaccessible', { accountAccess: 'inaccessible' }),
-      textModel('deepinfra', 'test/tc-text', ['token_classification']),
+      textModel('deepinfra', 'test/tc-text', PRODUCTION_TEXT_CAPABILITIES),
     ]
     const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'token_classification', { databaseReady: true, queueReady: true })
     const inaccessible = candidates.find((c) => c.model === 'test/tc-inaccessible')
@@ -272,6 +314,71 @@ describe('no eligible route', () => {
     const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'table_qa', { databaseReady: true, queueReady: true })
     const decision = evaluateOrchestra({ capability: 'table_qa', executionId: 'test' }, candidates)
     expect(decision.executionAllowed).toBe(false)
+  })
+
+  it('unknown-shape text model is rejected as fallback', () => {
+    const models = [textModel('deepinfra', 'test/bad-shape', PRODUCTION_TEXT_CAPABILITIES, {
+      rawMetadata: JSON.stringify({
+        compatibility: {
+          taskType: 'text', category: 'text', capabilities: PRODUCTION_TEXT_CAPABILITIES,
+          modalitiesIn: ['text'], modalitiesOut: ['text'],
+          transportProfile: 'openai_chat_sse', endpointFamily: 'deepinfra_openai_v1/openai_chat',
+          endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: true,
+          providerClientExists: true, workerExecutorExists: true,
+        },
+      }),
+    })]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    expect(candidates).toHaveLength(0)
+  })
+
+  it('DeepInfra embedding model is not accepted as semantic fallback', () => {
+    const models: DbModelRecord[] = [{
+      provider: 'deepinfra',
+      modelId: 'test/embedding-model',
+      displayName: 'Embedding model',
+      status: 'available',
+      capabilitiesJson: JSON.stringify(['embeddings', 'feature_extraction']),
+      rawMetadata: JSON.stringify({
+        compatibility: {
+          taskType: 'embedding', category: 'embedding', capabilities: ['embeddings', 'feature_extraction'],
+          modalitiesIn: ['text'], modalitiesOut: ['embedding'],
+          transportProfile: 'native_inference_json', endpointFamily: 'deepinfra_openai_v1/embeddings',
+          endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+          providerClientExists: true, workerExecutorExists: true,
+        },
+      }),
+    }]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    expect(candidates).toHaveLength(0)
+  })
+
+  it('Together text model is not accepted without an explicit semantic_text_fallback registration', () => {
+    const models = [textModel('together', 'test/together-text', PRODUCTION_TEXT_CAPABILITIES)]
+    const candidates = normalizeDbCandidates(models, [provider('together')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    const eligible = candidates.filter((c) => c.executionReady)
+    expect(eligible).toHaveLength(0)
+  })
+
+  it('no candidate when neither exact nor semantic registration is compatible', () => {
+    const models: DbModelRecord[] = [{
+      provider: 'deepinfra',
+      modelId: 'test/reranker-only',
+      displayName: 'Reranker',
+      status: 'available',
+      capabilitiesJson: JSON.stringify(['reranking']),
+      rawMetadata: JSON.stringify({
+        compatibility: {
+          taskType: 'reranker', category: 'reranking', capabilities: ['reranking'],
+          modalitiesIn: ['text'], modalitiesOut: ['json'],
+          transportProfile: 'native_inference_json', endpointFamily: 'deepinfra_native_v1/rerank/native_inference',
+          endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+          providerClientExists: true, workerExecutorExists: true,
+        },
+      }),
+    }]
+    const candidates = normalizeDbCandidates(models, [provider('deepinfra')], 'zero_shot_classification', { databaseReady: true, queueReady: true })
+    expect(candidates).toHaveLength(0)
   })
 })
 

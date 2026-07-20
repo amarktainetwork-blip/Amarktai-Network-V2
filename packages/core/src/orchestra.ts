@@ -10,6 +10,7 @@ import { CAPABILITY_FIELD_MAP, type CapabilityKey } from './capabilities.js'
 import {
   getExecutorRegistrations,
   isExecutorModelCompatible,
+  GENERAL_TEXT_CAPABILITY_SET,
   type ExecutorId,
   type ExecutorModelMetadata,
 } from './executor-registry.js'
@@ -465,7 +466,15 @@ function scoreCandidate(
 
 // ── Deterministic Tie-Breaking ─────────────────────────────────
 
+const ROUTE_PRIORITY: Record<string, number> = {
+  native_specialist: 0,
+  text_transform_fallback: 1,
+}
+
 function compareCandidates(a: OrchestraCandidate, b: OrchestraCandidate): number {
+  const aPriority = ROUTE_PRIORITY[a.routeType ?? ''] ?? 2
+  const bPriority = ROUTE_PRIORITY[b.routeType ?? ''] ?? 2
+  if (aPriority !== bPriority) return aPriority - bPriority
   if (a.liveProven !== b.liveProven) return a.liveProven ? -1 : 1
   if (a.modelAccountAccessible !== b.modelAccountAccessible) return a.modelAccountAccessible === true ? -1 : 1
   if (a.score !== b.score) return b.score - a.score
@@ -644,10 +653,21 @@ export function normalizeDbCandidates(
   for (const model of models) {
     const record = model as Record<string, unknown>
     const exactCapabilities = parseCapabilityList(model.capabilitiesJson)
-    if (exactCapabilities.length > 0) {
-      if (!exactCapabilities.includes(capability)) continue
-    } else if (record[supportField] !== true) {
-      continue
+    const exactCapabilityClaim = exactCapabilities.includes(capability)
+
+    // Pre-filter: check if the model could possibly be eligible before expensive compatibility evaluation.
+    // For exact-match registrations, the model must claim the capability.
+    // For semantic_text_fallback registrations, a text model without the specialist claim may still qualify,
+    // but it must have at least one general text capability.
+    const allRegistrations = getExecutorRegistrations(capability, model.provider as ProviderKey)
+    if (allRegistrations.length === 0) continue
+
+    const hasSemanticFallback = allRegistrations.some((r) => r.capabilityMatchMode === 'semantic_text_fallback')
+    if (!exactCapabilityClaim && !hasSemanticFallback) continue
+    if (!exactCapabilityClaim && hasSemanticFallback) {
+      const hasTextCapability = exactCapabilities.some((cap) => GENERAL_TEXT_CAPABILITY_SET.has(cap))
+        || (record[supportField] === true)
+      if (!hasTextCapability) continue
     }
 
     const provider = providerMap.get(model.provider)
@@ -659,7 +679,6 @@ export function normalizeDbCandidates(
     if (!(PROVIDER_KEYS as readonly string[]).includes(model.provider)) continue
     const providerDefinition = getProviderDefinition(model.provider as ProviderKey)
     const providerPolicyAllowed = providerDefinition.backendExecutionAllowed && !providerDefinition.codingOnly
-    const allRegistrations = getExecutorRegistrations(capability, model.provider as ProviderKey)
     const adapterSupported = allRegistrations.length > 0
     const executorSupported = allRegistrations.length > 0
     const compatibilityMetadata = executorModelMetadataFromDbRecord(model, exactCapabilities)
@@ -669,10 +688,14 @@ export function normalizeDbCandidates(
     const compatibleRegistrations = allRegistrations.filter((registration) =>
       isExecutorModelCompatible(registration, model.modelId, compatibilityMetadata),
     )
-    const nativeRegistration = compatibleRegistrations.find((r) => r.id === 'deepinfra.task-inference')
-    const fallbackRegistration = compatibleRegistrations.find((r) => r.id === 'deepinfra.text-transform')
+    const nativeRegistration = compatibleRegistrations.find((r) => r.capabilityMatchMode === 'exact')
+    const fallbackRegistration = compatibleRegistrations.find((r) => r.capabilityMatchMode === 'semantic_text_fallback')
     const bestRegistration = nativeRegistration ?? fallbackRegistration ?? compatibleRegistrations[0] ?? null
     const modelCompatible = bestRegistration !== null
+    // Skip models that have no compatible registration and no exact capability claim.
+    // These models were only considered because of a semantic fallback registration
+    // that didn't work out — no point adding them as blocked candidates.
+    if (!modelCompatible && !exactCapabilityClaim) continue
     const executorRegistration = bestRegistration
     const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
     const defaultBaseUrl = getProviderDefaultBaseUrl(model.provider as ProviderKey)

@@ -193,11 +193,13 @@ export {
   getExecutorRegistration,
   hasExecutorRegistration,
   isExecutorModelCompatible,
+  GENERAL_TEXT_CAPABILITY_SET,
   type ExecutorId,
   type ExecutorRegistration,
   type ExecutorCompatibilityProfile,
   type ExecutorModelMetadata,
   type StructuredOutputMode,
+  type CapabilityMatchMode,
 } from './executor-registry.js'
 
 export {

@@ -33,10 +33,10 @@ describe('dynamic media routing', () => {
   })
 
   it('blocks endpoint-incompatible, unhealthy, and unconfigured routes', () => {
-    const incompatible = mediaModel('together', 'new-but-wrong-transport', { category: 'video', modalitiesIn: ['text'], modalitiesOut: ['video'], transportProfile: 'async_job_poll', endpointFamily: 'dedicated_container' })
-    const wrong = normalizeDbCandidates([incompatible], [readyProvider('together')], 'video_generation', { databaseReady: true, queueReady: true })[0]!
+    const incompatible = mediaModel('genx', 'new-but-wrong-transport', { category: 'video', modalitiesIn: ['text'], modalitiesOut: ['video'], transportProfile: 'async_job_poll', endpointFamily: 'dedicated_container' })
+    const wrong = normalizeDbCandidates([incompatible], [readyProvider('genx')], 'video_generation', { databaseReady: true, queueReady: true })[0]!
     expect(wrong.modelCompatible).toBe(false)
-    const unhealthy = normalizeDbCandidates([together('healthy-model')], [readyProvider('together', { healthStatus: 'failed' })], 'video_generation', { databaseReady: true, queueReady: true })[0]!
+    const unhealthy = normalizeDbCandidates([genx('healthy-model')], [readyProvider('genx', { healthStatus: 'failed' })], 'video_generation', { databaseReady: true, queueReady: true })[0]!
     expect(unhealthy.infrastructureReady).toBe(false)
     const unconfigured = normalizeDbCandidates([genx('compatible-model')], [readyProvider('genx', { apiKey: '' })], 'video_generation', { databaseReady: true, queueReady: true })[0]!
     expect(unconfigured.providerConfigured).toBe(false)

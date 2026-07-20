@@ -56,6 +56,8 @@ export interface ExecutorModelMetadata {
   requestContract?: string | null
 }
 
+export type CapabilityMatchMode = 'exact' | 'semantic_text_fallback'
+
 export interface ExecutorRegistration {
   id: ExecutorId
   provider: ProviderKey
@@ -70,6 +72,7 @@ export interface ExecutorRegistration {
   sourceArtifactRequired: boolean
   artifactOutput: string | null
   executionMode: 'sync' | 'queued' | 'stream'
+  capabilityMatchMode: CapabilityMatchMode
 }
 
 const GENERAL_TEXT_CAPABILITIES: readonly CapabilityKey[] = [
@@ -109,6 +112,7 @@ function registration(
   handlerName: string,
   profile: ExecutorCompatibilityProfile,
   executionMode: 'sync' | 'queued' | 'stream' = 'queued',
+  capabilityMatchMode: CapabilityMatchMode = 'exact',
 ): ExecutorRegistration {
   const definition = CAPABILITY_BY_KEY[capability]
   return {
@@ -124,6 +128,7 @@ function registration(
     sourceArtifactRequired: definition.requiresSourceArtifact || capability === 'stt',
     artifactOutput: definition.artifactType,
     executionMode,
+    capabilityMatchMode,
   }
 }
 
@@ -168,7 +173,7 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
     registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
   ),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
-    registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT),
+    registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT, 'queued', 'semantic_text_fallback'),
   ),
   ...(['feature_extraction', 'sentence_similarity', 'embeddings'] as const).map((capability) => registration('deepinfra.embeddings', 'deepinfra', capability, 'executeEmbeddingsCapability', EMBEDDINGS)),
   registration('deepinfra.reranking', 'deepinfra', 'reranking', 'executeRerankingCapability', RERANK),
@@ -204,12 +209,19 @@ export function hasExecutorRegistration(capability: CapabilityKey, provider: Pro
   return getExecutorRegistration(capability, provider) !== undefined
 }
 
+export const GENERAL_TEXT_CAPABILITY_SET = new Set<string>(GENERAL_TEXT_CAPABILITIES)
+
 export function isExecutorModelCompatible(registration: ExecutorRegistration, _model: string, metadata?: ExecutorModelMetadata): boolean {
   const contract = registration.compatibilityProfile
   if (!metadata) return false
   if (!metadata.endpointShapeKnown || !metadata.requestShapeKnown || !metadata.responseShapeKnown) return false
   if (!metadata.providerClientExists || !metadata.workerExecutorExists) return false
-  if (!metadata.capabilities?.includes(registration.capability)) return false
+  if (registration.capabilityMatchMode === 'exact') {
+    if (!metadata.capabilities?.includes(registration.capability)) return false
+  } else {
+    const hasTextCapability = metadata.capabilities?.some((cap) => GENERAL_TEXT_CAPABILITY_SET.has(cap)) === true
+    if (!hasTextCapability) return false
+  }
   if (registration.executionMode === 'stream' && metadata.streamingSupported !== true) return false
   if (!matches(contract.taskTypes, metadata.taskType)) return false
   if (!matches(contract.categories, metadata.category)) return false
