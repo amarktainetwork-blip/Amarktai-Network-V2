@@ -45,8 +45,8 @@ if [[ -z "$ROLLBACK_SHA" ]]; then
 fi
 [[ "$ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'current production SHA is unavailable; set ROLLBACK_SHA explicitly'
 
-# Ensure immutable rollback tags exist before prepare-production-host.sh pins
-# them with temporary guard containers and removes every other unused image.
+# Ensure immutable rollback tags exist before host preparation pins them with
+# temporary guard containers and removes every other unused image.
 for service in api worker dashboard; do
   container="$(docker compose ps -q "$service")"
   [[ -n "$container" ]] || fail "current production service is absent: $service"
