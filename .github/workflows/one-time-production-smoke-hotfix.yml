@@ -161,18 +161,28 @@ jobs:
           if [ ! -s hotfix-build-errors.log ]; then tail -n 150 hotfix-build.log > hotfix-build-errors.log; fi
           exit "$STATUS"
 
-      - name: Upload hotfix build diagnostics
+      - name: Run focused regression tests
+        id: focused
+        shell: bash
+        run: |
+          set +e
+          npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js > hotfix-tests.log 2>&1
+          STATUS=$?
+          grep -E "FAIL|AssertionError|expected|Received|Test Files|Tests" hotfix-tests.log > hotfix-test-errors.log || true
+          if [ ! -s hotfix-test-errors.log ]; then tail -n 200 hotfix-tests.log > hotfix-test-errors.log; fi
+          exit "$STATUS"
+
+      - name: Upload hotfix diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: production-smoke-hotfix-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: production-smoke-hotfix-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 7
           path: |
             hotfix-build.log
             hotfix-build-errors.log
-
-      - name: Run focused regression tests
-        run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
+            hotfix-tests.log
+            hotfix-test-errors.log
 
       - name: Commit reviewed hotfix
         shell: bash
