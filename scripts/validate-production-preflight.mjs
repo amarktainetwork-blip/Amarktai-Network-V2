@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 const root = resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const preflight = readFileSync(resolve(root, 'deploy/preflight.sh'), 'utf8')
 const deploy = readFileSync(resolve(root, 'deploy/deploy.sh'), 'utf8')
+const nginxCheck = readFileSync(resolve(root, 'deploy/nginx-check.sh'), 'utf8')
 const example = readFileSync(resolve(root, '.env.example'), 'utf8')
 
 const checks = [
@@ -17,7 +18,13 @@ const checks = [
   ['canonical runtime provider names', ['GENX_API_KEY', 'TOGETHER_API_KEY', 'DEEPINFRA_API_KEY'].every((key) => preflight.includes(key)) && !preflight.includes('MIMO_API_KEY') && !preflight.includes('GROQ_API_KEY')],
   ['placeholder public URL rejected', preflight.includes('example.com') && preflight.includes('PUBLIC_API_URL')],
   ['provider base URL and authenticated proof inputs checked', preflight.includes('GENX_BASE_URL') && preflight.includes('ADMIN_PASSWORD must be nonempty')],
-  ['compose and nginx validated', preflight.includes('docker compose config --quiet') && preflight.includes('nginx -t')],
+  ['compose and least-privilege nginx validated',
+    preflight.includes('docker compose config --quiet')
+      && preflight.includes('validate_nginx_configuration')
+      && nginxCheck.includes('sudo -v')
+      && nginxCheck.includes('sudo nginx -t')
+      && nginxCheck.includes('production activation requires clean output')
+      && !deploy.includes('sudo bash deploy/deploy.sh')],
   ['MariaDB Redis Qdrant checked', ['mariadb-admin ping', 'redis-cli ping', '6333/healthz'].every((value) => preflight.includes(value))],
   ['artifact storage and FFmpeg checked', preflight.includes('test -w /var/www/amarktai/storage') && preflight.includes('ffmpeg -version')],
   ['read-only boundary', !/(git switch|git checkout|docker compose build|migrate deploy|docker compose up|mariadb-dump)/.test(preflight)],
