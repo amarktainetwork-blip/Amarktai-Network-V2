@@ -23,6 +23,7 @@
     "prisma:validate": "node scripts/prisma-validate.mjs",
     "prisma": "npm run prisma:validate",
     "proof": "node scripts/proof-release-fixture.mjs",
+    "proof:deployment-static": "node scripts/proof-deployment-static.mjs",
     "proof:router-app-contract": "tsx scripts/proof-router-app-contract.mjs",
     "proof:long-form-runtime": "node scripts/proof-long-form-runtime.mjs",
     "proof:long-form-runtime:strict": "node scripts/proof-long-form-runtime.mjs --strict-runtime",
