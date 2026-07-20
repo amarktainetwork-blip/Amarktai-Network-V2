@@ -22,14 +22,14 @@ It replaces the obsolete Phase 1 two-migration instructions. Always use the comp
 
 Use `deploy/deploy.sh` only when the current MariaDB, Redis, Qdrant, API, worker and dashboard are healthy and the current API reports a valid rollback SHA.
 
-Before deployment, validate the host Nginx configuration as root-readable production configuration:
+Before deployment, cache sudo credentials and require a clean root-readable Nginx validation:
 
 ```bash
 sudo -v
 sudo nginx -t
 ```
 
-The expected result is clean output ending in both `syntax is ok` and `test is successful`. Fix deprecated directives such as `listen ... http2` before deployment; warnings are release blockers.
+The output must contain `syntax is ok` and `test is successful` with no warnings, alerts or errors. Deprecated directives such as `listen ... http2` must be corrected before deployment.
 
 ### Fresh or broken-stack recovery
 
@@ -127,21 +127,33 @@ if [ -n "$API_CONTAINER" ]; then
 fi
 ```
 
-### Qdrant-volume backup
+Stop writes before copying Qdrant storage:
 
 ```bash
 QDRANT_CONTAINER="$(docker compose ps -a -q qdrant)"
-if [ -n "$QDRANT_CONTAINER" ]; then
-  QDRANT_IMAGE="$(docker inspect --format '{{.Image}}' "$QDRANT_CONTAINER")"
+if [ -n "$QDRANT_CONTAINER" ] && [ -n "${API_IMAGE:-}" ]; then
   QDRANT_VOLUME="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/qdrant/storage"}}{{.Name}}{{end}}{{end}}' "$QDRANT_CONTAINER")"
   test -n "$QDRANT_VOLUME"
+  docker stop "$QDRANT_CONTAINER"
   docker run --rm --entrypoint tar \
     --mount "type=volume,src=$QDRANT_VOLUME,dst=/source,readonly" \
     --mount "type=bind,src=$BACKUP_ROOT,dst=/backup" \
-    "$QDRANT_IMAGE" -C /source -cf /backup/qdrant.tar .
+    "$API_IMAGE" -C /source -cf /backup/qdrant.tar .
   tar -tf "$BACKUP_ROOT/qdrant.tar" >/dev/null
+  docker start "$QDRANT_CONTAINER"
 fi
 ```
+
+Create and verify checksums:
+
+```bash
+cd "$BACKUP_ROOT"
+sha256sum ./* > SHA256SUMS
+sha256sum -c SHA256SUMS
+cd /var/www/Amarktai-Network-V2
+```
+
+Stop if an expected backup is empty or unreadable.
 
 ## 5. Build and test the exact candidate
 
@@ -158,145 +170,185 @@ node scripts/proof-direct-provider-capabilities.mjs --static --strict
 bash -n deploy/nginx-check.sh
 bash -n deploy/preflight.sh
 bash -n deploy/deploy.sh
-docker compose config --quiet
 docker compose build --pull api worker dashboard
 ```
 
-Do not continue if any command fails.
+Any failure blocks deployment.
 
-## 6. Apply migrations normally
-
-Inspect current migration state:
+## 6. Start infrastructure
 
 ```bash
-docker compose run --rm --entrypoint npx api prisma migrate status --schema=./prisma/schema.prisma || true
+docker compose up -d mariadb redis qdrant
+
+docker compose exec -T mariadb sh -c \
+  'mariadb-admin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent'
+docker compose exec -T redis redis-cli ping | grep -qx PONG
+curl --fail --silent --show-error http://127.0.0.1:6333/healthz >/dev/null
 ```
 
-Apply the complete checked-in migration history:
+An existing MariaDB volume keeps the credentials created when that volume was initialized. Changing `.env` alone does not change those database users. Correct the actual MariaDB user/password before continuing when authentication fails.
+
+## 7. Apply Prisma migrations safely
+
+Check status:
 
 ```bash
-docker compose run --rm --entrypoint npx api prisma migrate deploy --schema=./prisma/schema.prisma
-docker compose run --rm --entrypoint npx api prisma migrate status --schema=./prisma/schema.prisma
+docker compose run --rm --entrypoint npx api \
+  prisma migrate status --schema=./prisma/schema.prisma || true
 ```
 
-The current recovery migration chain must include `20260718_complete_platform_recovery` and every later checked-in migration required by the release SHA.
+### Fresh database
 
-For a disposable proof of fresh and previously unmanaged database recovery, run:
+Do not resolve the baseline manually. Apply the entire history:
 
 ```bash
-bash scripts/verify-migrations-disposable.sh
+docker compose run --rm migrate
 ```
 
-Required result:
+### Existing Prisma-managed database
+
+```bash
+docker compose run --rm migrate
+docker compose run --rm --entrypoint npx api \
+  prisma migrate status --schema=./prisma/schema.prisma
+```
+
+### Existing unmanaged historical database
+
+Only when the database is non-empty, `_prisma_migrations` is absent, a verified backup exists, and schema comparison proves it matches the historical baseline represented by `20250701_baseline_fc21a6e`:
+
+```bash
+docker compose run --rm --entrypoint npx api \
+  prisma migrate resolve --applied 20250701_baseline_fc21a6e \
+  --schema=./prisma/schema.prisma
+
+docker compose run --rm migrate
+```
+
+Never edit or drop `_prisma_migrations` to hide a failed migration.
+
+## 8. Verify the mandatory schema level
+
+The API must require:
 
 ```text
-FRESH_DATABASE_PROOF=PASS
-UNMANAGED_DATABASE_PROOF=PASS
+20260718_complete_platform_recovery
 ```
 
-## 7. Start application services
+Confirm code and database agree:
 
 ```bash
-export GIT_SHA="$DEPLOY_SHA"
-export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+grep -n "REQUIRED_SCHEMA_MIGRATION" packages/db/src/schema-guard.ts
+
+docker compose exec -T mariadb sh -c \
+  'mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT migration_name FROM _prisma_migrations WHERE migration_name=\"20260718_complete_platform_recovery\" AND finished_at IS NOT NULL AND rolled_back_at IS NULL"' \
+  | grep -qx 20260718_complete_platform_recovery
+```
+
+## 9. Start API, worker and dashboard
+
+```bash
 docker compose up -d --no-build api worker dashboard
+docker compose ps
+
+curl --fail --silent --show-error http://127.0.0.1:3001/health | jq .
+curl --fail --silent --show-error http://127.0.0.1:3002/health | jq .
+curl --fail --silent --show-error http://127.0.0.1:3000/api/build-identity | jq .
 ```
 
-Wait for health:
+All three services must report the exact `DEPLOY_SHA`.
+
+## 10. Recover an existing administrator password
+
+Fresh databases use the normal idempotent admin bootstrap. For an existing administrator whose password is unknown, run the explicit one-shot recovery command:
 
 ```bash
-for url in \
-  http://127.0.0.1:3001/health \
-  http://127.0.0.1:3002/health \
-  http://127.0.0.1:3000/api/build-identity
- do
-  for _ in $(seq 1 60); do
-    curl -fsS --max-time 5 "$url" >/dev/null && break
-    sleep 2
-  done
-  curl -fsS --max-time 5 "$url"
-done
-```
-
-Confirm all three services report the exact release SHA.
-
-## 8. Recover administrator access only when required
-
-The normal path is to use the existing administrator password. Do not reset it unless login is genuinely unavailable.
-
-For an existing administrator only:
-
-```bash
-read -rsp 'New administrator password: ' ADMIN_RESET_PASSWORD
-echo
-export ADMIN_RESET_PASSWORD
 export ADMIN_EMAIL='amarktainetwork@gmail.com'
+export ADMIN_RESET_PASSWORD='<new-strong-password>'
 export CONFIRM_ADMIN_PASSWORD_RESET="$ADMIN_EMAIL"
-docker compose exec -T \
-  -e ADMIN_EMAIL="$ADMIN_EMAIL" \
-  -e ADMIN_RESET_PASSWORD="$ADMIN_RESET_PASSWORD" \
-  -e CONFIRM_ADMIN_PASSWORD_RESET="$CONFIRM_ADMIN_PASSWORD_RESET" \
-  api npm run admin:reset-password
+
+docker compose run --rm \
+  -e ADMIN_EMAIL \
+  -e ADMIN_RESET_PASSWORD \
+  -e CONFIRM_ADMIN_PASSWORD_RESET \
+  --entrypoint node api scripts/admin-reset-password.mjs
+
 unset ADMIN_RESET_PASSWORD CONFIRM_ADMIN_PASSWORD_RESET
 ```
 
-The reset command:
+The command refuses to create an unknown account, requires confirmation, hashes the replacement password, re-enables the existing account and increments `tokenVersion` so previous tokens become invalid.
 
-- refuses to create a missing administrator;
-- requires an explicit email confirmation value;
-- requires a password of at least 12 characters;
-- stores only a bcrypt hash;
-- increments the token version to revoke old sessions;
-- never prints the password.
+Verify both login paths:
 
-Verify login directly through the API and through the dashboard proxy before continuing.
+```bash
+export ADMIN_PASSWORD='<new-strong-password>'
+LOGIN_PAYLOAD="$(node -e 'process.stdout.write(JSON.stringify({email:process.env.ADMIN_EMAIL,password:process.env.ADMIN_PASSWORD}))')"
 
-## 9. Verify provider truth
+curl --fail --silent --show-error \
+  -H 'content-type: application/json' -d "$LOGIN_PAYLOAD" \
+  http://127.0.0.1:3001/api/v1/auth/login | jq .
 
-The approved provider truth must show:
+curl --fail --silent --show-error \
+  -H 'content-type: application/json' -d "$LOGIN_PAYLOAD" \
+  http://127.0.0.1:3000/api/auth/login | jq .
+```
 
-- GenX configured and runtime-eligible when its credential is valid;
-- Together configured and runtime-eligible when its credential is valid;
-- DeepInfra configured and runtime-eligible when its credential is valid;
-- MiMo stored-configuration truth separately from its coding-only runtime restriction;
-- Groq absent from active provider truth.
+## 11. Verify Nginx and HTTPS
 
-Run authenticated model discovery and confirm provider status consistency before capability proof.
+All published compose ports bind to `127.0.0.1`. Nginx is the public entry point.
 
-## 10. Run strict production proof
+```bash
+sudo -v
+sudo nginx -t
+curl --fail --silent --show-error "$PUBLIC_API_URL/api/system/health" | jq .
+```
+
+Nginx output must contain `syntax is ok` and `test is successful` with no warnings, alerts or errors.
+
+## 12. Prove real providers
 
 ```bash
 export PROOF_API_URL=http://127.0.0.1:3001
 npm run proof:authenticated-discovery
 node scripts/proof-direct-provider-capabilities.mjs --live --strict
-npm run proof
+```
+
+GenX, Together and DeepInfra must each pass authenticated account-aware discovery and live tests. MiMo remains coding-only. Groq must be absent.
+
+## 13. Run the strict production release proof
+
+```bash
+PROOF_FILE="$BACKUP_ROOT/release-proof-${DEPLOY_SHA}.json"
 node scripts/proof-production-release-candidate.mjs \
   --base-url http://127.0.0.1:3000 \
   --strict \
   --long-form \
-  --json-output "$BACKUP_ROOT/release-proof.json"
-chmod 600 "$BACKUP_ROOT/release-proof.json"
+  --json-output "$PROOF_FILE"
+chmod 600 "$PROOF_FILE"
 ```
 
-Required result:
+Acceptance requires zero failures and zero skips. The proof covers infrastructure, authentication, canonical truth, app grants, providers, real jobs, fallbacks, queues, authorised artifacts and long-form multimedia assembly.
 
-- zero failed required capabilities;
-- zero skipped required capabilities;
-- exact provider, model and executor evidence;
-- real required artifacts;
-- authenticated artifact preview and download;
-- administrator login through API and dashboard;
-- provider truth agreement;
-- public HTTPS, dashboard assets and Studio execution verified.
+## Release checklist
 
-## 11. Roll back application images on failure
+- [ ] Exact SHA pinned and built.
+- [ ] `.env` is complete and secure.
+- [ ] MariaDB backup verified.
+- [ ] Artifact backup verified.
+- [ ] Qdrant backup verified.
+- [ ] Build, tests, audit and static proofs pass.
+- [ ] All migrations are applied.
+- [ ] Latest mandatory migration is present.
+- [ ] API, worker and dashboard report the same SHA.
+- [ ] Existing admin password recovered when required.
+- [ ] API and dashboard-proxy login pass.
+- [ ] Nginx and public HTTPS pass.
+- [ ] GenX, Together and DeepInfra live tests pass.
+- [ ] MiMo remains coding-only.
+- [ ] Groq remains absent.
+- [ ] Strict production proof reports zero failures and skips.
+- [ ] Proof JSON and rollback images are retained.
 
-Keep MariaDB, Redis, Qdrant and artifact volumes unchanged. Restore only the previously tagged immutable API, worker and dashboard images:
+## Rollback
 
-```bash
-export GIT_SHA="$ROLLBACK_SHA"
-export BUILD_TIME="rollback-$ROLLBACK_SHA"
-docker compose up -d --no-build api worker dashboard
-```
-
-Additive migrations remain in place only when they are backward compatible with the rollback application. Confirm API, worker and dashboard health after rollback.
+Application rollback and data restoration are separate operations. For additive migrations, restore the previous immutable API, worker and dashboard images while leaving the migrated database intact. Restore MariaDB, artifact or Qdrant backups only when data integrity is damaged, with API and worker stopped and backup checksums verified.
