@@ -27,7 +27,13 @@ const VERIFIED_SERVERLESS_MODELS = new Set([
 
 function togetherCapabilities(modelId: string, rawType: string): Array<'chat' | 'reasoning' | 'summarization' | 'classification' | 'extraction' | 'code' | 'image_generation' | 'embeddings' | 'reranking' | 'video_generation' | 'tts' | 'stt' | 'music_generation'> {
   const type = rawType.toLowerCase()
-  const text = `${modelId} ${type}`.toLowerCase()
+  const normalizedModel = modelId.toLowerCase()
+  const text = `${normalizedModel} ${type}`
+  if (normalizedModel === 'black-forest-labs/flux.1-schnell') return ['image_generation']
+  if (normalizedModel === 'intfloat/multilingual-e5-large-instruct' || normalizedModel === 'togethercomputer/m2-bert-80m-32k-retrieval') return ['embeddings']
+  if (normalizedModel === 'salesforce/llama-rank-v1') return ['reranking']
+  if (normalizedModel === 'canopylabs/orpheus-3b-0.1-ft') return ['tts']
+  if (normalizedModel === 'openai/whisper-large-v3') return ['stt']
   if (type === 'chat' || type === 'language') return ['chat', 'reasoning', 'summarization', 'classification', 'extraction']
   if (type === 'code') return ['code']
   if (type === 'image') return ['image_generation']
@@ -97,7 +103,7 @@ export async function discoverTogetherProviderModels(options: DiscoveryAdapterOp
           displayName: stringField(record, ['display_name', 'name', 'id'], modelId),
           rawProviderType: rawType,
           inferredCapabilities: capabilities,
-          category: capabilities.includes('tts') ? 'tts' : capabilities.includes('stt') ? 'transcription' : rawType,
+          category: capabilities.includes('tts') ? 'tts' : capabilities.includes('stt') ? 'transcription' : capabilities.includes('reranking') ? 'rerank' : capabilities.includes('embeddings') ? 'embedding' : rawType,
           providerCategory: rawType,
           modalitiesIn,
           modalitiesOut,
