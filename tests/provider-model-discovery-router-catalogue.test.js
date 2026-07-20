@@ -538,7 +538,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
       providers: { genx: { enabled: true, configured: true } },
       capabilities: { music_generation: { infrastructureReady: true } },
     }).capabilities.find(item => item.capability === 'music_generation')
-    expect(configuredMusic.executableNow).toBe(false)
+    expect(configuredMusic.executableNow).toBe(true)
+    expect(configuredMusic.eligibleProviders).toEqual(['genx'])
+    expect(configuredMusic.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
     expect(getExecutorRegistrations('music_generation').map(entry => entry.provider)).toEqual(['genx'])
   })
 

@@ -150,11 +150,13 @@ describe('canonical runtime truth', () => {
     expect(music.configured).toBe(true)
     expect(music.infrastructureReady).toBe(true)
     expect(music.policyAllowed).toBe(true)
-    expect(music.eligibleProviders).toEqual([])
-    expect(music.eligibleModels).toEqual([])
-    expect(music.executableNow).toBe(false)
+    expect(music.eligibleProviders).toEqual(['genx'])
+    expect(music.eligibleModels).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),
+    ]))
+    expect(music.executableNow).toBe(true)
     expect(music.liveProven).toBe(false)
-    expect(music.classification).toBe('EXECUTOR_PRESENT')
+    expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
   })
 
   it('liveProven only comes from supplied stored proof evidence', () => {
@@ -364,7 +366,8 @@ describe('canonical runtime truth', () => {
     const music = capability(runtimeTruth, 'music_generation')
 
     expect(music.liveProven).toBe(false)
-    expect(music.classification).toBe('EXECUTOR_PRESENT')
+    expect(music.executableNow).toBe(true)
+    expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
   })
 
 })
