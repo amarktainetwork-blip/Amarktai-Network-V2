@@ -1,0 +1,50 @@
+name: security-lock-refresh
+
+on:
+  push:
+    branches: [feat/production-activation-music-longform]
+    paths:
+      - package.json
+      - .github/workflows/security-lock-refresh.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: security-lock-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  refresh-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/production-activation-music-longform
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Refresh lockfile from the committed security override
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Prove the production dependency tree is clean
+        run: npm audit --omit=dev
+
+      - name: Commit the npm-generated lockfile
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock.json already matches the security override'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'fix: refresh patched production dependency lock'
+          git push origin HEAD:feat/production-activation-music-longform
