@@ -27,7 +27,7 @@ export function getDashboardAppSlug(capability: CapabilityKey): string {
   const mode = CAPABILITY_BY_KEY[capability].studioMode
   if (mode === 'longvideo') return 'dashboard-long-form'
   if (mode === 'image') return 'dashboard-image'
-  if (mode === 'music') return 'dashboard-music'
+  if (mode === 'music' || mode === 'song_generation') return 'dashboard-music'
   if (mode === 'voice' || mode === 'voice_stt') return 'dashboard-voice'
   if (mode === 'video' || mode === 'image_to_video' || mode === 'video_to_video') return 'dashboard-video'
   if (mode === 'chat' || mode === 'streaming_chat') return 'dashboard-studio'
