@@ -8,6 +8,10 @@ REPO_DIR="${REPO_DIR:-/var/www/Amarktai-Network-V2}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-feat/production-activation-music-longform}"
 DEPLOY_SHA="${DEPLOY_SHA:-}"
 ROLLBACK_SHA="${ROLLBACK_SHA:-}"
+HOST_UID="$(id -u)"
+DEPLOY_CACHE_ROOT="${DEPLOY_CACHE_ROOT:-/var/tmp/amarktai-deploy-${HOST_UID}}"
+NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$DEPLOY_CACHE_ROOT/npm}"
+PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$DEPLOY_CACHE_ROOT/playwright}"
 
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || {
   echo 'ERROR: DEPLOY_SHA must be the exact 40-character release SHA' >&2
@@ -37,6 +41,7 @@ git switch --detach "$DEPLOY_SHA"
 test -z "$(git status --porcelain)"
 
 export REPO_DIR DEPLOY_BRANCH DEPLOY_SHA ROLLBACK_SHA
+export DEPLOY_CACHE_ROOT NPM_CONFIG_CACHE PLAYWRIGHT_BROWSERS_PATH
 bash "$REPO_DIR/deploy/prepare-production-host.sh"
 
 if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
