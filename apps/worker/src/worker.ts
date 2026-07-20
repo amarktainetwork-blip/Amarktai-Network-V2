@@ -17,6 +17,7 @@ import { assertDatabaseSchemaCurrent, getDatabaseSchemaStatus, prisma } from '@a
 import { createJobProcessor, type WorkerJobData } from './processors/job-processor.js'
 import { advanceLongFormWorkflow } from './long-form-workflow.js'
 import { recoverStaleProcessingJobs } from './recovery.js'
+import { executeWithDurableProviderFallback } from './providers/durable-provider-fallback.js'
 import { assertFixtureAdapterConfiguration } from './providers/release-fixture-executor.js'
 import { createServer, type Server } from 'node:http'
 import { readFileSync } from 'node:fs'
@@ -94,7 +95,10 @@ async function main(): Promise<void> {
   const queue = new Queue(QUEUE_NAMES.JOBS, { connection })
   const recovered = await recoverStaleProcessingJobs(queue)
   if (recovered.length) console.log(`[worker] Recovered ${recovered.length} stale processing jobs`)
-  const processJob = createJobProcessor({ advanceLongFormWorkflow: (parentJobId) => advanceLongFormWorkflow(parentJobId, queue) })
+  const processJob = createJobProcessor({
+    executeCapability: executeWithDurableProviderFallback,
+    advanceLongFormWorkflow: (parentJobId) => advanceLongFormWorkflow(parentJobId, queue),
+  })
   const worker = new Worker(
     QUEUE_NAMES.JOBS,
     async (job) => {
