@@ -28,6 +28,8 @@ export async function adminProviderRoutes(app: FastifyInstance): Promise<void> {
       ...credentialsByProvider.get(provider.provider),
       ...provider,
       providerKey: provider.provider,
+      configured: provider.credentialConfigured,
+      runtimeConfigured: provider.configured,
     }))
     return reply.send({
       providers,

@@ -256,10 +256,11 @@ describe('Music generation backend foundation', () => {
     })
     expect(status.implementationReady).toBe(true)
     expect(status.configured).toBe(true)
-    expect(status.executableNow).toBe(false)
+    expect(status.executableNow).toBe(true)
+    expect(status.musicGenerationReady).toBe(true)
     expect(status.liveProven).toBe(false)
-    expect(status.executionBlocked).toBe(true)
-    expect(status.blockedReasons).toContain('no_executor_compatible_catalogued_model')
+    expect(status.executionBlocked).toBe(false)
+    expect(status.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')
   })
 
   it('marks liveProven true only when proof evidence is supplied', () => {
@@ -269,8 +270,9 @@ describe('Music generation backend foundation', () => {
       liveProven: true,
       lastProofAt: '2026-07-10T00:00:00.000Z',
     })
-    expect(status.executableNow).toBe(false)
-    expect(status.liveProven).toBe(false)
+    expect(status.executableNow).toBe(true)
+    expect(status.liveProven).toBe(true)
+    expect(status.executionBlocked).toBe(false)
     expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')
   })
 
@@ -310,9 +312,11 @@ describe('Music generation backend foundation', () => {
       providers: { genx: { enabled: true, configured: true } },
       capabilities: { music_generation: { infrastructureReady: true } },
     }).capabilities.find(item => item.capability === 'music_generation')
-    expect(music.executableNow).toBe(false)
-    expect(music.eligibleProviders).toEqual([])
-    expect(music.eligibleModels).toEqual([])
+    expect(music.executableNow).toBe(true)
+    expect(music.eligibleProviders).toEqual(['genx'])
+    expect(music.eligibleModels).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),
+    ]))
   })
 
   it('keeps adult capabilities on hold', () => {

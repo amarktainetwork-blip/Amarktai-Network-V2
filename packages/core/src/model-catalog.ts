@@ -541,7 +541,15 @@ export function getExecutableModels(): ModelRecord[] {
 
 export function isModelRouteCompatible(model: ModelRecord, capability: CapabilityKey): boolean {
   if (model.status !== 'available' || model.policyRestrictedByApp) return false
-  if (!model.liveDiscovered && model.source !== 'static_verified') return false
+  const hasCompleteExecutionContract = model.endpointShapeKnown === true
+    && model.requestShapeKnown === true
+    && model.responseShapeKnown === true
+    && model.providerClientExists === true
+    && model.workerExecutorExists === true
+  const sourceEligible = model.liveDiscovered === true
+    || model.source === 'static_verified'
+    || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)
+  if (!sourceEligible) return false
   const raw = model.rawMetadata ?? {}
   const metadata = {
     category: model.category,
