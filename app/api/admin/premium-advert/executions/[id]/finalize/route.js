@@ -1,0 +1,18 @@
+import { NextResponse } from 'next/server'
+
+const API_BASE = process.env.API_URL ?? 'http://api:3001'
+
+export async function POST(request, { params }) {
+  const authorization = request.headers.get('authorization')
+  const { id } = await params
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/premium-advert/executions/${encodeURIComponent(id)}/finalize`, {
+      method: 'POST',
+      headers: authorization ? { Authorization: authorization } : {},
+      signal: AbortSignal.timeout(15 * 60 * 1000),
+    })
+    return NextResponse.json(await response.json(), { status: response.status })
+  } catch {
+    return NextResponse.json({ error: true, message: 'Backend unavailable. Premium advert final assembly could not complete.' }, { status: 502 })
+  }
+}
