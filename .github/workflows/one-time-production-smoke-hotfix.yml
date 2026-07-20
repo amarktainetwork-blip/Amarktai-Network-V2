@@ -87,6 +87,54 @@ jobs:
               ],
           )
 
+          replace_or_verify(
+              'tests/music-generation-foundation.test.js',
+              [
+                  '    expect(status.executableNow).toBe(false)',
+                  '    expect(status.liveProven).toBe(false)',
+                  '    expect(status.executionBlocked).toBe(true)',
+                  "    expect(status.blockedReasons).toContain('no_executor_compatible_catalogued_model')",
+              ],
+              [
+                  '    expect(status.executableNow).toBe(true)',
+                  '    expect(status.musicGenerationReady).toBe(true)',
+                  '    expect(status.liveProven).toBe(false)',
+                  '    expect(status.executionBlocked).toBe(false)',
+                  "    expect(status.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')",
+              ],
+          )
+
+          replace_or_verify(
+              'tests/music-generation-foundation.test.js',
+              [
+                  '    expect(status.executableNow).toBe(false)',
+                  '    expect(status.liveProven).toBe(false)',
+                  "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
+              ],
+              [
+                  '    expect(status.executableNow).toBe(true)',
+                  '    expect(status.liveProven).toBe(true)',
+                  '    expect(status.executionBlocked).toBe(false)',
+                  "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
+              ],
+          )
+
+          replace_or_verify(
+              'tests/music-generation-foundation.test.js',
+              [
+                  '    expect(music.executableNow).toBe(false)',
+                  '    expect(music.eligibleProviders).toEqual([])',
+                  '    expect(music.eligibleModels).toEqual([])',
+              ],
+              [
+                  '    expect(music.executableNow).toBe(true)',
+                  "    expect(music.eligibleProviders).toEqual(['genx'])",
+                  '    expect(music.eligibleModels).toEqual(expect.arrayContaining([',
+                  "      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),",
+                  '    ]))',
+              ],
+          )
+
           Path('tests/production-smoke-truth-alignment.test.ts').write_text(dedent('''\
           import { readFileSync } from 'node:fs'
           import { describe, expect, it } from 'vitest'
@@ -147,42 +195,13 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Validate Prisma and build backend
-        id: backend
-        shell: bash
         run: |
-          set +e
-          {
-            npx prisma validate
-            npx prisma generate
-            npm run build:backend
-          } > hotfix-build.log 2>&1
-          STATUS=$?
-          grep -E "error TS|Error:|npm error|ELIFECYCLE|not assignable|does not exist" hotfix-build.log > hotfix-build-errors.log || true
-          if [ ! -s hotfix-build-errors.log ]; then tail -n 150 hotfix-build.log > hotfix-build-errors.log; fi
-          exit "$STATUS"
+          npx prisma validate
+          npx prisma generate
+          npm run build:backend
 
       - name: Run focused regression tests
-        id: focused
-        shell: bash
-        run: |
-          set +e
-          npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js > hotfix-tests.log 2>&1
-          STATUS=$?
-          grep -E "FAIL|AssertionError|expected|Received|Test Files|Tests" hotfix-tests.log > hotfix-test-errors.log || true
-          if [ ! -s hotfix-test-errors.log ]; then tail -n 200 hotfix-tests.log > hotfix-test-errors.log; fi
-          exit "$STATUS"
-
-      - name: Upload hotfix diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-smoke-hotfix-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          retention-days: 7
-          path: |
-            hotfix-build.log
-            hotfix-build-errors.log
-            hotfix-tests.log
-            hotfix-test-errors.log
+        run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
 
       - name: Commit reviewed hotfix
         shell: bash
