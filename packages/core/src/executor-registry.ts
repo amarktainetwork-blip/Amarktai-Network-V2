@@ -202,7 +202,9 @@ export function getExecutorRegistrations(capability?: CapabilityKey, provider?: 
 }
 
 export function getExecutorRegistration(capability: CapabilityKey, provider: ProviderKey): ExecutorRegistration | undefined {
-  return EXECUTOR_REGISTRATIONS.find((entry) => entry.capability === capability && entry.provider === provider)
+  const registrations = getExecutorRegistrations(capability, provider)
+  if (registrations.length <= 1) return registrations[0]
+  return registrations.find((entry) => entry.capabilityMatchMode === 'semantic_text_fallback') ?? registrations[0]
 }
 
 export function hasExecutorRegistration(capability: CapabilityKey, provider: ProviderKey): boolean {
