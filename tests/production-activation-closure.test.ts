@@ -96,10 +96,16 @@ describe('production activation closure', () => {
 
     expect(prepare).toContain('docker builder prune --all --force')
     expect(prepare).toContain('docker image prune --force')
-    expect(prepare).toContain('npm ci --ignore-scripts')
+    expect(prepare).toContain('npm ci --ignore-scripts --cache "$NPM_CONFIG_CACHE"')
     expect(prepare).toContain('npx playwright install chromium')
     expect(prepare).toContain("chromium.launch({ headless: true })")
     expect(prepare).toContain('PRODUCTION_HOST_PREPARE=PASS')
+    expect(prepare).toContain('/var/tmp/amarktai-deploy-${HOST_UID}')
+    expect(prepare).toContain('NPM_CONFIG_CACHE')
+    expect(prepare).toContain('PLAYWRIGHT_BROWSERS_PATH')
+    expect(prepare).toContain('! -O "$DEPLOY_CACHE_ROOT"')
+    expect(prepare).not.toContain('/home/admin/.npm')
+    expect(prepare).not.toContain('sudo chown')
     expect(prepare).not.toContain('docker volume prune')
     expect(prepare).not.toContain('docker system prune')
     expect(prepare).not.toContain('docker image prune -a')
@@ -107,15 +113,20 @@ describe('production activation closure', () => {
     expect(prepare).not.toContain('docker container prune')
   })
 
-  it('uses one canonical activation wrapper before entering the deployment engine', () => {
+  it('uses one canonical activation wrapper and propagates isolated caches into deployment', () => {
     const activate = source('deploy/activate-production.sh')
 
     expect(activate).toContain('git fetch --prune origin "$DEPLOY_BRANCH"')
     expect(activate).toContain('git switch --detach "$DEPLOY_SHA"')
+    expect(activate).toContain('/var/tmp/amarktai-deploy-${HOST_UID}')
+    expect(activate).toContain('NPM_CONFIG_CACHE')
+    expect(activate).toContain('PLAYWRIGHT_BROWSERS_PATH')
+    expect(activate).toContain('export DEPLOY_CACHE_ROOT NPM_CONFIG_CACHE PLAYWRIGHT_BROWSERS_PATH')
     expect(activate).toContain('bash "$REPO_DIR/deploy/prepare-production-host.sh"')
     expect(activate).toContain("read -rsp 'Administrator password for production proof: '")
     expect(activate).toContain('exec bash "$REPO_DIR/deploy/deploy.sh"')
     expect(activate.indexOf('prepare-production-host.sh')).toBeLessThan(activate.indexOf('Administrator password for production proof'))
+    expect(activate).not.toContain('sudo chown')
   })
 
   it('restricts production cors instead of reflecting every origin', () => {
