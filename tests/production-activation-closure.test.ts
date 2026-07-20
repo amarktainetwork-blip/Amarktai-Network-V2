@@ -65,7 +65,7 @@ describe('production activation closure', () => {
   it('keeps one canonical operational README and a current recovery runbook', () => {
     const readme = source('README.md')
     const runbook = source('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
-    expect(readme).toContain('Groq — removed')
+    expect(readme.replaceAll('**', '')).toContain('Groq — removed')
     expect(readme).toContain('Broken or fresh-stack recovery')
     expect(readme).toContain('admin-reset-password.mjs')
     expect(runbook).toContain('Fresh or broken-stack recovery')
