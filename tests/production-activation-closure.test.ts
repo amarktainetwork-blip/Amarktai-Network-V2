@@ -8,7 +8,7 @@ const source = (path: string) => readFileSync(resolve(root, path), 'utf8')
 describe('production activation closure', () => {
   it('requires the latest production recovery migration at API startup', () => {
     const guard = source('packages/db/src/schema-guard.ts')
-    expect(guard).toContain("REQUIRED_SCHEMA_MIGRATION = '20260718_complete_platform_recovery'")
+    expect(guard).toContain("REQUIRED_SCHEMA_MIGRATION = '20260720_split_genx_video_contracts'")
     expect(guard).not.toContain("REQUIRED_SCHEMA_MIGRATION = '20260714_release_candidate'")
   })
 
