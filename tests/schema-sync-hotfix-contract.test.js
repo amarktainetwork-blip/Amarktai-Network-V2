@@ -157,10 +157,16 @@ describe('Docker entrypoint safety contract', () => {
     expect(fs.existsSync(runbookPath)).toBe(true)
 
     const runbook = fs.readFileSync(runbookPath, 'utf8')
+    const bashBlocks = [...runbook.matchAll(/```bash\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .join('\n')
+
     expect(runbook).toContain('prisma migrate resolve')
     expect(runbook).toContain('docker compose run --rm migrate')
-    expect(runbook).not.toContain('prisma db push')
-    expect(runbook).not.toContain('--accept-data-loss')
+    expect(runbook).toContain('Never run `prisma db push` in production.')
+    expect(runbook).toContain('Never use `--accept-data-loss`.')
+    expect(bashBlocks).not.toMatch(/^\s*(?:npx\s+)?prisma\s+db\s+push\b/m)
+    expect(bashBlocks).not.toContain('--accept-data-loss')
     expect(runbook).toContain('20250701_baseline_fc21a6e')
     expect(runbook).toContain('20260718_complete_platform_recovery')
   })
