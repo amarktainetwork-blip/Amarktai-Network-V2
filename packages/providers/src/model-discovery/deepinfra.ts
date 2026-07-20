@@ -186,7 +186,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
 export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterOptions = {}): Promise<ProviderDiscoveryResult> {
   const timestamp = discoveryTimestamp(options)
   if (!options.live || !options.apiKey) {
-    return skippedResult('deepinfra', DEEPINFRA_ACCOUNT_MODELS_ENDPOINT, [], ['DeepInfra documentation fallback is display-only. Authenticated /v1/models plus the live native /models/list catalogue are required for executable truth.'])
+    return skippedResult('deepinfra', DEEPINFRA_ACCOUNT_MODELS_ENDPOINT, [], ['DeepInfra documentation fallback is display-only. Authenticated GET /v1/models plus the live native /models/list catalogue are required for executable truth.'])
   }
   try {
     const [accountRecordsRaw, taskRecordsRaw] = await Promise.all([
