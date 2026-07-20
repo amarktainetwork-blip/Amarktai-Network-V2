@@ -11,6 +11,7 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/amarktai}"
 [[ "$DEPLOY_BRANCH" == "feat/production-activation-music-longform" ]] || { echo 'ERROR: unexpected deployment branch' >&2; exit 2; }
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: DEPLOY_SHA must be a 40-character SHA' >&2; exit 2; }
 cd "$REPO_DIR"
+source "$REPO_DIR/deploy/nginx-check.sh"
 
 [[ -z "$(git status --porcelain)" ]] || { echo 'ERROR: production worktree is not clean' >&2; git status --short >&2; exit 2; }
 CURRENT_SHA="$(git rev-parse HEAD)"
@@ -39,8 +40,7 @@ GENX_URL="$(env_value GENX_BASE_URL)"
 command -v docker >/dev/null
 docker info >/dev/null
 docker compose version >/dev/null
-command -v nginx >/dev/null
-nginx -t
+validate_nginx_configuration
 docker compose config --quiet
 
 for service in mariadb redis qdrant api worker dashboard; do
