@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 describe('live provider contract enrichment', () => {
-  it('intersects DeepInfra account inventory with task-rich model metadata', async () => {
+  it('combines DeepInfra account inventory with callable native task metadata', async () => {
     const calls: string[] = []
     global.fetch = vi.fn(async (url) => {
       const target = String(url)
@@ -80,8 +80,17 @@ describe('live provider contract enrichment', () => {
       'https://api.deepinfra.com/models/list',
     ]))
     expect(result.liveDiscoverySucceeded).toBe(true)
-    expect(result.models).toHaveLength(3)
-    expect(result.models.some((model) => model.modelId === 'public-only/not-in-account')).toBe(false)
+    expect(result.models).toHaveLength(4)
+
+    const nativeOnly = result.models.find((model) => model.modelId === 'public-only/not-in-account')
+    expect(nativeOnly).toMatchObject({
+      rawProviderType: 'text-generation',
+      requestShapeKnown: true,
+      responseShapeKnown: true,
+      providerClientExists: true,
+      workerExecutorExists: true,
+      rawMetadata: expect.objectContaining({ nativeCatalogueOnly: true }),
+    })
 
     const text = result.models.find((model) => model.modelId === 'meta-llama/Meta-Llama-3.1-8B-Instruct')
     expect(text).toMatchObject({
