@@ -51,7 +51,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Install locked dependencies
-        run: npm ci
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci 2>&1 | tee npm-ci-output.log
 
       - name: Validate and generate Prisma client
         run: |
@@ -78,6 +81,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: |
+            npm-ci-output.log
             backend-build-output.log
             static-test-output.log
 
