@@ -181,7 +181,11 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
     ])
     const accountRecords = accountRecordsRaw.filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
     const taskRecords = taskRecordsRaw.filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
-    const taskByModelId = new Map(taskRecords.map((record) => [modelIdFromRecord(record), record]).filter(([modelId]) => modelId))
+    const taskByModelId = new Map<string, Record<string, unknown>>()
+    for (const record of taskRecords) {
+      const modelId = modelIdFromRecord(record)
+      if (modelId) taskByModelId.set(modelId, record)
+    }
     const models = accountRecords
       .map((record) => enrichAccountRecord(record, taskByModelId.get(modelIdFromRecord(record))))
       .map((record) => toModel(record, timestamp))
