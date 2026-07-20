@@ -122,18 +122,27 @@ describe('production activation closure', () => {
     expect(prepare).not.toContain('docker container prune')
   })
 
-  it('uses one canonical activation wrapper and propagates isolated caches into deployment', () => {
+  it('pins the active rollback images before host cleanup and propagates isolated caches into deployment', () => {
     const activate = source('deploy/activate-production.sh')
 
     expect(activate).toContain('git fetch --prune origin "$DEPLOY_BRANCH"')
+    expect(activate).toContain('http://127.0.0.1:3001/health')
+    expect(activate).toContain("JSON.parse(s).build?.gitSha")
+    expect(activate).toContain('for service in api worker dashboard')
+    expect(activate).toContain('docker compose ps -q "$service"')
+    expect(activate).toContain("docker inspect --format '{{.Image}}' \"$container\"")
+    expect(activate).toContain('docker tag "$image_id" "amarktai/$service:$ROLLBACK_SHA"')
+    expect(activate).toContain('[activation] rollback images pinned')
     expect(activate).toContain('git switch --detach "$DEPLOY_SHA"')
     expect(activate).toContain('/var/tmp/amarktai-deploy-${HOST_UID}')
     expect(activate).toContain('NPM_CONFIG_CACHE')
     expect(activate).toContain('PLAYWRIGHT_BROWSERS_PATH')
+    expect(activate).toContain('export REPO_DIR DEPLOY_BRANCH DEPLOY_SHA ROLLBACK_SHA')
     expect(activate).toContain('export DEPLOY_CACHE_ROOT NPM_CONFIG_CACHE PLAYWRIGHT_BROWSERS_PATH')
     expect(activate).toContain('bash "$REPO_DIR/deploy/prepare-production-host.sh"')
     expect(activate).toContain("read -rsp 'Administrator password for production proof: '")
     expect(activate).toContain('exec bash "$REPO_DIR/deploy/deploy.sh"')
+    expect(activate.indexOf('rollback images pinned')).toBeLessThan(activate.indexOf('prepare-production-host.sh'))
     expect(activate.indexOf('prepare-production-host.sh')).toBeLessThan(activate.indexOf('Administrator password for production proof'))
     expect(activate).not.toContain('sudo chown')
   })
