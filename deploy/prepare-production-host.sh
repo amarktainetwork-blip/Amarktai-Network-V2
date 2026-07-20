@@ -5,15 +5,36 @@ set -Eeuo pipefail
 umask 077
 
 REPO_DIR="${REPO_DIR:-/var/www/Amarktai-Network-V2}"
-MIN_AVAILABLE_KB="${MIN_AVAILABLE_KB:-5242880}"
+MIN_AVAILABLE_KB="${MIN_AVAILABLE_KB:-16777216}"
+ROLLBACK_SHA="${ROLLBACK_SHA:-}"
 HOST_UID="$(id -u)"
 DEPLOY_CACHE_ROOT="${DEPLOY_CACHE_ROOT:-/var/tmp/amarktai-deploy-${HOST_UID}}"
 NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$DEPLOY_CACHE_ROOT/npm}"
 PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$DEPLOY_CACHE_ROOT/playwright}"
+PRUNE_GUARD_PREFIX="amarktai-prune-guard-${HOST_UID}-$$"
+PRUNE_GUARDS=()
 
 fail() {
   echo "ERROR: $*" >&2
   exit 2
+}
+
+cleanup_prune_guards() {
+  local guard
+  for guard in "${PRUNE_GUARDS[@]:-}"; do
+    [[ -n "$guard" ]] || continue
+    docker rm -f "$guard" >/dev/null 2>&1 || true
+  done
+}
+trap cleanup_prune_guards EXIT
+
+guard_rollback_image() {
+  local image="$1"
+  local guard="${PRUNE_GUARD_PREFIX}-${#PRUNE_GUARDS[@]}"
+  docker image inspect "$image" >/dev/null 2>&1 || fail "rollback image is missing: $image"
+  docker create --name "$guard" "$image" true >/dev/null
+  PRUNE_GUARDS+=("$guard")
+  echo "[host-prepare] protected rollback image: $image"
 }
 
 cd "$REPO_DIR"
@@ -29,6 +50,13 @@ mkdir -p "$NPM_CONFIG_CACHE" "$PLAYWRIGHT_BROWSERS_PATH"
 [[ -w "$NPM_CONFIG_CACHE" ]] || fail "npm deployment cache is not writable: $NPM_CONFIG_CACHE"
 [[ -w "$PLAYWRIGHT_BROWSERS_PATH" ]] || fail "Playwright deployment cache is not writable: $PLAYWRIGHT_BROWSERS_PATH"
 export DEPLOY_CACHE_ROOT NPM_CONFIG_CACHE PLAYWRIGHT_BROWSERS_PATH
+
+if [[ -n "$ROLLBACK_SHA" ]]; then
+  [[ "$ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'ROLLBACK_SHA must be empty or a 40-character SHA'
+  guard_rollback_image "amarktai/api:$ROLLBACK_SHA"
+  guard_rollback_image "amarktai/worker:$ROLLBACK_SHA"
+  guard_rollback_image "amarktai/dashboard:$ROLLBACK_SHA"
+fi
 
 echo '[host-prepare] disk before cleanup:'
 df -h "$REPO_DIR"
@@ -47,10 +75,15 @@ rm -rf -- \
   apps/worker/dist \
   packages/*/dist
 
-# Remove only disposable BuildKit cache and dangling images.
+# Rollback images are pinned above. Docker image prune --all removes only images
+# that are not referenced by any container, so live services and the guarded
+# rollback set remain intact. Removing image references first also lets the
+# following BuildKit prune reclaim cache records that were previously active.
+docker image prune --all --force >/dev/null
 docker builder prune --all --force >/dev/null
-docker image prune --force >/dev/null
 npm cache clean --force >/dev/null 2>&1 || true
+cleanup_prune_guards
+PRUNE_GUARDS=()
 
 AVAILABLE_KB="$(df -Pk "$REPO_DIR" | awk 'NR==2 {print $4}')"
 [[ "$AVAILABLE_KB" -ge "$MIN_AVAILABLE_KB" ]] || {
