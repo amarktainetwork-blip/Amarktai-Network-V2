@@ -129,6 +129,24 @@ describe('production activation closure', () => {
     expect(activate).not.toContain('sudo chown')
   })
 
+  it('keeps the disposable Docker fixture in CI and out of VPS deployment', () => {
+    const pkg = JSON.parse(source('package.json'))
+    const deploy = source('deploy/deploy.sh')
+    const deploymentProof = source('scripts/proof-deployment-static.mjs')
+
+    expect(pkg.scripts.proof).toBe('node scripts/proof-release-fixture.mjs')
+    expect(pkg.scripts['proof:deployment-static']).toBe('node scripts/proof-deployment-static.mjs')
+    expect(deploy).toContain('npm run proof:deployment-static')
+    expect(deploy).not.toMatch(/^\s*npm run proof\s*$/m)
+    expect(deploy).not.toContain('proof-release-fixture.mjs')
+    expect(deploymentProof).toContain('DEPLOYMENT_STATIC_PROOF=PASS')
+    expect(deploymentProof).toContain('proof-direct-provider-capabilities.mjs')
+    expect(deploymentProof).toContain('proof-long-form-closure.mjs')
+    expect(deploymentProof).toContain('music-reference-workflow-contract.test.js')
+    expect(deploymentProof).not.toContain('proof-release-fixture.mjs')
+    expect(deploymentProof).not.toContain('docker compose')
+  })
+
   it('restricts production cors instead of reflecting every origin', () => {
     const server = source('apps/api/src/server.ts')
     expect(server).toContain('CORS_ALLOWED_ORIGINS')
