@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./genx-account-client": {
+      "types": "./dist/genx-account-client.d.ts",
+      "import": "./dist/genx-account-client.js"
     }
   },
   "scripts": {
