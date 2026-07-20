@@ -108,8 +108,8 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
     sceneNumber: 1,
     title: 'The Fragmented Problem',
     objective: 'Open with the cost and confusion of disconnected AI tools.',
-    visualPrompt: 'A premium cinematic command desk suspended in darkness, overwhelmed by dozens of disconnected glowing AI windows, timelines, audio waves, image grids and automation alerts. The fragments stutter and pull in different directions before the motion freezes. Photoreal technology commercial, text-free generated frame, coherent interfaces without readable text.',
-    negativePrompt: 'No readable generated text, no brand logos, no cyberpunk clutter, no distorted hands, no comedy, no cheap stock-footage look.',
+    visualPrompt: 'A premium cinematic command desk suspended in darkness, overwhelmed by disconnected glowing AI windows, timelines, audio waves, image grids and automation alerts. The fragments pull in different directions before motion freezes. Photoreal technology commercial, coherent interfaces without readable text.',
+    negativePrompt: 'No readable generated text, brand logos, cyberpunk clutter, distorted hands, comedy or cheap stock-footage styling.',
     cameraDirection: 'Fast controlled push through fragmented panels, shallow depth of field, decisive freeze at peak complexity.',
     voiceoverText: 'AI became more powerful. But operating it became more fragmented.',
     subtitleText: 'AI became more powerful. But operating it became more fragmented.',
@@ -119,9 +119,9 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
     sceneNumber: 2,
     title: 'The AmarktAI Core',
     objective: 'Reveal AmarktAI as the organising intelligence.',
-    visualPrompt: 'The disconnected fragments collapse into a single elegant luminous orchestration core, dark graphite and electric cyan, with intelligent pathways locking into one coherent network. Premium product reveal, restrained particle energy, impeccable symmetry, realistic materials, text-free frame with generous negative space.',
-    negativePrompt: 'No generated lettering, no generic robot brain, no excessive neon, no lens dirt, no warped geometry.',
-    cameraDirection: 'Slow orbital reveal transitioning into a centred hero composition as pathways synchronize.',
+    visualPrompt: 'The disconnected fragments collapse into one elegant luminous orchestration core in graphite and electric cyan. Intelligent pathways lock into a coherent network. Restrained premium product reveal, realistic materials, impeccable symmetry and negative space.',
+    negativePrompt: 'No generated lettering, generic robot brain, excessive neon, lens dirt or warped geometry.',
+    cameraDirection: 'Slow orbital reveal into a centred hero composition as pathways synchronize.',
     voiceoverText: 'AmarktAI Network turns every capability into one intelligent operating platform.',
     subtitleText: 'One intelligent operating platform.',
     overlayText: 'AmarktAI Network',
@@ -130,8 +130,8 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
     sceneNumber: 3,
     title: 'Capability Explosion',
     objective: 'Demonstrate the breadth of callable creative and intelligence capabilities.',
-    visualPrompt: 'From the central orchestration core, high-end creative outputs unfold in one continuous cinematic transformation: photoreal brand imagery, premium product video, expressive voice waveform, full music production, research documents, code and data visualisations. Every output remains connected to the same elegant core. Photoreal commercial finish, coherent art direction, text-free frames.',
-    negativePrompt: 'No readable generated text, no random collage, no duplicated objects, no inconsistent lighting, no brand infringement.',
+    visualPrompt: 'From the orchestration core, premium creative outputs unfold in one continuous transformation: brand imagery, product video, expressive voice waveform, full music production, research documents, code and data visualisations. Every output remains connected to the same core with coherent art direction.',
+    negativePrompt: 'No readable generated text, random collage, duplicated objects, inconsistent lighting or brand infringement.',
     cameraDirection: 'Fluid macro-to-wide transformation with match cuts between image, video, voice, music and intelligence outputs.',
     voiceoverText: 'Image. Video. Voice. Music. Research. Code. Automation. All called as capabilities.',
     subtitleText: 'Every capability. One platform.',
@@ -140,10 +140,10 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
   {
     sceneNumber: 4,
     title: 'Thin Apps, One Runtime',
-    objective: 'Show multiple applications drawing from the same capability platform.',
-    visualPrompt: 'A sophisticated founder workspace where distinct applications for marketing, customer service, operations, education and specialist workflows appear as clean focused surfaces, all connected beneath the glass to one shared intelligent runtime. Premium enterprise technology advert, realistic hands and screens without readable text, consistent cyan-violet visual language.',
-    negativePrompt: 'No readable UI text, no fake company logos, no distorted hands, no floating screen chaos, no dated office stock footage.',
-    cameraDirection: 'Elegant lateral move across focused app surfaces, then tilt beneath them to reveal the shared runtime connection.',
+    objective: 'Show focused applications drawing from the same capability platform.',
+    visualPrompt: 'A sophisticated founder workspace where focused applications for marketing, customer service, operations, education and specialist workflows appear as clean surfaces connected beneath the glass to one shared intelligent runtime. Premium enterprise technology commercial.',
+    negativePrompt: 'No readable UI text, fake logos, distorted hands, floating-screen chaos or dated office stock footage.',
+    cameraDirection: 'Elegant lateral move across app surfaces, then tilt beneath them to reveal the shared runtime.',
     voiceoverText: 'Your apps stay focused. The Network decides how the work gets done.',
     subtitleText: 'Focused apps. Shared intelligence.',
     overlayText: 'Apps request outcomes. Runtime decides execution.',
@@ -152,9 +152,9 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
     sceneNumber: 5,
     title: 'Autonomous Job Graph',
     objective: 'Visualise routing, fallback, governance and durable execution.',
-    visualPrompt: 'A cinematic intelligent job graph activates across a dark premium operations environment: research flows into strategy, copy, image, video, voice and publishing; quality checks branch, weak outputs are replaced, approved artifacts lock into place. Clear visual causality, realistic dimensional interfaces without readable text, confident controlled movement.',
-    negativePrompt: 'No readable generated text, no chaotic spaghetti diagram, no red error overload, no sci-fi fantasy controls.',
-    cameraDirection: 'Follow one pulse through the job graph as it branches, validates, replaces a weak candidate and converges on approved artifacts.',
+    visualPrompt: 'A cinematic intelligent job graph activates: research flows into strategy, copy, image, video, voice and publishing; quality checks branch, weak outputs are replaced and approved artifacts lock into place. Clear causality, realistic dimensional interfaces and controlled motion.',
+    negativePrompt: 'No readable generated text, chaotic spaghetti diagram, red error overload or fantasy controls.',
+    cameraDirection: 'Follow one pulse through the graph as it branches, validates, replaces a weak candidate and converges.',
     voiceoverText: 'It routes, verifies, retries, controls cost and preserves every result.',
     subtitleText: 'Route. Verify. Improve. Preserve.',
     overlayText: 'Quality · Cost · Governance · Evidence',
@@ -162,10 +162,10 @@ export const AMARKTAI_PREMIUM_ADVERT_SCENES: readonly Omit<PremiumAdvertScene, '
   {
     sceneNumber: 6,
     title: 'Brand Close',
-    objective: 'End with an iconic, memorable brand and call to action.',
-    visualPrompt: 'The entire capability network resolves into a calm iconic AmarktAI hero mark made from luminous connected pathways above a deep graphite horizon. A confident founder silhouette faces the completed intelligent platform as sunrise light breaks through. Premium global technology campaign close, minimal, emotionally powerful, text-free generated frame with clean central negative space.',
-    negativePrompt: 'No generated words, no copied logos, no fireworks, no cheesy victory pose, no visual clutter, no malformed silhouette.',
-    cameraDirection: 'Slow pullback to the complete network, subtle sunrise lift, stable final hero frame held for the call to action.',
+    objective: 'End with an iconic brand and call to action.',
+    visualPrompt: 'The capability network resolves into a calm iconic AmarktAI hero symbol made from luminous connected pathways above a deep graphite horizon. A founder silhouette faces the completed platform as sunrise light breaks through. Minimal, emotionally powerful global technology campaign close.',
+    negativePrompt: 'No generated words, copied logos, fireworks, cheesy victory pose, clutter or malformed silhouette.',
+    cameraDirection: 'Slow pullback to the complete network, subtle sunrise lift and stable final hero frame.',
     voiceoverText: 'AmarktAI Network. Build anything. Operate everything.',
     subtitleText: 'Build anything. Operate everything.',
     overlayText: 'Build anything. Operate everything.',
@@ -194,11 +194,14 @@ export function buildPremiumAdvertPlan(input: {
   musicRoute: PremiumAdvertRoute
   availableCredits: number
 }): PremiumAdvertPlan {
-  if (!isPreferredPremiumGenxModel(input.videoRoute.model, 'hero_video')) {
+  if (!isPreferredPremiumGenxModel(input.videoRoute.model, 'video_scene')) {
     throw new Error(`Premium advert video route is not an approved flagship GenX family: ${input.videoRoute.model}`)
   }
   if (!isPreferredPremiumGenxModel(input.musicRoute.model, 'full_song')) {
     throw new Error(`Premium advert music route is not Lyria 3 Pro: ${input.musicRoute.model}`)
+  }
+  if (!isPreferredPremiumGenxModel(input.narrationRoute.model, 'voiceover')) {
+    throw new Error(`Premium advert narration route is not an approved GenX voice family: ${input.narrationRoute.model}`)
   }
   for (const route of [input.videoRoute, input.narrationRoute, input.musicRoute]) {
     if (route.provider !== 'genx') throw new Error('Premium advert execution is restricted to GenX')
@@ -217,7 +220,7 @@ export function buildPremiumAdvertPlan(input: {
       `Brand objective: ${input.request.objective}`,
       `Audience: ${input.request.audience}`,
       `Style: ${input.request.style}. Tone: ${input.request.tone}. Aspect ratio: ${input.request.aspectRatio}.`,
-      'Maintain the same AmarktAI graphite, cyan and violet art direction across every scene. Do not render readable words; overlays are added during final assembly.',
+      'Maintain the same graphite, cyan and violet art direction. Do not render readable words; overlays are added during final assembly.',
     ].join(' '),
     negativePrompt: scene.negativePrompt,
     route: input.videoRoute,
@@ -229,7 +232,7 @@ export function buildPremiumAdvertPlan(input: {
     maxCredits: input.request.maxCredits,
     reserveCredits: input.request.reserveCredits,
     lines: [
-      { role: 'hero_video', modelId: input.videoRoute.model, quantity: candidates.length, estimatedCreditsPerUnit: input.videoRoute.estimatedCreditsPerUnit },
+      { role: 'video_scene', modelId: input.videoRoute.model, quantity: candidates.length, estimatedCreditsPerUnit: input.videoRoute.estimatedCreditsPerUnit },
       { role: 'voiceover', modelId: input.narrationRoute.model, quantity: 1, estimatedCreditsPerUnit: input.narrationRoute.estimatedCreditsPerUnit },
       { role: 'full_song', modelId: input.musicRoute.model, quantity: 1, estimatedCreditsPerUnit: input.musicRoute.estimatedCreditsPerUnit },
     ],
@@ -261,7 +264,7 @@ export function scorePremiumVideoCandidate(evidence: PremiumCandidateEvidence, t
   const durationAdherence = deviation <= 0.35 ? 20 : deviation <= 1 ? 16 : deviation <= 2 ? 10 : evidence.durationSeconds ? 4 : 0
   const bytesPerSecond = evidence.durationSeconds && evidence.durationSeconds > 0 ? evidence.fileSizeBytes / evidence.durationSeconds : 0
   const dataDensity = bytesPerSecond >= 1_000_000 ? 15 : bytesPerSecond >= 500_000 ? 12 : bytesPerSecond >= 200_000 ? 8 : bytesPerSecond > 0 ? 3 : 0
-  const premiumModel = isPreferredPremiumGenxModel(evidence.model, 'hero_video') ? 20 : 0
+  const premiumModel = isPreferredPremiumGenxModel(evidence.model, 'video_scene') ? 20 : 0
   const outputValidation = evidence.outputValidated ? 15 : 0
   return {
     candidateId: evidence.candidateId,
