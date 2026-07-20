@@ -91,6 +91,33 @@ describe('production activation closure', () => {
     expect(repair).not.toContain('sudo bash deploy/deploy.sh')
   })
 
+  it('prepares the host without pruning persistent data or rollback images', () => {
+    const prepare = source('deploy/prepare-production-host.sh')
+
+    expect(prepare).toContain('docker builder prune --all --force')
+    expect(prepare).toContain('docker image prune --force')
+    expect(prepare).toContain('npm ci --ignore-scripts')
+    expect(prepare).toContain('npx playwright install chromium')
+    expect(prepare).toContain("chromium.launch({ headless: true })")
+    expect(prepare).toContain('PRODUCTION_HOST_PREPARE=PASS')
+    expect(prepare).not.toContain('docker volume prune')
+    expect(prepare).not.toContain('docker system prune')
+    expect(prepare).not.toContain('docker image prune -a')
+    expect(prepare).not.toContain('/var/backups/amarktai')
+    expect(prepare).not.toContain('docker container prune')
+  })
+
+  it('uses one canonical activation wrapper before entering the deployment engine', () => {
+    const activate = source('deploy/activate-production.sh')
+
+    expect(activate).toContain('git fetch --prune origin "$DEPLOY_BRANCH"')
+    expect(activate).toContain('git switch --detach "$DEPLOY_SHA"')
+    expect(activate).toContain('bash "$REPO_DIR/deploy/prepare-production-host.sh"')
+    expect(activate).toContain("read -rsp 'Administrator password for production proof: '")
+    expect(activate).toContain('exec bash "$REPO_DIR/deploy/deploy.sh"')
+    expect(activate.indexOf('prepare-production-host.sh')).toBeLessThan(activate.indexOf('Administrator password for production proof'))
+  })
+
   it('restricts production cors instead of reflecting every origin', () => {
     const server = source('apps/api/src/server.ts')
     expect(server).toContain('CORS_ALLOWED_ORIGINS')
