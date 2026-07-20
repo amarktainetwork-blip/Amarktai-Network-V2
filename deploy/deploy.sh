@@ -233,8 +233,7 @@ npm run build:backend
 npm test
 npm run build
 npm run audit
-npm run proof
-node scripts/proof-direct-provider-capabilities.mjs --static --strict
+npm run proof:deployment-static
 
 docker compose config >/dev/null
 docker compose build --pull api worker dashboard
@@ -291,7 +290,6 @@ AMARKTAI_DISCOVERY_OUTPUT_ROOT="$DISCOVERY_OUTPUT_ROOT" npm run discover:models:
 echo "[discovery] AUTHENTICATED_STORED_KEY_DISCOVERY (canonical persisted registry truth)"
 npm run proof:authenticated-discovery
 node scripts/proof-direct-provider-capabilities.mjs --live --strict
-npm run proof
 
 PRODUCTION_PROOF_FILE="$BACKUP_DIR/release-proof-${DEPLOY_SHA}-$(date -u +%Y%m%dT%H%M%SZ).json"
 node scripts/proof-production-release-candidate.mjs \
