@@ -24,6 +24,7 @@ import { adminArtifactRoutes } from './routes/admin-artifacts.js'
 import { adminStudioRoutes } from './routes/admin-studio.js'
 import { adminLongFormVideoRoutes } from './routes/admin-long-form-video.js'
 import { adminMusicRoutes } from './routes/admin-music.js'
+import { adminSongRoutes } from './routes/admin-song.js'
 import { adminModelDiscoveryRoutes } from './routes/admin-model-discovery.js'
 import { modelRegistryRoutes } from './routes/model-registry.js'
 import { streamingChatRoutes } from './routes/streaming-chat.js'
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
   await app.register(adminStudioRoutes)
   await app.register(adminLongFormVideoRoutes)
   await app.register(adminMusicRoutes)
+  await app.register(adminSongRoutes)
   await app.register(adminModelDiscoveryRoutes)
   await app.register(modelRegistryRoutes)
   await app.register(streamingChatRoutes)
