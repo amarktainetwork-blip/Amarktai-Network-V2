@@ -1,0 +1,149 @@
+name: one-time-production-smoke-hotfix
+
+on:
+  push:
+    branches:
+      - feat/production-activation-music-longform
+    paths:
+      - .github/workflows/one-time-production-smoke-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/production-activation-music-longform
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Apply reviewed production-smoke fixes
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one replacement target, found {count}')
+              target.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'apps/api/src/routes/admin-providers.ts',
+              """    const providers = truth.providers.map((provider) => ({
+              ...credentialsByProvider.get(provider.provider),
+              ...provider,
+              providerKey: provider.provider,
+            }))""",
+              """    const providers = truth.providers.map((provider) => ({
+              ...credentialsByProvider.get(provider.provider),
+              ...provider,
+              providerKey: provider.provider,
+              configured: provider.credentialConfigured,
+              runtimeConfigured: provider.configured,
+            }))""",
+          )
+
+          replace_once(
+              'packages/core/src/model-catalog.ts',
+              """  if (model.status !== 'available' || model.policyRestrictedByApp) return false
+            if (!model.liveDiscovered && model.source !== 'static_verified') return false
+            const raw = model.rawMetadata ?? {}""",
+              """  if (model.status !== 'available' || model.policyRestrictedByApp) return false
+            const hasCompleteExecutionContract = model.endpointShapeKnown === true
+              && model.requestShapeKnown === true
+              && model.responseShapeKnown === true
+              && model.providerClientExists === true
+              && model.workerExecutorExists === true
+            const sourceEligible = model.liveDiscovered === true
+              || model.source === 'static_verified'
+              || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)
+            if (!sourceEligible) return false
+            const raw = model.rawMetadata ?? {}""",
+          )
+
+          Path('tests/production-smoke-truth-alignment.test.ts').write_text("""import { readFileSync } from 'node:fs'
+          import { describe, expect, it } from 'vitest'
+          import { getModelRecord, isModelRouteCompatible, type ModelRecord } from '@amarktai/core'
+
+          describe('production smoke truth alignment', () => {
+            it('keeps provider credential configuration distinct from runtime eligibility', () => {
+              const source = readFileSync('apps/api/src/routes/admin-providers.ts', 'utf8')
+              expect(source).toContain('configured: provider.credentialConfigured')
+              expect(source).toContain('runtimeConfigured: provider.configured')
+            })
+
+            it('accepts the fully contracted GenX Lyria docs fallback without claiming live discovery', () => {
+              const lyria = getModelRecord('genx', 'lyria-3-clip-preview')
+              expect(lyria).toBeDefined()
+              expect(lyria?.source).toBe('docs_fallback')
+              expect(lyria?.liveDiscovered).not.toBe(true)
+              expect(isModelRouteCompatible(lyria!, 'music_generation')).toBe(true)
+            })
+
+            it('accepts a persisted manual projection only when the complete execution contract is present', () => {
+              const model: ModelRecord = {
+                provider: 'genx', modelId: 'contracted-music', displayName: 'Contracted Music',
+                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced',
+                latencyTier: 'high', costTier: 'premium', supportsArtifacts: true,
+                supportsStreaming: false, supportsBatch: false, executable: false,
+                notes: '', source: 'manual_seed', category: 'music', providerCategory: 'music',
+                modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
+                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true,
+                requestShapeKnown: true, responseShapeKnown: true,
+                providerClientExists: true, workerExecutorExists: true,
+              }
+              expect(isModelRouteCompatible(model, 'music_generation')).toBe(true)
+            })
+
+            it('continues to reject docs/manual models with incomplete execution evidence', () => {
+              const model: ModelRecord = {
+                provider: 'genx', modelId: 'unknown-music', displayName: 'Unknown Music',
+                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced',
+                latencyTier: 'high', costTier: 'premium', supportsArtifacts: true,
+                supportsStreaming: false, supportsBatch: false, executable: false,
+                notes: '', source: 'manual_seed', category: 'music', providerCategory: 'music',
+                modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
+                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true,
+                requestShapeKnown: false, responseShapeKnown: true,
+                providerClientExists: true, workerExecutorExists: true,
+              }
+              expect(isModelRouteCompatible(model, 'music_generation')).toBe(false)
+            })
+          })
+          """, encoding='utf-8')
+
+          Path('.github/workflows/one-time-production-smoke-hotfix.yml').unlink()
+          PY
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate Prisma and build backend
+        run: |
+          npx prisma validate
+          npx prisma generate
+          npm run build:backend
+
+      - name: Run focused regression tests
+        run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
+
+      - name: Commit reviewed hotfix
+        shell: bash
+        run: |
+          git config user.name "AmarktAI Release Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: align final production smoke truth"
+          git push origin HEAD:feat/production-activation-music-longform
