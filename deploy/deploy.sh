@@ -25,6 +25,7 @@ export GIT_SHA="$DEPLOY_SHA"
 export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export APP_VERSION ADMIN_EMAIL ADMIN_PASSWORD
 export REPO_DIR DEPLOY_BRANCH BACKUP_DIR DEPLOY_SHA
+source "$REPO_DIR/deploy/nginx-check.sh"
 
 playwright_preflight() {
   local version revision executable
@@ -79,7 +80,7 @@ AVAILABLE_KB="$(df -Pk "$REPO_DIR" | awk 'NR==2 {print $4}')"
 }
 docker info >/dev/null
 docker compose version >/dev/null
-nginx -t
+# Nginx was validated cleanly by deploy/preflight.sh with least privilege.
 
 for service in mariadb redis qdrant api worker dashboard; do
   container="$(docker compose ps -q "$service")"
@@ -281,7 +282,7 @@ docker compose exec -T mariadb sh -c 'mariadb-admin ping -uroot -p"$MYSQL_ROOT_P
 docker compose exec -T redis redis-cli ping | grep -qx PONG
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1:6333/healthz >/dev/null
 docker compose exec -T api sh -c 'p=/var/www/amarktai/storage/.deploy-write-proof; printf proof > "$p"; test -s "$p"; rm -f "$p"'
-nginx -t
+validate_nginx_configuration
 
 export PROOF_API_URL="${PROOF_API_URL:-http://127.0.0.1:3001}"
 DISCOVERY_OUTPUT_ROOT="$(mktemp -d)"
