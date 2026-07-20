@@ -162,9 +162,6 @@ jobs:
           '''), encoding='utf-8')
           PY
 
-          rm -f .github/workflows/one-time-production-smoke-hotfix.yml
-          git show 88f69ae49b84bac0497e4431c289786d7f4b29df:.github/workflows/release-candidate-checks.yml > .github/workflows/release-candidate-checks.yml
-
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
 
@@ -174,12 +171,16 @@ jobs:
       - name: Run focused regression tests
         run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
 
-      - name: Commit reviewed hotfix
+      - name: Commit reviewed hotfix source and tests
         shell: bash
         run: |
           git config user.name "AmarktAI Release Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -A
+          git add \
+            apps/api/src/routes/admin-providers.ts \
+            packages/core/src/model-catalog.ts \
+            tests/music-generation-foundation.test.js \
+            tests/production-smoke-truth-alignment.test.ts
           git diff --cached --check
           git commit -m "fix: align final production smoke truth"
           git push origin HEAD:feat/production-activation-music-longform
