@@ -135,15 +135,27 @@ export async function genxGetCreditBalance(options: GenxAccountClientOptions = {
   }
 }
 
-function pricingRows(raw: Record<string, unknown>): Record<string, unknown>[] {
-  const candidates = [raw.data, raw.pricing, raw.prices, raw.models, raw.items, asRecord(raw.data).pricing, asRecord(raw.data).models]
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate.map(asRecord).filter((row) => Object.keys(row).length > 0)
-    if (candidate && typeof candidate === 'object') {
-      return Object.entries(candidate as Record<string, unknown>).map(([modelId, value]) => ({ model_id: modelId, ...asRecord(value) }))
-    }
+function rowsFromCollection(candidate: unknown): Record<string, unknown>[] | null {
+  if (Array.isArray(candidate)) {
+    return candidate.map(asRecord).filter((row) => Object.keys(row).length > 0)
   }
-  return Object.keys(raw).length ? [raw] : []
+  if (candidate && typeof candidate === 'object') {
+    return Object.entries(candidate as Record<string, unknown>)
+      .filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
+      .map(([modelId, value]) => ({ model_id: modelId, ...asRecord(value) }))
+  }
+  return null
+}
+
+function pricingRows(raw: Record<string, unknown>): Record<string, unknown>[] {
+  const data = asRecord(raw.data)
+  const candidates = [data.models, data.pricing, data.prices, data.items, raw.models, raw.pricing, raw.prices, raw.items]
+  for (const candidate of candidates) {
+    const rows = rowsFromCollection(candidate)
+    if (rows && rows.length > 0) return rows
+  }
+  if (firstString([raw, data], MODEL_KEYS)) return [{ ...data, ...raw }]
+  return []
 }
 
 function metricUnit(name: string): string {
