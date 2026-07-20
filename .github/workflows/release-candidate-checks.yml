@@ -59,7 +59,10 @@ jobs:
           npm run prisma:validate
 
       - name: Build backend packages
-        run: npm run build:backend
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build:backend 2>&1 | tee backend-build-output.log
 
       - name: Run complete unit and contract suite
         shell: bash
@@ -67,14 +70,16 @@ jobs:
           set -o pipefail
           npm test 2>&1 | tee static-test-output.log
 
-      - name: Upload static test diagnostics
+      - name: Upload static and compiler diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: static-test-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 14
-          path: static-test-output.log
+          path: |
+            backend-build-output.log
+            static-test-output.log
 
       - name: Build dashboard
         run: npm run build
