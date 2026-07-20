@@ -48,7 +48,7 @@ describe('final live provider gap repairs', () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatch(/^https:\/\/api\.deepinfra\.com\//)
-    expect(calls[0]).toEndWith('/chat/completions')
+    expect(calls[0]?.endsWith('/chat/completions')).toBe(true)
     expect(chunks.filter((chunk) => chunk.type === 'content').map((chunk) => chunk.content).join('')).toBe('Hello world')
   })
 
