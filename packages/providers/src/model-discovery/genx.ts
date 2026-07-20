@@ -19,7 +19,17 @@ function classifyGenx(record: Record<string, unknown>, modelId: string, rawType:
   if (/image-to-video|(^|[-_/])i2v($|[-_/])/.test(text)) return { taskType: 'image-to-video', capabilities: ['image_to_video'], inputs: ['text', 'image'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/video-to-video|reference-video|(^|[-_/])r2v($|[-_/])/.test(text)) return { taskType: 'video-to-video', capabilities: ['video_to_video'], inputs: ['text', 'video'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/text-to-video|video|seedance|veo|wan/.test(text)) return { taskType: 'text-to-video', capabilities: ['video_generation'], inputs: ['text'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
-  if (/music|lyria|song|audio-generation|text-to-music/.test(text)) return { taskType: /song|vocal|lyrics/.test(text) ? 'song' : 'music', capabilities: /song|vocal|lyrics/.test(text) ? ['song_generation'] : ['music_generation'], inputs: ['text'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/music|lyria|song|audio-generation|text-to-music/.test(text)) {
+    const songCapable = /song|vocal|lyrics|lyria[-_ ]?3[-_ ]?pro/.test(text)
+    return {
+      taskType: songCapable ? 'song' : 'music',
+      capabilities: songCapable ? ['music_generation', 'song_generation'] : ['music_generation'],
+      inputs: ['text'],
+      outputs: ['audio'],
+      transport: 'async_job_poll',
+      endpointFamily: 'genx_generation_v1',
+    }
+  }
   if (/text-to-speech|\btts\b|voice|speech-synthesis/.test(text)) return { taskType: 'text-to-speech', capabilities: ['tts'], inputs: ['text'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/avatar/.test(text)) return { taskType: 'avatar', capabilities: ['avatar_generation'], inputs: ['text', 'image', 'audio'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/image-edit|inpaint|image-to-image/.test(text)) return { taskType: 'image-to-image', capabilities: ['image_edit', 'image_to_image'], inputs: ['text', 'image'], outputs: ['image'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
@@ -39,7 +49,7 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'xai', modelId: 'grok-imagine-video', displayName: 'Grok Imagine Video', rawProviderType: 'video', category: 'video', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'genx', modelId: 'genx-image-v1', displayName: 'GenX Image V1', rawProviderType: 'image', category: 'image', endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: '/api/v1/generate + /api/v1/jobs/:id', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: false, workerExecutorExists: false, endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: false, artifactPersistenceExists: false, transportProfile: 'async_job_poll' }),
     modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3 Clip Preview', rawProviderType: 'music', inferredCapabilities: ['music_generation'], category: 'music', modalitiesIn: ['text'], modalitiesOut: ['audio'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: 'genx_generation_v1', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll', catalogueOnlyReason: '' }),
-    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-pro-preview', displayName: 'Lyria 3 Pro Preview', rawProviderType: 'music', inferredCapabilities: ['music_generation'], category: 'music', modalitiesIn: ['text'], modalitiesOut: ['audio'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: 'genx_generation_v1', lastDiscoveredAt: timestamp, source: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll', catalogueOnlyReason: '' }),
+    modelFromProviderRecord({ provider: 'genx', executionProvider: 'genx', upstreamProvider: 'google', modelId: 'lyria-3-pro-preview', displayName: 'Lyria 3 Pro Preview', rawProviderType: 'song', inferredCapabilities: ['music_generation', 'song_generation'], category: 'song', providerCategory: 'song', modalitiesIn: ['text'], modalitiesOut: ['audio'], endpointSource: 'GenX official docs fallback /api/v1/models', endpointFamily: 'genx_generation_v1', lastDiscoveredAt: timestamp, source: 'docs_fallback', discoverySource: 'docs_fallback', providerClientExists: true, workerExecutorExists: true, endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, artifactPersistenceExists: true, transportProfile: 'async_job_poll', catalogueOnlyReason: '', rawMetadata: { taskType: 'song', capabilities: ['music_generation', 'song_generation'], supportedParameters: ['prompt', 'lyrics', 'vocals', 'instrumental', 'duration', 'genre', 'mood', 'tempo', 'title', 'language', 'structure', 'mastering_profile', 'output_format'] } }),
   ]
 
   if (!options.live || !options.apiKey) {
@@ -92,7 +102,7 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
       })
     })
 
-    return liveResult('genx', endpointSource, 'live_model_list', models, ['GenX live discovery swept model-list categories only. Music/Lyria-like models use the existing GenX music client, worker executor, and artifact path when configured; this does not prove live completion.'])
+    return liveResult('genx', endpointSource, 'live_model_list', models, ['GenX live discovery swept model-list categories only. Lyria 3 Pro is eligible for full-song execution only when account accessibility, pricing, and the complete song contract are confirmed.'])
   } catch (error) {
     return failedLiveResult('genx', endpointSource, error instanceof Error ? error.message : 'GenX discovery failed', [])
   }
