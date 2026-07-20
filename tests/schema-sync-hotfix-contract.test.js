@@ -158,7 +158,7 @@ describe('Docker entrypoint safety contract', () => {
 
     const runbook = fs.readFileSync(runbookPath, 'utf8')
     expect(runbook).toContain('prisma migrate resolve')
-    expect(runbook).toContain('prisma migrate deploy')
+    expect(runbook).toContain('docker compose run --rm migrate')
     expect(runbook).not.toContain('prisma db push')
     expect(runbook).not.toContain('--accept-data-loss')
     expect(runbook).toContain('20250701_baseline_fc21a6e')
