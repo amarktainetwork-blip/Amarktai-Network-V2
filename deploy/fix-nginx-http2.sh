@@ -10,25 +10,21 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP="${SITE}.backup-${STAMP}"
 CHANGED=false
 
-fail() {
-  echo "ERROR: $*" >&2
-  exit 2
-}
-
-[[ -f "$SITE" ]] || fail "Nginx site file does not exist: $SITE"
-command -v sudo >/dev/null || fail 'sudo is required'
-command -v python3 >/dev/null || fail 'python3 is required'
-command -v nginx >/dev/null || fail 'nginx is required'
-command -v systemctl >/dev/null || fail 'systemctl is required'
-
-sudo -v || fail 'sudo authentication failed'
-
 restore_backup() {
   if [[ "$CHANGED" == true && -f "$BACKUP" ]]; then
     echo '[rollback] restoring original Nginx configuration' >&2
     sudo cp -a "$BACKUP" "$SITE"
-    sudo nginx -t >&2 || true
+    if sudo nginx -t >&2; then
+      sudo systemctl reload nginx >&2 || true
+    fi
+    CHANGED=false
   fi
+}
+
+fail() {
+  echo "ERROR: $*" >&2
+  restore_backup
+  exit 2
 }
 
 on_error() {
@@ -37,6 +33,14 @@ on_error() {
   exit "$code"
 }
 trap on_error ERR
+
+[[ -f "$SITE" ]] || fail "Nginx site file does not exist: $SITE"
+command -v sudo >/dev/null || fail 'sudo is required'
+command -v python3 >/dev/null || fail 'python3 is required'
+command -v nginx >/dev/null || fail 'nginx is required'
+command -v systemctl >/dev/null || fail 'systemctl is required'
+
+sudo -v || fail 'sudo authentication failed'
 
 echo "[nginx] site: $SITE"
 sudo cp -a "$SITE" "$BACKUP"
@@ -71,7 +75,7 @@ if len(legacy_v4_matches) != 1 or len(legacy_v6_matches) != 1:
     )
 
 if http2_on.search(text):
-    raise SystemExit("Refusing mixed legacy/current HTTP/2 configuration")
+    raise SystemExit('Refusing mixed legacy/current HTTP/2 configuration')
 
 v4_indent = legacy_v4_matches[0].group('indent')
 v6_indent = legacy_v6_matches[0].group('indent')
@@ -99,9 +103,7 @@ NGINX_STATUS=$?
 set -e
 printf '%s\n' "$NGINX_OUTPUT"
 
-if [[ "$NGINX_STATUS" -ne 0 ]]; then
-  fail 'Nginx configuration test failed'
-fi
+[[ "$NGINX_STATUS" -eq 0 ]] || fail 'Nginx configuration test failed'
 if grep -Eq '\[(warn|alert|emerg|crit)\]' <<<"$NGINX_OUTPUT"; then
   fail 'Nginx configuration still emits warnings or errors'
 fi
@@ -109,7 +111,7 @@ grep -Fq 'syntax is ok' <<<"$NGINX_OUTPUT" || fail 'Nginx did not confirm valid 
 grep -Fq 'test is successful' <<<"$NGINX_OUTPUT" || fail 'Nginx did not confirm successful validation'
 
 if [[ "$CHANGED" == true ]]; then
-  sudo systemctl reload nginx
+  sudo systemctl reload nginx || fail 'Nginx reload failed'
 fi
 sudo systemctl is-active --quiet nginx || fail 'Nginx is not active after validation/reload'
 
