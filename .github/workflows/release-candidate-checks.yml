@@ -25,18 +25,19 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Generate package lock from committed security override
-        run: npm install --package-lock-only --ignore-scripts
-
-      - name: Prove patched production dependencies
-        run: npm audit --omit=dev
+      - name: Generate npm audit fixed package lock
+        run: npm audit fix --package-lock-only --ignore-scripts
 
       - name: Upload npm-generated package lock
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: security-package-lock-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 1
           path: package-lock.json
+
+      - name: Prove patched production dependencies
+        run: npm audit --omit=dev
 
   static-and-build:
     runs-on: ubuntu-latest
