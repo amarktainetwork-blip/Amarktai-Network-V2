@@ -88,6 +88,18 @@ function structuredModes(record: Record<string, unknown>): string[] {
   return [...new Set(values)]
 }
 
+function isCallableNativeRecord(record: Record<string, unknown>): boolean {
+  const modelId = modelIdFromRecord(record)
+  if (!modelId) return false
+  const task = normalizeTask(record, modelId)
+  if ((TASK_CAPABILITIES[task] ?? []).length === 0) return false
+  const privateValue = record.private
+  const isPrivate = privateValue === true || Number(privateValue ?? 0) > 0
+  const deprecatedValue = record.deprecated
+  const deprecated = deprecatedValue === true || Number(deprecatedValue ?? 0) > 0
+  return !isPrivate && !deprecated
+}
+
 function enrichAccountRecord(
   accountRecord: Record<string, unknown>,
   taskRecord: Record<string, unknown> | undefined,
@@ -112,6 +124,7 @@ function enrichAccountRecord(
     pricing: taskMetadata.pricing ?? accountMetadata.pricing ?? accountRecord.pricing,
     account_model_metadata: accountMetadata,
     task_contract_enriched: taskRecord !== undefined,
+    native_catalogue_only: accountRecord.native_catalogue_only === true,
   }
 }
 
@@ -161,6 +174,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       accountInventorySource: DEEPINFRA_ACCOUNT_MODELS_ENDPOINT,
       taskMetadataSource: DEEPINFRA_TASK_MODELS_ENDPOINT,
       taskContractEnriched: record.task_contract_enriched === true,
+      nativeCatalogueOnly: record.native_catalogue_only === true,
       pricing: record.pricing,
       tags: record.tags,
       deprecated: record.deprecated,
@@ -172,7 +186,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
 export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterOptions = {}): Promise<ProviderDiscoveryResult> {
   const timestamp = discoveryTimestamp(options)
   if (!options.live || !options.apiKey) {
-    return skippedResult('deepinfra', DEEPINFRA_ACCOUNT_MODELS_ENDPOINT, [], ['DeepInfra documentation fallback is display-only. Authenticated GET /v1/models plus task metadata from /models/list are required for executable catalogue truth.'])
+    return skippedResult('deepinfra', DEEPINFRA_ACCOUNT_MODELS_ENDPOINT, [], ['DeepInfra documentation fallback is display-only. Authenticated /v1/models plus the live native /models/list catalogue are required for executable truth.'])
   }
   try {
     const [accountRecordsRaw, taskRecordsRaw] = await Promise.all([
@@ -181,22 +195,34 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
     ])
     const accountRecords = accountRecordsRaw.filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
     const taskRecords = taskRecordsRaw.filter((record): record is Record<string, unknown> => typeof record === 'object' && record !== null)
+      .filter(isCallableNativeRecord)
+    const accountByModelId = new Map<string, Record<string, unknown>>()
+    for (const record of accountRecords) {
+      const modelId = modelIdFromRecord(record)
+      if (modelId) accountByModelId.set(modelId, record)
+    }
     const taskByModelId = new Map<string, Record<string, unknown>>()
     for (const record of taskRecords) {
       const modelId = modelIdFromRecord(record)
       if (modelId) taskByModelId.set(modelId, record)
     }
-    const models = accountRecords
+
+    const openAiModels = accountRecords
       .map((record) => enrichAccountRecord(record, taskByModelId.get(modelIdFromRecord(record))))
+    const nativeOnlyModels = taskRecords
+      .filter((record) => !accountByModelId.has(modelIdFromRecord(record)))
+      .map((record) => enrichAccountRecord({ id: modelIdFromRecord(record), native_catalogue_only: true }, record))
+    const models = [...openAiModels, ...nativeOnlyModels]
       .map((record) => toModel(record, timestamp))
       .filter((model) => model.modelId)
-    if (!models.length) return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, 'authenticated model list returned zero usable models', [])
+    if (!models.length) return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, 'authenticated and native model discovery returned zero usable models', [])
     const enrichedCount = models.filter((model) => model.rawMetadata?.taskContractEnriched === true).length
+    const nativeOnlyCount = models.filter((model) => model.rawMetadata?.nativeCatalogueOnly === true).length
     return {
       provider: 'deepinfra', providerRole: 'runtime_execution_provider', docsCapabilityKnown: true,
       liveDiscoverySupported: true, docsFallbackSupported: true, apiKeyEnvName: 'DEEPINFRA_API_KEY',
       apiKeyRequiredForLiveDiscovery: true, apiKeyPresent: true, modelsEndpointRequiresAuth: true,
-      modelsEndpointScope: 'authenticated_account_catalogue_enriched_with_task_contracts', mode: 'live_model_list', source: 'live_endpoint',
+      modelsEndpointScope: 'authenticated_openai_inventory_plus_live_native_catalogue', mode: 'live_model_list', source: 'live_endpoint',
       models, totalDiscovered: models.length, liveDiscoveryAttempted: true, liveDiscoverySucceeded: true,
       liveDiscoverySkipped: false, liveDiscoverySkipReason: null, docsFallbackUsed: false,
       providerUniverseKnown: true, providerUniversePartiallyKnown: false, publicDocsUniverseKnown: true,
@@ -204,7 +230,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
       returnedModelCount: models.length, staticFallbackCount: 0, docsFallbackCount: 0,
       effectiveCatalogueCount: models.length, runtimeExecutionAllowed: true, policyRestrictedByApp: false,
       policyExecutionDisabled: false, policyBlockedReason: null, discoveredAt: timestamp,
-      notes: [`Authenticated DeepInfra /v1/models inventory intersected with /models/list task contracts. Enriched ${enrichedCount}/${models.length} account-accessible models; unknown contracts remain visible but non-executable.`],
+      notes: [`DeepInfra OpenAI-compatible account inventory was combined with its live native-model catalogue. Enriched ${enrichedCount}/${models.length} contracts and added ${nativeOnlyCount} callable native-only models; private, deprecated, and unknown-contract entries remain excluded.`],
     }
   } catch (error) {
     return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, error instanceof Error ? error.message : 'DeepInfra discovery failed', [])
