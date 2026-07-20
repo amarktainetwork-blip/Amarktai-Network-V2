@@ -76,6 +76,21 @@ describe('production activation closure', () => {
     expect(deploy).not.toContain('sudo bash deploy/deploy.sh')
   })
 
+  it('provides an isolated idempotent host repair for deprecated nginx http2 syntax', () => {
+    const repair = source('deploy/fix-nginx-http2.sh')
+
+    expect(repair).toContain('NGINX_SITE:-/etc/nginx/sites-available/webdock')
+    expect(repair).toContain('listen 443 ssl;')
+    expect(repair).toContain('listen [::]:443 ssl;')
+    expect(repair).toContain('http2 on;')
+    expect(repair).toContain('ALREADY_CURRENT')
+    expect(repair).toContain('restore_backup')
+    expect(repair).toContain('sudo nginx -t')
+    expect(repair).toContain('sudo systemctl reload nginx')
+    expect(repair).toContain('NGINX_HTTP2_REPAIR=PASS')
+    expect(repair).not.toContain('sudo bash deploy/deploy.sh')
+  })
+
   it('restricts production cors instead of reflecting every origin', () => {
     const server = source('apps/api/src/server.ts')
     expect(server).toContain('CORS_ALLOWED_ORIGINS')
