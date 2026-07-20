@@ -1,4 +1,4 @@
-import type { ProviderKey } from '@amarktai/core'
+import { getProviderDefaultBaseUrl, type ProviderKey } from '@amarktai/core'
 import { CanonicalProviderError, normalizeProviderError, providerHttpError } from './provider-errors.js'
 
 export interface OpenAiTransportMessage {
@@ -159,6 +159,7 @@ export async function* openAiStreamingChat(
 
 async function fetchWithRetry(request: OpenAiChatTransportRequest, stream: boolean): Promise<Response> {
   const maxRetries = Math.max(0, Math.min(request.maxRetries ?? 2, 3))
+  const baseUrl = request.baseUrl.trim() || getProviderDefaultBaseUrl(request.provider)
   let lastError: unknown
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController()
@@ -183,7 +184,7 @@ async function fetchWithRetry(request: OpenAiChatTransportRequest, stream: boole
       if (request.toolChoice) payload.tool_choice = request.toolChoice
       if (request.reasoningEffort) payload.reasoning_effort = request.reasoningEffort
 
-      const response = await fetch(`${request.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': 'application/json', Accept: stream ? 'text/event-stream' : 'application/json' },
         body: JSON.stringify(payload),
