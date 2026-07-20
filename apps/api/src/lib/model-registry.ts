@@ -429,6 +429,13 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
     const rerank = ['reranker', 'rerank'].includes(taskType)
     const specialist = ['zero-shot-classification', 'token-classification', 'fill-mask', 'table-question-answering'].includes(taskType)
     if (!text && !embeddings && !rerank && !specialist) return null
+    const hasNativeExecutor = capabilities.some((capability) => hasExecutorRegistration(capability, 'deepinfra'))
+    const hasTextFallback = text || capabilities.some((capability) =>
+      ['zero_shot_classification', 'token_classification', 'fill_mask', 'table_qa'].includes(capability),
+    )
+    const supportedParameters = Array.isArray(model.rawMetadata?.supportedParameters)
+      ? model.rawMetadata.supportedParameters
+      : Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : []
     return {
       taskType, category: taskType, capabilities,
       modalitiesIn: embeddings || text || rerank ? ['text'] : [],
@@ -437,14 +444,13 @@ function discoveredCompatibility(model: DiscoveryResult['models'][number], capab
       endpointFamily: text ? 'deepinfra_openai_v1/openai_chat' : embeddings ? 'deepinfra_openai_v1/embeddings' : rerank ? 'deepinfra_native_v1/rerank/native_inference' : 'deepinfra_native_v1/native_inference',
       endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
       providerClientExists: true,
-      workerExecutorExists: capabilities.some((capability) => hasExecutorRegistration(capability, 'deepinfra')),
+      workerExecutorExists: hasNativeExecutor || hasTextFallback,
       streamingSupported: text,
       structuredOutputModes: Array.isArray(model.rawMetadata?.structuredOutputModes)
         ? model.rawMetadata.structuredOutputModes
         : Array.isArray(model.rawMetadata?.structured_output_modes) ? model.rawMetadata.structured_output_modes : ['none'],
-      supportedParameters: Array.isArray(model.rawMetadata?.supportedParameters)
-        ? model.rawMetadata.supportedParameters
-        : Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : [],
+      supportedParameters,
+      ...(specialist ? { nativeSpecialist: true } : {}),
     }
   }
   if (model.provider === 'together' && capabilities.length > 0) {
@@ -512,6 +518,19 @@ export function deriveDiscoveredModelAccessibility(model: DiscoveryResult['model
     return { currentAvailability: 'defined', accountAccess: 'unknown', serverlessAvailable: null, dedicatedEndpointRequired: false, executable: false, blocker: 'account_access_unknown', evidenceSource: 'non_live_catalogue' }
   }
   if (model.provider !== 'together') {
+    const isNativeCatalogueOnly = model.rawMetadata?.nativeCatalogueOnly === true
+      || model.rawMetadata?.native_catalogue_only === true
+    if (isNativeCatalogueOnly) {
+      return {
+        currentAvailability: 'available',
+        accountAccess: 'accessible',
+        serverlessAvailable: true,
+        dedicatedEndpointRequired: false,
+        executable: true,
+        blocker: null,
+        evidenceSource: 'native_catalogue_callable',
+      }
+    }
     return { currentAvailability: 'available', accountAccess: 'accessible', serverlessAvailable: true, dedicatedEndpointRequired: false, executable: true, blocker: null, evidenceSource: 'authenticated_provider_catalogue' }
   }
 

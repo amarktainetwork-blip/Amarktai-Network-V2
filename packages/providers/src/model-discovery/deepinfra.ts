@@ -135,6 +135,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
   const contractKnown = capabilities.length > 0
   const modes = structuredModes(record)
   const parameters = Array.isArray(record.supported_parameters) ? record.supported_parameters : []
+  const isReranker = task === 'reranker' || task === 'rerank'
   return modelFromProviderRecord({
     provider: 'deepinfra',
     modelId,
@@ -162,7 +163,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       category: task,
       capabilities,
       structuredOutputModes: modes.length ? modes : ['none'],
-      supportedParameters: parameters,
+      supportedParameters: isReranker ? [...new Set([...parameters, 'queries'])] : parameters,
       endpointFamily: endpointFamilyForTask(task),
       transportProfile: transportForTask(task),
       endpointShapeKnown: contractKnown,
@@ -179,6 +180,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       tags: record.tags,
       deprecated: record.deprecated,
       replacedBy: record.replaced_by,
+      ...(isReranker ? { requestContract: 'queries_documents' } : {}),
     },
   })
 }

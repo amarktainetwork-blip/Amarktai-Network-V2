@@ -224,7 +224,7 @@ export const DIRECT_PROVIDER_OUTPUT_SCHEMAS: Record<DirectProviderCapability, Re
   fill_mask: outputObject({ predictions: { type: 'array', minItems: 1, items: outputObject({ token: nonemptyText, sequence: nonemptyText, score: finiteNumberSchema }, ['token', 'sequence', 'score']) } }, ['predictions']),
   feature_extraction: outputObject({ features: { type: 'array', minItems: 1, items: { type: 'array', minItems: 1, items: finiteNumberSchema } }, dimensions: { type: 'integer', minimum: 1 } }, ['features', 'dimensions']),
   sentence_similarity: outputObject({ scores: { type: 'array', minItems: 1, items: outputObject({ index: { type: 'integer', minimum: 0 }, score: { type: 'number', minimum: -1, maximum: 1 } }, ['index', 'score']) } }, ['scores']),
-  table_qa: outputObject({ answer: nonemptyText, coordinates: { type: 'array' }, cells: { type: 'array' } }, ['answer']),
+  table_qa: outputObject({ answer: nonemptyText, coordinates: { type: 'array', items: { type: 'array', items: { type: 'integer', minimum: 0 } } }, cells: { type: 'array' } }, ['answer']),
   structured_output: { type: 'object' },
   tts: artifactOutput({ duration: { type: 'number', exclusiveMinimum: 0 } }, ['duration']),
   stt: outputObject({ transcript: nonemptyText, language: nonemptyText, duration: { type: 'number', minimum: 0 }, artifactId: { anyOf: [nonemptyText, { type: 'null' }] } }, ['transcript', 'duration']),

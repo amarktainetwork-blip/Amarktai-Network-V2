@@ -241,6 +241,13 @@ async function executeRerankingCapability(
     const documents = (input.documents as Array<string | { id?: string; text: string }>).map((document) =>
       typeof document === 'string' ? { text: document } : document,
     )
+    const routeCompatibility = isRecord(payload.metadata?.routeModelCompatibility) ? payload.metadata!.routeModelCompatibility as Record<string, unknown> : {}
+    const explicitRequestContract = typeof routeCompatibility.requestContract === 'string' ? routeCompatibility.requestContract : null
+    const requestContract = explicitRequestContract === 'queries_documents' || explicitRequestContract === 'query_documents'
+      ? explicitRequestContract
+      : provider === 'deepinfra' && arrayStrings(routeCompatibility.supportedParameters).includes('queries')
+        ? 'queries_documents'
+        : 'query_documents'
     const result = await providerRerank({
       provider,
       apiKey: credential.apiKey,
@@ -249,9 +256,7 @@ async function executeRerankingCapability(
       documents,
       topN: numberValue(input.topN),
       baseUrl: providerStatus.baseUrl || undefined,
-      requestContract: provider === 'deepinfra' && arrayStrings((isRecord(payload.metadata?.routeModelCompatibility) ? payload.metadata!.routeModelCompatibility as Record<string, unknown> : {}).supportedParameters).includes('queries')
-        ? 'queries_documents'
-        : 'query_documents',
+      requestContract,
     })
     return success(JSON.stringify({ results: result.results }), provider, selectedModel, result.usage.inputTokens, 0, {
       outputValidation: { valid: true, contract: 'ordered_finite_rerank_scores' },
@@ -272,6 +277,10 @@ function buildTextPlan(capability: CapabilityKey, prompt: string, input: Record<
   if (capability === 'classification') return { system: `Select only labels from this allowlist: ${JSON.stringify(input.labels)}. Multilabel: ${input.multiLabel}. Scores, when supplied, must be 0..1.`, prompt: String(input.text), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.classification }
   if (capability === 'extraction') return { system: `Extract data matching this JSON Schema: ${JSON.stringify(input.schema)}.`, prompt: String(input.sourceText), schema: input.schema as Record<string, unknown> }
   if (capability === 'structured_output') return { system: `Return data matching this JSON Schema: ${JSON.stringify(input.schema)}.`, prompt: joinPrompt(prompt, input.context), schema: input.schema as Record<string, unknown> }
+  if (capability === 'zero_shot_classification') return { system: `Classify the following text into exactly one of these labels: ${JSON.stringify(input.labels)}. Return only a JSON object with "label" (the selected label from the allowlist), "labels" (all candidate labels), and "scores" (confidence for each label, 0..1).`, prompt: String(input.text), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.zero_shot_classification }
+  if (capability === 'token_classification') return { system: 'Identify all named entities in the following text. Return only a JSON object with "items" array. Each item must have "text" (the entity), "label" (entity type), "start" (character offset, integer >= 0), "end" (character offset, integer >= start), and "score" (confidence 0..1).', prompt: String(input.text), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.token_classification }
+  if (capability === 'fill_mask') return { system: `Predict the [MASK] token in the following text. Return only a JSON object with "predictions" array containing exactly ${input.topK ?? 5} candidates. Each candidate must have "token" (the predicted word), "sequence" (the full text with mask filled), and "score" (confidence 0..1).`, prompt: String(input.text), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.fill_mask }
+  if (capability === 'table_qa') return { system: 'Answer the question using only the provided table data. Return only a JSON object with "answer" (non-empty string), "cells" (array of relevant cell values), and "coordinates" (array of [row, col] pairs, zero-indexed, non-negative).', prompt: joinPrompt(input.question, JSON.stringify(input.table)), schema: DIRECT_PROVIDER_OUTPUT_SCHEMAS.table_qa }
   return { system: 'Return a clear, nonempty response.', prompt }
 }
 
@@ -321,6 +330,41 @@ function validateTextSemantics(capability: CapabilityKey, output: unknown, input
   }
   if (capability === 'code' && !String(record.code ?? '').trim()) throw malformed(provider, 'code output was empty')
   if (capability === 'translation' && !String(record.translation ?? '').trim()) throw malformed(provider, 'translation output was empty')
+  if (capability === 'zero_shot_classification') {
+    const allowed = new Set(input.labels as string[])
+    const items = arrayRecords(record.labels)
+    if (!items.length) throw malformed(provider, 'zero_shot_classification returned no labels')
+    for (const item of items) {
+      if (!allowed.has(String(item.label))) throw malformed(provider, 'zero_shot_classification returned a label outside the allowlist')
+      if (typeof item.score !== 'number' || !Number.isFinite(item.score) || item.score < 0 || item.score > 1) throw malformed(provider, 'zero_score_classification returned a non-finite or out-of-range score')
+    }
+  }
+  if (capability === 'token_classification') {
+    const items = arrayRecords(record.items)
+    if (!items.length) throw malformed(provider, 'token_classification returned no entities')
+    for (const item of items) {
+      if (!String(item.text ?? '').trim()) throw malformed(provider, 'token_classification returned an empty entity text')
+      if (!String(item.label ?? '').trim()) throw malformed(provider, 'token_classification returned an empty entity label')
+      if (!Number.isInteger(item.start) || !Number.isInteger(item.end) || (item.start as number) < 0 || (item.end as number) < (item.start as number)) throw malformed(provider, 'token_classification returned invalid entity offsets')
+      if (typeof item.score !== 'number' || !Number.isFinite(item.score) || item.score < 0 || item.score > 1) throw malformed(provider, 'token_classification returned a non-finite or out-of-range score')
+    }
+  }
+  if (capability === 'fill_mask') {
+    const items = arrayRecords(record.predictions)
+    if (!items.length) throw malformed(provider, 'fill_mask returned no predictions')
+    for (const item of items) {
+      if (!String(item.token ?? '').trim()) throw malformed(provider, 'fill_mask returned an empty token')
+      if (!String(item.sequence ?? '').trim()) throw malformed(provider, 'fill_mask returned an empty sequence')
+      if (typeof item.score !== 'number' || !Number.isFinite(item.score) || item.score < 0 || item.score > 1) throw malformed(provider, 'fill_mask returned a non-finite or out-of-range score')
+    }
+  }
+  if (capability === 'table_qa') {
+    if (!String(record.answer ?? '').trim()) throw malformed(provider, 'table_qa returned an empty answer')
+    const coords = Array.isArray(record.coordinates) ? record.coordinates : []
+    for (const coord of coords) {
+      if (!Array.isArray(coord) || coord.length < 2 || !Number.isInteger(coord[0]) || !Number.isInteger(coord[1]) || coord[0] < 0 || coord[1] < 0) throw malformed(provider, 'table_qa returned invalid coordinates')
+    }
+  }
 }
 
 function validatedInput(payload: WorkerJobData) {

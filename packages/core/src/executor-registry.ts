@@ -53,6 +53,7 @@ export interface ExecutorModelMetadata {
   streamingSupported?: boolean
   structuredOutputModes?: readonly StructuredOutputMode[]
   supportedParameters?: readonly string[]
+  requestContract?: string | null
 }
 
 export interface ExecutorRegistration {
@@ -165,6 +166,9 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   ),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
+  ),
+  ...SPECIALIST_CAPABILITIES.map((capability) =>
+    registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT),
   ),
   ...(['feature_extraction', 'sentence_similarity', 'embeddings'] as const).map((capability) => registration('deepinfra.embeddings', 'deepinfra', capability, 'executeEmbeddingsCapability', EMBEDDINGS)),
   registration('deepinfra.reranking', 'deepinfra', 'reranking', 'executeRerankingCapability', RERANK),

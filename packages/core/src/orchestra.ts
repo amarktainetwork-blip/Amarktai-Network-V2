@@ -8,7 +8,7 @@
 import { PROVIDER_KEYS, getProviderDefinition, getProviderDefaultBaseUrl, type ProviderKey } from './providers.js'
 import { CAPABILITY_FIELD_MAP, type CapabilityKey } from './capabilities.js'
 import {
-  getExecutorRegistration,
+  getExecutorRegistrations,
   isExecutorModelCompatible,
   type ExecutorId,
   type ExecutorModelMetadata,
@@ -124,6 +124,7 @@ export interface OrchestraCandidate {
   displayName: string
   capability: CapabilityKey
   executorId: ExecutorId | null
+  routeType?: 'native_specialist' | 'text_transform_fallback'
   providerConfigured: boolean
   providerEnabled: boolean
   providerHealth: string
@@ -658,14 +659,21 @@ export function normalizeDbCandidates(
     if (!(PROVIDER_KEYS as readonly string[]).includes(model.provider)) continue
     const providerDefinition = getProviderDefinition(model.provider as ProviderKey)
     const providerPolicyAllowed = providerDefinition.backendExecutionAllowed && !providerDefinition.codingOnly
-    const executorRegistration = getExecutorRegistration(capability, model.provider as ProviderKey)
-    const adapterSupported = executorRegistration !== undefined
-    const executorSupported = executorRegistration !== undefined
+    const allRegistrations = getExecutorRegistrations(capability, model.provider as ProviderKey)
+    const adapterSupported = allRegistrations.length > 0
+    const executorSupported = allRegistrations.length > 0
     const compatibilityMetadata = executorModelMetadataFromDbRecord(model, exactCapabilities)
     const requestShapeKnown = compatibilityMetadata.requestShapeKnown === true
     const responseShapeKnown = compatibilityMetadata.responseShapeKnown === true
-    const modelCompatible = executorRegistration !== undefined
-      && isExecutorModelCompatible(executorRegistration, model.modelId, compatibilityMetadata)
+    // Find the best compatible registration: prefer native specialist over text-transform fallback
+    const compatibleRegistrations = allRegistrations.filter((registration) =>
+      isExecutorModelCompatible(registration, model.modelId, compatibilityMetadata),
+    )
+    const nativeRegistration = compatibleRegistrations.find((r) => r.id === 'deepinfra.task-inference')
+    const fallbackRegistration = compatibleRegistrations.find((r) => r.id === 'deepinfra.text-transform')
+    const bestRegistration = nativeRegistration ?? fallbackRegistration ?? compatibleRegistrations[0] ?? null
+    const modelCompatible = bestRegistration !== null
+    const executorRegistration = bestRegistration
     const configuredBaseUrl = typeof provider?.baseUrl === 'string' ? provider.baseUrl.trim() : ''
     const defaultBaseUrl = getProviderDefaultBaseUrl(model.provider as ProviderKey)
     const rawMetadata = parseJsonRecord(model.rawMetadata)
@@ -706,6 +714,7 @@ export function normalizeDbCandidates(
       displayName: model.displayName ?? model.modelId,
       capability,
       executorId: executorRegistration?.id ?? null,
+      routeType: nativeRegistration ? 'native_specialist' : fallbackRegistration ? 'text_transform_fallback' : undefined,
       providerConfigured,
       providerEnabled,
       providerHealth,
@@ -842,6 +851,7 @@ export function executorModelMetadataFromDbRecord(
     streamingSupported: compatibility.streamingSupported === true || canonical?.supportsStreaming === true,
     structuredOutputModes: stringArray(compatibility.structuredOutputModes) as Array<'none' | 'json_object' | 'json_schema'>,
     supportedParameters: stringArray(compatibility.supportedParameters),
+    requestContract: stringValue(compatibility.requestContract) ?? stringValue(raw.requestContract),
   }
 }
 
