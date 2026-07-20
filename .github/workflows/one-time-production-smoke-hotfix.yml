@@ -45,95 +45,75 @@ jobs:
                   raise SystemExit(f'{path}: expected one old target or verified new target; old count={count}')
               target.write_text(text.replace(old, new), encoding='utf-8')
 
-          replace_or_verify(
-              'apps/api/src/routes/admin-providers.ts',
-              [
-                  '    const providers = truth.providers.map((provider) => ({',
-                  '      ...credentialsByProvider.get(provider.provider),',
-                  '      ...provider,',
-                  '      providerKey: provider.provider,',
-                  '    }))',
-              ],
-              [
-                  '    const providers = truth.providers.map((provider) => ({',
-                  '      ...credentialsByProvider.get(provider.provider),',
-                  '      ...provider,',
-                  '      providerKey: provider.provider,',
-                  '      configured: provider.credentialConfigured,',
-                  '      runtimeConfigured: provider.configured,',
-                  '    }))',
-              ],
-          )
+          replace_or_verify('apps/api/src/routes/admin-providers.ts', [
+            '    const providers = truth.providers.map((provider) => ({',
+            '      ...credentialsByProvider.get(provider.provider),',
+            '      ...provider,',
+            '      providerKey: provider.provider,',
+            '    }))',
+          ], [
+            '    const providers = truth.providers.map((provider) => ({',
+            '      ...credentialsByProvider.get(provider.provider),',
+            '      ...provider,',
+            '      providerKey: provider.provider,',
+            '      configured: provider.credentialConfigured,',
+            '      runtimeConfigured: provider.configured,',
+            '    }))',
+          ])
 
-          replace_or_verify(
-              'packages/core/src/model-catalog.ts',
-              [
-                  "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
-                  "  if (!model.liveDiscovered && model.source !== 'static_verified') return false",
-                  '  const raw = model.rawMetadata ?? {}',
-              ],
-              [
-                  "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
-                  '  const hasCompleteExecutionContract = model.endpointShapeKnown === true',
-                  '    && model.requestShapeKnown === true',
-                  '    && model.responseShapeKnown === true',
-                  '    && model.providerClientExists === true',
-                  '    && model.workerExecutorExists === true',
-                  '  const sourceEligible = model.liveDiscovered === true',
-                  "    || model.source === 'static_verified'",
-                  "    || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)",
-                  '  if (!sourceEligible) return false',
-                  '  const raw = model.rawMetadata ?? {}',
-              ],
-          )
+          replace_or_verify('packages/core/src/model-catalog.ts', [
+            "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
+            "  if (!model.liveDiscovered && model.source !== 'static_verified') return false",
+            '  const raw = model.rawMetadata ?? {}',
+          ], [
+            "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
+            '  const hasCompleteExecutionContract = model.endpointShapeKnown === true',
+            '    && model.requestShapeKnown === true',
+            '    && model.responseShapeKnown === true',
+            '    && model.providerClientExists === true',
+            '    && model.workerExecutorExists === true',
+            '  const sourceEligible = model.liveDiscovered === true',
+            "    || model.source === 'static_verified'",
+            "    || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)",
+            '  if (!sourceEligible) return false',
+            '  const raw = model.rawMetadata ?? {}',
+          ])
 
-          replace_or_verify(
-              'tests/music-generation-foundation.test.js',
-              [
-                  '    expect(status.executableNow).toBe(false)',
-                  '    expect(status.liveProven).toBe(false)',
-                  '    expect(status.executionBlocked).toBe(true)',
-                  "    expect(status.blockedReasons).toContain('no_executor_compatible_catalogued_model')",
-              ],
-              [
-                  '    expect(status.executableNow).toBe(true)',
-                  '    expect(status.musicGenerationReady).toBe(true)',
-                  '    expect(status.liveProven).toBe(false)',
-                  '    expect(status.executionBlocked).toBe(false)',
-                  "    expect(status.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')",
-              ],
-          )
+          replace_or_verify('tests/music-generation-foundation.test.js', [
+            '    expect(status.executableNow).toBe(false)',
+            '    expect(status.liveProven).toBe(false)',
+            '    expect(status.executionBlocked).toBe(true)',
+            "    expect(status.blockedReasons).toContain('no_executor_compatible_catalogued_model')",
+          ], [
+            '    expect(status.executableNow).toBe(true)',
+            '    expect(status.musicGenerationReady).toBe(true)',
+            '    expect(status.liveProven).toBe(false)',
+            '    expect(status.executionBlocked).toBe(false)',
+            "    expect(status.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')",
+          ])
 
-          replace_or_verify(
-              'tests/music-generation-foundation.test.js',
-              [
-                  '    expect(status.executableNow).toBe(false)',
-                  '    expect(status.liveProven).toBe(false)',
-                  "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
-              ],
-              [
-                  '    expect(status.executableNow).toBe(true)',
-                  '    expect(status.liveProven).toBe(true)',
-                  '    expect(status.executionBlocked).toBe(false)',
-                  "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
-              ],
-          )
+          replace_or_verify('tests/music-generation-foundation.test.js', [
+            '    expect(status.executableNow).toBe(false)',
+            '    expect(status.liveProven).toBe(false)',
+            "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
+          ], [
+            '    expect(status.executableNow).toBe(true)',
+            '    expect(status.liveProven).toBe(true)',
+            '    expect(status.executionBlocked).toBe(false)',
+            "    expect(status.lastProofAt).toBe('2026-07-10T00:00:00.000Z')",
+          ])
 
-          replace_or_verify(
-              'tests/music-generation-foundation.test.js',
-              [
-                  '    expect(music.executableNow).toBe(false)',
-                  '    expect(music.eligibleProviders).toEqual([])',
-                  '    expect(music.eligibleModels).toEqual([])',
-              ],
-              [
-                  '    expect(music.executableNow).toBe(true)',
-                  "    expect(music.eligibleProviders).toEqual(['genx'])",
-                  '    expect(music.eligibleModels).toEqual(expect.arrayContaining([',
-                  "      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),",
-                  '    ]))',
-              ],
-          )
+          replace_or_verify('tests/music-generation-foundation.test.js', [
+            '    expect(music.executableNow).toBe(false)',
+            '    expect(music.eligibleProviders).toEqual([])',
+            '    expect(music.eligibleModels).toEqual([])',
+          ], [
+            '    expect(music.executableNow).toBe(true)',
+            "    expect(music.eligibleProviders).toEqual(['genx'])",
+            '    expect(music.eligibleModels).toEqual(expect.arrayContaining([',
+            "      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),",
+            '    ]))',
+          ])
 
           Path('tests/production-smoke-truth-alignment.test.ts').write_text(dedent('''\
           import { readFileSync } from 'node:fs'
@@ -155,31 +135,25 @@ jobs:
               expect(isModelRouteCompatible(lyria!, 'music_generation')).toBe(true)
             })
 
-            it('accepts a persisted manual projection only when the complete execution contract is present', () => {
+            it('accepts a persisted manual projection only with complete execution evidence', () => {
               const model: ModelRecord = {
                 provider: 'genx', modelId: 'contracted-music', displayName: 'Contracted Music',
-                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced',
-                latencyTier: 'high', costTier: 'premium', supportsArtifacts: true,
-                supportsStreaming: false, supportsBatch: false, executable: false,
-                notes: '', source: 'manual_seed', category: 'music', providerCategory: 'music',
-                modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
-                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true,
-                requestShapeKnown: true, responseShapeKnown: true,
+                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced', latencyTier: 'high', costTier: 'premium',
+                supportsArtifacts: true, supportsStreaming: false, supportsBatch: false, executable: false, notes: '', source: 'manual_seed',
+                category: 'music', providerCategory: 'music', modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
+                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
                 providerClientExists: true, workerExecutorExists: true,
               }
               expect(isModelRouteCompatible(model, 'music_generation')).toBe(true)
             })
 
-            it('continues to reject docs/manual models with incomplete execution evidence', () => {
+            it('rejects docs/manual models with incomplete execution evidence', () => {
               const model: ModelRecord = {
                 provider: 'genx', modelId: 'unknown-music', displayName: 'Unknown Music',
-                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced',
-                latencyTier: 'high', costTier: 'premium', supportsArtifacts: true,
-                supportsStreaming: false, supportsBatch: false, executable: false,
-                notes: '', source: 'manual_seed', category: 'music', providerCategory: 'music',
-                modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
-                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true,
-                requestShapeKnown: false, responseShapeKnown: true,
+                capabilities: ['music_generation'], status: 'available', qualityTier: 'balanced', latencyTier: 'high', costTier: 'premium',
+                supportsArtifacts: true, supportsStreaming: false, supportsBatch: false, executable: false, notes: '', source: 'manual_seed',
+                category: 'music', providerCategory: 'music', modalitiesIn: ['text'], modalitiesOut: ['audio'], transportProfile: 'async_job_poll',
+                endpointFamily: 'genx_generation_v1', endpointShapeKnown: true, requestShapeKnown: false, responseShapeKnown: true,
                 providerClientExists: true, workerExecutorExists: true,
               }
               expect(isModelRouteCompatible(model, 'music_generation')).toBe(false)
@@ -195,7 +169,20 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Run focused regression tests
-        run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
+        shell: bash
+        run: |
+          set +e
+          npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js > hotfix-tests.log 2>&1
+          STATUS=$?
+          exit "$STATUS"
+
+      - name: Upload focused-test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-smoke-focused-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          path: hotfix-tests.log
 
       - name: Commit reviewed hotfix
         shell: bash
