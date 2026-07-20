@@ -127,7 +127,19 @@ jobs:
           bash -n deploy/*.sh scripts/*.sh
 
       - name: Production dependency audit
-        run: npm audit --omit=dev
+        shell: bash
+        run: |
+          set -o pipefail
+          npm audit --omit=dev 2>&1 | tee production-dependency-audit.log
+
+      - name: Upload production dependency audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: production-dependency-audit.log
 
       - name: Patch hygiene
         run: |
