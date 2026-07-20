@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./premium-media-policy": {
+      "types": "./dist/premium-media-policy.d.ts",
+      "import": "./dist/premium-media-policy.js"
     }
   },
   "scripts": {
