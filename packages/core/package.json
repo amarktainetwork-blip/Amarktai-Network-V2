@@ -17,6 +17,10 @@
     "./song-generation": {
       "types": "./dist/song-generation.d.ts",
       "import": "./dist/song-generation.js"
+    },
+    "./premium-advert": {
+      "types": "./dist/premium-advert.d.ts",
+      "import": "./dist/premium-advert.js"
     }
   },
   "scripts": {
