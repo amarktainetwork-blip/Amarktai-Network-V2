@@ -5,6 +5,7 @@ on:
     branches: [feat/production-activation-music-longform]
     paths:
       - package.json
+      - package-lock.json
       - .github/workflows/security-lock-refresh.yml
 
 permissions:
@@ -30,17 +31,39 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Refresh lockfile from the committed security override
-        run: npm install --package-lock-only --ignore-scripts
+      - name: Patch the exact vulnerable transitive lock record
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const path = 'package-lock.json'
+          const lock = JSON.parse(fs.readFileSync(path, 'utf8'))
+          const key = 'node_modules/@crawlee/core/node_modules/brace-expansion'
+          const current = lock.packages?.[key]
+          if (!current) throw new Error(`Missing expected lock entry: ${key}`)
+          if (!['2.1.1', '2.1.2'].includes(current.version)) {
+            throw new Error(`Unexpected brace-expansion version at ${key}: ${current.version}`)
+          }
+          lock.packages[key] = {
+            ...current,
+            version: '2.1.2',
+            resolved: 'https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.2.tgz',
+            integrity: 'sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw=='
+          }
+          fs.writeFileSync(path, `${JSON.stringify(lock, null, 2)}\n`)
+          NODE
+
+      - name: Prove the patched lock installs exactly
+        run: npm ci --ignore-scripts
 
       - name: Prove the production dependency tree is clean
         run: npm audit --omit=dev
 
-      - name: Commit the npm-generated lockfile
+      - name: Commit only the verified lockfile
         shell: bash
         run: |
           if git diff --quiet -- package-lock.json; then
-            echo 'package-lock.json already matches the security override'
+            echo 'package-lock.json already contains the verified security patch'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
