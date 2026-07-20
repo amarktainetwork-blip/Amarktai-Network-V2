@@ -53,6 +53,29 @@ describe('production activation closure', () => {
     expect(compose).not.toMatch(/-\s*["']?(3306|6379|6333|6334|3001|3002|3000):\1["']?\s*$/m)
   })
 
+  it('validates nginx with least privilege and rejects warning-bearing configuration', () => {
+    const validator = source('deploy/nginx-check.sh')
+    const preflight = source('deploy/preflight.sh')
+    const deploy = source('deploy/deploy.sh')
+
+    expect(validator).toContain('validate_nginx_configuration()')
+    expect(validator).toContain('sudo -v')
+    expect(validator).toContain('sudo nginx -t')
+    expect(validator).toContain("\\[(warn|alert|emerg|crit)\\]")
+    expect(validator).toContain('production activation requires clean output')
+    expect(validator).toContain('syntax is ok')
+    expect(validator).toContain('test is successful')
+
+    expect(preflight).toContain('source "$REPO_DIR/deploy/nginx-check.sh"')
+    expect(preflight).toContain('validate_nginx_configuration')
+    expect(preflight).not.toMatch(/^\s*nginx -t\s*$/m)
+
+    expect(deploy).toContain('source "$REPO_DIR/deploy/nginx-check.sh"')
+    expect(deploy).toContain('validate_nginx_configuration')
+    expect(deploy).not.toMatch(/^\s*nginx -t\s*$/m)
+    expect(deploy).not.toContain('sudo bash deploy/deploy.sh')
+  })
+
   it('restricts production cors instead of reflecting every origin', () => {
     const server = source('apps/api/src/server.ts')
     expect(server).toContain('CORS_ALLOWED_ORIGINS')
