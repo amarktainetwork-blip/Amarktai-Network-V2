@@ -29,10 +29,13 @@ jobs:
         run: |
           python <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def replace_once(path: str, old_lines: list[str], new_lines: list[str]) -> None:
               target = Path(path)
               text = target.read_text(encoding='utf-8')
+              old = '\n'.join(old_lines)
+              new = '\n'.join(new_lines)
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f'{path}: expected exactly one replacement target, found {count}')
@@ -40,39 +43,48 @@ jobs:
 
           replace_once(
               'apps/api/src/routes/admin-providers.ts',
-              """    const providers = truth.providers.map((provider) => ({
-              ...credentialsByProvider.get(provider.provider),
-              ...provider,
-              providerKey: provider.provider,
-            }))""",
-              """    const providers = truth.providers.map((provider) => ({
-              ...credentialsByProvider.get(provider.provider),
-              ...provider,
-              providerKey: provider.provider,
-              configured: provider.credentialConfigured,
-              runtimeConfigured: provider.configured,
-            }))""",
+              [
+                  '    const providers = truth.providers.map((provider) => ({',
+                  '      ...credentialsByProvider.get(provider.provider),',
+                  '      ...provider,',
+                  '      providerKey: provider.provider,',
+                  '    }))',
+              ],
+              [
+                  '    const providers = truth.providers.map((provider) => ({',
+                  '      ...credentialsByProvider.get(provider.provider),',
+                  '      ...provider,',
+                  '      providerKey: provider.provider,',
+                  '      configured: provider.credentialConfigured,',
+                  '      runtimeConfigured: provider.configured,',
+                  '    }))',
+              ],
           )
 
           replace_once(
               'packages/core/src/model-catalog.ts',
-              """  if (model.status !== 'available' || model.policyRestrictedByApp) return false
-            if (!model.liveDiscovered && model.source !== 'static_verified') return false
-            const raw = model.rawMetadata ?? {}""",
-              """  if (model.status !== 'available' || model.policyRestrictedByApp) return false
-            const hasCompleteExecutionContract = model.endpointShapeKnown === true
-              && model.requestShapeKnown === true
-              && model.responseShapeKnown === true
-              && model.providerClientExists === true
-              && model.workerExecutorExists === true
-            const sourceEligible = model.liveDiscovered === true
-              || model.source === 'static_verified'
-              || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)
-            if (!sourceEligible) return false
-            const raw = model.rawMetadata ?? {}""",
+              [
+                  "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
+                  "  if (!model.liveDiscovered && model.source !== 'static_verified') return false",
+                  '  const raw = model.rawMetadata ?? {}',
+              ],
+              [
+                  "  if (model.status !== 'available' || model.policyRestrictedByApp) return false",
+                  '  const hasCompleteExecutionContract = model.endpointShapeKnown === true',
+                  '    && model.requestShapeKnown === true',
+                  '    && model.responseShapeKnown === true',
+                  '    && model.providerClientExists === true',
+                  '    && model.workerExecutorExists === true',
+                  '  const sourceEligible = model.liveDiscovered === true',
+                  "    || model.source === 'static_verified'",
+                  "    || ((model.source === 'docs_fallback' || model.source === 'manual_seed') && hasCompleteExecutionContract)",
+                  '  if (!sourceEligible) return false',
+                  '  const raw = model.rawMetadata ?? {}',
+              ],
           )
 
-          Path('tests/production-smoke-truth-alignment.test.ts').write_text("""import { readFileSync } from 'node:fs'
+          Path('tests/production-smoke-truth-alignment.test.ts').write_text(dedent('''\
+          import { readFileSync } from 'node:fs'
           import { describe, expect, it } from 'vitest'
           import { getModelRecord, isModelRouteCompatible, type ModelRecord } from '@amarktai/core'
 
@@ -121,7 +133,7 @@ jobs:
               expect(isModelRouteCompatible(model, 'music_generation')).toBe(false)
             })
           })
-          """, encoding='utf-8')
+          '''), encoding='utf-8')
 
           Path('.github/workflows/one-time-production-smoke-hotfix.yml').unlink()
           PY
