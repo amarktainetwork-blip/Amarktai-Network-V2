@@ -47,10 +47,13 @@ interface ResolvedArtifact {
   mimeType: string
 }
 
-async function resolveArtifact(id: string, prefix: string): Promise<ResolvedArtifact> {
+async function resolveArtifact(id: string, acceptedMime: string | string[]): Promise<ResolvedArtifact> {
   const artifact = await prisma.artifact.findUnique({ where: { id } })
   if (!artifact) throw new Error(`Premium advert artifact not found: ${id}`)
-  if (!artifact.mimeType.startsWith(prefix)) throw new Error(`Premium advert artifact ${id} is not ${prefix}`)
+  const accepted = Array.isArray(acceptedMime) ? acceptedMime : [acceptedMime]
+  if (!accepted.some((value) => artifact.mimeType === value || artifact.mimeType.startsWith(value))) {
+    throw new Error(`Premium advert artifact ${id} has unsupported MIME ${artifact.mimeType}`)
+  }
   const path = join(getStorageRoot(), artifact.storagePath)
   if (!existsSync(path)) throw new Error(`Premium advert artifact file is missing: ${id}`)
   return { id, path, mimeType: artifact.mimeType }
@@ -127,7 +130,7 @@ export async function assemblePremiumAdvert(input: PremiumAdvertAssemblyInput): 
 
     const narration = await resolveArtifact(input.narrationArtifactId, 'audio/')
     const music = await resolveArtifact(input.musicArtifactId, 'audio/')
-    const subtitles = await resolveArtifact(input.subtitleArtifactId, 'text/')
+    const subtitles = await resolveArtifact(input.subtitleArtifactId, ['text/', 'application/x-subrip'])
     const finalPath = join(workspace, 'amarktai-network-premium-advert.mp4')
     const audioFilter = [
       '[1:a]loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.0[narration]',
