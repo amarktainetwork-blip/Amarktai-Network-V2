@@ -91,11 +91,21 @@ describe('production activation closure', () => {
     expect(repair).not.toContain('sudo bash deploy/deploy.sh')
   })
 
-  it('prepares the host without pruning persistent data or rollback images', () => {
+  it('reclaims unused Docker storage while preserving persistent data, live services, and rollback images', () => {
     const prepare = source('deploy/prepare-production-host.sh')
 
+    expect(prepare).toContain('MIN_AVAILABLE_KB="${MIN_AVAILABLE_KB:-16777216}"')
+    expect(prepare).toContain('ROLLBACK_SHA="${ROLLBACK_SHA:-}"')
+    expect(prepare).toContain('guard_rollback_image()')
+    expect(prepare).toContain('docker image inspect "$image"')
+    expect(prepare).toContain('docker create --name "$guard" "$image" true')
+    expect(prepare).toContain('amarktai/api:$ROLLBACK_SHA')
+    expect(prepare).toContain('amarktai/worker:$ROLLBACK_SHA')
+    expect(prepare).toContain('amarktai/dashboard:$ROLLBACK_SHA')
+    expect(prepare).toContain('docker image prune --all --force')
     expect(prepare).toContain('docker builder prune --all --force')
-    expect(prepare).toContain('docker image prune --force')
+    expect(prepare.indexOf('docker image prune --all --force')).toBeLessThan(prepare.indexOf('docker builder prune --all --force'))
+    expect(prepare).toContain('cleanup_prune_guards')
     expect(prepare).toContain('npm ci --ignore-scripts --cache "$NPM_CONFIG_CACHE"')
     expect(prepare).toContain('npx playwright install chromium')
     expect(prepare).toContain("chromium.launch({ headless: true })")
@@ -108,7 +118,6 @@ describe('production activation closure', () => {
     expect(prepare).not.toContain('sudo chown')
     expect(prepare).not.toContain('docker volume prune')
     expect(prepare).not.toContain('docker system prune')
-    expect(prepare).not.toContain('docker image prune -a')
     expect(prepare).not.toContain('/var/backups/amarktai')
     expect(prepare).not.toContain('docker container prune')
   })
