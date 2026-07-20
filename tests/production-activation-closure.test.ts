@@ -124,12 +124,15 @@ describe('production activation closure', () => {
 
   it('pins the active rollback images before host cleanup and propagates isolated caches into deployment', () => {
     const activate = source('deploy/activate-production.sh')
+    const composeInspection = 'container="$(docker compose ps -q "$service")"'
 
     expect(activate).toContain('git fetch --prune origin "$DEPLOY_BRANCH"')
+    expect(activate).toContain('export GIT_SHA="$DEPLOY_SHA"')
+    expect(activate).toContain('export BUILD_TIME="${BUILD_TIME:-activation-preflight}"')
     expect(activate).toContain('http://127.0.0.1:3001/health')
     expect(activate).toContain("JSON.parse(s).build?.gitSha")
     expect(activate).toContain('for service in api worker dashboard')
-    expect(activate).toContain('docker compose ps -q "$service"')
+    expect(activate).toContain(composeInspection)
     expect(activate).toContain("docker inspect --format '{{.Image}}' \"$container\"")
     expect(activate).toContain('docker tag "$image_id" "amarktai/$service:$ROLLBACK_SHA"')
     expect(activate).toContain('[activation] rollback images pinned')
@@ -142,8 +145,10 @@ describe('production activation closure', () => {
     expect(activate).toContain('bash "$REPO_DIR/deploy/prepare-production-host.sh"')
     expect(activate).toContain("read -rsp 'Administrator password for production proof: '")
     expect(activate).toContain('exec bash "$REPO_DIR/deploy/deploy.sh"')
-    expect(activate.indexOf('rollback images pinned')).toBeLessThan(activate.indexOf('prepare-production-host.sh'))
-    expect(activate.indexOf('prepare-production-host.sh')).toBeLessThan(activate.indexOf('Administrator password for production proof'))
+    expect(activate.indexOf('export GIT_SHA="$DEPLOY_SHA"')).toBeLessThan(activate.indexOf(composeInspection))
+    expect(activate.indexOf('export BUILD_TIME="${BUILD_TIME:-activation-preflight}"')).toBeLessThan(activate.indexOf(composeInspection))
+    expect(activate.indexOf('rollback images pinned')).toBeLessThan(activate.indexOf('bash "$REPO_DIR/deploy/prepare-production-host.sh"'))
+    expect(activate.indexOf('bash "$REPO_DIR/deploy/prepare-production-host.sh"')).toBeLessThan(activate.indexOf('Administrator password for production proof'))
     expect(activate).not.toContain('sudo chown')
   })
 
