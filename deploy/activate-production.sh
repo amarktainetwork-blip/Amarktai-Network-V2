@@ -22,6 +22,12 @@ fail() {
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'DEPLOY_SHA must be the exact 40-character release SHA'
 [[ -z "$ROLLBACK_SHA" || "$ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'ROLLBACK_SHA must be empty or a 40-character SHA'
 
+# docker-compose.yml requires these values during interpolation even for read-only
+# commands such as `docker compose ps`. deploy/deploy.sh replaces BUILD_TIME with
+# the actual release timestamp before any image build or service activation.
+export GIT_SHA="$DEPLOY_SHA"
+export BUILD_TIME="${BUILD_TIME:-activation-preflight}"
+
 cd "$REPO_DIR"
 test -z "$(git status --porcelain)" || {
   echo 'ERROR: production worktree is not clean' >&2
