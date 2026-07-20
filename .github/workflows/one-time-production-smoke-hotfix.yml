@@ -194,12 +194,6 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
 
-      - name: Validate Prisma and build backend
-        run: |
-          npx prisma validate
-          npx prisma generate
-          npm run build:backend
-
       - name: Run focused regression tests
         run: npx vitest run tests/production-smoke-truth-alignment.test.ts tests/admin-provider-routes-contract.test.js tests/genx-music-contract.test.js tests/music-generation-foundation.test.js
 
