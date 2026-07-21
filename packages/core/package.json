@@ -53,6 +53,10 @@
     "./voice-avatar-evidence": {
       "types": "./dist/voice-avatar-evidence.d.ts",
       "import": "./dist/voice-avatar-evidence.js"
+    },
+    "./governed-tts": {
+      "types": "./dist/governed-tts.d.ts",
+      "import": "./dist/governed-tts.js"
     }
   },
   "scripts": {
