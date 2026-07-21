@@ -5,6 +5,8 @@ export interface SocialAdPlanPayload { request: Record<string, unknown>; campaig
 export interface SocialAdApprovalPayload { decision: 'approved' | 'rejected'; notes?: string }
 export interface MemorySearchOptions { namespace: string; query?: string; limit?: number; types?: Array<'event' | 'summary' | 'context' | 'learned'> }
 export interface MemoryWritePayload { namespace: string; content: string; key?: string; memoryType?: 'event' | 'summary' | 'context' | 'learned'; importance?: number; ttlSeconds?: number }
+export interface RagIngestPayload { namespace: string; sourceId: string; title?: string; url?: string; text: string; metadata?: Record<string, unknown>; chunkSize?: number; chunkOverlap?: number }
+export interface RagSearchPayload { namespace: string; query: string; topK?: number; minScore?: number; rerank?: boolean; answer?: boolean }
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -51,6 +53,9 @@ export class AmarktAIClient {
   }
   writeMemory(payload: MemoryWritePayload) { return this.request('/api/v1/memory', { method: 'POST', body: JSON.stringify(payload) }) }
   deleteMemory(memoryId: number, namespace: string) { return this.request(`/api/v1/memory/${encodeURIComponent(String(memoryId))}?namespace=${encodeURIComponent(namespace)}`, { method: 'DELETE' }) }
+  ingestRag(payload: RagIngestPayload) { return this.request('/api/v1/rag/ingest', { method: 'POST', body: JSON.stringify(payload) }) }
+  searchRag(payload: RagSearchPayload) { return this.request('/api/v1/rag/search', { method: 'POST', body: JSON.stringify(payload) }) }
+  ragExecution(executionId: string) { return this.request(`/api/v1/rag/executions/${encodeURIComponent(executionId)}`) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
