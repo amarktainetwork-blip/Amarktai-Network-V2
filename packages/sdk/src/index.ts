@@ -3,8 +3,8 @@ export interface ExecuteRequest { capability: string; prompt?: string; input?: R
 export type BrandProfilePayload = Record<string, unknown>
 export interface SocialAdPlanPayload { request: Record<string, unknown>; campaign: Record<string, unknown> }
 export interface SocialAdApprovalPayload { decision: 'approved' | 'rejected'; notes?: string }
-export interface MemorySearchOptions { query?: string; limit?: number; types?: Array<'event' | 'summary' | 'context' | 'learned'> }
-export interface MemoryWritePayload { content: string; key?: string; memoryType?: 'event' | 'summary' | 'context' | 'learned'; importance?: number; ttlSeconds?: number }
+export interface MemorySearchOptions { namespace: string; query?: string; limit?: number; types?: Array<'event' | 'summary' | 'context' | 'learned'> }
+export interface MemoryWritePayload { namespace: string; content: string; key?: string; memoryType?: 'event' | 'summary' | 'context' | 'learned'; importance?: number; ttlSeconds?: number }
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -42,16 +42,15 @@ export class AmarktAIClient {
     return { approval, assembly }
   }
   decideFinalSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/final-approval`, { method: 'POST', body: JSON.stringify(payload) }) }
-  searchMemory(options: MemorySearchOptions = {}) {
-    const query = new URLSearchParams()
+  searchMemory(options: MemorySearchOptions) {
+    const query = new URLSearchParams({ namespace: options.namespace })
     if (options.query) query.set('q', options.query)
     if (options.limit !== undefined) query.set('limit', String(options.limit))
     if (options.types?.length) query.set('types', options.types.join(','))
-    const suffix = query.size ? `?${query.toString()}` : ''
-    return this.request(`/api/v1/memory/search${suffix}`)
+    return this.request(`/api/v1/memory/search?${query.toString()}`)
   }
   writeMemory(payload: MemoryWritePayload) { return this.request('/api/v1/memory', { method: 'POST', body: JSON.stringify(payload) }) }
-  deleteMemory(memoryId: number) { return this.request(`/api/v1/memory/${encodeURIComponent(String(memoryId))}`, { method: 'DELETE' }) }
+  deleteMemory(memoryId: number, namespace: string) { return this.request(`/api/v1/memory/${encodeURIComponent(String(memoryId))}?namespace=${encodeURIComponent(namespace)}`, { method: 'DELETE' }) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
