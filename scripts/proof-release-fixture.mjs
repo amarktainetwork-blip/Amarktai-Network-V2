@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { proveRagReleaseFixture } from './lib/proof-rag-release-fixture.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
@@ -266,8 +267,6 @@ async function proveQueueAndRestartRecovery(token, proofReport) {
 
 let passed = false
 try {
-  // The host-side proof imports the workspace package through its production
-  // export, so a fresh checkout must compile that entrypoint before invocation.
   run(npm, ['run', 'build', '--workspace=@amarktai/core'])
   run(docker, [...compose, 'config', '--quiet'])
   run(docker, [...compose, 'down', '--volumes', '--remove-orphans'])
@@ -280,14 +279,13 @@ try {
   }
   const catalogueToken = await loginFixtureAdmin()
   await seedFixtureModelCatalogue(catalogueToken)
+  await proveRagReleaseFixture({ apiRequest, invariant, delay, run, docker, compose, adminToken: catalogueToken })
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
     '--fixture', '--strict', '--long-form', '--json-output', proofReportFile,
   ], { env: proofEnv })
   const proofReport = JSON.parse(await readFile(proofReportFile, 'utf8'))
-  // Strict proof logs out and increments the admin token version, so queue and
-  // restart recovery must authenticate again instead of reusing bootstrap JWT.
   const recoveryToken = await loginFixtureAdmin()
   await proveQueueAndRestartRecovery(recoveryToken, proofReport)
   run(docker, [...compose, 'up', '--detach', '--wait', '--wait-timeout', '300', 'api', 'worker', 'dashboard'])
@@ -309,4 +307,5 @@ if (!passed) process.exit(1)
 console.log(`FIXTURE_BUILD_SHA=${sha}`)
 console.log('FIXTURE_STACK=PASS')
 console.log('FIXTURE_PROOF=PASS')
+console.log('RAG_RELEASE_FIXTURE=PASS')
 console.log('BROWSER_E2E=PASS')
