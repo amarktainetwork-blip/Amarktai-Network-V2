@@ -48,10 +48,12 @@ describe('durable RAG integration contract', () => {
     expect(routes).not.toContain('model: parsed.data')
   })
 
-  it('dispatches RAG parents after every child completion', () => {
-    expect(parentWorkflow).toContain("ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'unknown'")
+  it('dispatches durable RAG and research parents after every child completion', () => {
+    expect(parentWorkflow).toContain("ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'unknown'")
     expect(parentWorkflow).toContain("if (kind === 'rag')")
     expect(parentWorkflow).toContain('await advanceRagWorkflow(parent.id, queue)')
+    expect(parentWorkflow).toContain("if (kind === 'research')")
+    expect(parentWorkflow).toContain('await advanceResearchWorkflow(parent.id, queue)')
     expect(dispatcher).toContain("parent.capability === 'rag_ingest'")
     expect(dispatcher).toContain("parent.capability === 'rag_search'")
     expect(dispatcher).toContain('advanceRagIngestWorkflow')
