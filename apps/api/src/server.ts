@@ -39,6 +39,7 @@ import { appSocialAdFinalApprovalRoutes } from './routes/app-social-ad-final-app
 import { appMemoryRoutes } from './routes/app-memory.js'
 import { appRagRoutes } from './routes/app-rag.js'
 import { appResearchRoutes } from './routes/app-research.js'
+import { appVoiceAvatarProfileRoutes } from './routes/app-voice-avatar-profiles.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -112,6 +113,7 @@ async function main(): Promise<void> {
   await app.register(appMemoryRoutes)
   await app.register(appRagRoutes)
   await app.register(appResearchRoutes)
+  await app.register(appVoiceAvatarProfileRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
