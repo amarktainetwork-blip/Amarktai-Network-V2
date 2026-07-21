@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest'
 
 const server = readFileSync(new URL('../apps/api/src/server.ts', import.meta.url), 'utf8')
 const route = readFileSync(new URL('../apps/api/src/routes/app-voice-avatar-evidence.ts', import.meta.url), 'utf8')
+const musicRoute = readFileSync(new URL('../apps/api/src/routes/admin-music.ts', import.meta.url), 'utf8')
 const contract = readFileSync(new URL('../packages/core/src/voice-avatar-evidence.ts', import.meta.url), 'utf8')
 
 describe('secure voice and avatar evidence upload API', () => {
-  it('registers Fastify multipart and one dedicated profile-artifact route', () => {
-    expect(server).toContain("import multipart from '@fastify/multipart'")
-    expect(server).toContain('await app.register(multipart')
+  it('registers independent route-scoped multipart parsers without a root collision', () => {
+    expect(server).not.toContain("import multipart from '@fastify/multipart'")
+    expect(server).not.toContain('await app.register(multipart')
+    expect(route).toContain("import multipart from '@fastify/multipart'")
+    expect(route).toContain('await app.register(multipart')
+    expect(musicRoute).toContain("import multipart from '@fastify/multipart'")
+    expect(musicRoute).toContain('await app.register(multipart')
     expect(server).toContain("import { appVoiceAvatarEvidenceRoutes } from './routes/app-voice-avatar-evidence.js'")
     expect(server).toContain('await app.register(appVoiceAvatarEvidenceRoutes)')
     expect(route).toContain("app.post('/api/v1/profile-artifacts/:purpose'")
@@ -27,9 +32,9 @@ describe('secure voice and avatar evidence upload API', () => {
   })
 
   it('accepts one multipart file and no app-controlled metadata fields', () => {
-    expect(server).toContain('files: 1')
-    expect(server).toContain('fields: 0')
-    expect(server).toContain('parts: 1')
+    expect(route).toContain('files: 1')
+    expect(route).toContain('fields: 0')
+    expect(route).toContain('parts: 1')
     expect(route).toContain('fileSize: config.maxBytes')
     expect(route).toContain("part.fieldname !== 'file'")
     expect(route).toContain('const buffer = await part.toBuffer()')
@@ -62,7 +67,7 @@ describe('secure voice and avatar evidence upload API', () => {
 
   it('sanitizes filenames and handles file-size errors explicitly', () => {
     expect(route).toContain("basename((value || 'evidence').replaceAll('\\\\', '/'))")
-    expect(route).toContain("error instanceof app.multipartErrors.RequestFileTooLargeError")
+    expect(route).toContain('error instanceof app.multipartErrors.RequestFileTooLargeError')
     expect(route).toContain("code: 'VOICE_AVATAR_EVIDENCE_TOO_LARGE'")
     expect(route).toContain('reply.status(413)')
   })
