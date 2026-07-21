@@ -38,6 +38,68 @@ Research requests must not contain `appSlug`, provider, model, route, executor, 
 
 Automatic research-to-RAG export is intentionally not accepted yet. After human or product approval, retrieve the completed report or source artifact and call `ingestRag` explicitly with a granted namespace. This keeps RAG ingestion durable, reviewable and independently isolated.
 
+## Governed voice and avatar profiles
+
+Voice and avatar profiles are app-owned reusable resources. They are separate from the provider voice catalogue and from generation execution. Grant `voice_clone` for human recordings, synthetic voice designs or voice remixes. A provider-catalogue voice uses `tts`. Grant `avatar_generation` for avatar evidence and profiles. Every write grant must allow artifact writes.
+
+Upload evidence through a purpose-specific multipart endpoint. The Network accepts one file, derives its artifact type and MIME from the bytes, applies a purpose-specific size limit and stores it under the authenticated app. Client metadata, `appSlug`, provider, model, route, executor, endpoint and credential fields are not accepted.
+
+```ts
+const sourceAudio = await network.uploadProfileArtifact(
+  'voice_source_audio',
+  new Blob([audioBytes], { type: 'audio/wav' }),
+  'narrator.wav',
+) as { artifactId: string }
+
+const identity = await network.uploadProfileArtifact(
+  'voice_identity_verification',
+  new Blob([identityImage], { type: 'image/png' }),
+  'identity.png',
+) as { artifactId: string }
+
+const consent = await network.uploadProfileArtifact(
+  'voice_consent',
+  new Blob([consentPdf], { type: 'application/pdf' }),
+  'consent.pdf',
+) as { artifactId: string }
+
+const recordingConsent = await network.uploadProfileArtifact(
+  'voice_recording_consent',
+  new Blob([recordingConsentPdf], { type: 'application/pdf' }),
+  'recording-consent.pdf',
+) as { artifactId: string }
+
+const profile = await network.createVoiceProfile({
+  displayName: 'Consented narrator',
+  source: { sourceType: 'user_recording', sourceAudioArtifactIds: [sourceAudio.artifactId] },
+  language: 'en',
+  locale: 'en-ZA',
+  permittedUses: ['narration', 'avatar_performance'],
+  consentEvidence: {
+    version: 1,
+    subjectReference: 'subject:verified-adult',
+    rightsHolderReference: 'rights-holder:verified',
+    subjectAgeConfirmedAdult: true,
+    identityVerificationArtifactId: identity.artifactId,
+    consentArtifactId: consent.artifactId,
+    sourceRecordingConsentArtifactId: recordingConsent.artifactId,
+    permittedUses: ['narration', 'avatar_performance'],
+    commercialUseAllowed: true,
+    revocable: true,
+    declaredAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString(),
+    verifierReference: 'customer-consent-workflow',
+    jurisdictions: ['ZA'],
+  },
+})
+```
+
+Apps can list, read, create, update and archive only their own profiles. App writes always produce a `draft` with `rightsStatus: pending`; editing a verified profile resets its rights decision and removes any internal provider binding. Only an authenticated Network administrator can verify, reject or revoke a profile. The administrator identity and decision time are server-derived and stored durably. Revoked profiles cannot be edited or silently re-verified, and archived profiles cannot be reactivated by a verification request.
+
+A human-derived voice requires identity, consent, source-recording consent and source-audio artifacts owned by the same app. Its requested uses must be a subset of the signed consent, and marketing use requires commercial permission. Human-likeness avatars require equivalent identity and consent evidence. Synthetic avatars require an app-owned portrait and creation-evidence artifact. A default voice is accepted for avatar verification only when it is a verified, usable voice profile owned by the same app.
+
+The currently proven surface is evidence upload and governed reusable profile management. `voice_clone`, `voice_conversion`, `lip_sync` and `avatar_generation` execution must not be treated as live until an exact approved provider transport, runtime-selected model, durable output, cost evidence and real-service proof are added.
+
 ## Webhooks
 
 When an administrator configures a webhook, store the returned `webhookSigningSecret`; like the API key, it is shown only once. Terminal `job.completed` and `job.failed` requests are sent only to that exact configured HTTPS URL. Verify `X-AmarktAI-Signature` as HMAC-SHA256 over `<X-AmarktAI-Timestamp>.<raw request body>` using the signing secret, reject stale timestamps, and deduplicate with `X-AmarktAI-Event-Id` (also supplied as `Idempotency-Key`). A per-request `callbackUrl`, when supplied, must exactly match the configured endpoint.
