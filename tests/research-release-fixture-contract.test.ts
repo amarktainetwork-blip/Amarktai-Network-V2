@@ -14,9 +14,12 @@ describe('authoritative governed research release fixture', () => {
   })
 
   it('creates two real apps and immutable research grants', () => {
-    expect(researchFixture).toContain("capabilities = ['research', 'question_answering']")
+    expect(researchFixture).toContain("fullCapabilities = ['research', 'question_answering']")
+    expect(researchFixture).toContain("'Research Release Fixture', ['research']")
     expect(researchFixture).toContain("'/api/admin/app-connections'")
     expect(researchFixture).toContain('/api/admin/app-connections/${encodeURIComponent(appSlug)}/keys')
+    expect(researchFixture).toContain('/api/admin/app-connections/${encodeURIComponent(appSlug)}')
+    expect(researchFixture).toContain('expandCapabilities(apiRequest, invariant, adminToken, primarySlug, fullCapabilities)')
     expect(researchFixture).toContain('/api/admin/app-grants/${encodeURIComponent(appSlug)}/${encodeURIComponent(capability)}')
     expect(researchFixture).toContain("configureGrant(apiRequest, invariant, adminToken, primarySlug, 'research')")
     expect(researchFixture).toContain("configureGrant(apiRequest, invariant, adminToken, primarySlug, 'question_answering')")
