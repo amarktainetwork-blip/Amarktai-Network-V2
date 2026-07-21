@@ -8,6 +8,7 @@
 import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import cors from '@fastify/cors'
+import multipart from '@fastify/multipart'
 import { API_PORT, API_HOST, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '@amarktai/core'
 import { redisPluginDecorated } from './plugins/redis.js'
 import { jwtPluginDecorated } from './plugins/jwt.js'
@@ -40,6 +41,7 @@ import { appMemoryRoutes } from './routes/app-memory.js'
 import { appRagRoutes } from './routes/app-rag.js'
 import { appResearchRoutes } from './routes/app-research.js'
 import { appVoiceAvatarProfileRoutes } from './routes/app-voice-avatar-profiles.js'
+import { appVoiceAvatarEvidenceRoutes } from './routes/app-voice-avatar-evidence.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -82,6 +84,17 @@ async function main(): Promise<void> {
     max: RATE_LIMIT_MAX,
     timeWindow: RATE_LIMIT_WINDOW_MS,
   })
+  await app.register(multipart, {
+    throwFileSizeLimit: true,
+    limits: {
+      fileSize: 150 * 1024 * 1024,
+      files: 1,
+      fields: 0,
+      parts: 1,
+      fieldNameSize: 100,
+      headerPairs: 200,
+    },
+  })
   await app.register(redisPluginDecorated)
   await app.register(jwtPluginDecorated)
   await app.register(errorHandlerPlugin)
@@ -114,6 +127,7 @@ async function main(): Promise<void> {
   await app.register(appRagRoutes)
   await app.register(appResearchRoutes)
   await app.register(appVoiceAvatarProfileRoutes)
+  await app.register(appVoiceAvatarEvidenceRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
