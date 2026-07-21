@@ -9,6 +9,7 @@ import {
   evaluateVoiceProfileRights,
   hasVoiceAvatarBlockedOverrides,
   type HumanConsentEvidence,
+  type ProfileRightsDecision,
   type ReusableAvatarProfile,
   type ReusableVoiceProfile,
 } from '../packages/core/src/voice-avatar-platform.ts'
@@ -49,6 +50,16 @@ function consent(overrides: Partial<HumanConsentEvidence> = {}): HumanConsentEvi
   })
 }
 
+function decision(overrides: Partial<ProfileRightsDecision> = {}): ProfileRightsDecision {
+  return {
+    decision: 'verified',
+    verifierReference: 'admin:fixture',
+    decidedAt: '2026-07-20T12:00:00.000Z',
+    notes: 'Verified fixture rights.',
+    ...overrides,
+  }
+}
+
 function voiceProfile(overrides: Partial<ReusableVoiceProfile> = {}): ReusableVoiceProfile {
   return ReusableVoiceProfileSchema.parse({
     version: 1,
@@ -63,6 +74,7 @@ function voiceProfile(overrides: Partial<ReusableVoiceProfile> = {}): ReusableVo
     styleTags: ['warm', 'professional'],
     permittedUses: ['narration', 'marketing', 'avatar_performance'],
     rightsStatus: 'verified',
+    rightsDecision: decision(),
     consentEvidence: consent(),
     createdAt: '2026-07-20T12:00:00.000Z',
     updatedAt: '2026-07-20T12:00:00.000Z',
@@ -85,6 +97,7 @@ function avatarProfile(overrides: Partial<ReusableAvatarProfile> = {}): Reusable
     },
     permittedUses: ['marketing', 'avatar_performance'],
     rightsStatus: 'verified',
+    rightsDecision: decision(),
     defaultVoiceProfileId: IDS.voice,
     styleTags: ['studio'],
     createdAt: '2026-07-20T12:00:00.000Z',
@@ -105,16 +118,19 @@ describe('governed voice and avatar platform contracts', () => {
     const profile = voiceProfile()
     expect(profile.source.sourceType).toBe('user_recording')
     expect(profile.consentEvidence?.subjectAgeConfirmedAdult).toBe(true)
+    expect(profile.rightsDecision).toMatchObject({ decision: 'verified', verifierReference: 'admin:fixture' })
     expect(evaluateVoiceProfileRights({ profile, intendedUse: 'marketing', now: new Date('2026-08-01T00:00:00.000Z') })).toEqual({ allowed: true, reasons: [] })
   })
 
-  it('rejects human-derived voices without consent and verified rights', () => {
+  it('rejects human-derived voices without consent, verified rights or decision evidence', () => {
     expect(ReusableVoiceProfileSchema.safeParse({
       ...voiceProfile(),
       status: 'verified',
       rightsStatus: 'pending',
+      rightsDecision: undefined,
       consentEvidence: undefined,
     }).success).toBe(false)
+    expect(ReusableVoiceProfileSchema.safeParse({ ...voiceProfile(), rightsDecision: undefined }).success).toBe(false)
   })
 
   it('allows provider catalogue and synthetic voice sources without human consent', () => {
@@ -144,13 +160,14 @@ describe('governed voice and avatar platform contracts', () => {
     const revoked = voiceProfile({
       status: 'revoked',
       rightsStatus: 'revoked',
+      rightsDecision: decision({ decision: 'revoked', notes: 'Subject revoked consent.' }),
       revokedAt: '2026-09-01T00:00:00.000Z',
       revocationReason: 'Subject revoked consent.',
     })
-    const decision = evaluateVoiceProfileRights({ profile: revoked, intendedUse: 'customer_support' })
-    expect(decision.allowed).toBe(false)
-    expect(decision.reasons).toContain('Voice profile has been revoked')
-    expect(decision.reasons).toContain("Use 'customer_support' is not permitted")
+    const rights = evaluateVoiceProfileRights({ profile: revoked, intendedUse: 'customer_support' })
+    expect(rights.allowed).toBe(false)
+    expect(rights.reasons).toContain('Voice profile has been revoked')
+    expect(rights.reasons).toContain("Use 'customer_support' is not permitted")
   })
 
   it('requires consent for human likeness avatars and supports synthetic avatars', () => {
@@ -163,6 +180,7 @@ describe('governed voice and avatar platform contracts', () => {
       ...human,
       source: { subjectType: 'human_likeness', portraitArtifactId: IDS.portrait },
     }).success).toBe(false)
+    expect(ReusableAvatarProfileSchema.safeParse({ ...avatarProfile(), rightsDecision: undefined }).success).toBe(false)
   })
 
   it('rejects every app-selected execution authority field', () => {
