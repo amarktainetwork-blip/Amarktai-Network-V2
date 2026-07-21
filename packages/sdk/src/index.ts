@@ -29,6 +29,8 @@ export class AmarktAIClient {
   updateBrandProfile(brandProfileId: string, profile: BrandProfilePayload) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'PUT', body: JSON.stringify(profile) }) }
   archiveBrandProfile(brandProfileId: string) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'DELETE' }) }
   planSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/plan', { method: 'POST', body: JSON.stringify(payload) }) }
+  executeSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/executions', { method: 'POST', body: JSON.stringify(payload) }) }
+  socialAdVideoExecution(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}`) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
