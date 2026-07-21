@@ -62,7 +62,7 @@ services:
     networks:
       - amarktai
 
-  # ── SearXNG internal metasearch ─────────────────────────────
+  # ── API dependency: SearXNG internal metasearch ─────────────
   # No host port is published. Only services on the private Compose network
   # can use the JSON search API.
   searxng:
