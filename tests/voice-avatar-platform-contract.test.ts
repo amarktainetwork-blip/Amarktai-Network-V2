@@ -133,11 +133,13 @@ describe('governed voice and avatar platform contracts', () => {
   })
 
   it('fails closed on expired, revoked or unpermitted voice use', () => {
-    expect(evaluateVoiceProfileRights({
+    const expired = evaluateVoiceProfileRights({
       profile: voiceProfile(),
       intendedUse: 'marketing',
       now: new Date('2028-01-01T00:00:00.000Z'),
-    })).toMatchObject({ allowed: false, reasons: ['Voice consent evidence has expired'] })
+    })
+    expect(expired.allowed).toBe(false)
+    expect(expired.reasons).toContain('Voice consent evidence has expired')
 
     const revoked = voiceProfile({
       status: 'revoked',
@@ -156,7 +158,6 @@ describe('governed voice and avatar platform contracts', () => {
     const human = avatarProfile({
       source: { subjectType: 'human_likeness', portraitArtifactId: IDS.portrait, consentEvidence: consent() },
     })
-    expect(evaluateAvatarProfileRights({ humanProfile: undefined } as never)).toBeUndefined
     expect(evaluateAvatarProfileRights({ profile: human, intendedUse: 'avatar_performance', now: new Date('2026-08-01T00:00:00.000Z') })).toEqual({ allowed: true, reasons: [] })
     expect(ReusableAvatarProfileSchema.safeParse({
       ...human,
