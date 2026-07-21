@@ -35,6 +35,7 @@ import { appPlatformRoutes } from './routes/app-platform.js'
 import { appBrandProfileRoutes } from './routes/app-brand-profiles.js'
 import { appSocialAdVideoRoutes } from './routes/app-social-ad-video.js'
 import { appSocialAdAssemblyRoutes } from './routes/app-social-ad-assembly.js'
+import { appSocialAdFinalApprovalRoutes } from './routes/app-social-ad-final-approval.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -104,6 +105,7 @@ async function main(): Promise<void> {
   await app.register(appBrandProfileRoutes)
   await app.register(appSocialAdVideoRoutes)
   await app.register(appSocialAdAssemblyRoutes)
+  await app.register(appSocialAdFinalApprovalRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
