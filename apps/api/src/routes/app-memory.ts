@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import { prisma } from '@amarktai/db'
 import { authenticateAppKey } from './jobs.js'
 import { loadAppCapabilityGrant } from '../lib/app-grant-loader.js'
@@ -52,7 +52,7 @@ async function memoryAuthority(appSlug: string, mode: 'read' | 'write') {
   return grant
 }
 
-function invalidNamespace(reply: Parameters<FastifyInstance['get']>[1] extends (...args: infer T) => unknown ? T[1] : never) {
+function invalidNamespace(reply: FastifyReply) {
   return reply.status(400).send({
     error: true,
     code: 'INVALID_MEMORY_NAMESPACE',
