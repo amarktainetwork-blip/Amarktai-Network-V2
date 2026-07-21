@@ -67,9 +67,38 @@ function textResult(payload: WorkerJobData, provider: ProviderKey, model: string
   if (payload.capability === 'token_classification') output = [{ entity: 'FIXTURE', word: prompt.split(/\s+/)[0] || 'fixture', score: 0.99 }]
   if (payload.capability === 'fill_mask') output = [{ token_str: 'fixture', score: 0.99 }]
   if (payload.capability === 'table_qa') output = { answer: 'fixture answer', coordinates: [[0, 0]] }
-  if (payload.capability === 'embeddings' || payload.capability === 'feature_extraction') output = { embeddings: [[0.1, 0.2, 0.3, 0.4]], dimensions: 4 }
+  if (payload.capability === 'embeddings') {
+    const texts = Array.isArray(payload.input?.texts) && payload.input.texts.length > 0 ? payload.input.texts : [prompt]
+    const vectors = texts.map(() => [0.1, 0.2, 0.3, 0.4])
+    output = { vectors, dimensions: 4, count: vectors.length }
+  }
+  if (payload.capability === 'feature_extraction') {
+    const texts = Array.isArray(payload.input?.text) ? payload.input.text : [payload.input?.text ?? prompt]
+    output = { features: texts.map(() => [0.1, 0.2, 0.3, 0.4]), dimensions: 4 }
+  }
   if (payload.capability === 'sentence_similarity') output = { scores: [0.99] }
-  if (payload.capability === 'reranking') output = { results: [{ index: 0, score: 0.99, text: Array.isArray(payload.input?.documents) ? String(payload.input.documents[0] ?? '') : prompt }] }
+  if (payload.capability === 'reranking') {
+    const documents = Array.isArray(payload.input?.documents) ? payload.input.documents : []
+    output = {
+      results: documents.map((document, index) => ({
+        index,
+        score: Math.max(0.5, 0.99 - index * 0.01),
+        text: typeof document === 'object' && document !== null && 'text' in document
+          ? String((document as Record<string, unknown>).text ?? '')
+          : String(document ?? ''),
+      })),
+    }
+  }
+  if (payload.capability === 'question_answering') {
+    const sourceIds = Array.isArray(payload.input?.sourceIds)
+      ? payload.input.sourceIds.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : []
+    output = {
+      answer: 'AmarktAI Network owns provider routing, model selection, grants, durable execution, evidence, artifacts, quality gates, budgets, memory and RAG.',
+      supportedByContext: sourceIds.length > 0,
+      sourceIds: sourceIds.slice(0, 1),
+    }
+  }
   if (payload.capability === 'stt') output = { transcript: 'Deterministic fixture transcription.', language: 'en', duration: 2, segments: [] }
 
   return {
@@ -215,7 +244,6 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
     height: media.height,
     sourceArtifactId,
   }
-  // For STT, include the transcript text in the job output so the dashboard can display it
   if (capability === 'stt') {
     const transcriptData = JSON.parse(media.data.toString('utf8'))
     output.transcript = transcriptData.text
