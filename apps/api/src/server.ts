@@ -32,6 +32,7 @@ import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
 import { appGrantRoutes } from './routes/admin-app-grants.js'
 import { appPlatformRoutes } from './routes/app-platform.js'
+import { appBrandProfileRoutes } from './routes/app-brand-profiles.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -98,6 +99,7 @@ async function main(): Promise<void> {
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
   await app.register(appPlatformRoutes)
+  await app.register(appBrandProfileRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
