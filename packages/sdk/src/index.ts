@@ -24,6 +24,67 @@ export interface ResearchExecutionPayload {
   includeSnapshots?: boolean
   metadata?: Record<string, unknown>
 }
+export type VoiceAvatarUseScope = 'narration' | 'conversational_agent' | 'marketing' | 'education' | 'accessibility' | 'customer_support' | 'avatar_performance' | 'internal_production'
+export type VoiceAvatarEvidencePurpose =
+  | 'voice_source_audio'
+  | 'voice_identity_verification'
+  | 'voice_consent'
+  | 'voice_recording_consent'
+  | 'voice_preview'
+  | 'avatar_portrait'
+  | 'avatar_identity_verification'
+  | 'avatar_consent'
+  | 'avatar_creation_evidence'
+  | 'avatar_preview'
+export interface HumanConsentEvidencePayload {
+  version: 1
+  subjectReference: string
+  rightsHolderReference: string
+  subjectAgeConfirmedAdult: true
+  identityVerificationArtifactId: string
+  consentArtifactId: string
+  sourceRecordingConsentArtifactId?: string
+  permittedUses: VoiceAvatarUseScope[]
+  commercialUseAllowed: boolean
+  syntheticDisclosureRequired?: boolean
+  revocable: true
+  declaredAt: string
+  verifiedAt: string
+  expiresAt?: string
+  verifierReference: string
+  jurisdictions: string[]
+  notes?: string
+}
+export type VoiceSourcePayload =
+  | { sourceType: 'provider_catalogue'; catalogueVoiceId: string }
+  | { sourceType: 'user_recording'; sourceAudioArtifactIds: string[] }
+  | { sourceType: 'synthetic_design'; designPrompt: string }
+  | { sourceType: 'voice_remix'; parentVoiceProfileId: string; remixInstructions: string }
+export interface VoiceProfileDraftPayload {
+  displayName: string
+  description?: string
+  source: VoiceSourcePayload
+  language: string
+  locale?: string
+  styleTags?: string[]
+  permittedUses: VoiceAvatarUseScope[]
+  consentEvidence?: HumanConsentEvidencePayload
+  previewArtifactId?: string
+}
+export type VoiceProfileUpdatePayload = Partial<VoiceProfileDraftPayload>
+export type AvatarSourcePayload =
+  | { subjectType: 'synthetic'; portraitArtifactId: string; creationEvidenceArtifactId: string }
+  | { subjectType: 'human_likeness'; portraitArtifactId: string; consentEvidence: HumanConsentEvidencePayload }
+export interface AvatarProfileDraftPayload {
+  displayName: string
+  description?: string
+  source: AvatarSourcePayload
+  permittedUses: VoiceAvatarUseScope[]
+  defaultVoiceProfileId?: string
+  styleTags?: string[]
+  previewArtifactId?: string
+}
+export type AvatarProfileUpdatePayload = Partial<AvatarProfileDraftPayload>
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -75,6 +136,28 @@ export class AmarktAIClient {
   ragExecution(executionId: string) { return this.request(`/api/v1/rag/executions/${encodeURIComponent(executionId)}`) }
   executeResearch(payload: ResearchExecutionPayload) { return this.request('/api/v1/research/executions', { method: 'POST', body: JSON.stringify(payload) }) }
   researchExecution(executionId: string) { return this.request(`/api/v1/research/executions/${encodeURIComponent(executionId)}`) }
+  voiceProfiles() { return this.request('/api/v1/voice-profiles') }
+  voiceProfile(voiceProfileId: string) { return this.request(`/api/v1/voice-profiles/${encodeURIComponent(voiceProfileId)}`) }
+  createVoiceProfile(payload: VoiceProfileDraftPayload) { return this.request('/api/v1/voice-profiles', { method: 'POST', body: JSON.stringify(payload) }) }
+  updateVoiceProfile(voiceProfileId: string, payload: VoiceProfileUpdatePayload) { return this.request(`/api/v1/voice-profiles/${encodeURIComponent(voiceProfileId)}`, { method: 'PUT', body: JSON.stringify(payload) }) }
+  archiveVoiceProfile(voiceProfileId: string) { return this.request(`/api/v1/voice-profiles/${encodeURIComponent(voiceProfileId)}`, { method: 'DELETE' }) }
+  avatarProfiles() { return this.request('/api/v1/avatar-profiles') }
+  avatarProfile(avatarProfileId: string) { return this.request(`/api/v1/avatar-profiles/${encodeURIComponent(avatarProfileId)}`) }
+  createAvatarProfile(payload: AvatarProfileDraftPayload) { return this.request('/api/v1/avatar-profiles', { method: 'POST', body: JSON.stringify(payload) }) }
+  updateAvatarProfile(avatarProfileId: string, payload: AvatarProfileUpdatePayload) { return this.request(`/api/v1/avatar-profiles/${encodeURIComponent(avatarProfileId)}`, { method: 'PUT', body: JSON.stringify(payload) }) }
+  archiveAvatarProfile(avatarProfileId: string) { return this.request(`/api/v1/avatar-profiles/${encodeURIComponent(avatarProfileId)}`, { method: 'DELETE' }) }
+  async uploadProfileArtifact(purpose: VoiceAvatarEvidencePurpose, file: Blob, filename?: string): Promise<unknown> {
+    const form = new FormData()
+    const inferredName = 'name' in file && typeof file.name === 'string' ? file.name : 'evidence'
+    form.append('file', file, filename ?? inferredName)
+    const response = await this.transport(`${this.baseUrl}/api/v1/profile-artifacts/${encodeURIComponent(purpose)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.apiKey}`, Accept: 'application/json' },
+      body: form,
+    })
+    if (!response.ok) throw await this.error(response)
+    return response.json()
+  }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
