@@ -12,6 +12,7 @@ import { API_PORT, API_HOST, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '@amark
 import { redisPluginDecorated } from './plugins/redis.js'
 import { jwtPluginDecorated } from './plugins/jwt.js'
 import { errorHandlerPlugin } from './plugins/error-handler.js'
+import { governedTtsIngressPlugin } from './plugins/governed-tts-ingress.js'
 import { healthRoutes } from './routes/health.js'
 import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
   await app.register(redisPluginDecorated)
   await app.register(jwtPluginDecorated)
   await app.register(errorHandlerPlugin)
+  await app.register(governedTtsIngressPlugin)
 
   await app.register(healthRoutes)
   await app.register(authRoutes)
