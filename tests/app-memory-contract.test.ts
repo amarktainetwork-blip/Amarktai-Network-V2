@@ -50,7 +50,8 @@ describe('app memory contract', () => {
     expect(sdk).toContain('writeMemory(')
     expect(sdk).toContain('deleteMemory(')
     expect(sdk).toContain('namespace: string')
-    const memoryInterfaces = sdk.match(/export interface MemorySearchOptions[\s\S]+?export class AmarktAIError/)?.[0] ?? ''
+    const memoryInterfaces = sdk.match(/export interface MemorySearchOptions[\s\S]+?(?=export interface RagIngestPayload)/)?.[0] ?? ''
+    expect(memoryInterfaces).toContain('export interface MemoryWritePayload')
     expect(memoryInterfaces).not.toMatch(/provider|model|route|executorId|endpoint|apiKey/)
   })
 })
