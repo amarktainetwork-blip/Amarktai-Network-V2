@@ -1,25 +1,265 @@
 openapi: 3.1.0
-info: { title: AmarktAI Thin-App API, version: 1.1.0 }
-servers: [{ url: https://network.amarktai.com }]
-security: [{ bearerAuth: [] }]
+info:
+  title: AmarktAI Thin-App API
+  version: 1.3.0
+servers:
+  - url: https://network.amarktai.com
+security:
+  - bearerAuth: []
 components:
-  securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
-    Execute: { type: object, additionalProperties: false, required: [capability, prompt], properties: { capability: { type: string }, prompt: { type: string }, input: { type: object }, metadata: { type: object }, callbackUrl: { type: string, format: uri, description: Must exactly match the administrator-configured HTTPS webhook URL. } } }
-    BrandProfile: { type: object, additionalProperties: false, required: [version, brandProfileId, appSlug, status, displayName, summary, voice, visual, sourceEvidence, overallConfidence, rightsDeclaredBy, rightsDeclaredAt, createdAt, updatedAt], properties: { version: { const: 1 }, brandProfileId: { type: string }, appSlug: { type: string }, status: { enum: [draft, verified, archived] }, displayName: { type: string }, summary: { type: string }, voice: { type: object }, visual: { type: object }, sourceEvidence: { type: array, items: { type: object } }, overallConfidence: { type: number, minimum: 0, maximum: 1 }, rightsDeclaredBy: { type: string }, rightsDeclaredAt: { type: string, format: date-time }, createdAt: { type: string, format: date-time }, updatedAt: { type: string, format: date-time } } }
-    SocialAdPlanRequest: { type: object, additionalProperties: false, required: [request, campaign], properties: { request: { type: object, description: SocialAdVideoRequest contract. Provider/model/route fields are forbidden. }, campaign: { type: object, description: MarketingCampaignBrief contract. } } }
+    Execute:
+      type: object
+      additionalProperties: false
+      required: [capability, prompt]
+      properties:
+        capability: { type: string }
+        prompt: { type: string }
+        input: { type: object }
+        metadata: { type: object }
+        callbackUrl:
+          type: string
+          format: uri
+          description: Must exactly match the administrator-configured HTTPS webhook URL.
+    BrandProfile:
+      type: object
+      additionalProperties: false
+      required: [version, brandProfileId, appSlug, status, displayName, summary, voice, visual, sourceEvidence, overallConfidence, rightsDeclaredBy, rightsDeclaredAt, createdAt, updatedAt]
+      properties:
+        version: { const: 1 }
+        brandProfileId: { type: string }
+        appSlug: { type: string }
+        status: { enum: [draft, verified, archived] }
+        displayName: { type: string }
+        summary: { type: string }
+        voice: { type: object }
+        visual: { type: object }
+        sourceEvidence: { type: array, items: { type: object } }
+        overallConfidence: { type: number, minimum: 0, maximum: 1 }
+        rightsDeclaredBy: { type: string }
+        rightsDeclaredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SocialAdPlanRequest:
+      type: object
+      additionalProperties: false
+      required: [request, campaign]
+      properties:
+        request:
+          type: object
+          description: SocialAdVideoRequest contract. Provider/model/route fields are forbidden.
+        campaign:
+          type: object
+          description: MarketingCampaignBrief contract.
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { enum: [approved, rejected] }
+        notes: { type: string, maxLength: 5000 }
+    MemoryWrite:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 100000 }
+        key: { type: string, maxLength: 500 }
+        memoryType: { enum: [event, summary, context, learned], default: context }
+        importance: { type: number, minimum: 0, maximum: 1, default: 0.5 }
+        ttlSeconds: { type: integer, minimum: 60, maximum: 31536000 }
 paths:
-  /api/v1/capabilities: { get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } } }
-  /api/v1/policy: { get: { summary: Read effective app policy, responses: { '200': { description: Policy } } } }
-  /api/v1/jobs: { post: { summary: Submit a durable capability job; Orchestra owns provider and model selection, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Execute' } } } }, responses: { '201': { description: Queued }, '403': { description: Capability not approved } } } }
-  /api/v1/jobs/{id}: { get: { summary: Read job status and immutable execution evidence, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Job } } } }
-  /api/v1/jobs/{id}/cancel: { post: { summary: Cancel a cancellable job, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } } }
-  /api/v1/streaming-chat: { post: { summary: Authenticated SSE chat, responses: { '200': { description: SSE stream } } } }
-  /api/v1/usage: { get: { summary: Read usage and budget state, responses: { '200': { description: Usage } } } }
-  /api/v1/brand-profiles: { get: { summary: List app-isolated Brand Profiles, responses: { '200': { description: Brand Profiles } } }, post: { summary: Create an evidence-backed Brand Profile, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandProfile' } } } }, responses: { '201': { description: Created }, '409': { description: Profile already exists } } } }
-  /api/v1/brand-profiles/{id}: { get: { summary: Read an app-isolated Brand Profile, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Brand Profile }, '404': { description: Not found } } }, put: { summary: Replace a validated Brand Profile version, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandProfile' } } } }, responses: { '200': { description: Updated } } }, delete: { summary: Archive rather than destructively delete a Brand Profile, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Archived } } } }
-  /api/v1/social-ad-video/plan: { post: { summary: Build a provider-neutral social-ad execution plan from an authenticated app Brand Profile and campaign brief, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SocialAdPlanRequest' } } } }, responses: { '200': { description: Validated execution plan }, '403': { description: social_content_generation grant required }, '404': { description: Brand Profile not found }, '409': { description: Brand/campaign/approval requirements rejected } } } }
-  /api/v1/social-ad-video/executions: { post: { summary: Create a durable social-ad parent job and queue provider-neutral candidate child jobs with immutable app grant snapshots, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SocialAdPlanRequest' } } } }, responses: { '202': { description: Candidate generation queued }, '403': { description: Required parent or child capability grant missing }, '409': { description: Candidate input or workflow requirements rejected } } } }
-  /api/v1/social-ad-video/executions/{id}: { get: { summary: Poll app-isolated social-ad candidate execution and immutable route evidence, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Parent status, candidate statuses, provider/model evidence and next required phase }, '404': { description: Execution not found or not owned by app } } } }
-  /api/v1/artifacts/{id}: { get: { summary: Read authorised artifact metadata, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Artifact metadata }, '404': { description: Not found or not owned by app } } } }
-  /api/v1/artifacts/{id}/file: { get: { summary: Preview or download authorised artifact bytes with Range support, parameters: [{ in: path, name: id, required: true, schema: { type: string } }, { in: query, name: download, schema: { type: string, enum: ['1'] } }, { in: header, name: Range, schema: { type: string } }], responses: { '200': { description: Artifact bytes }, '206': { description: Partial artifact bytes } } } }
+  /api/v1/capabilities:
+    get:
+      summary: Discover granted capabilities
+      responses: { '200': { description: Granted capabilities } }
+  /api/v1/policy:
+    get:
+      summary: Read effective app policy
+      responses: { '200': { description: Policy } }
+  /api/v1/usage:
+    get:
+      summary: Read usage and budget state
+      responses: { '200': { description: Usage } }
+  /api/v1/jobs:
+    post:
+      summary: Submit a durable capability job; Orchestra owns provider and model selection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Execute' }
+      responses:
+        '201': { description: Queued }
+        '403': { description: Capability not approved }
+  /api/v1/jobs/{id}:
+    get:
+      summary: Read job status and immutable execution evidence
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses: { '200': { description: Job } }
+  /api/v1/jobs/{id}/cancel:
+    post:
+      summary: Cancel a cancellable job
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses: { '200': { description: Cancelled } }
+  /api/v1/streaming-chat:
+    post:
+      summary: Authenticated SSE chat
+      responses: { '200': { description: SSE stream } }
+  /api/v1/brand-profiles:
+    get:
+      summary: List app-isolated Brand Profiles
+      responses: { '200': { description: Brand Profiles } }
+    post:
+      summary: Create an evidence-backed Brand Profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BrandProfile' }
+      responses:
+        '201': { description: Created }
+        '409': { description: Profile already exists }
+  /api/v1/brand-profiles/{id}:
+    get:
+      summary: Read an app-isolated Brand Profile
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Brand Profile }
+        '404': { description: Not found }
+    put:
+      summary: Replace a validated Brand Profile version
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BrandProfile' }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: Archive rather than destructively delete a Brand Profile
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses: { '200': { description: Archived } }
+  /api/v1/social-ad-video/plan:
+    post:
+      summary: Build a provider-neutral social-ad execution plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SocialAdPlanRequest' }
+      responses:
+        '200': { description: Validated execution plan }
+        '403': { description: Required grant missing }
+        '404': { description: Brand Profile not found }
+        '409': { description: Workflow requirements rejected }
+  /api/v1/social-ad-video/executions:
+    post:
+      summary: Create a durable quality-gated social-ad execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SocialAdPlanRequest' }
+      responses:
+        '202': { description: Candidate generation queued }
+        '403': { description: Generation, video-understanding or structured-output grant missing }
+        '409': { description: Input or workflow requirements rejected }
+  /api/v1/social-ad-video/executions/{id}:
+    get:
+      summary: Poll generation, quality, assembly, copy and approval evidence
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: App-scoped execution status and immutable evidence }
+        '404': { description: Execution not found or not owned by app }
+  /api/v1/social-ad-video/executions/{id}/approval:
+    post:
+      summary: Approve or reject the Network-selected creative winner
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalDecision' }
+      responses:
+        '200': { description: Creative decision recorded }
+        '409': { description: Execution is not ready for creative approval }
+  /api/v1/social-ad-video/executions/{id}/assemble:
+    post:
+      summary: Idempotently resume approved internal media assembly
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '202': { description: Assembly queued or already active }
+        '409': { description: Creative approval or quality winner missing }
+  /api/v1/social-ad-video/executions/{id}/final-approval:
+    post:
+      summary: Approve or reject the complete delivery pack
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalDecision' }
+      responses:
+        '200': { description: Final decision recorded; approval completes the parent }
+        '409': { description: Media/copy pack is not ready for final approval }
+  /api/v1/memory/search:
+    get:
+      summary: Search non-expired memory entries owned by the authenticated app
+      parameters:
+        - { in: query, name: q, schema: { type: string, maxLength: 2000 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+        - { in: query, name: types, description: Comma-separated memory types, schema: { type: string } }
+      responses:
+        '200': { description: App-scoped memory results }
+        '403': { description: Enabled rag_search grant with memoryRead required }
+  /api/v1/memory:
+    post:
+      summary: Store a memory entry for the authenticated app
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemoryWrite' }
+      responses:
+        '201': { description: Memory entry created }
+        '403': { description: Enabled rag_ingest grant with memoryWrite required }
+  /api/v1/memory/{id}:
+    delete:
+      summary: Delete a memory entry owned by the authenticated app
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200': { description: Memory deleted }
+        '404': { description: Memory not found for the authenticated app }
+  /api/v1/artifacts/{id}:
+    get:
+      summary: Read authorised artifact metadata
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Artifact metadata }
+        '404': { description: Not found or not owned by app }
+  /api/v1/artifacts/{id}/file:
+    get:
+      summary: Preview or download authorised artifact bytes with Range support
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: query, name: download, schema: { type: string, enum: ['1'] } }
+        - { in: header, name: Range, schema: { type: string } }
+      responses:
+        '200': { description: Artifact bytes }
+        '206': { description: Partial artifact bytes }
