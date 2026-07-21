@@ -69,7 +69,8 @@ describe('durable governed research integration contract', () => {
     expect(sdk).toContain('export interface ResearchExecutionPayload')
     expect(sdk).toContain('executeResearch(payload: ResearchExecutionPayload)')
     expect(sdk).toContain('researchExecution(executionId: string)')
-    const sdkContract = sdk.match(/export interface ResearchExecutionPayload[\s\S]+?export class AmarktAIError/)?.[0] ?? ''
+    const sdkContract = sdk.match(/export interface ResearchExecutionPayload[\s\S]+?(?=export type VoiceAvatarUseScope)/)?.[0] ?? ''
+    expect(sdkContract).toContain('includeSnapshots?: boolean')
     expect(sdkContract).not.toMatch(/appSlug|provider|model|route|executorId|endpoint|apiKey|ragNamespace/)
     expect(openapi).toContain('version: 1.5.0')
     expect(openapi).toContain('ResearchExecution:')
