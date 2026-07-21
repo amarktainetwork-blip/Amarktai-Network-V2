@@ -21,6 +21,10 @@
     "./premium-advert": {
       "types": "./dist/premium-advert.d.ts",
       "import": "./dist/premium-advert.js"
+    },
+    "./marketing-platform": {
+      "types": "./dist/marketing-platform.d.ts",
+      "import": "./dist/marketing-platform.js"
     }
   },
   "scripts": {
