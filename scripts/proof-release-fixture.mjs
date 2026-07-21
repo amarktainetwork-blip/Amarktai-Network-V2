@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { proveRagReleaseFixture } from './lib/proof-rag-release-fixture.mjs'
+import { proveResearchReleaseFixture } from './lib/proof-research-release-fixture.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
@@ -103,7 +104,7 @@ async function persistFixtureDiagnostics() {
   const report = await readFile(proofReportFile, 'utf8').catch(() => '')
   if (report) await writeFile(join(outputDir, 'proof-report.json'), redact(report), { mode: 0o600 })
   await writeFile(join(outputDir, 'docker-compose-status.log'), capture(docker, [...compose, 'ps', '--all']), { mode: 0o600 })
-  for (const service of ['mariadb', 'redis', 'qdrant', 'migrate', 'api', 'worker', 'dashboard']) {
+  for (const service of ['mariadb', 'redis', 'qdrant', 'searxng', 'migrate', 'api', 'worker', 'dashboard']) {
     const logs = capture(docker, [...compose, 'logs', '--no-color', '--timestamps', service])
     await writeFile(join(outputDir, `${service}.log`), logs, { mode: 0o600 })
   }
@@ -280,6 +281,7 @@ try {
   const catalogueToken = await loginFixtureAdmin()
   await seedFixtureModelCatalogue(catalogueToken)
   await proveRagReleaseFixture({ apiRequest, invariant, delay, run, docker, compose, adminToken: catalogueToken })
+  await proveResearchReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
@@ -308,4 +310,5 @@ console.log(`FIXTURE_BUILD_SHA=${sha}`)
 console.log('FIXTURE_STACK=PASS')
 console.log('FIXTURE_PROOF=PASS')
 console.log('RAG_RELEASE_FIXTURE=PASS')
+console.log('RESEARCH_RELEASE_FIXTURE=PASS')
 console.log('BROWSER_E2E=PASS')
