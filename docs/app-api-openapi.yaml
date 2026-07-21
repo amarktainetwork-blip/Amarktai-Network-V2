@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AmarktAI Thin-App API
-  version: 1.3.0
+  version: 1.3.1
 servers:
   - url: https://network.amarktai.com
 security:
@@ -65,10 +65,16 @@ components:
     MemoryWrite:
       type: object
       additionalProperties: false
-      required: [content]
+      required: [namespace, content]
       properties:
+        namespace:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9._:-]*$'
+          description: Must be present in the effective rag_ingest grant ragNamespaces, or the grant must include wildcard authority.
         content: { type: string, minLength: 1, maxLength: 100000 }
-        key: { type: string, maxLength: 500 }
+        key: { type: string, maxLength: 300 }
         memoryType: { enum: [event, summary, context, learned], default: context }
         importance: { type: number, minimum: 0, maximum: 1, default: 0.5 }
         ttlSeconds: { type: integer, minimum: 60, maximum: 31536000 }
@@ -218,33 +224,42 @@ paths:
         '409': { description: Media/copy pack is not ready for final approval }
   /api/v1/memory/search:
     get:
-      summary: Search non-expired memory entries owned by the authenticated app
+      summary: Search non-expired memory entries owned by the authenticated app and granted namespace
       parameters:
+        - in: query
+          name: namespace
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._:-]*$' }
         - { in: query, name: q, schema: { type: string, maxLength: 2000 } }
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
         - { in: query, name: types, description: Comma-separated memory types, schema: { type: string } }
       responses:
-        '200': { description: App-scoped memory results }
-        '403': { description: Enabled rag_search grant with memoryRead required }
+        '200': { description: App- and namespace-scoped memory results }
+        '403': { description: rag_search memoryRead authority or requested namespace grant missing }
   /api/v1/memory:
     post:
-      summary: Store a memory entry for the authenticated app
+      summary: Store a memory entry for the authenticated app and granted namespace
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/MemoryWrite' }
       responses:
-        '201': { description: Memory entry created }
-        '403': { description: Enabled rag_ingest grant with memoryWrite required }
+        '201': { description: Namespaced memory entry created }
+        '403': { description: rag_ingest memoryWrite authority or requested namespace grant missing }
   /api/v1/memory/{id}:
     delete:
-      summary: Delete a memory entry owned by the authenticated app
+      summary: Delete a memory entry owned by the authenticated app and granted namespace
       parameters:
         - { in: path, name: id, required: true, schema: { type: integer, minimum: 1 } }
+        - in: query
+          name: namespace
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._:-]*$' }
       responses:
         '200': { description: Memory deleted }
-        '404': { description: Memory not found for the authenticated app }
+        '403': { description: rag_ingest memoryWrite authority or requested namespace grant missing }
+        '404': { description: Memory not found for the authenticated app and namespace }
   /api/v1/artifacts/{id}:
     get:
       summary: Read authorised artifact metadata
