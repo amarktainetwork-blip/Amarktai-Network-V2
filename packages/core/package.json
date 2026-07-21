@@ -41,6 +41,10 @@
     "./research-platform": {
       "types": "./dist/research-platform.d.ts",
       "import": "./dist/research-platform.js"
+    },
+    "./voice-avatar-platform": {
+      "types": "./dist/voice-avatar-platform.d.ts",
+      "import": "./dist/voice-avatar-platform.js"
     }
   },
   "scripts": {
