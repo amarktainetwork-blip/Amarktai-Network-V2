@@ -25,6 +25,10 @@
     "./marketing-platform": {
       "types": "./dist/marketing-platform.d.ts",
       "import": "./dist/marketing-platform.js"
+    },
+    "./social-ad-video": {
+      "types": "./dist/social-ad-video.d.ts",
+      "import": "./dist/social-ad-video.js"
     }
   },
   "scripts": {
