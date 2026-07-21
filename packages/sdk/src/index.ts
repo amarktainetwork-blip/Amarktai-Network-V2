@@ -39,6 +39,7 @@ export class AmarktAIClient {
     const assembly = await this.assembleSocialAdVideo(executionId)
     return { approval, assembly }
   }
+  decideFinalSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/final-approval`, { method: 'POST', body: JSON.stringify(payload) }) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
