@@ -10,6 +10,8 @@ export default defineConfig({
       '@amarktai/core/social-ad-video': fromRoot('./packages/core/src/social-ad-video.ts'),
       '@amarktai/core/rag-platform': fromRoot('./packages/core/src/rag-platform.ts'),
       '@amarktai/core/research-platform': fromRoot('./packages/core/src/research-platform.ts'),
+      '@amarktai/core/voice-avatar-platform': fromRoot('./packages/core/src/voice-avatar-platform.ts'),
+      '@amarktai/core/voice-avatar-resources': fromRoot('./packages/core/src/voice-avatar-resources.ts'),
       '@amarktai/core/config': fromRoot('./packages/core/src/config.ts'),
       '@amarktai/core': fromRoot('./packages/core/src/index.ts'),
       '@amarktai/db': fromRoot('./packages/db/src/index.ts'),
