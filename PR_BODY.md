@@ -1,6 +1,6 @@
 ## Batch A release candidate
 
-Exact head: `f4bb40f5a8db4760d33d4b4a8ea2fd49f1e910d3`
+Exact head: `d000dbec3a165dc368a009d2489235dfd3c3a4d4`
 
 Provider policy is final:
 - Runtime: GenX, Together, DeepInfra
@@ -47,33 +47,16 @@ The canonical catalogue remains 68 capabilities. Adult remnants remain untouched
 
 ## Production failures found and fixed
 
-### Worker image storage exhaustion
-- rollback remained active;
-- host preparation now protects live/rollback images, removes only unused images/cache and requires 16 GiB free.
-
-### Compose preflight interpolation
-- activation exports `GIT_SHA` and temporary `BUILD_TIME` before its first read-only Compose command.
-
-### Image-to-video fallback claim collision
-- primary and fallback routes in the same durable execution previously collided with the same provider claim;
-- fallback recovery now uses durable route attempts and an atomic compare-and-set;
-- genuine competing claims remain protected;
-- already-submitted GenX jobs resume instead of submitting twice.
-
-### Long-form assembly authority and dispatch
-- the generated assembly child now inherits and validates the parent's immutable `long_form_video` grant;
-- assembly metadata and BullMQ payload both carry the same grant;
-- legacy planned assembly records are repaired before retry;
-- internal FFmpeg assembly bypasses provider routing;
-- the final artifact is stream/duration/component validated and the parent reaches completed state.
-
-### Production dependency advisory
-- nested Crawlee `brace-expansion` was raised narrowly from 2.1.1 to 2.1.2;
-- locked installation and `npm audit --omit=dev` pass.
+- Worker image storage exhaustion: rollback remained active; host prep now protects live/rollback images, removes only unused images/cache and requires 16 GiB free.
+- Compose interpolation: activation exports required build identity before its first read-only Compose command.
+- Image-to-video fallback collision: same-execution fallbacks inherit durable provider authority through atomic compare-and-set; genuine competing claims remain blocked.
+- Long-form assembly authority: assembly inherits and validates the parent `long_form_video` grant in durable metadata and BullMQ payload.
+- Long-form internal dispatch: FFmpeg assembly bypasses provider routing and produces a stream/duration/component-validated final MP4.
+- Production advisory: nested Crawlee `brace-expansion` raised narrowly from 2.1.1 to 2.1.2; exact install and production audit pass.
 
 ## Exact-head CI
 
-Workflow run `29808222432` for `f4bb40f5a8db4760d33d4b4a8ea2fd49f1e910d3`:
+Workflow run `29808954331` for `d000dbec3a165dc368a009d2489235dfd3c3a4d4`:
 - locked dependency installation: passed;
 - Prisma validation: passed;
 - backend compilation: passed;
@@ -86,7 +69,7 @@ Workflow run `29808222432` for `f4bb40f5a8db4760d33d4b4a8ea2fd49f1e910d3`:
 - authoritative real-service API/worker/dashboard/browser fixture: passed (40/40).
 
 ## Remaining production gates
-1. Deploy exact SHA `f4bb40f5a8db4760d33d4b4a8ea2fd49f1e910d3` through the canonical activation wrapper.
+1. Deploy exact SHA `d000dbec3a165dc368a009d2489235dfd3c3a4d4` through the canonical activation wrapper.
 2. Confirm exact API, worker and dashboard identities.
 3. Complete strict live provider/capability proof with zero failures and zero skips.
 4. Verify public HTTPS, administrator login, Studio and artifact preview/download.
