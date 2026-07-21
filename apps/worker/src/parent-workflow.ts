@@ -1,6 +1,7 @@
 import type { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { advanceLongFormWorkflow } from './long-form-workflow.js'
+import { advanceRagWorkflow, classifyRagWorkflow } from './rag-workflow.js'
 import { refreshSocialAdAssemblyParent } from './social-ad-assembly-workflow.js'
 import { ensureSocialAdCopyGrantSnapshot } from './social-ad-copy-grant.js'
 import { advanceSocialAdCopyWorkflow } from './social-ad-copy-workflow.js'
@@ -20,7 +21,7 @@ function safeJson(value: unknown): Record<string, unknown> {
   }
 }
 
-export type ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'unknown'
+export type ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'unknown'
 
 export function classifyParentWorkflow(parent: {
   capability: string
@@ -31,6 +32,7 @@ export function classifyParentWorkflow(parent: {
   if (parent.capability === 'social_content_generation' && metadata.socialAdVideo === true) {
     return 'social_ad_video'
   }
+  if (classifyRagWorkflow(parent)) return 'rag'
   return 'unknown'
 }
 
@@ -44,6 +46,10 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
   const kind = classifyParentWorkflow(parent)
   if (kind === 'long_form_video') {
     await advanceLongFormWorkflow(parent.id, queue)
+    return { kind, advanced: true }
+  }
+  if (kind === 'rag') {
+    await advanceRagWorkflow(parent.id, queue)
     return { kind, advanced: true }
   }
   if (kind === 'social_ad_video') {
