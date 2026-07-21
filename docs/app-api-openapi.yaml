@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AmarktAI Thin-App API
-  version: 1.4.0
+  version: 1.5.0
 servers:
   - url: https://network.amarktai.com
 security:
@@ -94,6 +94,27 @@ components:
         minScore: { type: number, minimum: 0, maximum: 1, default: 0 }
         rerank: { type: boolean, default: true }
         answer: { type: boolean, default: true }
+    ResearchExecution:
+      type: object
+      additionalProperties: false
+      required: [query]
+      description: Provider-neutral governed research request. Apps cannot choose search engines, browsers, providers, models, routes, executors, endpoints or credentials.
+      properties:
+        query: { type: string, minLength: 3, maxLength: 4000 }
+        mode: { enum: [search, browse, deep], default: deep }
+        seedUrls: { type: array, maxItems: 20, items: { type: string, format: uri, maxLength: 4096 } }
+        allowedDomains: { type: array, maxItems: 50, items: { type: string, minLength: 1, maxLength: 253 } }
+        blockedDomains: { type: array, maxItems: 100, items: { type: string, minLength: 1, maxLength: 253 } }
+        maxSearchResults: { type: integer, minimum: 1, maximum: 25, default: 10 }
+        maxPages: { type: integer, minimum: 1, maximum: 20, default: 8 }
+        maxDepth: { type: integer, minimum: 0, maximum: 3, default: 1 }
+        maxBytesPerPage: { type: integer, minimum: 10000, maximum: 5000000, default: 1500000 }
+        freshnessDays: { type: integer, minimum: 1, maximum: 3650 }
+        language: { type: string, minLength: 2, maxLength: 20, default: en }
+        safeSearch: { enum: [strict, moderate, off], default: strict }
+        answer: { type: boolean, default: true }
+        includeSnapshots: { type: boolean, default: true }
+        metadata: { type: object }
 paths:
   /api/v1/capabilities:
     get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } }
@@ -217,6 +238,23 @@ paths:
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
       responses:
         '200': { description: Parent status, child evidence and validated result when completed }
+        '404': { description: Execution not found or not owned by the authenticated app }
+  /api/v1/research/executions:
+    post:
+      summary: Run durable governed web research with Network-owned search and controlled browsing
+      description: Requires an enabled research grant and artifact writes. Cited answers additionally require question_answering. SearXNG, Playwright, provider and model selection remain Network-owned. Automatic RAG export is intentionally excluded until separately proven.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ResearchExecution' } } } }
+      responses:
+        '202': { description: Evidence collection queued }
+        '400': { description: Invalid provider-neutral research request }
+        '403': { description: Research, answer or artifact-write authority missing }
+        '409': { description: Automatic RAG export requested before its durable proof exists }
+  /api/v1/research/executions/{id}:
+    get:
+      summary: Poll an app-isolated research workflow and its evidence, answer and report artifacts
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Parent status, internal evidence child, routed answer child and validated cited result }
         '404': { description: Execution not found or not owned by the authenticated app }
   /api/v1/artifacts/{id}:
     get:
