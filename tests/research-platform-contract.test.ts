@@ -108,7 +108,7 @@ describe('governed research platform contract', () => {
     expect(researchDomainAllowed({ hostname: 'notexample.com', allowedDomains: ['example.com'] })).toBe(false)
   })
 
-  it('parses robots groups and applies the most specific matching rule', () => {
+  it('parses robots groups and applies the most specific matching user-agent group', () => {
     const content = `
 User-agent: *
 Disallow: /private
@@ -119,10 +119,12 @@ Disallow: /bot-only
 Allow: /bot-only/allowed
 `
     expect(parseRobotsTxt(content)).toHaveLength(2)
-    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/public/article' })).toEqual({ allowed: true, matchedRule: 'allow:/private/public' })
-    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/secret' })).toEqual({ allowed: false, matchedRule: 'disallow:/private' })
+    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/public/article' })).toEqual({ allowed: true, matchedRule: null })
+    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/secret' })).toEqual({ allowed: true, matchedRule: null })
     expect(evaluateRobotsAccess({ content, url: 'https://example.com/bot-only/allowed' })).toEqual({ allowed: true, matchedRule: 'allow:/bot-only/allowed' })
     expect(evaluateRobotsAccess({ content, url: 'https://example.com/bot-only/secret' })).toEqual({ allowed: false, matchedRule: 'disallow:/bot-only' })
+    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/public/article', userAgent: 'OtherCrawler' })).toEqual({ allowed: true, matchedRule: 'allow:/private/public' })
+    expect(evaluateRobotsAccess({ content, url: 'https://example.com/private/secret', userAgent: 'OtherCrawler' })).toEqual({ allowed: false, matchedRule: 'disallow:/private' })
   })
 
   it('creates deterministic content, source and citation identities', () => {
