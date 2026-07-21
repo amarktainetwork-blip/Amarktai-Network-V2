@@ -1,6 +1,7 @@
 export interface AmarktAIClientOptions { apiKey: string; baseUrl?: string; fetch?: typeof globalThis.fetch }
 export interface ApprovedRoute { provider: 'genx' | 'together' | 'deepinfra'; model: string }
 export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; route?: ApprovedRoute; callbackUrl?: string }
+export type BrandProfilePayload = Record<string, unknown>
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -22,6 +23,11 @@ export class AmarktAIClient {
   capabilities() { return this.request('/api/v1/capabilities') }
   policy() { return this.request('/api/v1/policy') }
   usage() { return this.request('/api/v1/usage') }
+  brandProfiles() { return this.request('/api/v1/brand-profiles') }
+  brandProfile(brandProfileId: string) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`) }
+  createBrandProfile(profile: BrandProfilePayload) { return this.request('/api/v1/brand-profiles', { method: 'POST', body: JSON.stringify(profile) }) }
+  updateBrandProfile(brandProfileId: string, profile: BrandProfilePayload) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'PUT', body: JSON.stringify(profile) }) }
+  archiveBrandProfile(brandProfileId: string) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'DELETE' }) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
