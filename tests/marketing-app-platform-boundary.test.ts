@@ -7,7 +7,7 @@ import {
   NETWORK_OWNED_MARKETING_POWERS,
   SocialAdVideoRequestSchema,
   validateMarketingCapabilityRequest,
-} from '@amarktai/core'
+} from '../packages/core/src/marketing-platform.js'
 
 const now = '2026-07-21T10:00:00+02:00'
 
