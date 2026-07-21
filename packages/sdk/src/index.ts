@@ -32,7 +32,13 @@ export class AmarktAIClient {
   planSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/plan', { method: 'POST', body: JSON.stringify(payload) }) }
   executeSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/executions', { method: 'POST', body: JSON.stringify(payload) }) }
   socialAdVideoExecution(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}`) }
-  decideSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/approval`, { method: 'POST', body: JSON.stringify(payload) }) }
+  assembleSocialAdVideo(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/assemble`, { method: 'POST' }) }
+  async decideSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload): Promise<unknown> {
+    const approval = await this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/approval`, { method: 'POST', body: JSON.stringify(payload) })
+    if (payload.decision !== 'approved') return { approval }
+    const assembly = await this.assembleSocialAdVideo(executionId)
+    return { approval, assembly }
+  }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
