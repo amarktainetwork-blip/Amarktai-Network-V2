@@ -1,6 +1,7 @@
 import type { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { advanceLongFormWorkflow } from './long-form-workflow.js'
+import { advanceSocialAdQualityWorkflow } from './social-ad-quality-workflow.js'
 import { refreshSocialAdParentState } from './social-ad-workflow.js'
 
 function safeJson(value: unknown): Record<string, unknown> {
@@ -42,7 +43,10 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
     return { kind, advanced: true }
   }
   if (kind === 'social_ad_video') {
-    await refreshSocialAdParentState(parent.id)
+    const generation = await refreshSocialAdParentState(parent.id)
+    if (generation?.state.phase === 'candidate_quality_pending') {
+      await advanceSocialAdQualityWorkflow(parent.id, queue)
+    }
     return { kind, advanced: true }
   }
   return { kind, advanced: false }
