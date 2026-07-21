@@ -12,7 +12,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function validateTtsIngress(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  if (request.method !== 'POST' || !TTS_INGRESS_ROUTES.has(request.routeOptions.url)) return
+  const routeUrl = request.routeOptions.url
+  if (request.method !== 'POST' || !routeUrl || !TTS_INGRESS_ROUTES.has(routeUrl)) return
   if (!isRecord(request.body) || request.body.capability !== 'tts') return
 
   const body = request.body
