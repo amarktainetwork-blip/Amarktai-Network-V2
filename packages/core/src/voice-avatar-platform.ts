@@ -134,6 +134,19 @@ export const ReusableVoiceProfileSchema = z.object({
   if (humanDerived && !value.consentEvidence) {
     context.addIssue({ code: 'custom', path: ['consentEvidence'], message: 'Human-derived voice profiles require verified consent evidence' })
   }
+  if (humanDerived && value.consentEvidence) {
+    if (!value.consentEvidence.sourceRecordingConsentArtifactId) {
+      context.addIssue({ code: 'custom', path: ['consentEvidence', 'sourceRecordingConsentArtifactId'], message: 'Cloned voice recordings require explicit recording-consent evidence' })
+    }
+    for (const use of value.permittedUses) {
+      if (!value.consentEvidence.permittedUses.includes(use)) {
+        context.addIssue({ code: 'custom', path: ['permittedUses'], message: `Use '${use}' is outside the signed voice consent scope` })
+      }
+    }
+    if (value.permittedUses.includes('marketing') && !value.consentEvidence.commercialUseAllowed) {
+      context.addIssue({ code: 'custom', path: ['permittedUses'], message: 'Marketing use requires commercial-use consent' })
+    }
+  }
   if (value.status === 'verified' && value.rightsStatus !== 'verified') {
     context.addIssue({ code: 'custom', path: ['rightsStatus'], message: 'Verified voice profiles require verified rights status' })
   }
@@ -192,6 +205,17 @@ export const ReusableAvatarProfileSchema = z.object({
   revokedAt: IsoDateTimeSchema.optional(),
   revocationReason: z.string().max(2_000).optional(),
 }).strict().superRefine((value, context) => {
+  if (value.source.subjectType === 'human_likeness') {
+    const consent = value.source.consentEvidence
+    for (const use of value.permittedUses) {
+      if (!consent.permittedUses.includes(use)) {
+        context.addIssue({ code: 'custom', path: ['permittedUses'], message: `Use '${use}' is outside the signed avatar consent scope` })
+      }
+    }
+    if (value.permittedUses.includes('marketing') && !consent.commercialUseAllowed) {
+      context.addIssue({ code: 'custom', path: ['permittedUses'], message: 'Marketing use requires commercial-use consent' })
+    }
+  }
   if (value.status === 'verified' && value.rightsStatus !== 'verified') {
     context.addIssue({ code: 'custom', path: ['rightsStatus'], message: 'Verified avatar profiles require verified rights status' })
   }
