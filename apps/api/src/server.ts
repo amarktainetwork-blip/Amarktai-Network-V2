@@ -37,6 +37,7 @@ import { appSocialAdVideoRoutes } from './routes/app-social-ad-video.js'
 import { appSocialAdAssemblyRoutes } from './routes/app-social-ad-assembly.js'
 import { appSocialAdFinalApprovalRoutes } from './routes/app-social-ad-final-approval.js'
 import { appMemoryRoutes } from './routes/app-memory.js'
+import { appRagRoutes } from './routes/app-rag.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -108,6 +109,7 @@ async function main(): Promise<void> {
   await app.register(appSocialAdAssemblyRoutes)
   await app.register(appSocialAdFinalApprovalRoutes)
   await app.register(appMemoryRoutes)
+  await app.register(appRagRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
