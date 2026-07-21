@@ -29,6 +29,10 @@
     "./social-ad-video": {
       "types": "./dist/social-ad-video.d.ts",
       "import": "./dist/social-ad-video.js"
+    },
+    "./rag-platform": {
+      "types": "./dist/rag-platform.d.ts",
+      "import": "./dist/rag-platform.js"
     }
   },
   "scripts": {
