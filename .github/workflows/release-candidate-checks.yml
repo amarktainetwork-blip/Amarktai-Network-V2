@@ -2,9 +2,9 @@ name: release-candidate-checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/production-activation-music-longform]
   push:
-    branches: [feat/production-activation-music-longform]
+    branches: [feat/production-activation-music-longform, feat/batch-b-platform-closure]
 
 permissions:
   contents: read
