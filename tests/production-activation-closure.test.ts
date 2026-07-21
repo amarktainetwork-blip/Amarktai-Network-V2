@@ -184,7 +184,7 @@ describe('production activation closure', () => {
     const runbook = source('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
     expect(readme).toContain('| **Groq** | Removed.')
     expect(readme).toContain('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
-    expect(readme).toContain('scripts/admin-reset-password.mjs')
+    expect(readme).toContain('admin-reset-password.mjs')
     expect(runbook).toContain('Fresh or broken-stack recovery')
     expect(runbook).toContain('20260718_complete_platform_recovery')
     expect(runbook).toContain('ADMIN_RESET_PASSWORD')
