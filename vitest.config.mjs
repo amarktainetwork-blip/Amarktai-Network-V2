@@ -10,6 +10,7 @@ export default defineConfig({
       '@amarktai/core/social-ad-video': fromRoot('./packages/core/src/social-ad-video.ts'),
       '@amarktai/core/rag-platform': fromRoot('./packages/core/src/rag-platform.ts'),
       '@amarktai/core/research-platform': fromRoot('./packages/core/src/research-platform.ts'),
+      '@amarktai/core/config': fromRoot('./packages/core/src/config.ts'),
       '@amarktai/core': fromRoot('./packages/core/src/index.ts'),
       '@amarktai/db': fromRoot('./packages/db/src/index.ts'),
       '@amarktai/providers': fromRoot('./packages/providers/src/index.ts'),
