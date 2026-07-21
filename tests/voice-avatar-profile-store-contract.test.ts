@@ -25,6 +25,7 @@ const ids = {
   audio: '33333333-3333-4333-8333-333333333333',
   identity: '44444444-4444-4444-8444-444444444444',
   consent: '55555555-5555-4555-8555-555555555555',
+  recordingConsent: '88888888-8888-4888-8888-888888888888',
   portrait: '66666666-6666-4666-8666-666666666666',
   creation: '77777777-7777-4777-8777-777777777777',
 }
@@ -37,6 +38,7 @@ function consent() {
     subjectAgeConfirmedAdult: true as const,
     identityVerificationArtifactId: ids.identity,
     consentArtifactId: ids.consent,
+    sourceRecordingConsentArtifactId: ids.recordingConsent,
     permittedUses: ['narration', 'avatar_performance'] as const,
     commercialUseAllowed: true,
     syntheticDisclosureRequired: true,
@@ -124,6 +126,7 @@ describe('voice and avatar stored payloads', () => {
       { artifactId: ids.audio, role: 'source_audio', expectedTypes: ['audio'] },
       { artifactId: ids.identity, role: 'identity_verification', expectedTypes: ['document', 'image', 'video'] },
       { artifactId: ids.consent, role: 'consent', expectedTypes: ['document', 'audio', 'video'] },
+      { artifactId: ids.recordingConsent, role: 'source_recording_consent', expectedTypes: ['document', 'audio', 'video'] },
     ]))
     expect(avatarProfileArtifactReferences(avatarProfile())).toEqual(expect.arrayContaining([
       { artifactId: ids.portrait, role: 'portrait', expectedTypes: ['image'] },
