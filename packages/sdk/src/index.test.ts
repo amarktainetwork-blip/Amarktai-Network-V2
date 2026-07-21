@@ -35,7 +35,7 @@ describe('AmarktAIClient', () => {
     expect(transport.mock.calls[4]![1]?.method).toBe('DELETE')
   })
 
-  it('plans, starts, polls and decides provider-neutral social-ad execution', async () => {
+  it('plans, starts, polls, approves and resumes provider-neutral social-ad execution', async () => {
     const transport = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ executionAuthority: 'orchestra' }), { status: 200, headers: { 'content-type': 'application/json' } }))
     const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
     const payload = {
@@ -52,14 +52,24 @@ describe('AmarktAIClient', () => {
       'https://example.test/api/v1/social-ad-video/executions',
       'https://example.test/api/v1/social-ad-video/executions/execution%20%2F%20one',
       'https://example.test/api/v1/social-ad-video/executions/execution%20%2F%20one/approval',
+      'https://example.test/api/v1/social-ad-video/executions/execution%20%2F%20one/assemble',
     ])
     expect(transport.mock.calls[0]![1]?.method).toBe('POST')
     expect(transport.mock.calls[1]![1]?.method).toBe('POST')
     expect(transport.mock.calls[2]![1]?.method).toBeUndefined()
     expect(transport.mock.calls[3]![1]?.method).toBe('POST')
+    expect(transport.mock.calls[4]![1]?.method).toBe('POST')
     const approval = JSON.parse(String(transport.mock.calls[3]![1]?.body)) as Record<string, unknown>
     expect(approval).toEqual({ decision: 'approved', notes: 'Approved by campaign owner.' })
     expect(JSON.stringify(payload)).not.toMatch(/"provider"|"model"|"route"/)
+  })
+
+  it('does not queue assembly after a rejection', async () => {
+    const transport = vi.fn(async () => new Response(JSON.stringify({ phase: 'revision_required' }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
+    await client.decideSocialAdVideo('execution-1', { decision: 'rejected', notes: 'Revise the opening.' })
+    expect(transport).toHaveBeenCalledTimes(1)
+    expect(transport.mock.calls[0]![0]).toBe('https://example.test/api/v1/social-ad-video/executions/execution-1/approval')
   })
 
   it('returns stable typed errors', async () => {
