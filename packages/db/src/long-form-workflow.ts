@@ -1,10 +1,22 @@
 import { createHash } from 'node:crypto'
-import { DEFAULT_JOB_OPTIONS, type JobPayload } from '@amarktai/core'
+import { AppCapabilityGrantSnapshotSchema, DEFAULT_JOB_OPTIONS, type JobPayload } from '@amarktai/core'
 import { prisma } from './client.js'
 import { refreshLongFormParentState } from './long-form-parent-state.js'
 
 type QueueLike = {
   add: (...args: any[]) => Promise<unknown>
+}
+
+function safeJson(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
 }
 
 export function longFormAssemblyJobId(parentJobId: string): string {
@@ -21,6 +33,17 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
     return { scheduled: false, assemblyJobId: refreshed?.componentState.assembly.jobId ?? null }
   }
 
+  const parsedGrant = AppCapabilityGrantSnapshotSchema.safeParse(refreshed.metadata.appGrantSnapshot)
+  if (!parsedGrant.success
+    || parsedGrant.data.appSlug !== refreshed.parent.appSlug
+    || parsedGrant.data.capability !== 'long_form_video'
+    || parsedGrant.data.enabled !== true
+    || parsedGrant.data.artifactRead !== true
+    || parsedGrant.data.artifactWrite !== true) {
+    throw new Error("Long-form assembly requires the parent's valid immutable long_form_video AppCapabilityGrant snapshot with artifact read/write authority.")
+  }
+  const appGrantSnapshot = parsedGrant.data
+
   const id = longFormAssemblyJobId(parentJobId)
   const metadata = {
     executionProfile: 'internal_dashboard',
@@ -29,6 +52,13 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
     internalLocalExecution: true,
     parentJobId,
     executionId: refreshed.parent.executionId,
+    appGrantSnapshot,
+    appGrantSnapshotSource: typeof refreshed.metadata.appGrantSnapshotSource === 'string'
+      ? refreshed.metadata.appGrantSnapshotSource
+      : 'parent_job_snapshot',
+    appGrantSnapshotAt: typeof refreshed.metadata.appGrantSnapshotAt === 'string'
+      ? refreshed.metadata.appGrantSnapshotAt
+      : new Date().toISOString(),
   }
   let assembly = await prisma.job.findUnique({ where: { id } })
   if (!assembly) {
@@ -64,6 +94,7 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
       completedAt: null,
       startedAt: null,
       workflowPhase: 'assembly_queued',
+      metadataJson: JSON.stringify({ ...safeJson(assembly.metadataJson), ...metadata }),
     },
   })
   if (claim.count !== 1) return { scheduled: false, assemblyJobId: id }
@@ -78,6 +109,7 @@ export async function advanceLongFormWorkflow(parentJobId: string, queue: QueueL
     metadata,
     traceId: assembly.traceId,
     routingMode: 'balanced',
+    appGrantSnapshot,
   }
   try {
     await queue.add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: id })
