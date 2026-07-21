@@ -58,14 +58,22 @@ function isInternalSocialAdAssembly(payload: WorkerJobData): boolean {
     && payload.metadata.internalLocalExecution === true
 }
 
+function isInternalResearchEvidence(payload: WorkerJobData): boolean {
+  return payload.capability === 'research'
+    && payload.metadata?.researchEvidence === true
+    && payload.metadata.internalLocalExecution === true
+}
+
 function isInternalLocalExecution(payload: WorkerJobData): boolean {
-  return isInternalLongFormAssembly(payload) || isInternalSocialAdAssembly(payload)
+  return isInternalLongFormAssembly(payload)
+    || isInternalSocialAdAssembly(payload)
+    || isInternalResearchEvidence(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
-  // Local assembly is an internal workflow operation, not a provider route. It
-  // retains immutable app authority but never enters Orchestra or claims a
-  // provider execution. Provider fallback applies only to provider-backed jobs.
+  // Local workflow operations retain immutable app authority but never enter
+  // Orchestra or claim a paid provider execution. Provider fallback applies
+  // only to provider-backed jobs.
   if (isInternalLongFormAssembly(payload)) {
     const { executeLongFormAssembly } = await import('../long-form-assembly.js')
     return executeLongFormAssembly(payload)
@@ -73,6 +81,10 @@ async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> 
   if (isInternalSocialAdAssembly(payload)) {
     const { executeSocialAdAssembly } = await import('../social-ad-assembly.js')
     return executeSocialAdAssembly(payload)
+  }
+  if (isInternalResearchEvidence(payload)) {
+    const { executeResearchEvidence } = await import('../research-evidence-executor.js')
+    return executeResearchEvidence(payload)
   }
   return executeWithProvider(payload)
 }
@@ -117,7 +129,7 @@ function withRecoveryEvidence(result: ProcessorResult, route: { provider: string
  * Orchestra and recover one very specific durable provider fallback race.
  *
  * Recovery is deliberately fail-closed:
- * - internal local assembly never enters provider routing;
+ * - internal local operations never enter provider routing;
  * - the job must still be processing;
  * - a provider claim must exist;
  * - at least two route attempts must be durably recorded;
