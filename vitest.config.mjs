@@ -5,14 +5,14 @@ const fromRoot = (path) => fileURLToPath(new URL(path, import.meta.url))
 
 export default defineConfig({
   resolve: {
-    alias: [
-      { find: '@amarktai/core/marketing-platform', replacement: fromRoot('./packages/core/src/marketing-platform.ts') },
-      { find: '@amarktai/core/social-ad-video', replacement: fromRoot('./packages/core/src/social-ad-video.ts') },
-      { find: '@amarktai/core', replacement: fromRoot('./packages/core/src/index.ts') },
-      { find: '@amarktai/db', replacement: fromRoot('./packages/db/src/index.ts') },
-      { find: '@amarktai/providers', replacement: fromRoot('./packages/providers/src/index.ts') },
-      { find: '@amarktai/artifacts', replacement: fromRoot('./packages/artifacts/src/index.ts') },
-    ],
+    alias: {
+      '@amarktai/core/marketing-platform': fromRoot('./packages/core/src/marketing-platform.ts'),
+      '@amarktai/core/social-ad-video': fromRoot('./packages/core/src/social-ad-video.ts'),
+      '@amarktai/core': fromRoot('./packages/core/src/index.ts'),
+      '@amarktai/db': fromRoot('./packages/db/src/index.ts'),
+      '@amarktai/providers': fromRoot('./packages/providers/src/index.ts'),
+      '@amarktai/artifacts': fromRoot('./packages/artifacts/src/index.ts'),
+    },
   },
   test: {
     setupFiles: ['./tests/setup-unit-environment.ts'],
