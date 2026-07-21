@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { ArtifactType } from './artifacts.js'
+import { getArtifactTypeFromMime, type ArtifactType } from './artifacts.js'
 import type { CapabilityKey } from './capabilities.js'
 
 export const VOICE_AVATAR_EVIDENCE_PURPOSES = [
@@ -21,7 +21,7 @@ export const VoiceAvatarEvidencePurposeSchema = z.enum(VOICE_AVATAR_EVIDENCE_PUR
 
 export type VoiceAvatarEvidenceConfig = {
   capability: Extract<CapabilityKey, 'voice_clone' | 'avatar_generation'>
-  artifactType: Extract<ArtifactType, 'audio' | 'image' | 'video' | 'document'>
+  artifactTypes: readonly Extract<ArtifactType, 'audio' | 'image' | 'video' | 'document'>[]
   subType: string
   maxBytes: number
   allowedMimeTypes: readonly string[]
@@ -37,70 +37,70 @@ const CONSENT_MIMES = ['application/pdf', ...AUDIO_MIMES, ...VIDEO_MIMES] as con
 export const VOICE_AVATAR_EVIDENCE_CONFIG: Record<VoiceAvatarEvidencePurpose, VoiceAvatarEvidenceConfig> = {
   voice_source_audio: {
     capability: 'voice_clone',
-    artifactType: 'audio',
+    artifactTypes: ['audio'],
     subType: 'voice_source_audio',
     maxBytes: 50 * MiB,
     allowedMimeTypes: AUDIO_MIMES,
   },
   voice_identity_verification: {
     capability: 'voice_clone',
-    artifactType: 'document',
+    artifactTypes: ['image', 'document', 'video'],
     subType: 'voice_identity_verification',
     maxBytes: 50 * MiB,
     allowedMimeTypes: IDENTITY_MIMES,
   },
   voice_consent: {
     capability: 'voice_clone',
-    artifactType: 'document',
+    artifactTypes: ['document', 'audio', 'video'],
     subType: 'voice_consent',
     maxBytes: 100 * MiB,
     allowedMimeTypes: CONSENT_MIMES,
   },
   voice_recording_consent: {
     capability: 'voice_clone',
-    artifactType: 'document',
+    artifactTypes: ['document', 'audio', 'video'],
     subType: 'voice_recording_consent',
     maxBytes: 100 * MiB,
     allowedMimeTypes: CONSENT_MIMES,
   },
   voice_preview: {
     capability: 'voice_clone',
-    artifactType: 'audio',
+    artifactTypes: ['audio'],
     subType: 'voice_preview',
     maxBytes: 50 * MiB,
     allowedMimeTypes: AUDIO_MIMES,
   },
   avatar_portrait: {
     capability: 'avatar_generation',
-    artifactType: 'image',
+    artifactTypes: ['image'],
     subType: 'avatar_portrait',
     maxBytes: 20 * MiB,
     allowedMimeTypes: IMAGE_MIMES,
   },
   avatar_identity_verification: {
     capability: 'avatar_generation',
-    artifactType: 'document',
+    artifactTypes: ['image', 'document', 'video'],
     subType: 'avatar_identity_verification',
     maxBytes: 50 * MiB,
     allowedMimeTypes: IDENTITY_MIMES,
   },
   avatar_consent: {
     capability: 'avatar_generation',
-    artifactType: 'document',
+    artifactTypes: ['document', 'audio', 'video'],
     subType: 'avatar_consent',
     maxBytes: 100 * MiB,
     allowedMimeTypes: CONSENT_MIMES,
   },
   avatar_creation_evidence: {
     capability: 'avatar_generation',
-    artifactType: 'document',
+    artifactTypes: ['image', 'document'],
     subType: 'avatar_creation_evidence',
     maxBytes: 20 * MiB,
     allowedMimeTypes: [...IMAGE_MIMES, 'application/pdf'],
   },
   avatar_preview: {
     capability: 'avatar_generation',
-    artifactType: 'video',
+    artifactTypes: ['image', 'video'],
     subType: 'avatar_preview',
     maxBytes: 150 * MiB,
     allowedMimeTypes: [...IMAGE_MIMES, ...VIDEO_MIMES],
@@ -154,7 +154,12 @@ export function validateVoiceAvatarEvidenceUpload(input: {
   purpose: VoiceAvatarEvidencePurpose
   buffer: Buffer
   declaredMimeType: string
-}): { config: VoiceAvatarEvidenceConfig; detectedMimeType: string; declaredMimeType: string } {
+}): {
+  config: VoiceAvatarEvidenceConfig
+  detectedMimeType: string
+  declaredMimeType: string
+  artifactType: Extract<ArtifactType, 'audio' | 'image' | 'video' | 'document'>
+} {
   const config = VOICE_AVATAR_EVIDENCE_CONFIG[input.purpose]
   if (!config) throw new Error('VOICE_AVATAR_EVIDENCE_PURPOSE_INVALID')
   if (input.buffer.length === 0) throw new Error('VOICE_AVATAR_EVIDENCE_EMPTY')
@@ -164,5 +169,7 @@ export function validateVoiceAvatarEvidenceUpload(input: {
   const declaredMimeType = normalizeUploadedMimeType(input.declaredMimeType)
   if (declaredMimeType !== detectedMimeType) throw new Error('VOICE_AVATAR_EVIDENCE_MIME_MISMATCH')
   if (!config.allowedMimeTypes.includes(detectedMimeType)) throw new Error('VOICE_AVATAR_EVIDENCE_TYPE_NOT_ALLOWED')
-  return { config, detectedMimeType, declaredMimeType }
+  const artifactType = getArtifactTypeFromMime(detectedMimeType) as Extract<ArtifactType, 'audio' | 'image' | 'video' | 'document'>
+  if (!config.artifactTypes.includes(artifactType)) throw new Error('VOICE_AVATAR_EVIDENCE_ARTIFACT_TYPE_NOT_ALLOWED')
+  return { config, detectedMimeType, declaredMimeType, artifactType }
 }
