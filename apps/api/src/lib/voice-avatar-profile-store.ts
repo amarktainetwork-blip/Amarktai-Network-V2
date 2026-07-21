@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { prisma } from '@amarktai/db'
 import {
   ReusableAvatarProfileSchema,
@@ -7,24 +6,17 @@ import {
   type ReusableAvatarProfile,
   type ReusableVoiceProfile,
 } from '@amarktai/core/voice-avatar-platform'
-import type { VoiceAvatarProfileDecision } from '@amarktai/core/voice-avatar-resources'
+import {
+  avatarProfileArtifactId,
+  voiceProfileArtifactId,
+  type VoiceAvatarProfileDecision,
+} from '@amarktai/core/voice-avatar-resources'
+
+export { avatarProfileArtifactId, voiceProfileArtifactId }
 
 export const VOICE_PROFILE_ARTIFACT_SUBTYPE = 'voice_profile'
 export const AVATAR_PROFILE_ARTIFACT_SUBTYPE = 'avatar_profile'
 const PROFILE_ARTIFACT_TYPE = 'document'
-
-function profileArtifactId(kind: 'voice' | 'avatar', appSlug: string, profileId: string): string {
-  const digest = createHash('sha256').update(`${kind}:${appSlug}:${profileId}`).digest('hex').slice(0, 40)
-  return `${kind}-profile-${digest}`
-}
-
-export function voiceProfileArtifactId(appSlug: string, voiceProfileId: string): string {
-  return profileArtifactId('voice', appSlug, voiceProfileId)
-}
-
-export function avatarProfileArtifactId(appSlug: string, avatarProfileId: string): string {
-  return profileArtifactId('avatar', appSlug, avatarProfileId)
-}
 
 function parseMetadata(metadata: string): unknown {
   try { return JSON.parse(metadata) } catch { throw new Error('Stored profile metadata is not valid JSON') }
@@ -162,18 +154,18 @@ function ensureConsentCurrent(profile: ReusableVoiceProfile | ReusableAvatarProf
   if (consent?.expiresAt && new Date(consent.expiresAt).getTime() <= at.getTime()) throw new Error('PROFILE_CONSENT_EXPIRED')
 }
 
-function rightsDecision(input: VoiceAvatarProfileDecision, at: Date): ProfileRightsDecision {
-  return {
-    decision: input.decision,
-    verifierReference: input.verifierReference,
-    decidedAt: at.toISOString(),
-    notes: input.notes,
-  }
-}
-
-function ensureDecisionAllowed(status: string, decision: VoiceAvatarProfileDecision['decision']): void {
+function ensureDecisionAllowed(status: ReusableVoiceProfile['status'] | ReusableAvatarProfile['status'], decision: VoiceAvatarProfileDecision['decision']): void {
   if (status === 'revoked' && decision !== 'revoked') throw new Error('PROFILE_REVOKED')
   if (status === 'archived' && decision !== 'revoked') throw new Error('PROFILE_ARCHIVED')
+}
+
+function rightsDecision(input: { decision: VoiceAvatarProfileDecision; at: Date }): ProfileRightsDecision {
+  return {
+    decision: input.decision.decision,
+    verifierReference: input.decision.verifierReference,
+    decidedAt: input.at.toISOString(),
+    notes: input.decision.notes,
+  }
 }
 
 export async function decideVoiceProfile(input: {
@@ -186,7 +178,7 @@ export async function decideVoiceProfile(input: {
   if (!current) throw new Error('VOICE_PROFILE_NOT_FOUND')
   const at = input.at ?? new Date()
   ensureDecisionAllowed(current.status, input.decision.decision)
-  const durableDecision = rightsDecision(input.decision, at)
+  const durableDecision = rightsDecision({ decision: input.decision, at })
   if (input.decision.decision === 'verified') {
     ensureConsentCurrent(current, at)
     return updateVoiceProfile({
@@ -231,7 +223,7 @@ export async function decideAvatarProfile(input: {
   if (!current) throw new Error('AVATAR_PROFILE_NOT_FOUND')
   const at = input.at ?? new Date()
   ensureDecisionAllowed(current.status, input.decision.decision)
-  const durableDecision = rightsDecision(input.decision, at)
+  const durableDecision = rightsDecision({ decision: input.decision, at })
   if (input.decision.decision === 'verified') {
     ensureConsentCurrent(current, at)
     return updateAvatarProfile({
