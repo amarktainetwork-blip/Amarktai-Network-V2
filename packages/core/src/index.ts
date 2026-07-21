@@ -272,6 +272,32 @@ export {
   type BudgetCheckResult,
 } from './budget-policy.js'
 
+// Reusable output quality gates
+export {
+  QUALITY_DIMENSIONS,
+  QUALITY_OUTPUT_TYPES,
+  QUALITY_PROFILES,
+  HUMAN_REVIEW_STATUSES,
+  QUALITY_DECISIONS,
+  QualityDimensionScoreSchema,
+  QualityCandidateEvidenceSchema,
+  QualityPolicySchema,
+  createQualityPolicy,
+  evaluateQualityCandidate,
+  rankQualityCandidates,
+  selectQualityWinner,
+  type QualityDimension,
+  type QualityOutputType,
+  type QualityProfile,
+  type HumanReviewStatus,
+  type QualityDecisionStatus,
+  type QualityDimensionScore,
+  type QualityCandidateEvidence,
+  type QualityPolicy,
+  type QualityEvaluationDecision,
+  type RankedQualityCandidate,
+} from './quality-evaluation.js'
+
 // Canonical runtime truth
 export {
   CAPABILITY_RUNTIME_CLASSIFICATIONS,
