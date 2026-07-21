@@ -108,10 +108,22 @@ export const QDRANT_COLLECTION = process.env.QDRANT_COLLECTION ?? 'amarktai_know
 export const TOGETHER_EMBEDDING_MODEL = process.env.TOGETHER_EMBEDDING_MODEL ?? 'togethercomputer/m2-bert-80M-32k-retrieval'
 export const EMBEDDING_DIMENSIONS = 768
 
-// ── Crawlee / Apify ───────────────────────────────────────────────────────────
+// ── Search / Controlled Browser ───────────────────────────────────────────────
 
-export const CRAWLEE_MAX_PAGES = Number(process.env.CRAWLEE_MAX_PAGES ?? 5)
-export const CRAWLEE_TIMEOUT_MS = Number(process.env.CRAWLEE_TIMEOUT_MS ?? 60_000)
+export function getSearxngUrl(): string {
+  return (process.env.SEARXNG_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '')
+}
+
+export const RESEARCH_SEARCH_TIMEOUT_MS = Number(process.env.RESEARCH_SEARCH_TIMEOUT_MS ?? 20_000)
+export const RESEARCH_BROWSER_TIMEOUT_MS = Number(process.env.RESEARCH_BROWSER_TIMEOUT_MS ?? 45_000)
+export const RESEARCH_ROBOTS_TIMEOUT_MS = Number(process.env.RESEARCH_ROBOTS_TIMEOUT_MS ?? 10_000)
+export const RESEARCH_MAX_REDIRECTS = Number(process.env.RESEARCH_MAX_REDIRECTS ?? 5)
+export const RESEARCH_MAX_PAGES = Number(process.env.RESEARCH_MAX_PAGES ?? process.env.CRAWLEE_MAX_PAGES ?? 8)
+export const RESEARCH_MAX_BYTES_PER_PAGE = Number(process.env.RESEARCH_MAX_BYTES_PER_PAGE ?? 1_500_000)
+
+// Legacy aliases remain while existing deployment environments migrate.
+export const CRAWLEE_MAX_PAGES = RESEARCH_MAX_PAGES
+export const CRAWLEE_TIMEOUT_MS = RESEARCH_BROWSER_TIMEOUT_MS
 
 // ── Token Ledger ──────────────────────────────────────────────────────────────
 
