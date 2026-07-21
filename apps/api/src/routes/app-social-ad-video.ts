@@ -10,8 +10,14 @@ import {
   type CapabilityKey,
   type JobPayload,
 } from '@amarktai/core'
-import { MarketingCampaignBriefSchema, SocialAdVideoRequestSchema } from '@amarktai/core/marketing-platform'
-import { buildSocialAdVideoPlan, type SocialAdVideoPlan } from '@amarktai/core/social-ad-video'
+import {
+  MarketingCampaignBriefSchema,
+  SocialAdVideoRequestSchema,
+} from '@amarktai/core/marketing-platform'
+import {
+  buildSocialAdVideoPlan,
+  type SocialAdVideoPlan,
+} from '@amarktai/core/social-ad-video'
 import { getBrandProfile } from '../lib/brand-profile-store.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 import { authenticateAppKey } from './jobs.js'
@@ -26,7 +32,7 @@ type PlanResolution =
     }
   | { ok: false; statusCode: number; body: Record<string, unknown> }
 
-type AppAuth = NonNullable<Awaited<ReturnType<typeof authenticateAppKey>>['app']>
+type ChildJob = Awaited<ReturnType<typeof prisma.job.findMany>>[number]
 
 function safeJson(value: string | null | undefined): Record<string, unknown> {
   if (!value?.trim()) return {}
@@ -40,8 +46,45 @@ function safeJson(value: string | null | undefined): Record<string, unknown> {
   }
 }
 
-function isQualityJob(metadataJson: string): boolean {
-  return safeJson(metadataJson).socialAdQualityAnalysis === true
+function childKind(job: ChildJob): 'generation' | 'quality' | 'assembly' | 'copy' | 'other' {
+  const metadata = safeJson(job.metadataJson)
+  if (metadata.socialAdQualityAnalysis === true) return 'quality'
+  if (metadata.socialAdAssembly === true) return 'assembly'
+  if (metadata.socialAdCopyCandidate === true) return 'copy'
+  if (metadata.socialAdVideo === true && typeof metadata.candidateId === 'string') return 'generation'
+  return 'other'
+}
+
+function summarizeJobs(jobs: readonly ChildJob[]) {
+  return {
+    total: jobs.length,
+    planned: jobs.filter((job) => job.status === 'planned').length,
+    queued: jobs.filter((job) => job.status === 'queued').length,
+    processing: jobs.filter((job) => job.status === 'processing').length,
+    completed: jobs.filter((job) => job.status === 'completed').length,
+    failed: jobs.filter((job) => job.status === 'failed').length,
+    cancelled: jobs.filter((job) => job.status === 'cancelled').length,
+  }
+}
+
+function jobEvidence(job: ChildJob) {
+  const metadata = safeJson(job.metadataJson)
+  return {
+    jobId: job.id,
+    kind: childKind(job),
+    candidateJobId: metadata.candidateJobId ?? null,
+    candidateId: metadata.candidateId ?? null,
+    candidateIndex: job.sceneNumber,
+    status: job.status,
+    progress: job.progress,
+    capability: job.capability,
+    provider: job.provider,
+    model: job.model,
+    artifactId: job.artifactId,
+    error: job.error,
+    retryCount: job.retryCount,
+    workflowPhase: job.workflowPhase,
+  }
 }
 
 async function resolvePlan(
@@ -110,8 +153,12 @@ async function resolvePlan(
       statusCode: 409,
       body: {
         error: true,
-        code: error instanceof Error ? error.message.split(':')[0] : 'SOCIAL_AD_PLAN_REJECTED',
-        message: error instanceof Error ? error.message : 'Social-ad plan was rejected.',
+        code: error instanceof Error
+          ? error.message.split(':')[0]
+          : 'SOCIAL_AD_PLAN_REJECTED',
+        message: error instanceof Error
+          ? error.message
+          : 'Social-ad plan was rejected.',
       },
     }
   }
@@ -139,37 +186,6 @@ function candidateInput(candidate: SocialAdVideoPlan['candidates'][number]): Rec
   }
 }
 
-function summarizeJobs(jobs: Awaited<ReturnType<typeof prisma.job.findMany>>) {
-  return {
-    total: jobs.length,
-    planned: jobs.filter((job) => job.status === 'planned').length,
-    queued: jobs.filter((job) => job.status === 'queued').length,
-    processing: jobs.filter((job) => job.status === 'processing').length,
-    completed: jobs.filter((job) => job.status === 'completed').length,
-    failed: jobs.filter((job) => job.status === 'failed').length,
-    cancelled: jobs.filter((job) => job.status === 'cancelled').length,
-  }
-}
-
-function jobEvidence(job: Awaited<ReturnType<typeof prisma.job.findMany>>[number]) {
-  const metadata = safeJson(job.metadataJson)
-  return {
-    jobId: job.id,
-    candidateJobId: metadata.candidateJobId ?? null,
-    candidateId: metadata.candidateId ?? null,
-    candidateIndex: job.sceneNumber,
-    status: job.status,
-    progress: job.progress,
-    capability: job.capability,
-    provider: job.provider,
-    model: job.model,
-    artifactId: job.artifactId,
-    error: job.error,
-    retryCount: job.retryCount,
-    workflowPhase: job.workflowPhase,
-  }
-}
-
 async function findSocialAdParent(appSlug: string, id: string) {
   const parent = await prisma.job.findFirst({
     where: {
@@ -182,13 +198,31 @@ async function findSocialAdParent(appSlug: string, id: string) {
   return parent && safeJson(parent.metadataJson).socialAdVideo === true ? parent : null
 }
 
+function nextRequiredPhase(workflowPhase: string): string {
+  const map: Record<string, string> = {
+    human_approval_pending: 'marketing_app_creative_approval',
+    assembly_pending: 'network_master_assembly',
+    assembly_processing: 'network_master_assembly',
+    social_copy_generation: 'network_social_copy_generation',
+    final_approval_pending: 'marketing_app_final_pack_approval',
+    revision_required: 'marketing_app_creative_revision',
+    final_revision_required: 'marketing_app_final_pack_revision',
+    completed: 'none',
+  }
+  return map[workflowPhase] ?? workflowPhase
+}
+
 function executionStatus(
   parent: NonNullable<Awaited<ReturnType<typeof findSocialAdParent>>>,
-  children: Awaited<ReturnType<typeof prisma.job.findMany>>,
+  children: ChildJob[],
 ) {
   const metadata = safeJson(parent.metadataJson)
-  const generationJobs = children.filter((job) => !isQualityJob(job.metadataJson))
-  const qualityJobs = children.filter((job) => isQualityJob(job.metadataJson))
+  const generationJobs = children.filter((job) => childKind(job) === 'generation')
+  const qualityJobs = children.filter((job) => childKind(job) === 'quality')
+  const assemblyJobs = children.filter((job) => childKind(job) === 'assembly')
+  const copyJobs = children.filter((job) => childKind(job) === 'copy')
+  const otherJobs = children.filter((job) => childKind(job) === 'other')
+
   return {
     executionId: parent.executionId,
     parentJobId: parent.id,
@@ -210,14 +244,28 @@ function executionStatus(
       selectedCandidateArtifactId: metadata.selectedCandidateArtifactId ?? null,
       selectedQualityScore: metadata.selectedQualityScore ?? null,
     },
+    assembly: {
+      counts: summarizeJobs(assemblyJobs),
+      jobs: assemblyJobs.map(jobEvidence),
+      primaryArtifactId: metadata.assemblyArtifactId ?? parent.artifactId ?? null,
+      deliveryVariants: metadata.deliveryVariants ?? [],
+      subtitleArtifactIds: metadata.subtitleArtifactIds ?? [],
+      thumbnailArtifactId: metadata.thumbnailArtifactId ?? null,
+      reportArtifactId: metadata.deliveryReportArtifactId ?? null,
+    },
+    socialCopy: {
+      counts: summarizeJobs(copyJobs),
+      candidates: copyJobs.map(jobEvidence),
+      status: metadata.socialCopyStatus ?? 'not_started',
+      artifactId: metadata.copyArtifactId ?? null,
+      selectedCopyJobId: metadata.selectedCopyJobId ?? null,
+      selectedQualityScore: metadata.selectedCopyQualityScore ?? null,
+      ranking: metadata.copyQualityRanking ?? [],
+    },
+    otherChildren: otherJobs.map(jobEvidence),
     humanApproval: metadata.humanApproval ?? { status: 'not_ready' },
-    nextRequiredPhase: parent.workflowPhase === 'human_approval_pending'
-      ? 'marketing_app_human_approval'
-      : parent.workflowPhase === 'assembly_pending'
-        ? 'network_master_assembly'
-        : parent.workflowPhase === 'revision_required'
-          ? 'marketing_app_revision_decision'
-          : parent.workflowPhase,
+    finalApproval: metadata.finalApproval ?? { status: 'not_ready' },
+    nextRequiredPhase: nextRequiredPhase(parent.workflowPhase),
     plan: metadata.plan ?? null,
   }
 }
@@ -267,9 +315,11 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
     )
     if (!resolution.ok) return reply.status(resolution.statusCode).send(resolution.body)
 
+    const socialCopyRequested = resolution.request.includeSocialCopy === true
     const requiredExecutionCapabilities = [...new Set<CapabilityKey>([
       'social_content_generation',
       'video_understanding',
+      ...(socialCopyRequested ? ['structured_output' as CapabilityKey] : []),
       ...resolution.plan.candidates.map((candidate) => candidate.generationCapability),
     ])]
     const grantEntries = await Promise.all(requiredExecutionCapabilities.map(async (capability) => ({
@@ -291,6 +341,7 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
         missingCapabilities: missingGrants,
       })
     }
+
     const grants = new Map(grantEntries.map((entry) => [entry.capability, entry.snapshot!]))
     const qualityGrant = grants.get('video_understanding')!
     if (!qualityGrant.grant.artifactRead) {
@@ -300,9 +351,8 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
         message: 'video_understanding grant must allow artifact reads.',
       })
     }
+    const copyGrant = socialCopyRequested ? grants.get('structured_output')! : null
 
-    const executionId = randomUUID()
-    const createdAt = new Date().toISOString()
     let validatedCandidateInputs: Array<{
       candidate: SocialAdVideoPlan['candidates'][number]
       input: Record<string, unknown>
@@ -332,6 +382,8 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
       })
     }
 
+    const executionId = randomUUID()
+    const createdAt = new Date().toISOString()
     const { parent, children } = await prisma.$transaction(async (tx) => {
       const parentGrant = grants.get('social_content_generation')!
       const parent = await tx.job.create({
@@ -356,8 +408,14 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
             qualityGrantSnapshot: qualityGrant.grant,
             qualityGrantSnapshotSource: qualityGrant.source,
             qualityGrantSnapshotAt: createdAt,
+            ...(copyGrant ? {
+              copyGrantSnapshot: copyGrant.grant,
+              copyGrantSnapshotSource: copyGrant.source,
+              copyGrantSnapshotAt: createdAt,
+            } : {}),
             currentPhase: 'candidate_submission',
             humanApproval: { status: 'not_ready' },
+            finalApproval: { status: 'not_ready' },
           }),
           traceId: `trace_social_ad_${executionId}`,
           status: 'processing',
@@ -367,7 +425,7 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
         },
       })
 
-      const children = []
+      const children: ChildJob[] = []
       for (const { candidate, input } of validatedCandidateInputs) {
         const childGrant = grants.get(candidate.generationCapability)!
         const metadata = {
@@ -405,7 +463,6 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
       return { parent, children }
     })
 
-    const q = getQueue()
     const queued: string[] = []
     const failed: Array<{ jobId: string; error: string }> = []
     for (const child of children) {
@@ -425,7 +482,7 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
             : 'automatic',
           appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext,
         }
-        await q.add('process', payload, {
+        await getQueue().add('process', payload, {
           ...DEFAULT_JOB_OPTIONS,
           jobId: child.id,
         })
@@ -477,7 +534,9 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
       queueFailures: failed,
       candidateCount: children.length,
       qualityAnalysisRequired: true,
+      socialCopyRequired: socialCopyRequested,
       humanApprovalRequired: resolution.plan.approvalRequired,
+      finalApprovalRequired: true,
       maxCredits: resolution.plan.maxCredits,
       executionAuthority: 'orchestra',
     })
@@ -551,26 +610,26 @@ export async function appSocialAdVideoRoutes(app: FastifyInstance): Promise<void
         message: 'The Network has not selected a quality-qualified candidate.',
       })
     }
+
     const decidedAt = new Date().toISOString()
     const nextPhase = decision === 'approved'
       ? 'assembly_pending'
       : 'revision_required'
-    const updatedMetadata = {
-      ...metadata,
-      currentPhase: nextPhase,
-      humanApproval: {
-        status: decision,
-        notes,
-        decidedAt,
-        appSlug: auth.app!.slug,
-      },
-    }
     await prisma.job.update({
       where: { id: parent.id },
       data: {
         workflowPhase: nextPhase,
         progress: decision === 'approved' ? 85 : 80,
-        metadataJson: JSON.stringify(updatedMetadata),
+        metadataJson: JSON.stringify({
+          ...metadata,
+          currentPhase: nextPhase,
+          humanApproval: {
+            status: decision,
+            notes,
+            decidedAt,
+            appSlug: auth.app!.slug,
+          },
+        }),
         error: decision === 'rejected'
           ? 'Selected social-ad candidate was rejected by the Marketing App reviewer.'
           : null,
