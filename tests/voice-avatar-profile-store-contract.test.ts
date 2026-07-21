@@ -138,8 +138,8 @@ describe('voice and avatar stored payloads', () => {
 describe('admin rights decision persistence', () => {
   it('writes verifier, decision time and notes into the stored profile', () => {
     expect(store).toContain('rightsDecision: durableDecision')
-    expect(store).toContain('verifierReference: input.verifierReference')
-    expect(store).toContain('decidedAt: at.toISOString()')
+    expect(store).toContain('verifierReference: input.decision.verifierReference')
+    expect(store).toContain('decidedAt: input.at.toISOString()')
     expect(store).toContain("if (status === 'revoked' && decision !== 'revoked') throw new Error('PROFILE_REVOKED')")
     expect(store).toContain("if (status === 'archived' && decision !== 'revoked') throw new Error('PROFILE_ARCHIVED')")
   })
