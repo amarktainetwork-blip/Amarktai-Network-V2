@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
     "./premium-media-policy": {
       "types": "./dist/premium-media-policy.d.ts",
       "import": "./dist/premium-media-policy.js"
