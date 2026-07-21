@@ -2,6 +2,7 @@ export interface AmarktAIClientOptions { apiKey: string; baseUrl?: string; fetch
 export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; callbackUrl?: string }
 export type BrandProfilePayload = Record<string, unknown>
 export interface SocialAdPlanPayload { request: Record<string, unknown>; campaign: Record<string, unknown> }
+export interface SocialAdApprovalPayload { decision: 'approved' | 'rejected'; notes?: string }
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -31,6 +32,7 @@ export class AmarktAIClient {
   planSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/plan', { method: 'POST', body: JSON.stringify(payload) }) }
   executeSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/executions', { method: 'POST', body: JSON.stringify(payload) }) }
   socialAdVideoExecution(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}`) }
+  decideSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/approval`, { method: 'POST', body: JSON.stringify(payload) }) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
