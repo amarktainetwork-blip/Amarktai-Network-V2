@@ -182,17 +182,19 @@ describe('production activation closure', () => {
   it('keeps one canonical operational README and a current recovery runbook', () => {
     const readme = source('README.md')
     const runbook = source('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
-    expect(readme.replaceAll('**', '')).toContain('Groq — removed')
-    expect(readme).toContain('Broken or fresh-stack recovery')
-    expect(readme).toContain('admin-reset-password.mjs')
+    expect(readme).toContain('| **Groq** | Removed.')
+    expect(readme).toContain('docs/PRODUCTION_MIGRATION_RUNBOOK.md')
+    expect(readme).toContain('scripts/admin-reset-password.mjs')
     expect(runbook).toContain('Fresh or broken-stack recovery')
     expect(runbook).toContain('20260718_complete_platform_recovery')
     expect(runbook).toContain('ADMIN_RESET_PASSWORD')
     expect(runbook).not.toContain('Production Migration Runbook — Phase 1')
   })
 
-  it('removes the obsolete hardcoded production verifier', () => {
+  it('uses the current strict production verifier instead of the obsolete script', () => {
+    const readme = source('README.md')
     expect(existsSync(resolve(root, 'deploy/verify.sh'))).toBe(false)
-    expect(source('README.md')).toContain('deploy/verify.sh` was removed')
+    expect(readme).toContain('proof-production-release-candidate.mjs')
+    expect(readme).not.toContain('deploy/verify.sh')
   })
 })
