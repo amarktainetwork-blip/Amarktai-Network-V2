@@ -22,15 +22,34 @@ describe('marketing platform API contract', () => {
   })
 
   it('loads the Brand Profile by authenticated app scope before planning social ads', () => {
-    expect(socialAdRoutes).toContain("getBrandProfile(auth.app!.slug, requestResult.data.brandProfileId)")
-    expect(socialAdRoutes).toContain("auth.allowedCapabilities?.includes('social_content_generation')")
+    expect(socialAdRoutes).toContain('getBrandProfile(appSlug, requestResult.data.brandProfileId)')
+    expect(socialAdRoutes).toContain("allowedCapabilities.includes('social_content_generation')")
     expect(socialAdRoutes).toContain('buildSocialAdVideoPlan')
+  })
+
+  it('creates durable parent and candidate child jobs with immutable grant snapshots', () => {
+    expect(socialAdRoutes).toContain("app.post('/api/v1/social-ad-video/executions'")
+    expect(socialAdRoutes).toContain("capability: 'social_content_generation'")
+    expect(socialAdRoutes).toContain('parentJobId: parent.id')
+    expect(socialAdRoutes).toContain('resolveAppCapabilityGrantSnapshot')
+    expect(socialAdRoutes).toContain('appGrantSnapshot: childGrant.grant')
+    expect(socialAdRoutes).toContain("await q.add('process', payload")
+    expect(socialAdRoutes).toContain('validateDirectProviderRequest')
+  })
+
+  it('polls executions within authenticated app scope and returns route evidence only after runtime selection', () => {
+    expect(socialAdRoutes).toContain("app.get('/api/v1/social-ad-video/executions/:id'")
+    expect(socialAdRoutes).toContain('appSlug: auth.app!.slug')
+    expect(socialAdRoutes).toContain('provider: job.provider')
+    expect(socialAdRoutes).toContain('model: job.model')
+    expect(socialAdRoutes).toContain('quality_evaluation_and_winner_selection')
   })
 
   it('does not expose provider, model or route controls through the thin-app SDK', () => {
     const executeRequest = sdk.match(/export interface ExecuteRequest \{([^}]+)\}/s)?.[1] ?? ''
     expect(executeRequest).not.toMatch(/provider|model|route|executorId|endpoint|apiKey/)
     expect(sdk).toContain('planSocialAdVideo')
-    expect(sdk).toContain('/api/v1/social-ad-video/plan')
+    expect(sdk).toContain('executeSocialAdVideo')
+    expect(sdk).toContain('socialAdVideoExecution')
   })
 })
