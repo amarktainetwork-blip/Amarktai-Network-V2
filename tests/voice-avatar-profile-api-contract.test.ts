@@ -5,6 +5,9 @@ const server = readFileSync(new URL('../apps/api/src/server.ts', import.meta.url
 const route = readFileSync(new URL('../apps/api/src/routes/app-voice-avatar-profiles.ts', import.meta.url), 'utf8')
 const validation = readFileSync(new URL('../apps/api/src/lib/voice-avatar-profile-validation.ts', import.meta.url), 'utf8')
 const store = readFileSync(new URL('../apps/api/src/lib/voice-avatar-profile-store.ts', import.meta.url), 'utf8')
+const sdk = readFileSync(new URL('../packages/sdk/src/index.ts', import.meta.url), 'utf8')
+const openapi = readFileSync(new URL('../docs/app-api-openapi.yaml', import.meta.url), 'utf8')
+const guide = readFileSync(new URL('../docs/THIN_APP_GUIDE.md', import.meta.url), 'utf8')
 
 describe('governed voice and avatar profile API contract', () => {
   it('registers app and admin profile routes without generation claims', () => {
@@ -75,5 +78,37 @@ describe('governed voice and avatar profile API contract', () => {
     expect(validation).toContain("dependencyError('VOICE_PROFILE_SELF_REFERENCE'")
     expect(validation).toContain("dependencyError('PARENT_VOICE_PROFILE_NOT_VERIFIED'")
     expect(validation).toContain("dependencyError('DEFAULT_VOICE_PROFILE_NOT_VERIFIED'")
+  })
+
+  it('publishes provider-neutral SDK and OpenAPI profile management only', () => {
+    for (const method of [
+      'voiceProfiles()',
+      'createVoiceProfile(payload: VoiceProfileDraftPayload)',
+      'updateVoiceProfile(voiceProfileId: string, payload: VoiceProfileUpdatePayload)',
+      'archiveVoiceProfile(voiceProfileId: string)',
+      'avatarProfiles()',
+      'createAvatarProfile(payload: AvatarProfileDraftPayload)',
+      'updateAvatarProfile(avatarProfileId: string, payload: AvatarProfileUpdatePayload)',
+      'archiveAvatarProfile(avatarProfileId: string)',
+      'uploadProfileArtifact(purpose: VoiceAvatarEvidencePurpose',
+    ]) expect(sdk).toContain(method)
+    expect(openapi).toContain('version: 1.6.0')
+    expect(openapi).toContain('ProfileEvidencePurpose:')
+    expect(openapi).toContain('HumanConsentEvidence:')
+    expect(openapi).toContain('/api/v1/profile-artifacts/{purpose}:')
+    expect(openapi).toContain('/api/v1/voice-profiles:')
+    expect(openapi).toContain('/api/v1/voice-profiles/{id}:')
+    expect(openapi).toContain('/api/v1/avatar-profiles:')
+    expect(openapi).toContain('/api/v1/avatar-profiles/{id}:')
+    expect(openapi).not.toContain('/api/v1/voice-clone/executions:')
+    expect(openapi).not.toContain('/api/v1/avatar-generation/executions:')
+  })
+
+  it('documents profile governance as proven without claiming media execution', () => {
+    expect(guide).toContain('## Governed voice and avatar profiles')
+    expect(guide).toContain('Apps can list, read, create, update and archive only their own profiles.')
+    expect(guide).toContain('editing a verified profile resets its rights decision')
+    expect(guide).toContain('The currently proven surface is evidence upload and governed reusable profile management.')
+    expect(guide).toContain('must not be treated as live until an exact approved provider transport')
   })
 })
