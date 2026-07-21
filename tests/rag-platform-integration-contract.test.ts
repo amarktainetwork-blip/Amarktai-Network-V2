@@ -23,7 +23,8 @@ describe('durable RAG integration contract', () => {
     expect(sdk).toContain('ingestRag(')
     expect(sdk).toContain('searchRag(')
     expect(sdk).toContain('ragExecution(')
-    const contracts = sdk.match(/export interface RagIngestPayload[\s\S]+?export class AmarktAIError/)?.[0] ?? ''
+    const contracts = sdk.match(/export interface RagIngestPayload[\s\S]+?(?=export interface ResearchExecutionPayload)/)?.[0] ?? ''
+    expect(contracts).toContain('export interface RagSearchPayload')
     expect(contracts).not.toMatch(/provider|model|route|executorId|endpoint|apiKey|appSlug/)
   })
 
