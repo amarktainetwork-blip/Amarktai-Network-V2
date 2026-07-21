@@ -13,6 +13,7 @@ export default defineConfig({
       '@amarktai/core/voice-avatar-platform': fromRoot('./packages/core/src/voice-avatar-platform.ts'),
       '@amarktai/core/voice-avatar-resources': fromRoot('./packages/core/src/voice-avatar-resources.ts'),
       '@amarktai/core/voice-avatar-evidence': fromRoot('./packages/core/src/voice-avatar-evidence.ts'),
+      '@amarktai/core/governed-tts': fromRoot('./packages/core/src/governed-tts.ts'),
       '@amarktai/core/config': fromRoot('./packages/core/src/config.ts'),
       '@amarktai/core': fromRoot('./packages/core/src/index.ts'),
       '@amarktai/db': fromRoot('./packages/db/src/index.ts'),
