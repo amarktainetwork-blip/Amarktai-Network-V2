@@ -33,6 +33,10 @@
     "./rag-platform": {
       "types": "./dist/rag-platform.d.ts",
       "import": "./dist/rag-platform.js"
+    },
+    "./research-platform": {
+      "types": "./dist/research-platform.d.ts",
+      "import": "./dist/research-platform.js"
     }
   },
   "scripts": {
