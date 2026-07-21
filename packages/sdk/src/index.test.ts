@@ -35,7 +35,7 @@ describe('AmarktAIClient', () => {
     expect(transport.mock.calls[4]![1]?.method).toBe('DELETE')
   })
 
-  it('plans, starts and polls provider-neutral social-ad execution', async () => {
+  it('plans, starts, polls and decides provider-neutral social-ad execution', async () => {
     const transport = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ executionAuthority: 'orchestra' }), { status: 200, headers: { 'content-type': 'application/json' } }))
     const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
     const payload = {
@@ -45,15 +45,20 @@ describe('AmarktAIClient', () => {
     await client.planSocialAdVideo(payload)
     await client.executeSocialAdVideo(payload)
     await client.socialAdVideoExecution('execution / one')
+    await client.decideSocialAdVideo('execution / one', { decision: 'approved', notes: 'Approved by campaign owner.' })
 
     expect(transport.mock.calls.map((call) => call[0])).toEqual([
       'https://example.test/api/v1/social-ad-video/plan',
       'https://example.test/api/v1/social-ad-video/executions',
       'https://example.test/api/v1/social-ad-video/executions/execution%20%2F%20one',
+      'https://example.test/api/v1/social-ad-video/executions/execution%20%2F%20one/approval',
     ])
     expect(transport.mock.calls[0]![1]?.method).toBe('POST')
     expect(transport.mock.calls[1]![1]?.method).toBe('POST')
     expect(transport.mock.calls[2]![1]?.method).toBeUndefined()
+    expect(transport.mock.calls[3]![1]?.method).toBe('POST')
+    const approval = JSON.parse(String(transport.mock.calls[3]![1]?.body)) as Record<string, unknown>
+    expect(approval).toEqual({ decision: 'approved', notes: 'Approved by campaign owner.' })
     expect(JSON.stringify(payload)).not.toMatch(/"provider"|"model"|"route"/)
   })
 
