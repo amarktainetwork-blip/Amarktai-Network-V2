@@ -106,7 +106,7 @@ async function saveSnapshot(input: {
   return saved.id
 }
 
-function fixturePage(request: ResearchRequest): ControlledPageResult {
+function fixturePage(): ControlledPageResult {
   const canonicalUrl = 'https://fixture.invalid/amarktai-network-research'
   const extractedText = [
     'AmarktAI Network owns provider routing, model selection, grants, durable jobs, evidence, artifacts, quality gates, budgets, memory, RAG and controlled research.',
@@ -207,7 +207,7 @@ function uniqueCandidates(input: {
 async function collectEvidence(payload: WorkerJobData, request: ResearchRequest): Promise<ResearchEvidenceArtifact> {
   const searchedAt = new Date().toISOString()
   if (isReleaseFixtureAdapterEnabled()) {
-    const source = await pageToSource({ payload, request, page: fixturePage(request), depth: 0 })
+    const source = await pageToSource({ payload, request, page: fixturePage(), depth: 0 })
     return {
       version: 1,
       query: request.query,
@@ -276,7 +276,7 @@ async function collectEvidence(payload: WorkerJobData, request: ResearchRequest)
       selectedCount: sources.length,
     } : null,
     sources,
-    warnings: [...search?.evidence.unresponsiveEngines.map((engine) => `SearXNG engine unavailable: ${engine}`) ?? [], ...warnings].slice(0, 100),
+    warnings: [...(search?.evidence.unresponsiveEngines.map((engine) => `SearXNG engine unavailable: ${engine}`) ?? []), ...warnings].slice(0, 100),
     failedCount,
     blockedCount,
   }
