@@ -1,6 +1,7 @@
 import type { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { advanceLongFormWorkflow } from './long-form-workflow.js'
+import { refreshSocialAdAssemblyParent } from './social-ad-assembly-workflow.js'
 import { ensureSocialAdQualityGrantSnapshot } from './social-ad-quality-grant.js'
 import { advanceSocialAdQualityWorkflow } from './social-ad-quality-workflow.js'
 import { refreshSocialAdParentState } from './social-ad-workflow.js'
@@ -44,6 +45,13 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
     return { kind, advanced: true }
   }
   if (kind === 'social_ad_video') {
+    if (['assembly_queued', 'assembly_processing', 'assembly_queue_failed'].includes(parent.workflowPhase)) {
+      await refreshSocialAdAssemblyParent(parent.id)
+      return { kind, advanced: true }
+    }
+    if (['social_copy_pending', 'completed', 'assembly_failed', 'revision_required', 'human_approval_pending', 'assembly_pending'].includes(parent.workflowPhase)) {
+      return { kind, advanced: false }
+    }
     const generation = await refreshSocialAdParentState(parent.id)
     if (generation?.state.phase === 'candidate_quality_pending') {
       await ensureSocialAdQualityGrantSnapshot(parent.id)
@@ -51,5 +59,5 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
     }
     return { kind, advanced: true }
   }
-  return { kind, advanced: false }
+  return { kind: 'unknown', advanced: false }
 }
