@@ -106,6 +106,10 @@ function safeJson(value: unknown): Record<string, unknown> {
   }
 }
 
+function isQualityChild(metadataJson: string): boolean {
+  return safeJson(metadataJson).socialAdQualityAnalysis === true
+}
+
 export async function refreshSocialAdParentState(parentJobId: string): Promise<{
   parentId: string
   executionId: string
@@ -116,17 +120,19 @@ export async function refreshSocialAdParentState(parentJobId: string): Promise<{
   const metadata = safeJson(parent.metadataJson)
   if (metadata.socialAdVideo !== true) return null
 
-  const children = await prisma.job.findMany({
+  const allChildren = await prisma.job.findMany({
     where: { appSlug: parent.appSlug, parentJobId: parent.id },
     orderBy: [{ sceneNumber: 'asc' }, { createdAt: 'asc' }],
   })
-  const state = deriveSocialAdCandidateState(children)
+  const generationChildren = allChildren.filter((child) => !isQualityChild(child.metadataJson))
+  const qualityChildren = allChildren.filter((child) => isQualityChild(child.metadataJson))
+  const state = deriveSocialAdCandidateState(generationChildren)
   const nextStatus = state.phase === 'candidate_generation_failed'
     ? 'failed'
     : parent.status === 'cancelled'
       ? 'cancelled'
       : 'processing'
-  const childEvidence = children.map((child) => ({
+  const childEvidence = generationChildren.map((child) => ({
     jobId: child.id,
     candidateIndex: child.sceneNumber,
     capability: child.capability,
@@ -137,11 +143,20 @@ export async function refreshSocialAdParentState(parentJobId: string): Promise<{
     retryCount: child.retryCount,
     error: child.error,
   }))
+  const qualityEvidence = qualityChildren.map((child) => ({
+    jobId: child.id,
+    candidateIndex: child.sceneNumber,
+    status: child.status,
+    provider: child.provider,
+    model: child.model,
+    error: child.error,
+  }))
   const updatedMetadata = {
     ...metadata,
     currentPhase: state.phase,
     candidateState: state,
     candidateEvidence: childEvidence,
+    qualityJobEvidence: qualityEvidence,
     completedCandidateArtifactIds: state.artifactIds,
     retryableCandidateFailures: state.retryableFailures,
     refreshedAt: new Date().toISOString(),
