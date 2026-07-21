@@ -1,6 +1,5 @@
 export interface AmarktAIClientOptions { apiKey: string; baseUrl?: string; fetch?: typeof globalThis.fetch }
-export interface ApprovedRoute { provider: 'genx' | 'together' | 'deepinfra'; model: string }
-export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; route?: ApprovedRoute; callbackUrl?: string }
+export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; callbackUrl?: string }
 export type BrandProfilePayload = Record<string, unknown>
 
 export class AmarktAIError extends Error {
