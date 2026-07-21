@@ -45,6 +45,10 @@
     "./voice-avatar-platform": {
       "types": "./dist/voice-avatar-platform.d.ts",
       "import": "./dist/voice-avatar-platform.js"
+    },
+    "./voice-avatar-resources": {
+      "types": "./dist/voice-avatar-resources.d.ts",
+      "import": "./dist/voice-avatar-resources.js"
     }
   },
   "scripts": {
