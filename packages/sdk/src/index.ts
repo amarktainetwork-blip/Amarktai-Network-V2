@@ -1,6 +1,7 @@
 export interface AmarktAIClientOptions { apiKey: string; baseUrl?: string; fetch?: typeof globalThis.fetch }
 export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; callbackUrl?: string }
 export type BrandProfilePayload = Record<string, unknown>
+export interface SocialAdPlanPayload { request: Record<string, unknown>; campaign: Record<string, unknown> }
 
 export class AmarktAIError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) { super(message); this.name = 'AmarktAIError' }
@@ -27,6 +28,7 @@ export class AmarktAIClient {
   createBrandProfile(profile: BrandProfilePayload) { return this.request('/api/v1/brand-profiles', { method: 'POST', body: JSON.stringify(profile) }) }
   updateBrandProfile(brandProfileId: string, profile: BrandProfilePayload) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'PUT', body: JSON.stringify(profile) }) }
   archiveBrandProfile(brandProfileId: string) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'DELETE' }) }
+  planSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/plan', { method: 'POST', body: JSON.stringify(payload) }) }
   artifact(artifactId: string) { return this.request(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`) }
   artifactFile(artifactId: string, options: { download?: boolean; range?: string } = {}) {
     const query = options.download ? '?download=1' : ''
