@@ -35,6 +35,19 @@ describe('AmarktAIClient', () => {
     expect(transport.mock.calls[4]![1]?.method).toBe('DELETE')
   })
 
+  it('requests a provider-neutral social-ad execution plan', async () => {
+    const transport = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ plan: { executionAuthority: 'orchestra' } }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
+    await client.planSocialAdVideo({
+      request: { brandProfileId: 'brand-1', campaignId: 'campaign-1' },
+      campaign: { brandProfileId: 'brand-1', campaignId: 'campaign-1' },
+    })
+    expect(transport.mock.calls[0]![0]).toBe('https://example.test/api/v1/social-ad-video/plan')
+    expect(transport.mock.calls[0]![1]?.method).toBe('POST')
+    const payload = JSON.parse(String(transport.mock.calls[0]![1]?.body)) as Record<string, unknown>
+    expect(JSON.stringify(payload)).not.toMatch(/"provider"|"model"|"route"/)
+  })
+
   it('returns stable typed errors', async () => {
     const client = new AmarktAIClient({ apiKey: 'x', fetch: async () => new Response(JSON.stringify({ code: 'DENIED', message: 'No grant' }), { status: 403 }) })
     await expect(client.policy()).rejects.toBeInstanceOf(AmarktAIError)
