@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
   AvatarSourceSchema,
@@ -12,6 +13,19 @@ const ArtifactIdSchema = z.string().uuid()
 const ProfileIdSchema = z.string().uuid()
 const UseScopeArraySchema = z.array(z.enum(VOICE_AVATAR_USE_SCOPES)).min(1).max(VOICE_AVATAR_USE_SCOPES.length)
 const StyleTagsSchema = z.array(z.string().trim().min(1).max(100)).max(30).default([])
+
+function profileArtifactId(kind: 'voice' | 'avatar', appSlug: string, profileId: string): string {
+  const digest = createHash('sha256').update(`${kind}:${appSlug}:${profileId}`).digest('hex').slice(0, 40)
+  return `${kind}-profile-${digest}`
+}
+
+export function voiceProfileArtifactId(appSlug: string, voiceProfileId: string): string {
+  return profileArtifactId('voice', appSlug, voiceProfileId)
+}
+
+export function avatarProfileArtifactId(appSlug: string, avatarProfileId: string): string {
+  return profileArtifactId('avatar', appSlug, avatarProfileId)
+}
 
 const VoiceProfileWritableFieldsSchema = z.object({
   displayName: z.string().trim().min(1).max(200),
