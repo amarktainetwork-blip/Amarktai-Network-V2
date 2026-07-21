@@ -13,6 +13,8 @@ export {
   CAPABILITY_CATEGORY_MAP,
   CAPABILITY_PREFIX_MAP,
   CAPABILITY_CATALOG,
+  CAPABILITY_BY_KEY,
+  CAPABILITY_FIELD_MAP,
   CapabilityDefinitionSchema,
   isValidCapability,
   getCapabilityCategory,
@@ -20,11 +22,19 @@ export {
   type CapabilityCategory,
   type CapabilityKey,
   type CapabilityDefinition,
+  CAPABILITY_KINDS,
+  COMPOSITE_CAPABILITY_KEYS,
+  ATOMIC_CAPABILITY_KEYS,
+  type CapabilityKind,
 } from './capabilities.js'
 
 // Provider definitions
 export {
   PROVIDER_KEYS,
+  APPROVED_PROVIDER_DEFINITIONS,
+  RUNTIME_EXECUTION_PROVIDERS,
+  CODING_ONLY_PROVIDERS,
+  REMOVED_PROVIDERS,
   PROVIDER_HEALTH_STATUSES,
   PROVIDER_ENV_VARS,
   CREDENTIAL_USAGE_POLICIES,
@@ -34,6 +44,10 @@ export {
   ProviderCapabilityMapSchema,
   isValidProvider,
   getProviderEnvVar,
+  getProviderDefinition,
+  getProviderDefaultBaseUrl,
+  type ApprovedProviderDefinition,
+  type RuntimeExecutionProvider,
   type ProviderKey,
   type ProviderHealthStatus,
   type CredentialUsagePolicy,
@@ -50,6 +64,8 @@ export {
   BLOCKED_OVERRIDE_FIELDS,
   SAFE_ROUTING_FIELDS,
   VALID_ROUTING_MODES,
+  ROUTING_MODE_ALIASES,
+  normalizeRoutingMode,
   isValidRoutingMode,
   extractRoutingMode,
   hasBlockedOverrides,
@@ -87,6 +103,7 @@ export {
 export {
   QUEUE_NAMES,
   JobPayloadSchema,
+  AppCapabilityGrantSnapshotSchema,
   WORKER_EVENTS,
   DEFAULT_JOB_OPTIONS,
   type JobPayload,
@@ -104,22 +121,16 @@ export {
   RATE_LIMIT_MAX,
   RATE_LIMIT_WINDOW_MS,
   WORKER_CONCURRENCY,
-  getGroqApiKey,
   getTogetherApiKey,
   getGenxApiKey,
   getGenxBaseUrl,
   getDeepinfraApiKey,
-  GROQ_BASE_URL,
   TOGETHER_BASE_URL,
   DEEPINFRA_BASE_URL,
   DEEPINFRA_OPENAI_BASE_URL,
-  GROQ_DEFAULT_MODEL,
   DEEPINFRA_DEFAULT_CHAT_MODEL,
-  GROQ_STT_MODEL,
-  GROQ_TTS_MODEL,
   TOGETHER_DEFAULT_IMAGE_MODEL,
   getTogetherImageModel,
-  GROQ_TTS_MAX_CHARS,
   getJwtSecret,
   JWT_EXPIRY_SECONDS,
   getQdrantUrl,
@@ -144,6 +155,7 @@ export {
   getModelsByProvider,
   getModelsByCapability,
   getExecutableModels,
+  isModelRouteCompatible,
   getPlannedModels,
   getBlockedModels,
   getModelRecord,
@@ -174,34 +186,109 @@ export {
   type TransportProfile,
 } from './provider-model-discovery.js'
 
-// Brain Router v1
+// Executor registrations
 export {
-  ROUTING_MODES,
-  routeBrain,
-  type RoutingMode,
-  type BrainRouterProviderState,
-  type BrainRouterRequest,
-  type BrainRouterDecision,
-  type RejectedCandidate,
-  type FallbackEntry,
-} from './brain-router.js'
+  EXECUTOR_REGISTRATIONS,
+  getExecutorRegistrations,
+  getExecutorRegistration,
+  hasExecutorRegistration,
+  isExecutorModelCompatible,
+  GENERAL_TEXT_CAPABILITY_SET,
+  type ExecutorId,
+  type ExecutorRegistration,
+  type ExecutorCompatibilityProfile,
+  type ExecutorModelMetadata,
+  type StructuredOutputMode,
+  type CapabilityMatchMode,
+} from './executor-registry.js'
+
+export {
+  resolveStructuredOutputContract,
+  structuredResponseFormat,
+  downgradeStructuredOutput,
+  type StructuredOutputContract,
+} from './structured-output.js'
+export { operatorMessage } from './operator-messages.js'
+
+// Direct provider capability contracts and normalized execution evidence
+export {
+  DIRECT_PROVIDER_CAPABILITIES,
+  DIRECT_PROVIDER_REQUEST_SCHEMAS,
+  DIRECT_PROVIDER_OUTPUT_SCHEMAS,
+  ChatMessageSchema,
+  isDirectProviderCapability,
+  validateDirectProviderRequest,
+  validateJsonSchemaValue,
+  createCanonicalProviderUsage,
+  type DirectProviderCapability,
+  type DirectProviderRequestValidation,
+  type CanonicalProviderUsage,
+  type JsonSchemaValidationResult,
+} from './direct-provider-contracts.js'
+
+// Orchestra routing engine
+export {
+  ORCHESTRA_ROUTING_MODES,
+  EXECUTION_PROFILES,
+  evaluateOrchestra,
+  checkCandidateEligibility,
+  normalizeDbCandidates,
+  normalizeDbModelRecords,
+  executorModelMetadataFromDbRecord,
+  validateOrchestraRequest,
+  ORCHESTRA_BLOCKED_REQUEST_FIELDS,
+  HEALTHY_PROVIDER_STATUSES,
+  BLOCKED_PROVIDER_STATUSES,
+  CODING_TOOL_CAPABILITIES,
+  type OrchestraRoutingMode,
+  type ExecutionProfile,
+  type OrchestraRequest,
+  type OrchestraCandidate,
+  type OrchestraDecision,
+  type OrchestraFallbackRoute,
+  type ScoringWeights,
+  type DbModelRecord,
+  type DbProviderRecord,
+  type RuntimeInfrastructureEvidence,
+  type AppCapabilityGrantContext,
+  APP_ROUTE_POLICY_MODES,
+  APP_QUALITY_TARGETS,
+  APP_SPEND_STRATEGIES,
+  type AppRoutePolicyMode,
+  type AppQualityTarget,
+  type AppSpendStrategy,
+} from './orchestra.js'
+
+// Budget policy
+export {
+  PUBLIC_BUDGET_POLICIES,
+  QUALITY_FLOORS,
+  mapBudgetPolicyToRoutingMode,
+  getMixPolicyStepMode,
+  checkBudgetConstraints,
+  meetsQualityFloor,
+  type PublicBudgetPolicy,
+  type QualityFloor,
+  type BudgetCheckResult,
+} from './budget-policy.js'
 
 // Canonical runtime truth
 export {
-  RUNTIME_EXECUTION_PROVIDERS,
-  CODING_ONLY_PROVIDERS,
   CAPABILITY_RUNTIME_CLASSIFICATIONS,
+  CAPABILITY_OPERATIONAL_STATES,
   getProviderRuntimeTruth,
   getCapabilityRuntimeTruth,
   getRuntimeTruth,
-  type RuntimeExecutionProvider,
   type CapabilityRuntimeClassification,
   type ProviderRuntimeStateInput,
   type CapabilityRuntimeStateInput,
+  type LongFormComponentRuntimeState,
   type RuntimeTruthInput,
   type ProviderRuntimeTruth,
   type CapabilityRuntimeTruth,
   type RuntimeTruth,
+  type RuntimeTruthMetrics,
+  type CapabilityOperationalState,
 } from './runtime-truth.js'
 
 // Provider credential security
@@ -228,7 +315,10 @@ export {
   LongFormSceneStatus,
   LongFormRenderStepType,
   LongFormRenderStatus,
-  LONG_FORM_VIDEO_STATUS,
+  PlanningMode,
+  VoiceProfileSchema,
+  LongFormOverlaySchema,
+  StructuredSceneSchema,
   validateLongFormVideoRequest,
   validateLongFormVideoPlan,
   type LongFormVideoRequest,
@@ -237,14 +327,19 @@ export {
   type LongFormStoryboard,
   type LongFormRenderStep,
   type LongFormVideoArtifactPlan,
-  type LongFormVideoStatus,
+  type PlanningMode as PlanningModeType,
+  type VoiceProfile,
+  type LongFormOverlay,
+  type StructuredScene,
 } from './long-form-video.js'
 
 export {
   createLongFormVideoPlan,
+  validatePlanCompleteness,
 } from './long-form-planner.js'
 
 export {
+  DURABLE_WORKFLOW_REGISTRATIONS,
   buildSceneVideoPrompt,
   createSceneExecutionPayloads,
   createLongFormExecutionState,
@@ -256,6 +351,14 @@ export {
   type LongFormExecutionState,
   type LongFormAssemblyHandoff,
 } from './long-form-execution.js'
+
+export {
+  getReleaseCandidateCapabilityKeys,
+  getDashboardAppSlug,
+  getInternalDashboardApps,
+  canReadSourceArtifactForApp,
+  type InternalDashboardAppDefinition,
+} from './dashboard-apps.js'
 
 // Music generation foundation
 export {
@@ -294,3 +397,14 @@ export {
   type MusicGenerationPlan,
   type MusicGenerationResult,
 } from './music-generation.js'
+
+// Subtitle generation
+export {
+  generateSubtitles,
+  buildSubtitleSegments,
+  generateSrt,
+  generateVtt,
+  getSubtitleMimeType,
+  type SubtitleSegment,
+  type SubtitleGenerationInput,
+} from './subtitle-generation.js'

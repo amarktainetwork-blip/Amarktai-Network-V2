@@ -9,24 +9,88 @@ import { z } from 'zod'
 
 // ── Provider Keys ─────────────────────────────────────────────────────────────
 
-export const PROVIDER_KEYS = ['genx', 'groq', 'together', 'mimo', 'deepinfra'] as const
+/**
+ * The single approved-provider definition. Runtime, discovery, API, worker and
+ * dashboard projections derive their provider lists and policy from this data.
+ */
+export const APPROVED_PROVIDER_DEFINITIONS = [
+  {
+    key: 'genx',
+    displayName: 'GenX',
+    runtimeRole: 'runtime_execution_provider',
+    credentialEnvKey: 'GENX_API_KEY',
+    discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://query.genx.sh',
+    backendExecutionAllowed: true,
+    codingOnly: false,
+  },
+  {
+    key: 'together',
+    displayName: 'Together',
+    runtimeRole: 'runtime_execution_provider',
+    credentialEnvKey: 'TOGETHER_API_KEY',
+    discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://api.together.xyz/v1',
+    backendExecutionAllowed: true,
+    codingOnly: false,
+  },
+  {
+    key: 'mimo',
+    displayName: 'MiMo',
+    runtimeRole: 'coding_agent_only',
+    credentialEnvKey: 'MIMO_API_KEY',
+    discoveryPolicy: 'docs_only',
+    defaultBaseUrl: '',
+    backendExecutionAllowed: false,
+    codingOnly: true,
+  },
+  {
+    key: 'deepinfra',
+    displayName: 'DeepInfra',
+    runtimeRole: 'runtime_execution_provider',
+    credentialEnvKey: 'DEEPINFRA_API_KEY',
+    discoveryPolicy: 'live_with_docs_fallback',
+    defaultBaseUrl: 'https://api.deepinfra.com/v1',
+    backendExecutionAllowed: true,
+    codingOnly: false,
+  },
+] as const
 
-export type ProviderKey = (typeof PROVIDER_KEYS)[number]
+export type ApprovedProviderDefinition = (typeof APPROVED_PROVIDER_DEFINITIONS)[number]
+export type ProviderKey = ApprovedProviderDefinition['key']
 
-export const PROVIDER_ENV_VARS: Record<ProviderKey, string> = {
-  genx: 'GENX_API_KEY',
-  groq: 'GROQ_API_KEY',
-  together: 'TOGETHER_API_KEY',
-  mimo: 'MIMO_API_KEY',
-  deepinfra: 'DEEPINFRA_API_KEY',
-}
+export const PROVIDER_KEYS = APPROVED_PROVIDER_DEFINITIONS.map((provider) => provider.key) as [ProviderKey, ...ProviderKey[]]
+export const RUNTIME_EXECUTION_PROVIDERS = APPROVED_PROVIDER_DEFINITIONS
+  .filter((provider) => provider.backendExecutionAllowed)
+  .map((provider) => provider.key) as Exclude<ProviderKey, 'mimo'>[]
+export type RuntimeExecutionProvider = (typeof RUNTIME_EXECUTION_PROVIDERS)[number]
+export const CODING_ONLY_PROVIDERS = APPROVED_PROVIDER_DEFINITIONS
+  .filter((provider) => provider.codingOnly)
+  .map((provider) => provider.key) as ProviderKey[]
+
+/**
+ * Providers removed from active runtime. Historical database rows may exist
+ * but must not be visible, selectable, routable, or counted.
+ */
+export const REMOVED_PROVIDERS = ['groq'] as const
+export type RemovedProvider = (typeof REMOVED_PROVIDERS)[number]
+
+export const PROVIDER_ENV_VARS = Object.fromEntries(
+  APPROVED_PROVIDER_DEFINITIONS.map((provider) => [provider.key, provider.credentialEnvKey]),
+) as Record<ProviderKey, string>
 
 // ── Provider Status ───────────────────────────────────────────────────────────
 
 export const PROVIDER_HEALTH_STATUSES = [
   'unconfigured',
   'configured',
+  'untested',
   'live',
+  'unhealthy',
+  'insufficient_credit',
+  'authentication_failed',
+  'rate_limited',
+  'policy_restricted',
   'failed',
   'gated',
   'runtime_restricted',
@@ -93,4 +157,12 @@ export function isValidProvider(key: string): key is ProviderKey {
 
 export function getProviderEnvVar(provider: ProviderKey): string {
   return PROVIDER_ENV_VARS[provider]
+}
+
+export function getProviderDefinition(provider: ProviderKey): ApprovedProviderDefinition {
+  return APPROVED_PROVIDER_DEFINITIONS.find((definition) => definition.key === provider)!
+}
+
+export function getProviderDefaultBaseUrl(provider: ProviderKey): string {
+  return getProviderDefinition(provider).defaultBaseUrl
 }

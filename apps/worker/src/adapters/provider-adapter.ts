@@ -3,7 +3,7 @@
  *
  * Each capability category (text, image, voice, video) has its own adapter
  * implementation. Adapters either execute real backend provider calls or
- * throw explicit backend-pending errors.
+ * fail closed with explicit unsupported-execution errors.
  */
 
 import type { CapabilityKey } from '@amarktai/core'

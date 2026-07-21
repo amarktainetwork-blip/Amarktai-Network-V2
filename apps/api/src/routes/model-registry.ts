@@ -1,10 +1,17 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { resolveProviderApiKey, getProviderCredentialStatus } from '@amarktai/db'
-import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertDiscoveredModels, upsertGenXPricingCatalog } from '../lib/model-registry.js'
-import { getAllCapabilityGroupSummaries, getCapabilityGroupSummary } from '../lib/capability-groups.js'
+import { resolveProviderApiKey, getProviderCredentialStatus, prisma } from '@amarktai/db'
+import { seedCuratedFallback, getModelCatalog, getCatalogSummary, upsertCanonicalProviderDiscovery, upsertGenXPricingCatalog } from '../lib/model-registry.js'
+import { getAllCapabilityGroupSummaries, buildCapabilityGroupSummary } from '../lib/capability-groups.js'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 import { planVideoBudget, getBudgetProfiles } from '../lib/video-planner.js'
 import { selectRuntimeModel } from '../lib/runtime-selector.js'
-import { discoverTogetherModels, discoverDeepInfraModels, discoverGenXModels, discoverGroqModels, discoverGenXPricing } from '../lib/provider-discovery.js'
+import { discoverGenXPricing } from '../lib/provider-discovery.js'
+import {
+  discoverTogetherProviderModels,
+  discoverDeepInfraProviderModels,
+  discoverGenXProviderModels,
+  runProviderModelDiscovery,
+} from '@amarktai/providers'
 
 interface ProviderRefreshRouteSummary {
   providerKey: string
@@ -49,49 +56,16 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
 
     const results: Record<string, ProviderRefreshRouteSummary | { providerKey: string; totalFetched: number; created: number; updated: number; failedRows: number; errors: string[]; discoveryError: string | null }> = {}
 
-    // Together
-    try {
-      const cred = await resolveProviderApiKey('together')
-      const result = await discoverTogetherModels(cred.apiKey)
-      const upsert = await upsertDiscoveredModels(result)
-      results.together = { ...upsert, discoveryError: result.error }
-    } catch (err) {
-      results.together = { providerKey: 'together', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
+    const apiKeys: Record<string, string> = {}
+    await Promise.all(['genx', 'together', 'deepinfra'].map(async (provider) => {
+      try { apiKeys[provider] = (await resolveProviderApiKey(provider)).apiKey } catch { /* result remains truthful below */ }
+    }))
+    const genxStatus = await getProviderCredentialStatus('genx').catch(() => null)
+    const discovery = await runProviderModelDiscovery({ live: true, apiKeys, genxBaseUrl: genxStatus?.baseUrl })
+    for (const result of discovery) {
+      const upsert = await upsertCanonicalProviderDiscovery(result)
+      results[result.provider] = { ...upsert, discoveryError: result.error }
     }
-
-    // DeepInfra
-    try {
-      const cred = await resolveProviderApiKey('deepinfra')
-      const result = await discoverDeepInfraModels(cred.apiKey)
-      const upsert = await upsertDiscoveredModels(result)
-      results.deepinfra = { ...upsert, discoveryError: result.error }
-    } catch (err) {
-      results.deepinfra = { providerKey: 'deepinfra', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
-    }
-
-    // GenX
-    try {
-      const cred = await resolveProviderApiKey('genx')
-      const status = await getProviderCredentialStatus('genx')
-      const result = await discoverGenXModels(cred.apiKey, status.baseUrl)
-      const upsert = await upsertDiscoveredModels(result)
-      results.genx = { ...upsert, discoveryError: result.error }
-    } catch (err) {
-      results.genx = { providerKey: 'genx', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
-    }
-
-    // Groq
-    try {
-      const cred = await resolveProviderApiKey('groq')
-      const result = await discoverGroqModels(cred.apiKey)
-      const upsert = await upsertDiscoveredModels(result)
-      results.groq = { ...upsert, discoveryError: result.error }
-    } catch (err) {
-      results.groq = { providerKey: 'groq', totalFetched: 0, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: err instanceof Error ? err.message : 'Not configured' }
-    }
-
-    // MiMo stays as curated seed
-    results.mimo = { providerKey: 'mimo', totalFetched: 1, created: 0, updated: 0, failedRows: 0, errors: [], discoveryError: null }
 
     return reply.send({ success: true, results })
   })
@@ -107,26 +81,23 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
 
       switch (provider) {
         case 'together':
-          result = await discoverTogetherModels(cred.apiKey)
+          result = await discoverTogetherProviderModels({ live: true, apiKey: cred.apiKey })
           break
         case 'deepinfra':
-          result = await discoverDeepInfraModels(cred.apiKey)
+          result = await discoverDeepInfraProviderModels({ live: true, apiKey: cred.apiKey })
           break
         case 'genx': {
           const status = await getProviderCredentialStatus('genx')
-          result = await discoverGenXModels(cred.apiKey, status.baseUrl)
+          result = await discoverGenXProviderModels({ live: true, apiKey: cred.apiKey, baseUrl: status.baseUrl })
           break
         }
-        case 'groq':
-          result = await discoverGroqModels(cred.apiKey)
-          break
         case 'mimo':
           return reply.send({ success: true, total: 1, source: 'curated_seed', note: 'MiMo is coding-tool-only' })
         default:
           return reply.status(400).send({ error: true, message: 'Unknown provider' })
       }
 
-      const upsert = await upsertDiscoveredModels(result)
+      const upsert = await upsertCanonicalProviderDiscovery(result)
       return reply.send({ success: true, ...upsert, source: result.source, discoveryError: result.error })
     } catch (err) {
       return reply.status(400).send({ error: true, message: err instanceof Error ? err.message : 'Provider not configured' })
@@ -184,6 +155,13 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
         source: m.source,
         catalogCompleteness: m.catalogCompleteness,
         isLiveDiscovered: m.isLiveDiscovered,
+        currentAvailability: m.currentAvailability,
+        accountAccess: m.accountAccess,
+        endpointFamily: m.endpointFamily,
+        transportProfile: m.transportProfile,
+        deprecated: m.deprecated,
+        lastProofAt: m.lastProofAt,
+        liveProvenRouteCount: m.liveProvenRouteCount,
         modelOwner: m.modelOwner,
         pricingSource: m.pricingSource,
         pricingConfidence: m.pricingConfidence,
@@ -207,7 +185,11 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
   // Capability group summaries
   app.get('/api/admin/capability-groups', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const summaries = await getAllCapabilityGroupSummaries()
+    const [allModels, runtimeTruth] = await Promise.all([
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
+      buildAdminRuntimeTruth(app),
+    ])
+    const summaries = await getAllCapabilityGroupSummaries(allModels, runtimeTruth)
     return reply.send({ capabilities: summaries })
   })
 
@@ -215,7 +197,11 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/capability-groups/:capability', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { capability } = request.params as { capability: string }
-    const summary = await getCapabilityGroupSummary(capability)
+    const [allModels, runtimeTruth] = await Promise.all([
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
+      buildAdminRuntimeTruth(app),
+    ])
+    const summary = buildCapabilityGroupSummary(capability, allModels, runtimeTruth)
     return reply.send(summary)
   })
 
@@ -240,6 +226,7 @@ export async function modelRegistryRoutes(app: FastifyInstance): Promise<void> {
       qualityTier: qualityTier as string,
       maxCostCents: maxCostCents as number,
       excludeProviders: excludeProviders as string[],
+      infrastructureReady: Boolean(app.redis),
     })
     return reply.send(selection)
   })

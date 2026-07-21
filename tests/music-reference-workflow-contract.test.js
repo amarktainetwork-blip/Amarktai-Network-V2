@@ -13,6 +13,9 @@ const dbMocks = vi.hoisted(() => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    appCapabilityGrant: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -112,6 +115,15 @@ describe('music reference-track workflow contract', () => {
       fileSizeBytes: 4,
     })
     dbMocks.prisma.artifact.update.mockResolvedValue({})
+    dbMocks.prisma.appCapabilityGrant.findUnique.mockResolvedValue({
+      appSlug: 'dashboard-music',
+      capability: 'music_generation',
+      enabled: true,
+      artifactRead: true,
+      artifactWrite: true,
+      ragNamespaces: '[]',
+      providerResidencyConstraints: '[]',
+    })
   })
 
   it('uploads legal reference audio through artifact storage with rights and checksum metadata', async () => {
@@ -136,7 +148,7 @@ describe('music reference-track workflow contract', () => {
     expect(body).not.toHaveProperty('storagePath')
     expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({
-        appSlug: 'admin-music',
+        appSlug: 'dashboard-music',
         type: 'audio',
         subType: 'music_reference',
         metadata: expect.objectContaining({
@@ -339,7 +351,8 @@ describe('music reference-track workflow contract', () => {
 
     expect([400, 409]).toContain(response.statusCode)
     const body = response.json()
-    expect(body.details || body.message).toMatch(/vocals_not_proven|vocalsRequested|Lyrics/)
+    // Vocals are no longer globally blocked - the error is now about credentials/infrastructure
+    expect(body.details || body.message).toMatch(/credentials|blocked|missing|vocals|Lyrics/)
     expect(dbMocks.prisma.job.create).not.toHaveBeenCalled()
     expect(queueMocks.add).not.toHaveBeenCalled()
 

@@ -16,7 +16,7 @@ describe('Dashboard runtime proof proxy', () => {
 
   it('forwards the admin Authorization header and backend proof payload', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      providers: ['genx', 'groq', 'together', 'mimo', 'deepinfra'],
+      providers: ['genx', 'together', 'mimo', 'deepinfra'],
       provenCapabilities: [],
       unprovenCapabilities: [],
       summary: {

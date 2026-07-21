@@ -1,0 +1,33 @@
+-- CreateTable
+CREATE TABLE `app_capability_grants` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `app_slug` VARCHAR(191) NOT NULL,
+    `capability` VARCHAR(191) NOT NULL,
+    `enabled` BOOLEAN NOT NULL DEFAULT true,
+    `quality_floor` VARCHAR(191) NOT NULL DEFAULT 'balanced',
+    `budget_policy` VARCHAR(191) NOT NULL DEFAULT 'balanced',
+    `max_cost_per_request` INTEGER NOT NULL DEFAULT 0,
+    `max_cost_per_workflow` INTEGER NOT NULL DEFAULT 0,
+    `latency_preference` VARCHAR(191) NOT NULL DEFAULT 'medium',
+    `allow_fallback` BOOLEAN NOT NULL DEFAULT true,
+    `max_fallback_attempts` INTEGER NOT NULL DEFAULT 3,
+    `live_proof_required` BOOLEAN NOT NULL DEFAULT false,
+    `approval_required` BOOLEAN NOT NULL DEFAULT false,
+    `artifact_read` BOOLEAN NOT NULL DEFAULT true,
+    `artifact_write` BOOLEAN NOT NULL DEFAULT true,
+    `memory_read` BOOLEAN NOT NULL DEFAULT false,
+    `memory_write` BOOLEAN NOT NULL DEFAULT false,
+    `rag_namespaces` VARCHAR(191) NOT NULL DEFAULT '[]',
+    `policy_profile` VARCHAR(191) NOT NULL DEFAULT 'standard',
+    `adult_permission` BOOLEAN NOT NULL DEFAULT false,
+    `data_retention_policy` VARCHAR(191) NOT NULL DEFAULT 'default',
+    `passthrough_model_allowed` BOOLEAN NOT NULL DEFAULT false,
+    `provider_residency_constraints` VARCHAR(191) NOT NULL DEFAULT '[]',
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `app_capability_grant_unique`(`app_slug`, `capability`),
+    INDEX `app_capability_grants_app_slug_idx`(`app_slug`),
+    INDEX `app_capability_grants_capability_idx`(`capability`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

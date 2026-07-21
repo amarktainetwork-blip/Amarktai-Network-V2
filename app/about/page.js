@@ -63,7 +63,7 @@ export default function AboutPage() {
               We exist to eliminate the redundant AI infrastructure that every product team rebuilds. Routing, fallback chains, budget enforcement, artifact storage, provider abstraction, safety guardrails — these are platform problems, not product problems.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-              AmarktAI Network centralizes these capabilities into a single, secure, multi-tenant runtime contract. Connected apps send capability requests with scoped credentials; backend routes then handle provider selection, execution, storage, and delivery once wired.
+              AmarktAI Network centralizes these capabilities into a single, secure, multi-tenant runtime. Connected apps send capability requests with scoped credentials; Orchestra handles provider selection while queues, workers, storage, and authorised artifact routes handle delivery.
             </p>
           </Reveal>
         </div>
@@ -119,7 +119,7 @@ export default function AboutPage() {
             {[
               { icon: Layers, title: 'Capability Contracts', desc: 'Typed schemas define every input and output. Connected apps request capabilities — never models or providers.' },
               { icon: Workflow, title: 'Intelligent Routing', desc: 'The engine selects the optimal provider based on capability, cost, latency, and availability. Fallback chains are automatic.' },
-              { icon: Database, title: 'Artifact Lineage', desc: 'Artifact contracts describe storage, versioning, retrieval, and proof from request to delivered result once backend integration is complete.' },
+              { icon: Database, title: 'Artifact Lineage', desc: 'Artifacts retain storage, versioning, retrieval, trace, and proof metadata from the queued request to the authorised result.' },
             ].map((item) => (
               <StaggerItem key={item.title}>
                 <div className="h-full rounded-xl border border-white/[0.07] bg-white/[0.02] p-6">

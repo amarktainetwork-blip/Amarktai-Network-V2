@@ -5,7 +5,8 @@ export async function adminRuntimeProofRoutes(app: FastifyInstance): Promise<voi
   app.get('/api/admin/runtime-proofs', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return reply
 
-    return reply.send(getRuntimeProofStatus())
+    const proofStatus = await getRuntimeProofStatus(app)
+    return reply.send(proofStatus)
   })
 }
 

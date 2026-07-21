@@ -17,7 +17,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
   genxPollVideo: vi.fn(),
@@ -42,6 +42,9 @@ const artifactMocks = vi.hoisted(() => ({
 const prismaMock = vi.hoisted(() => ({
   aiProvider: {
     findUnique: vi.fn(),
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'genx', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+    ]),
   },
   job: {
     findUnique: vi.fn(),
@@ -51,12 +54,18 @@ const prismaMock = vi.hoisted(() => ({
   usageMeter: {
     upsert: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'genx', modelId: 'seedance-v1-fast', displayName: 'Seedance', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsVideoGeneration: true, capabilitiesJson: '["video_generation"]', rawMetadata: '{"compatibility":{"taskType":"text-to-video","category":"video","capabilities":["video_generation"],"modalitiesIn":["text"],"modalitiesOut":["video"],"transportProfile":"async_job_poll","endpointFamily":"genx_generation_v1","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
+    ]),
+  },
 }))
 
 vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  recordModelAccessibilitySuccess: vi.fn().mockResolvedValue(true),
   prisma: prismaMock,
 }))
 
@@ -65,19 +74,23 @@ vi.mock('@amarktai/artifacts', () => artifactMocks)
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { PROVIDER_KEYS } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'runtime-proof-genx-video'
+  const capability = overrides.capability ?? 'video_generation'
   return {
     jobId: 'job-genx-video-001',
-    appSlug: 'runtime-proof-genx-video',
-    capability: 'video_generation',
+    appSlug,
+    capability,
     prompt: 'A simple red ball bouncing gently on a white background',
     input: { duration: 4, aspectRatio: '16:9' },
     metadata: {},
     traceId: 'trace-genx-video-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 
@@ -107,7 +120,7 @@ describe('GenX video executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       GENX_API_KEY: 'genx-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockResolvedValue({
@@ -123,16 +136,16 @@ describe('GenX video executor', () => {
     prismaMock.job.update.mockResolvedValue({})
     prismaMock.usageMeter.upsert.mockResolvedValue({})
     providerMocks.genxGenerateVideo.mockResolvedValue({
-      videoBuffer: Buffer.from('video-bytes'),
+      videoBuffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomvideo-bytes')]),
       mimeType: 'video/mp4',
       duration: 4,
       width: 1280,
       height: 720,
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
       providerJobId: 'genx-provider-job-001',
       metadata: {
         providerJobId: 'genx-provider-job-001',
-        selectedModel: 'grok-imagine-video',
+        selectedModel: 'seedance-v1-fast',
       },
     })
     providerMocks.genxPollVideo.mockResolvedValue({
@@ -143,12 +156,12 @@ describe('GenX video executor', () => {
       metadata: {},
     })
     providerMocks.genxDownloadVideo.mockResolvedValue({
-      videoBuffer: Buffer.from('resumed-video-bytes'),
+      videoBuffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomresumed-video-bytes')]),
       mimeType: 'video/mp4',
       duration: 4,
       width: 1280,
       height: 720,
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
       metadata: { downloaded: true },
     })
     artifactMocks.saveArtifact.mockResolvedValue({
@@ -164,7 +177,7 @@ describe('GenX video executor', () => {
     process.env = ORIGINAL_ENV
   })
 
-  it('uses discovered Router models instead of an unsupported stale default', async () => {
+  it('uses Orchestra exact registered model and ignores caller overrides', async () => {
     const result = await executeWithProvider(makePayload({
       provider: 'together',
       model: 'user-supplied-model',
@@ -178,17 +191,10 @@ describe('GenX video executor', () => {
 
     expect(result.success).toBe(true)
     expect(result.provider).toBe('genx')
-    expect(result.model).toBe('grok-imagine-video')
-    expect(providerMocks.resolveGenxVideoModel).toHaveBeenCalledWith({
-      model: 'seedance-v1-fast',
-      providerDefaultModel: 'seedance-v1-fast',
-      providerFallbackModel: '',
-      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
-    })
+    expect(result.model).toBe('seedance-v1-fast')
+    expect(providerMocks.resolveGenxVideoModel).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).toHaveBeenCalledWith(expect.objectContaining({
       model: 'seedance-v1-fast',
-      providerDefaultModel: 'seedance-v1-fast',
-      providerAvailableModels: ['grok-imagine-video', 'kling-avatar-v2-pro', 'kling-v2.5-turbo'],
     }))
     expect(providerMocks.genxGenerateVideo.mock.calls[0][0].model).toBe('seedance-v1-fast')
   })
@@ -201,14 +207,14 @@ describe('GenX video executor', () => {
         type: 'video',
         subType: 'video_generation',
         provider: 'genx',
-        model: 'grok-imagine-video',
+        model: 'seedance-v1-fast',
         metadata: expect.objectContaining({
           providerJobId: 'genx-provider-job-001',
-          model: 'grok-imagine-video',
+          model: 'seedance-v1-fast',
           duration: 4,
         }),
       }),
-      data: Buffer.from('video-bytes'),
+      data: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomvideo-bytes')]),
       explicitMimeType: 'video/mp4',
     }))
 
@@ -222,17 +228,20 @@ describe('GenX video executor', () => {
       height: 720,
       duration: 4,
       providerJobId: 'genx-provider-job-001',
-      selectedModel: 'grok-imagine-video',
+      selectedModel: 'seedance-v1-fast',
     })
   })
 
   it('resumes an existing GenX remote job without submitting a duplicate provider request', async () => {
-    prismaMock.job.findUnique.mockResolvedValueOnce({
-      metadataJson: JSON.stringify({
-        genxProviderJobId: 'genx-remote-resume-001',
-        genxProviderModel: 'grok-imagine-video',
-      }),
-    })
+    prismaMock.job.findUnique
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra selection persistence
+      .mockResolvedValueOnce({
+        metadataJson: JSON.stringify({
+          genxProviderJobId: 'genx-remote-resume-001',
+          genxProviderModel: 'seedance-v1-fast',
+        }),
+      })
 
     const result = await executeWithProvider(makePayload())
 
@@ -246,10 +255,10 @@ describe('GenX video executor', () => {
     expect(providerMocks.genxDownloadVideo).toHaveBeenCalledWith('https://query.genx.sh/api/v1/jobs/genx-provider-job-001/file', expect.objectContaining({
       apiKey: 'genx-secret-key',
       baseUrl: 'https://query.genx.sh',
-      model: 'grok-imagine-video',
+      model: 'seedance-v1-fast',
     }))
     expect(artifactMocks.saveArtifact).toHaveBeenCalledWith(expect.objectContaining({
-      data: Buffer.from('resumed-video-bytes'),
+      data: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisomresumed-video-bytes')]),
     }))
     const output = JSON.parse(result.output)
     expect(output.providerJobId).toBe('genx-remote-resume-001')
@@ -257,8 +266,10 @@ describe('GenX video executor', () => {
 
   it('blocks provider submission when cancellation wins before the provider claim', async () => {
     prismaMock.job.findUnique
-      .mockResolvedValueOnce({ metadataJson: '{}' })
-      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' })
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra metadata call
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // Orchestra selection persistence
+      .mockResolvedValueOnce({ metadataJson: '{}' }) // GenX resume metadata
+      .mockResolvedValueOnce({ providerClaimAt: null, status: 'cancelled' }) // provider claim check
     prismaMock.job.updateMany.mockResolvedValueOnce({ count: 0 })
 
     const result = await executeWithProvider(makePayload())
@@ -289,6 +300,6 @@ describe('GenX video executor', () => {
   })
 
   it('keeps the approved provider set unchanged', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 })

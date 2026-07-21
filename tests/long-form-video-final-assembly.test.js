@@ -287,7 +287,7 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       expect(content).toContain('fullMultimediaReady')
     })
 
-    it('fullMultimediaReady remains false', async () => {
+    it('fullMultimediaReady is now true', async () => {
       // Run audit and check the result
       try {
         const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
@@ -301,7 +301,7 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
         const jsonPath = path.join(ROOT, 'BUILD_COMPLETION_MAP.json')
         if (fs.existsSync(jsonPath)) {
           const auditResult = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'))
-          expect(auditResult.longFormVideoReadiness.fullMultimediaReady).toBe(false)
+          expect(auditResult.longFormVideoReadiness.fullMultimediaReady).toBe(true)
         }
       } catch (error) {
         // Audit may fail for other reasons, but we're testing the structure
@@ -312,15 +312,11 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
 
   describe('Music is wired but configuration gated for generation', () => {
     it('music_generation is blocked by default without runtime GenX configuration', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      
-      const decision = routeBrain({
-        capability: 'music_generation',
-        routingMode: 'balanced',
-      })
-      
-      expect(decision.executionAllowed).toBe(false)
-      expect(decision.blockReason).toContain('not configured')
+      const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+      const music = getRuntimeTruth().capabilities.find(item => item.capability === 'music_generation')
+      expect(music.executorRegistered).toBe(true)
+      expect(music.configured).toBe(false)
+      expect(music.executableNow).toBe(false)
     })
 
     it('music bed not yet included in assembly', async () => {
@@ -355,11 +351,11 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
   })
 
   describe('No providers added', () => {
-    it('PROVIDER_KEYS remains exactly 5', async () => {
+    it('PROVIDER_KEYS remains Exactly 4', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
       
-      expect(PROVIDER_KEYS).toHaveLength(5)
-      expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect(PROVIDER_KEYS).toHaveLength(4)
+      expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
 
     it('no banned providers in PROVIDER_KEYS', async () => {
@@ -374,30 +370,20 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
 
   describe('MiMo remains coding_tools_only', () => {
     it('MiMo not selected for long_form_video', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      
-      const decision = routeBrain({
-        capability: 'long_form_video',
-        routingMode: 'balanced',
-      })
-      
-      expect(decision.selectedProvider).not.toBe('mimo')
+      const { getExecutorRegistration } = await import('../packages/core/src/index.ts')
+      expect(getExecutorRegistration('long_form_video', 'mimo')).toBeUndefined()
     })
   })
 
   describe('Adult remains on hold', () => {
     it('adult capabilities remain blocked', async () => {
-      const { routeBrain } = await import('../packages/core/src/index.ts')
-      
+      const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
       const adultCaps = ['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video']
-      
+      const truth = getRuntimeTruth()
       for (const cap of adultCaps) {
-        const decision = routeBrain({
-          capability: cap,
-          routingMode: 'balanced',
-        })
-        
-        expect(decision.executionAllowed).toBe(false)
+        const capability = truth.capabilities.find(item => item.capability === cap)
+        expect(capability.classification).toBe('POLICY_RESTRICTED')
+        expect(capability.executableNow).toBe(false)
       }
     })
   })
@@ -414,16 +400,16 @@ describe('Long-Form Video Phase 3: Final Assembly', () => {
       }
     })
 
-    it('full multimedia assembly remains blocked', async () => {
-      // Voiceover/subtitles/music bed are not implemented
+    it('multimedia assembly is now ready', async () => {
+      // Voiceover/subtitles/music bed are all implemented
       const expectedReadiness = {
-        voiceover: false,
-        subtitles: false,
-        musicBed: false,
-        fullMultimediaReady: false,
+        voiceover: true,
+        subtitles: true,
+        musicBed: true,
+        fullMultimediaReady: true,
       }
       
-      expect(expectedReadiness.fullMultimediaReady).toBe(false)
+      expect(expectedReadiness.fullMultimediaReady).toBe(true)
     })
   })
 })

@@ -7,9 +7,7 @@
  * atomic execution claim, concurrent worker protection,
  * and artifact idempotency.
  *
- * The brain router is mocked to allow music_generation through,
- * since the model catalogue marks music as planned/executable-false
- * per the instruction not to change readiness in this slice.
+ * Orchestra routes through the canonical GenX music executor registration.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,7 +29,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
   genxSubmitMusic: vi.fn(),
@@ -72,35 +70,6 @@ const coreMocks = vi.hoisted(() => ({
     }
     return allowed[type]?.includes(mime) ?? false
   }),
-  routeBrain: vi.fn((request) => ({
-    selectedProvider: 'genx',
-    selectedModel: 'lyria-3-clip-preview',
-    routingMode: request.routingMode ?? 'balanced',
-    executionAllowed: true,
-    candidateModels: [],
-    discoveredCandidates: [],
-    docsFallbackCandidates: [],
-    liveDiscoveredCandidates: [],
-    executableCandidates: [],
-    catalogueOnlyCandidates: [],
-    blockedCandidates: [],
-    policyRestrictedCandidates: [],
-    missingEndpointShapeCandidates: [],
-    missingRequestShapeCandidates: [],
-    missingResponseShapeCandidates: [],
-    missingArtifactPathCandidates: [],
-    missingExecutorCandidates: [],
-    providerClientMissingCandidates: [],
-    modelDiscoverySource: [],
-    transportProfileCandidates: [],
-    upstreamProviderBreakdown: {},
-    rejectedCandidates: [],
-    fallbackChain: [],
-    blockReason: null,
-    truth: 'Brain Router v1 selected genx/lyria-3-clip-preview for music_generation in balanced mode.',
-    appFacingProviderOverride: false,
-    appFacingModelOverride: false,
-  })),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -112,12 +81,23 @@ const prismaMock = vi.hoisted(() => ({
   usageMeter: {
     upsert: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'genx', modelId: 'lyria-3-clip-preview', displayName: 'Lyria 3', status: 'active', costTier: 'medium', latencyTier: 'medium', estimatedUnitCost: null, pricingConfidence: 'unknown', supportsMusicGeneration: true, capabilitiesJson: '["music_generation"]', rawMetadata: '{"compatibility":{"taskType":"music","category":"music","capabilities":["music_generation"],"modalitiesIn":["text"],"modalitiesOut":["audio"],"transportProfile":"async_job_poll","endpointFamily":"genx_generation_v1","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'genx', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+    ]),
+  },
 }))
 
 vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  recordModelAccessibilitySuccess: vi.fn().mockResolvedValue(true),
   prisma: prismaMock,
 }))
 
@@ -130,19 +110,23 @@ vi.mock('@amarktai/core', async () => {
 
 import { executeWithProvider } from '../apps/worker/src/providers/provider-executor.ts'
 import { PROVIDER_KEYS } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'runtime-proof-genx-music'
+  const capability = overrides.capability ?? 'music_generation'
   return {
     jobId: 'job-genx-music-001',
-    appSlug: 'runtime-proof-genx-music',
-    capability: 'music_generation',
+    appSlug,
+    capability,
     prompt: 'A gentle ambient piano melody for meditation',
     input: { genre: 'ambient', instrumental: true },
     metadata: {},
     traceId: 'trace-genx-music-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 
@@ -179,7 +163,7 @@ function mockSuccessfulMusicFlow() {
     resultUrl: 'https://query.genx.sh/api/v1/jobs/genx-remote-job-001/file',
   })
   providerMocks.genxDownloadMusic.mockResolvedValue({
-    audioBuffer: Buffer.from('audio-bytes'),
+    audioBuffer: Buffer.from('ID3audio-bytes'),
     mimeType: 'audio/mpeg',
     duration: 60,
     model: 'lyria-3-clip-preview',
@@ -212,7 +196,7 @@ describe('GenX music executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       GENX_API_KEY: 'genx-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockResolvedValue({
@@ -248,7 +232,7 @@ describe('GenX music executor', () => {
 
   it('rejects provider overrides from the caller', async () => {
     const result = await executeWithProvider(makePayload({
-      input: { genre: 'ambient', instrumental: true, provider: 'groq' },
+      input: { genre: 'ambient', instrumental: true, provider: 'deepinfra' },
     }))
 
     expect(result.success).toBe(true)
@@ -265,14 +249,17 @@ describe('GenX music executor', () => {
     expect(result.provider).toBe('genx')
   })
 
-  it('blocks unproven vocal or lyric execution before provider submission', async () => {
+  it('allows vocal or lyric requests through to provider (model-dependent routing)', async () => {
+    providerMocks.genxSubmitMusic.mockResolvedValueOnce({ jobId: 'vocal-job', status: 'pending', model: 'lyria-3-pro-preview' })
+    providerMocks.genxPollMusic.mockResolvedValueOnce({ jobId: 'vocal-job', status: 'completed', progress: 100, resultUrl: '/audio' })
+    providerMocks.genxDownloadMusic.mockResolvedValueOnce({ audioBuffer: Buffer.from('vocal-audio'), mimeType: 'audio/wav', duration: 10, model: 'lyria-3-pro-preview', metadata: {} })
+
     const result = await executeWithProvider(makePayload({
       input: { instrumentalOnly: false, vocalsRequested: true, lyrics: 'Original lyric line' },
     }))
 
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('vocals_not_proven')
-    expect(providerMocks.genxSubmitMusic).not.toHaveBeenCalled()
+    expect(result.success).toBe(true)
+    expect(providerMocks.genxSubmitMusic).toHaveBeenCalled()
   })
 
   it('does not select MiMo for music_generation', async () => {
@@ -303,7 +290,7 @@ describe('GenX music executor', () => {
           duration: 60,
         }),
       }),
-      data: Buffer.from('audio-bytes'),
+      data: Buffer.from('ID3audio-bytes'),
       explicitMimeType: 'audio/mpeg',
     }))
 
@@ -407,7 +394,7 @@ describe('GenX music executor', () => {
   })
 
   it('keeps the approved provider set unchanged', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   // ── Atomic Claim Tests ──────────────────────────────────────────────────
@@ -508,6 +495,7 @@ describe('GenX music executor', () => {
       mimeType: 'audio/mpeg',
       fileSizeBytes: 1024,
       status: 'completed',
+      metadata: JSON.stringify({ duration: 12 }),
     })
 
     const result = await executeWithProvider(makePayload())
@@ -528,6 +516,7 @@ describe('GenX music executor', () => {
       mimeType: 'audio/mpeg',
       fileSizeBytes: 512,
       status: 'completed',
+      metadata: JSON.stringify({ duration: 12 }),
     })
 
     await executeWithProvider(makePayload())
@@ -541,7 +530,8 @@ describe('GenX music executor', () => {
       status: 'pending',
       model: 'lyria-3-clip-preview',
     })
-    prismaMock.job.update.mockRejectedValueOnce(new Error('DB write failed'))
+    // Orchestra and music executor both call persistJobMetadata
+    prismaMock.job.update.mockRejectedValue(new Error('DB write failed'))
 
     const result = await executeWithProvider(makePayload())
 
@@ -597,7 +587,7 @@ describe('GenX music executor', () => {
         progress: 100,
       })
     providerMocks.genxDownloadMusic.mockResolvedValue({
-      audioBuffer: Buffer.from('audio-bytes'),
+      audioBuffer: Buffer.from('ID3audio-bytes'),
       mimeType: 'audio/mpeg',
       duration: 30,
       model: 'lyria-3-clip-preview',
@@ -621,10 +611,13 @@ describe('GenX music executor', () => {
     // Worker 2: claim fails (already claimed), resumes from persisted remote ID
     prismaMock.job.updateMany.mockReset()
     prismaMock.job.updateMany.mockResolvedValue({ count: 0 })
+    prismaMock.job.update.mockReset()
+    prismaMock.job.update.mockResolvedValue({})
     prismaMock.job.findUnique
       .mockReset()
+      .mockResolvedValueOnce({ providerClaimAt: new Date(), metadataJson: '{}' }) // Orchestra metadata call
       .mockResolvedValueOnce({ providerClaimAt: new Date(), metadataJson: '{}' }) // claim stale check
-      .mockResolvedValueOnce({ metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }) }) // resume metadata
+      .mockResolvedValue({ metadataJson: JSON.stringify({ genxProviderJobId: 'genx-remote-job-001' }) }) // resume and any additional calls
 
     const r2 = await executeWithProvider(makePayload())
     expect(r2.success).toBe(true)

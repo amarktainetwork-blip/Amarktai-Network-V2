@@ -13,13 +13,30 @@ import {
   saveProviderCredential,
 } from '@amarktai/db'
 import { testProviderCredential } from '../lib/provider-health-test.js'
+import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
 
 export async function adminProviderRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/providers', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
-    const providers = await listProviderCredentialStatuses()
-    return reply.send({ providers })
+    const [credentialStatuses, truth] = await Promise.all([
+      listProviderCredentialStatuses(),
+      buildAdminRuntimeTruth(app),
+    ])
+    const credentialsByProvider = new Map(credentialStatuses.map((status) => [status.providerKey, status]))
+    const providers = truth.providers.map((provider) => ({
+      ...credentialsByProvider.get(provider.provider),
+      ...provider,
+      providerKey: provider.provider,
+      configured: provider.credentialConfigured,
+      runtimeConfigured: provider.configured,
+    }))
+    return reply.send({
+      providers,
+      providerPolicy: truth.providerPolicy,
+      capabilityCount: truth.capabilities.length,
+      providerCount: truth.providers.length,
+    })
   })
 
   app.put('/api/admin/providers/:providerKey', async (request, reply) => {

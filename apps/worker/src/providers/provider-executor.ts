@@ -1,33 +1,34 @@
 /**
  * Provider executor - routes execution to implemented provider clients.
  *
- * Groq chat, Together image_generation, and GenX video_generation are implemented.
- * All other capabilities return "not implemented".
- *
- * This module is the only active worker path that calls provider APIs.
+ * Canonical queued runtime for direct provider capabilities and media jobs.
  */
 
 import {
-  routeBrain,
-  extractRoutingMode,
+  createCanonicalProviderUsage,
+  canReadSourceArtifactForApp,
+  evaluateOrchestra,
+  normalizeDbCandidates,
+  getExecutorRegistration,
+  getExecutorRegistrations,
+  getProviderDefaultBaseUrl,
+  executorModelMetadataFromDbRecord,
+  isExecutorModelCompatible,
   type CapabilityKey,
   type ProviderKey,
-  type RoutingMode,
-  type BrainRouterDecision,
-  type BrainRouterProviderState,
+  type ExecutorId,
+  type AppCapabilityGrantContext,
+  type OrchestraRoutingMode,
+  type OrchestraDecision,
+  type OrchestraCandidate,
 } from '@amarktai/core'
-import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, prisma } from '@amarktai/db'
-import { findCompletedArtifactByTraceId } from '@amarktai/artifacts'
+import { ProviderConfigError, getProviderCredentialStatus, resolveProviderApiKey, recordModelAccessibilityFailure, recordModelAccessibilitySuccess, prisma } from '@amarktai/db'
+import { findCompletedArtifactByTraceId, getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'
 import type { WorkerJobData, ProcessorResult } from '../processors/job-processor.js'
+import { DIRECT_EXECUTOR_HANDLERS } from './direct-provider-executor.js'
+import { executeReleaseFixture, isReleaseFixtureAdapterEnabled } from './release-fixture-executor.js'
 
 type ProvidersModule = typeof import('@amarktai/providers')
-
-function formatSupportedCandidates(capability: CapabilityKey): string {
-  const decision = routeBrain({ capability, routingMode: 'balanced' })
-  const executable = decision.executableCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(executable)`)
-  const catalogueOnly = decision.catalogueOnlyCandidates.map((candidate) => `${candidate.provider}/${candidate.modelId}(catalogue-only)`)
-  return [...executable, ...catalogueOnly].join(', ') || 'none'
-}
 
 function redactProviderSecrets(message: string, extraKeys: string[] = []): string {
   let safe = message
@@ -39,53 +40,28 @@ function redactProviderSecrets(message: string, extraKeys: string[] = []): strin
   return safe
 }
 
-async function isProviderDisabledInDb(provider: ProviderKey): Promise<boolean> {
-  try {
-    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
-    if (!record) return false
-    return record.healthStatus === 'disabled' || !record.enabled
-  } catch {
-    return false
-  }
-}
-
-async function isProviderRuntimeRestrictedInDb(provider: ProviderKey): Promise<boolean> {
-  try {
-    const record = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
-    if (!record) return false
-    return record.healthStatus === 'runtime_restricted'
-  } catch {
-    return false
-  }
-}
-
-async function buildProviderStates(): Promise<Partial<Record<ProviderKey, BrainRouterProviderState>>> {
-  const providers: ProviderKey[] = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-  const states: Partial<Record<ProviderKey, BrainRouterProviderState>> = {}
-
-  for (const provider of providers) {
-    const [disabled, runtimeRestricted] = await Promise.all([
-      isProviderDisabledInDb(provider),
-      isProviderRuntimeRestrictedInDb(provider),
-    ])
-    let credentialStatus: Awaited<ReturnType<typeof getProviderCredentialStatus>> | null = null
-    try {
-      credentialStatus = await getProviderCredentialStatus(provider)
-    } catch {
-      credentialStatus = null
-    }
-    if (disabled || runtimeRestricted || provider === 'genx') {
-      states[provider] = {
-        disabled,
-        runtimeRestricted,
-        configured: credentialStatus?.configured === true && credentialStatus.runtimeEnabled !== false,
-        infrastructureReady: true,
-        policyAllowed: provider !== 'mimo',
-      }
-    }
-  }
-
-  return states
+function assertMediaSignature(buffer: Buffer, mimeType: string): void {
+  const ascii = (start: number, end: number) => buffer.subarray(start, end).toString('ascii')
+  const valid = mimeType === 'image/png'
+    ? buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    : mimeType === 'image/jpeg'
+      ? buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+      : mimeType === 'image/webp'
+        ? buffer.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP'
+        : mimeType === 'video/mp4' || mimeType === 'video/quicktime'
+          ? buffer.length >= 12 && ascii(4, 8) === 'ftyp'
+          : mimeType === 'video/webm'
+            ? buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+            : mimeType === 'audio/wav' || mimeType === 'audio/x-wav'
+              ? buffer.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE'
+              : mimeType === 'audio/flac'
+                ? buffer.length >= 4 && ascii(0, 4) === 'fLaC'
+                : mimeType === 'audio/ogg'
+                  ? buffer.length >= 4 && ascii(0, 4) === 'OggS'
+                  : mimeType === 'audio/mpeg'
+                    ? buffer.length >= 3 && (ascii(0, 3) === 'ID3' || (buffer[0] === 0xff && (buffer[1]! & 0xe0) === 0xe0))
+                    : false
+  if (!valid) throw new Error(`Artifact bytes do not match declared MIME type '${mimeType}'`)
 }
 
 function readNumber(input: Record<string, unknown> | undefined, key: string): number | undefined {
@@ -103,22 +79,8 @@ function readBool(input: Record<string, unknown> | undefined, key: string): bool
   return typeof value === 'boolean' ? value : undefined
 }
 
-function normalizeSelectedModel(model: string | null | undefined): string | undefined {
-  return typeof model === 'string' && model.trim() ? model.trim() : undefined
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function parseGenxDiscoveredModels(healthMessage: string): string[] {
-  const match = healthMessage.match(/Models seen:\s*(.+)$/i)
-  if (!match?.[1]) return []
-
-  return match[1]
-    .split(',')
-    .map((model) => model.trim().replace(/\.$/, ''))
-    .filter(Boolean)
 }
 
 function safeParseJsonObject(value: unknown): Record<string, unknown> {
@@ -267,7 +229,6 @@ async function resumeGenxVideoProviderJob(input: {
   apiKey: string
   baseUrl?: string
   model: string
-  providerAvailableModels: string[]
   providers: Pick<ProvidersModule, 'genxPollVideo' | 'genxDownloadVideo' | 'GENX_POLL_INTERVAL_MS' | 'GENX_POLL_MAX_ATTEMPTS'>
 }): Promise<{
   videoBuffer: Buffer
@@ -311,7 +272,6 @@ async function resumeGenxVideoProviderJob(input: {
           apiKey: input.apiKey,
           baseUrl: input.baseUrl,
           model: input.model,
-          providerAvailableModels: input.providerAvailableModels,
         })
         return {
           ...video,
@@ -339,222 +299,7 @@ async function resumeGenxVideoProviderJob(input: {
   throw new Error(`GenX video generation timed out after ${input.providers.GENX_POLL_MAX_ATTEMPTS} poll attempts; providerJobId=${input.remoteJobId}; model=${input.model}`)
 }
 
-async function recordMusicUsage(appSlug: string, model: string): Promise<void> {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  await prisma.usageMeter.upsert({
-    where: {
-      usage_meter_unique: {
-        appSlug,
-        date: today,
-        capability: 'music_generation',
-        provider: 'genx',
-        model,
-      },
-    },
-    update: {
-      requestCount: { increment: 1 },
-      successCount: { increment: 1 },
-      artifactCount: { increment: 1 },
-    },
-    create: {
-      appSlug,
-      date: today,
-      capability: 'music_generation',
-      provider: 'genx',
-      model,
-      requestCount: 1,
-      successCount: 1,
-      artifactCount: 1,
-    },
-  })
-}
-
-async function executeGroqChat(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    apiKey = credential.apiKey
-    const { groqChat } = await import('@amarktai/providers')
-    const result = await groqChat({
-      prompt: payload.prompt,
-      apiKey,
-      model: selectedModel,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return {
-        success: false,
-        status: 'failed',
-        error: 'Groq returned empty response',
-      }
-    }
-
-    return {
-      success: true,
-      status: 'completed',
-      output: result.content,
-      provider: 'groq',
-      model: result.model,
-    }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown Groq error'
-    return {
-      success: false,
-      status: 'failed',
-      error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}`,
-    }
-  }
-}
-
-// ── Groq Text Capabilities ───────────────────────────────────────────────────
-
-const TEXT_CAPABILITY_SYSTEM_PROMPTS: Partial<Record<CapabilityKey, (payload: WorkerJobData) => string>> = {
-  reasoning: () => 'You are a reasoning engine. Think step by step. Show your reasoning process clearly before giving a final answer.',
-  code: () => 'You are a code generation assistant. Write clean, well-documented code. Include comments explaining your approach.',
-  summarization: () => 'You are a text summarization assistant. Provide clear, concise summaries that capture the key points.',
-  translation: () => 'You are a translation assistant. Translate the provided text accurately while preserving meaning and tone.',
-  classification: () => 'You are a text classification assistant. Classify the provided text into the given categories. Return the classification result clearly.',
-  extraction: () => 'You are a data extraction assistant. Extract structured information from the provided text. Return JSON when possible.',
-  structured_output: (payload) => {
-    const schema = readString(payload.input, 'schema') || readString(payload.metadata, 'schema')
-    return `You are a structured output assistant. Return valid JSON that matches this schema: ${schema || 'No schema provided - infer appropriate structure'}. Return ONLY valid JSON, no explanation.`
-  },
-}
-
-async function executeGroqTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('groq')
-    apiKey = credential.apiKey
-    const { groqChat } = await import('@amarktai/providers')
-
-    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
-    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
-
-    const result = await groqChat({
-      prompt: payload.prompt,
-      apiKey,
-      model: selectedModel,
-      systemPrompt,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return { success: false, status: 'failed', error: 'Groq returned empty response' }
-    }
-
-    if (payload.capability === 'structured_output') {
-      try { JSON.parse(result.content) } catch {
-        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
-      }
-    }
-
-    return { success: true, status: 'completed', output: result.content, provider: 'groq', model: result.model }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown Groq error'
-    return { success: false, status: 'failed', error: `Groq execution failed: ${redactProviderSecrets(message, [apiKey])}` }
-  }
-}
-
-async function executeDeepInfraTextCapability(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  let apiKey = ''
-
-  try {
-    const credential = await resolveProviderApiKey('deepinfra')
-    apiKey = credential.apiKey
-    const providerStatus = await getProviderCredentialStatus('deepinfra')
-    const { deepinfraChat } = await import('@amarktai/providers')
-
-    const systemPromptFn = TEXT_CAPABILITY_SYSTEM_PROMPTS[payload.capability as CapabilityKey]
-    const systemPrompt = systemPromptFn ? systemPromptFn(payload) : undefined
-
-    const result = await deepinfraChat({
-      prompt: payload.prompt,
-      apiKey,
-      baseUrl: providerStatus.baseUrl || undefined,
-      providerDefaultModel: selectedModel || providerStatus.defaultModel,
-      systemPrompt,
-    })
-
-    if (!result.content || !result.content.trim()) {
-      return { success: false, status: 'failed', error: 'DeepInfra returned empty response' }
-    }
-
-    if (payload.capability === 'structured_output') {
-      try { JSON.parse(result.content) } catch {
-        return { success: false, status: 'failed', error: 'Structured output did not return valid JSON' }
-      }
-    }
-
-    return { success: true, status: 'completed', output: result.content, provider: 'deepinfra', model: result.model }
-  } catch (err) {
-    if (err instanceof ProviderConfigError) throw err
-    const message = err instanceof Error ? err.message : 'Unknown DeepInfra error'
-    return { success: false, status: 'failed', error: `DeepInfra execution failed: ${redactProviderSecrets(message, [apiKey])}` }
-  }
-}
-
-async function executeTextCapabilityWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  try {
-    return await executeGroqTextCapability(payload, selectedModel)
-  } catch (err) {
-    if (!(err instanceof ProviderConfigError)) throw err
-  }
-
-  if (await isProviderDisabledInDb('deepinfra')) {
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-    }
-  }
-
-  try {
-    return await executeDeepInfraTextCapability(payload)
-  } catch (err) {
-    if (err instanceof ProviderConfigError) {
-      return {
-        success: false,
-        status: 'failed',
-        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-      }
-    }
-    throw err
-  }
-}
-
-async function executeChatWithFallback(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
-  try {
-    return await executeGroqChat(payload, selectedModel)
-  } catch (err) {
-    if (!(err instanceof ProviderConfigError)) throw err
-  }
-
-  if (await isProviderDisabledInDb('deepinfra')) {
-    return {
-      success: false,
-      status: 'failed',
-      error: `Provider execution not implemented or blocked for '${payload.capability}'. deepinfra is disabled. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-    }
-  }
-
-  try {
-    return await executeDeepInfraTextCapability(payload)
-  } catch (err) {
-    if (err instanceof ProviderConfigError) {
-      return {
-        success: false,
-        status: 'failed',
-        error: `Provider execution not implemented or blocked for '${payload.capability}'. ${err.message}. Candidates: ${formatSupportedCandidates(payload.capability as CapabilityKey)}. executionAllowed: false`,
-      }
-    }
-    throw err
-  }
-}
+// ── Runtime Text Capabilities ────────────────────────────────────────────────
 
 // ── Together Image Generation ────────────────────────────────────────────────
 
@@ -588,6 +333,7 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
         error: 'Together returned empty image data',
       }
     }
+    assertMediaSignature(image.buffer, image.mimeType)
 
     const artifact = await saveArtifact({
       input: {
@@ -629,7 +375,15 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
       model: result.model,
       artifactId: artifact.id,
       output: JSON.stringify(output),
-      metadata: output,
+      metadata: {
+        ...output,
+        usage: createCanonicalProviderUsage({
+          provider: 'together', model: result.model,
+          inputTokens: result.usage.promptTokens, outputTokens: result.usage.completionTokens,
+          totalTokens: result.usage.totalTokens, imageCount: 1,
+        }),
+        outputValidation: { valid: true, contract: 'validated_image_artifact_signature' },
+      },
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
@@ -644,55 +398,51 @@ async function executeTogetherImage(payload: WorkerJobData, selectedModel?: stri
 
 async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
-  let model = 'lyria-3-clip-preview'
+  let model = selectedModel?.trim() ?? ''
 
   try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX music model')
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
     const {
       genxSubmitMusic,
-      resolveGenxMusicModel,
     } = await import('@amarktai/providers')
-    const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
-    model = resolveGenxMusicModel({
-      model: selectedModel,
-      providerDefaultModel: providerStatus.defaultModel || undefined,
-      providerFallbackModel: providerStatus.fallbackModel || undefined,
-      providerAvailableModels,
-    })
-
     const vocalsRequested = readBool(payload.input, 'vocalsRequested') === true
       || readBool(payload.input, 'instrumentalOnly') === false
       || typeof payload.input?.lyrics === 'string'
-    if (vocalsRequested) {
-      return {
-        success: false,
-        status: 'failed',
-        error: 'Music generation blocked: vocals_not_proven, lyrics_not_proven.',
-        provider: 'genx',
-        model,
-      }
-    }
+    // Vocals and lyrics are model-dependent, not globally blocked.
+    // Orchestra routes music_generation to instrumental models and
+    // song_generation to lyrics/vocals-capable models.
+    // If a song_generation request reaches this handler, pass lyrics through.
 
     // ── 1. Check for existing completed artifact (idempotency) ────────────
     const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'music_generation')
     if (existingArtifact) {
-      const output = {
-        artifactId: existingArtifact.id,
-        artifactUrl: existingArtifact.storageUrl,
-        mimeType: existingArtifact.mimeType,
-        fileSizeBytes: existingArtifact.fileSizeBytes,
-        reused: true,
-      }
-      return {
-        success: true,
-        status: 'completed',
-        provider: 'genx',
-        model,
-        artifactId: existingArtifact.id,
-        output: JSON.stringify(output),
-        metadata: output,
+      const existingMetadata = safeParseJsonObject(existingArtifact.metadata)
+      const duration = readPositiveNumber(existingMetadata.duration)
+      if (duration) {
+        const output = {
+          artifactId: existingArtifact.id,
+          artifactUrl: existingArtifact.storageUrl,
+          mimeType: existingArtifact.mimeType,
+          fileSizeBytes: existingArtifact.fileSizeBytes,
+          duration,
+          reused: true,
+        }
+        return {
+          success: true,
+          status: 'completed',
+          provider: 'genx',
+          model,
+          artifactId: existingArtifact.id,
+          output: JSON.stringify(output),
+          metadata: {
+            ...output,
+            usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: duration }),
+            outputValidation: { valid: true, contract: 'reused_music_artifact' },
+          },
+        }
       }
     }
 
@@ -706,7 +456,9 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       )
       const resumeRemoteId = typeof resumeMeta.genxProviderJobId === 'string' ? resumeMeta.genxProviderJobId : ''
       if (resumeRemoteId) {
-        return await pollAndDownloadMusic(resumeRemoteId, apiKey, providerStatus, model, payload, providerAvailableModels)
+        const resumeModel = readString(resumeMeta, 'genxProviderModel')
+        if (resumeModel && resumeModel !== model) throw new Error(`Persisted GenX music model '${resumeModel}' does not match Orchestra-selected model '${model}'`)
+        return await pollAndDownloadMusic(resumeRemoteId, apiKey, providerStatus, model, payload)
       }
       return {
         success: false,
@@ -722,20 +474,20 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       (await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }))?.metadataJson,
     )
     let remoteJobId = typeof jobMeta.genxProviderJobId === 'string' ? jobMeta.genxProviderJobId : ''
+    const remoteModel = readString(jobMeta, 'genxProviderModel')
+    if (remoteJobId && remoteModel && remoteModel !== model) throw new Error(`Persisted GenX music model '${remoteModel}' does not match Orchestra-selected model '${model}'`)
 
     // ── 4. Submit once if no remote job exists ─────────────────────────────
     if (!remoteJobId) {
-      // Only send proven fields to GenX: prompt + model.
-      // Unproven fields (duration, instrumental, genre, mood, tempo, negativePrompt)
-      // are kept in internal job input but NOT sent to the provider.
+      const lyrics = typeof payload.input?.lyrics === 'string' ? payload.input.lyrics : undefined
       const submitResult = await genxSubmitMusic({
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        model: selectedModel,
-        providerDefaultModel: providerStatus.defaultModel || undefined,
-        providerFallbackModel: providerStatus.fallbackModel || undefined,
-        providerAvailableModels,
+        model,
+        lyrics,
+        vocals: vocalsRequested || undefined,
+        instrumental: vocalsRequested ? false : undefined,
       })
       if (!submitResult.jobId) {
         return {
@@ -770,7 +522,7 @@ async function executeGenxMusic(payload: WorkerJobData, selectedModel?: string):
       }
     }
 
-    return await pollAndDownloadMusic(remoteJobId, apiKey, providerStatus, model, payload, providerAvailableModels)
+    return await pollAndDownloadMusic(remoteJobId, apiKey, providerStatus, model, payload)
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
     const message = err instanceof Error ? err.message : 'Unknown GenX music error'
@@ -790,7 +542,6 @@ async function pollAndDownloadMusic(
   providerStatus: { baseUrl: string; defaultModel: string; fallbackModel: string; healthMessage: string },
   model: string,
   payload: WorkerJobData,
-  providerAvailableModels: string[],
 ): Promise<ProcessorResult> {
   const {
     genxPollMusic,
@@ -848,7 +599,6 @@ async function pollAndDownloadMusic(
             apiKey,
             baseUrl: providerStatus.baseUrl || undefined,
             model,
-            providerAvailableModels,
           })
 
           if (!musicResult.audioBuffer || musicResult.audioBuffer.length === 0) {
@@ -870,6 +620,7 @@ async function pollAndDownloadMusic(
               model,
             }
           }
+          assertMediaSignature(musicResult.audioBuffer, musicResult.mimeType)
 
           // ── Save artifact ───────────────────────────────────────────
           const artifact = await saveArtifact({
@@ -905,8 +656,6 @@ async function pollAndDownloadMusic(
           })
 
           // ── Record usage ────────────────────────────────────────────
-          await recordMusicUsage(payload.appSlug, musicResult.model || model).catch(() => {})
-
           const output = {
             artifactId: artifact.id,
             artifactUrl: artifact.storageUrl,
@@ -924,7 +673,11 @@ async function pollAndDownloadMusic(
             model: musicResult.model || model,
             artifactId: artifact.id,
             output: JSON.stringify(output),
-            metadata: output,
+            metadata: {
+              ...output,
+              usage: createCanonicalProviderUsage({ provider: 'genx', model: musicResult.model || model, audioSeconds: musicResult.duration }),
+              outputValidation: { valid: true, contract: 'validated_music_artifact_signature' },
+            },
           }
         } catch (err) {
           lastDownloadError = err
@@ -962,22 +715,16 @@ async function pollAndDownloadMusic(
 
 async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
   let apiKey = ''
-  let model = 'seedance-v1-fast'
+  let model = selectedModel?.trim() ?? ''
 
   try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX video model')
     const credential = await resolveProviderApiKey('genx')
     apiKey = credential.apiKey
     const providerStatus = await getProviderCredentialStatus('genx')
     const providers = await import('@amarktai/providers')
-    const { genxGenerateVideo, resolveGenxVideoModel } = providers
+    const { genxGenerateVideo } = providers
     const { saveArtifact } = await import('@amarktai/artifacts')
-    const providerAvailableModels = parseGenxDiscoveredModels(providerStatus.healthMessage)
-    model = resolveGenxVideoModel({
-      model: selectedModel,
-      providerDefaultModel: providerStatus.defaultModel,
-      providerFallbackModel: providerStatus.fallbackModel,
-      providerAvailableModels,
-    })
     const job = await prisma.job.findUnique({
       where: { id: payload.jobId },
       select: { metadataJson: true },
@@ -985,25 +732,40 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
     const jobMetadata = safeParseJsonObject(job?.metadataJson)
     const existingRemoteJobId = readProviderJobIdFromMetadata(jobMetadata)
     const existingRemoteModel = readString(jobMetadata, 'genxProviderModel')
-    if (existingRemoteModel) model = existingRemoteModel
+    if (existingRemoteJobId && existingRemoteModel && existingRemoteModel !== model) {
+      throw new Error(`Persisted GenX video model '${existingRemoteModel}' does not match Orchestra-selected model '${model}'`)
+    }
 
-    const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, 'video_generation')
+    const existingArtifact = await findCompletedArtifactByTraceId(payload.traceId, payload.capability)
     if (existingArtifact) {
-      const output = {
-        artifactId: existingArtifact.id,
-        artifactUrl: existingArtifact.storageUrl,
-        mimeType: existingArtifact.mimeType,
-        fileSizeBytes: existingArtifact.fileSizeBytes,
-        reused: true,
-      }
-      return {
-        success: true,
-        status: 'completed',
-        provider: 'genx',
-        model,
-        artifactId: existingArtifact.id,
-        output: JSON.stringify(output),
-        metadata: output,
+      const existingMetadata = safeParseJsonObject(existingArtifact.metadata)
+      const duration = readPositiveNumber(existingMetadata.duration)
+      const width = readPositiveNumber(existingMetadata.width)
+      const height = readPositiveNumber(existingMetadata.height)
+      if (duration && width && height) {
+        const output = {
+          artifactId: existingArtifact.id,
+          artifactUrl: existingArtifact.storageUrl,
+          mimeType: existingArtifact.mimeType,
+          fileSizeBytes: existingArtifact.fileSizeBytes,
+          duration,
+          width,
+          height,
+          reused: true,
+        }
+        return {
+          success: true,
+          status: 'completed',
+          provider: 'genx',
+          model,
+          artifactId: existingArtifact.id,
+          output: JSON.stringify(output),
+          metadata: {
+            ...output,
+            usage: createCanonicalProviderUsage({ provider: 'genx', model, videoSeconds: duration }),
+            outputValidation: { valid: true, contract: 'reused_video_artifact' },
+          },
+        }
       }
     }
 
@@ -1018,26 +780,75 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       }
     }
 
+    // ── Load source artifact for i2v/v2v ──────────────────────────────────
+    let sourceImageDataUrl: string | undefined
+    let referenceVideoUrl: string | undefined
+    let sourceArtifactId: string | null = null
+    if (payload.capability === 'image_to_video' || payload.capability === 'video_to_video') {
+      const grant = readAppGrantSnapshot(payload)
+      if (!grant?.artifactRead) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies source-artifact read.' }
+      }
+      const sourceId = payload.capability === 'image_to_video'
+        ? (typeof payload.input?.sourceImageArtifactId === 'string' ? payload.input.sourceImageArtifactId : null)
+        : (typeof payload.input?.sourceVideoArtifactId === 'string' ? payload.input.sourceVideoArtifactId : null)
+      if (!sourceId) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: `${payload.capability} requires a source artifact` }
+      }
+      sourceArtifactId = sourceId
+      const source = await getArtifactRecord(sourceId)
+      if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'Authorised source artifact was not found' }
+      }
+      const expectedPrefix = payload.capability === 'image_to_video' ? 'image/' : 'video/'
+      if (!source.mimeType.startsWith(expectedPrefix)) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: `Source artifact must have MIME type ${expectedPrefix}*` }
+      }
+      const file = await getArtifactFile(sourceId)
+      if (!file?.buffer.length) {
+        return { success: false, status: 'failed', provider: 'genx', model, error: 'Source artifact bytes are missing' }
+      }
+      assertMediaSignature(file.buffer, file.mimeType)
+      if (payload.capability === 'image_to_video') {
+        sourceImageDataUrl = `data:${file.mimeType};base64,${file.buffer.toString('base64')}`
+      } else {
+        // For video-to-video, construct a provider-readable URL
+        const publicApiUrl = process.env.PUBLIC_API_URL?.trim() ?? ''
+        const secret = process.env.JWT_SECRET?.trim() ?? ''
+        if (!publicApiUrl || !secret) {
+          return { success: false, status: 'failed', provider: 'genx', model, error: 'PUBLIC_API_URL and JWT_SECRET required for source video' }
+        }
+        const { createProviderMediaUrl } = await import('@amarktai/artifacts')
+        referenceVideoUrl = createProviderMediaUrl({ artifactId: sourceId, publicApiUrl, secret })
+      }
+    }
+
     const result = existingRemoteJobId
       ? await resumeGenxVideoProviderJob({
         remoteJobId: existingRemoteJobId,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
         model,
-        providerAvailableModels,
         providers,
       })
       : await genxGenerateVideo({
         prompt: payload.prompt,
         apiKey,
         baseUrl: providerStatus.baseUrl || undefined,
-        model: selectedModel,
-        providerDefaultModel: providerStatus.defaultModel || undefined,
-        providerFallbackModel: providerStatus.fallbackModel || undefined,
-        providerAvailableModels,
+        model,
         duration: readNumber(payload.input, 'duration'),
         aspectRatio: readString(payload.input, 'aspectRatio'),
         style: readString(payload.input, 'style'),
+        negativePrompt: readString(payload.input, 'negativePrompt'),
+        sourceImageDataUrl,
+        referenceVideoUrl,
+        onSubmitted: async (jobId: string, submittedModel: string) => {
+          await persistJobMetadata(payload.jobId, {
+            genxProviderJobId: jobId,
+            genxProviderModel: submittedModel,
+            genxProviderSubmittedAt: new Date().toISOString(),
+          })
+        },
       }).catch(async (err) => {
         const remoteJobId = extractGenxProviderJobIdFromError(err)
         if (remoteJobId) {
@@ -1056,20 +867,21 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
         error: 'GenX returned empty video data',
       }
     }
+    assertMediaSignature(result.videoBuffer, result.mimeType)
 
     const artifact = await saveArtifact({
       input: {
         appSlug: payload.appSlug,
         type: 'video',
-        subType: 'video_generation',
-        title: `video_generation output for ${payload.appSlug}`,
-        description: 'GenX video_generation artifact',
+        subType: payload.capability,
+        title: `${payload.capability} output for ${payload.appSlug}`,
+        description: `GenX ${payload.capability} artifact`,
         provider: 'genx',
         model: result.model || model,
         traceId: payload.traceId,
         mimeType: result.mimeType,
         metadata: {
-          capability: 'video_generation',
+          capability: payload.capability,
           provider: 'genx',
           model: result.model || model,
           width: result.width,
@@ -1080,6 +892,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
           parentJobId: typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : undefined,
           executionId: typeof payload.metadata?.executionId === 'string' ? payload.metadata.executionId : undefined,
           sceneNumber: typeof payload.metadata?.sceneNumber === 'number' ? payload.metadata.sceneNumber : undefined,
+          sourceArtifactId,
         },
       },
       data: result.videoBuffer,
@@ -1096,6 +909,7 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       duration: result.duration,
       providerJobId: result.providerJobId,
       selectedModel: result.model || model,
+      sourceArtifactId,
     }
 
     if (result.providerJobId) {
@@ -1112,7 +926,11 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
       model: result.model || model,
       artifactId: artifact.id,
       output: JSON.stringify(output),
-      metadata: output,
+      metadata: {
+        ...output,
+        usage: createCanonicalProviderUsage({ provider: 'genx', model: result.model || model, videoSeconds: result.duration }),
+        outputValidation: { valid: true, contract: 'validated_video_artifact_signature' },
+      },
     }
   } catch (err) {
     if (err instanceof ProviderConfigError) throw err
@@ -1127,173 +945,660 @@ async function executeGenxVideo(payload: WorkerJobData, selectedModel?: string):
   }
 }
 
-async function resolveBrainRouterDecision(payload: WorkerJobData): Promise<{
-  decision: BrainRouterDecision
-  routingMode: RoutingMode
-}> {
-  const routingMode = extractRoutingMode(payload.metadata) as RoutingMode
-  const providerStates = await buildProviderStates()
+function normalizeRoutingMode(payload: WorkerJobData): OrchestraRoutingMode {
+  const raw = payload.routingMode ?? payload.metadata?.routingMode
+  if (raw === 'quality' || raw === 'premium') return 'quality'
+  if (raw === 'economy' || raw === 'budget') return 'economy'
+  if (raw === 'fast') return 'fast'
+  return 'balanced'
+}
 
-  const decision = routeBrain({
-    capability: payload.capability as CapabilityKey,
+function readAppGrantSnapshot(payload: WorkerJobData): AppCapabilityGrantContext | null {
+  const snapshot = payload.appGrantSnapshot ?? payload.metadata?.appGrantSnapshot
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null
+  const grant = snapshot as unknown as AppCapabilityGrantContext
+  if (grant.appSlug !== payload.appSlug || grant.capability !== payload.capability) return null
+  if (typeof grant.enabled !== 'boolean' || typeof grant.adultPermission !== 'boolean') return null
+  if (!Array.isArray(grant.ragNamespaces) || !Array.isArray(grant.providerResidencyConstraints)) return null
+  return Object.freeze({ ...grant })
+}
+
+async function resolveOrchestraDecision(
+  payload: WorkerJobData,
+  appGrant: AppCapabilityGrantContext,
+): Promise<{ decision: OrchestraDecision; reusedPersistedRoute: boolean }> {
+  const capability = payload.capability as CapabilityKey
+  const routingMode = normalizeRoutingMode(payload)
+  let orchestraCandidates: OrchestraCandidate[] = []
+  let durableMetadata: Record<string, unknown> = {}
+  try {
+    const [models, providers, job] = await Promise.all([
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
+      prisma.aiProvider.findMany(),
+      prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } }),
+    ])
+    durableMetadata = safeParseJsonObject(job?.metadataJson)
+    // Reaching this point proves the worker has both its DB connection and its
+    // BullMQ delivery. Provider readiness is still derived per provider by the
+    // core normalizer from credential, enabled, health, endpoint, registry, and
+    // exact model compatibility facts.
+    orchestraCandidates = normalizeDbCandidates(models, providers, capability, {
+      databaseReady: true,
+      queueReady: true,
+    })
+  } catch {
+    // DB unavailable — Orchestra will evaluate with empty candidates and block
+  }
+
+  const serverControlledLongFormRoute = payload.executionProfile === 'internal_dashboard'
+    && capability === 'video_generation'
+    && durableMetadata.longFormVideo === true
+  const executorConstraint = serverControlledLongFormRoute && typeof durableMetadata.orchestraExecutorConstraint === 'string'
+    ? durableMetadata.orchestraExecutorConstraint
+    : null
+  if (executorConstraint) {
+    orchestraCandidates = orchestraCandidates.filter((candidate) => candidate.executorId === executorConstraint)
+  }
+
+  const persistedProvider = durableMetadata.orchestraSelectedProvider
+  const persistedModel = durableMetadata.orchestraSelectedModel
+  const persistedExecutor = durableMetadata.orchestraSelectedExecutorId
+  const reusedPersistedRoute = typeof persistedProvider === 'string'
+    && typeof persistedModel === 'string'
+    && typeof persistedExecutor === 'string'
+  if (reusedPersistedRoute) {
+    // Re-evaluate current health/configuration/compatibility, but never silently
+    // switch the provider, model, or executor selected for this durable job.
+    orchestraCandidates = orchestraCandidates.filter((candidate) => (
+      candidate.provider === persistedProvider
+      && candidate.model === persistedModel
+      && candidate.executorId === persistedExecutor
+    ))
+  }
+
+  const decision = evaluateOrchestra({
+    capability,
+    executionProfile: payload.executionProfile ?? 'external_app',
     routingMode,
-    providerStates,
+    executionId: payload.jobId,
     appSlug: payload.appSlug,
-  })
-
-  return { decision, routingMode }
+    appGrant,
+    requestedRoute: readRequestedRoute(durableMetadata),
+  }, orchestraCandidates)
+  return { decision, reusedPersistedRoute }
 }
 
-function canExecuteProviderForCapability(
-  capability: CapabilityKey,
-  provider: ProviderKey,
-): boolean {
-  if (provider === 'groq') {
-    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
-    return textCaps.includes(capability)
-  }
-  if (provider === 'deepinfra') {
-    const textCaps: CapabilityKey[] = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output']
-    return textCaps.includes(capability)
-  }
-  if (provider === 'together') {
-    return capability === 'image_generation'
-  }
-  if (provider === 'genx') {
-    return capability === 'video_generation' || capability === 'music_generation'
-  }
-  return false
+function readRequestedRoute(metadata: Record<string, unknown>): { provider: ProviderKey; model: string } | undefined {
+  const route = metadata.requestedRoute
+  if (!route || typeof route !== 'object' || Array.isArray(route)) return undefined
+  const value = route as Record<string, unknown>
+  if (!['genx', 'together', 'deepinfra'].includes(String(value.provider)) || typeof value.model !== 'string' || !value.model.trim()) return undefined
+  return { provider: value.provider as ProviderKey, model: value.model }
 }
 
-function attachBrainRouterMetadata(result: ProcessorResult, decision: BrainRouterDecision, routingMode: RoutingMode): ProcessorResult {
+export interface ProviderExecutionRoute {
+  provider: ProviderKey
+  model: string
+  executorId: ExecutorId
+  routeKind: 'primary' | 'fallback'
+}
+
+function attachOrchestraRouteMetadata(result: ProcessorResult, route: ProviderExecutionRoute): ProcessorResult {
   return {
     ...result,
     metadata: {
       ...result.metadata,
-      brainRouter: {
-        routingMode,
-        selectedProvider: decision.selectedProvider,
-        selectedModel: decision.selectedModel,
-        executionAllowed: decision.executionAllowed,
-        truth: decision.truth,
-        fallbackChain: decision.fallbackChain,
-      },
+      orchestraRoute: route,
     },
   }
 }
 
-async function executeWithSelectedProvider(
+async function recordCanonicalUsage(
   payload: WorkerJobData,
-  capability: CapabilityKey,
-  provider: ProviderKey,
-  decision: BrainRouterDecision,
-  routingMode: RoutingMode,
-): Promise<ProcessorResult> {
-  const selectedModel = normalizeSelectedModel(decision.selectedModel)
+  route: ProviderExecutionRoute,
+  result: ProcessorResult,
+): Promise<void> {
+  const usage = result.metadata?.usage
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return
+  const record = usage as Record<string, unknown>
+  const inputTokens = readFiniteNonNegative(record.inputTokens)
+  const outputTokens = readFiniteNonNegative(record.outputTokens)
+  const reportedCost = typeof record.providerReportedCost === 'number' && Number.isFinite(record.providerReportedCost)
+    ? record.providerReportedCost
+    : null
+  const currency = typeof record.currency === 'string' ? record.currency.toUpperCase() : null
+  const hasReportedUsdCost = reportedCost !== null && (currency === null || currency === 'USD')
+  const costUsdCents = hasReportedUsdCost ? Math.max(0, Math.round(reportedCost * 100)) : null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  await prisma.usageMeter.upsert({
+    where: { usage_meter_unique: { appSlug: payload.appSlug, date: today, capability: payload.capability, provider: route.provider, model: route.model } },
+    update: {
+      requestCount: { increment: 1 },
+      ...(result.success ? { successCount: { increment: 1 } } : { errorCount: { increment: 1 } }),
+      inputTokens: { increment: inputTokens },
+      outputTokens: { increment: outputTokens },
+      ...(costUsdCents !== null ? { costUsdCents: { increment: costUsdCents } } : {}),
+      ...(result.artifactId ? { artifactCount: { increment: 1 } } : {}),
+    },
+    create: {
+      appSlug: payload.appSlug,
+      date: today,
+      capability: payload.capability,
+      provider: route.provider,
+      model: route.model,
+      requestCount: 1,
+      successCount: result.success ? 1 : 0,
+      errorCount: result.success ? 0 : 1,
+      inputTokens,
+      outputTokens,
+      ...(costUsdCents !== null ? { costUsdCents } : {}),
+      artifactCount: result.artifactId ? 1 : 0,
+    },
+  })
+}
 
+function readFiniteNonNegative(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+type ExecutorHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
+
+export const EXECUTOR_HANDLERS: Partial<Record<ExecutorId, ExecutorHandler>> = {
+  ...DIRECT_EXECUTOR_HANDLERS,
+  'together.image-generation': executeTogetherImage,
+  'together.tts': executeTogetherTts,
+  'together.stt': executeTogetherStt,
+  'genx.video-generation': executeGenxVideo,
+  'genx.image-to-video': executeGenxVideo,
+  'genx.video-to-video': executeGenxVideo,
+  'genx.music-generation': executeGenxMusic,
+  'genx.song-generation': executeGenxMusic,
+  'genx.tts': executeGenxTts,
+  'genx.stt': executeGenxStt,
+}
+
+async function executeTogetherTts(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
   try {
-    if (provider === 'groq' && capability === 'chat') {
-      const result = await executeChatWithFallback(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'AppCapabilityGrant denies TTS artifact write.' }
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'tts')
+    if (existing) return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel, artifactId: existing.id,
+      output: JSON.stringify({ artifactId: existing.id, artifactUrl: existing.storageUrl, mimeType: existing.mimeType, fileSizeBytes: existing.fileSizeBytes, reused: true }),
+      metadata: { artifactId: existing.id, reused: true, outputValidation: { valid: true, contract: 'reused_tts_artifact' } },
     }
-
-    if (provider === 'groq' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      const result = await executeTextCapabilityWithFallback(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: claim.error || 'Execution already claimed' }
+    const credential = await resolveProviderApiKey('together')
+    const status = await getProviderCredentialStatus('together')
+    const { togetherTextToSpeech } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+    const result = await togetherTextToSpeech({
+      apiKey: credential.apiKey, baseUrl: status.baseUrl || undefined, model: selectedModel,
+      text: String(payload.input?.text ?? payload.prompt),
+      voice: readString(payload.input, 'voice'), responseFormat: readString(payload.input, 'outputFormat'),
+    })
+    assertMediaSignature(result.audioBuffer, result.mimeType)
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'audio', subType: 'tts', title: `TTS audio for ${payload.appSlug}`,
+        description: 'Together speech synthesis output', provider: 'together', model: selectedModel,
+        traceId: payload.traceId, mimeType: result.mimeType,
+        metadata: { capability: 'tts', provider: 'together', model: selectedModel, duration: result.duration, voice: result.voice, evidenceSource: 'live_provider', liveProviderProof: true },
+      }, data: result.audioBuffer, explicitMimeType: result.mimeType,
+    })
+    return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel, artifactId: artifact.id,
+      output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration: result.duration }),
+      metadata: { artifactId: artifact.id, duration: result.duration, usage: createCanonicalProviderUsage({ provider: 'together', model: selectedModel, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'validated_audio_artifact_signature' } },
     }
+  } catch (error) {
+    const canonical = (await import('@amarktai/providers')).normalizeProviderError('together', error)
+    return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: canonical.message, metadata: { errorClassification: canonical.code, retryable: canonical.retryable, httpStatus: canonical.status } }
+  }
+}
 
-    if (provider === 'deepinfra' && TEXT_CAPABILITY_SYSTEM_PROMPTS[capability]) {
-      if (await isProviderDisabledInDb('deepinfra')) {
+async function executeTogetherStt(payload: WorkerJobData, selectedModel: string): Promise<ProcessorResult> {
+  try {
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactRead) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'AppCapabilityGrant denies STT artifact read.' }
+    const sourceId = readString(payload.input, 'artifactId') ?? readString(payload.input, 'audioArtifactId')
+    if (!sourceId) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'STT requires an authorised audio source artifact' }
+    const source = await getArtifactRecord(sourceId)
+    if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'Authorised source artifact was not found' }
+    if (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/')) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'STT source must be audio or video' }
+    const file = await getArtifactFile(sourceId)
+    if (!file?.buffer.length) return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: 'Source artifact bytes are missing' }
+    assertMediaSignature(file.buffer, file.mimeType)
+    const credential = await resolveProviderApiKey('together')
+    const status = await getProviderCredentialStatus('together')
+    const { togetherSpeechToText } = await import('@amarktai/providers')
+    const result = await togetherSpeechToText({
+      apiKey: credential.apiKey, baseUrl: status.baseUrl || undefined, model: selectedModel,
+      audioBuffer: file.buffer, filename: file.filename, mimeType: file.mimeType, language: readString(payload.input, 'language'),
+    })
+    return {
+      success: true, status: 'completed', provider: 'together', model: selectedModel,
+      output: JSON.stringify({ transcript: result.text, language: result.language, duration: result.duration, sourceArtifactId: sourceId }),
+      metadata: { sourceArtifactId: sourceId, usage: createCanonicalProviderUsage({ provider: 'together', model: selectedModel, audioSeconds: result.duration ?? 0 }), outputValidation: { valid: true, contract: 'nonempty_authorised_transcript' } },
+    }
+  } catch (error) {
+    const canonical = (await import('@amarktai/providers')).normalizeProviderError('together', error)
+    return { success: false, status: 'failed', provider: 'together', model: selectedModel, error: canonical.message, metadata: { errorClassification: canonical.code, retryable: canonical.retryable, httpStatus: canonical.status } }
+  }
+}
+
+async function executeGenxTts(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  let apiKey = ''
+  let model = selectedModel?.trim() ?? ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX TTS model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactWrite) return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies TTS artifact write.' }
+
+    const existing = await findCompletedArtifactByTraceId(payload.traceId, 'tts')
+    if (existing) {
+      const meta = safeParseJsonObject(existing.metadata)
+      const duration = readPositiveNumber(meta.duration)
+      if (duration) {
         return {
-          success: false,
-          status: 'failed',
-          error: `DeepInfra is disabled. Cannot use as fallback for '${capability}'. Truth: ${decision.truth}`,
-          metadata: { brainRouter: { routingMode, selectedProvider: 'deepinfra', executionAllowed: false, truth: decision.truth } },
+          success: true, status: 'completed', provider: 'genx', model, artifactId: existing.id,
+          output: JSON.stringify({ artifactId: existing.id, artifactUrl: existing.storageUrl, mimeType: existing.mimeType, fileSizeBytes: existing.fileSizeBytes, duration, reused: true }),
+          metadata: { artifactId: existing.id, duration, reused: true, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: duration }), outputValidation: { valid: true, contract: 'reused_tts_artifact' } },
         }
       }
-      const result = await executeDeepInfraTextCapability(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
     }
 
-    if (provider === 'together' && capability === 'image_generation') {
-      const result = await executeTogetherImage(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
+    const claim = await claimProviderExecution(payload.jobId)
+    if (!claim.claimed) return { success: false, status: 'failed', provider: 'genx', model, error: claim.error || 'Execution already claimed' }
 
-    if (provider === 'genx' && capability === 'video_generation') {
-      const result = await executeGenxVideo(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
-    }
+    const credential = await resolveProviderApiKey('genx')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('genx')
+    const { genxGenerateTts } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+    const selectedVoice = await resolveGenxVoice(model, payload.input)
 
-    if (provider === 'genx' && capability === 'music_generation') {
-      const result = await executeGenxMusic(payload, selectedModel)
-      return attachBrainRouterMetadata(result, decision, routingMode)
+    const result = await genxGenerateTts({
+      text: String(payload.input?.text ?? payload.prompt),
+      model,
+      voice: selectedVoice.voiceId,
+      speed: Number(payload.input?.speed ?? 1),
+      outputFormat: String(payload.input?.outputFormat ?? 'wav'),
+      language: selectedVoice.locale || selectedVoice.language,
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+    })
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug, type: 'audio', subType: 'tts', title: `TTS audio for ${payload.appSlug}`,
+        description: 'GenX speech synthesis output', provider: 'genx', model, traceId: payload.traceId, mimeType: result.mimeType,
+        metadata: { capability: 'tts', provider: 'genx', model, duration: result.duration, voice: selectedVoice.voiceId, voiceProfileId: selectedVoice.id, evidenceSource: 'live_provider', liveProviderProof: true },
+      }, data: result.audioBuffer, explicitMimeType: result.mimeType,
+    })
+
+    return {
+      success: true, status: 'completed', provider: 'genx', model, artifactId: artifact.id,
+      output: JSON.stringify({ artifactId: artifact.id, artifactUrl: artifact.storageUrl, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, duration: result.duration }),
+      metadata: { artifactId: artifact.id, duration: result.duration, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'playable_audio_artifact' } },
     }
   } catch (err) {
-    if (err instanceof ProviderConfigError) {
+    if (err instanceof ProviderConfigError) throw err
+    return { success: false, status: 'failed', provider: 'genx', model, error: `GenX TTS failed: ${redactProviderSecrets(err instanceof Error ? err.message : 'unknown', [apiKey])}` }
+  }
+}
+
+async function executeGenxStt(payload: WorkerJobData, selectedModel?: string): Promise<ProcessorResult> {
+  let apiKey = ''
+  let model = selectedModel?.trim() ?? ''
+  try {
+    if (!model) throw new Error('Orchestra route did not include an exact GenX STT model')
+    const grant = readAppGrantSnapshot(payload)
+    if (!grant?.artifactRead) return { success: false, status: 'failed', provider: 'genx', model, error: 'AppCapabilityGrant denies STT artifact read.' }
+
+    const sourceId = typeof payload.input?.artifactId === 'string' ? payload.input.artifactId : typeof payload.input?.audioArtifactId === 'string' ? payload.input.audioArtifactId : null
+    if (!sourceId) return { success: false, status: 'failed', provider: 'genx', model, error: 'STT requires an authorised audio source artifact' }
+    const source = await getArtifactRecord(sourceId)
+    if (!source || source.status !== 'completed' || !canReadSourceArtifactForApp(payload.appSlug, source.appSlug)) {
+      return { success: false, status: 'failed', provider: 'genx', model, error: 'Authorised source artifact was not found' }
+    }
+    if (!source.mimeType.startsWith('audio/') && !source.mimeType.startsWith('video/')) {
+      return { success: false, status: 'failed', provider: 'genx', model, error: 'STT source must be audio or video' }
+    }
+    const file = await getArtifactFile(sourceId)
+    if (!file?.buffer.length) return { success: false, status: 'failed', provider: 'genx', model, error: 'Source artifact bytes are missing' }
+
+    const credential = await resolveProviderApiKey('genx')
+    apiKey = credential.apiKey
+    const providerStatus = await getProviderCredentialStatus('genx')
+    const { genxGenerateStt } = await import('@amarktai/providers')
+    const { saveArtifact } = await import('@amarktai/artifacts')
+
+    const result = await genxGenerateStt({
+      audioBuffer: file.buffer,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      model,
+      language: String(payload.input?.language),
+      apiKey,
+      baseUrl: providerStatus.baseUrl || undefined,
+    })
+
+    let artifactId: string | undefined
+    if (payload.input?.persistTranscript !== false) {
+      const artifact = await saveArtifact({
+        input: {
+          appSlug: payload.appSlug, type: 'transcript', subType: 'stt', title: `STT transcript for ${payload.appSlug}`,
+          description: 'GenX speech transcription output', provider: 'genx', model, traceId: payload.traceId, mimeType: 'application/json',
+          metadata: { capability: 'stt', provider: 'genx', model, sourceArtifactId: sourceId, language: result.language, duration: result.duration, evidenceSource: 'live_provider', liveProviderProof: true },
+        }, data: Buffer.from(JSON.stringify({ text: result.text, language: result.language, duration: result.duration, segments: result.segments })), explicitMimeType: 'application/json',
+      })
+      artifactId = artifact.id
+    }
+
+    return {
+      success: true, status: 'completed', provider: 'genx', model, artifactId,
+      output: JSON.stringify({ transcript: result.text, language: result.language, duration: result.duration, segments: result.segments, artifactId: artifactId ?? null }),
+      metadata: { sourceArtifactId: sourceId, artifactId: artifactId ?? null, usage: createCanonicalProviderUsage({ provider: 'genx', model, audioSeconds: result.duration }), outputValidation: { valid: true, contract: 'nonempty_authorised_transcript' } },
+    }
+  } catch (err) {
+    if (err instanceof ProviderConfigError) throw err
+    return { success: false, status: 'failed', provider: 'genx', model, error: `GenX STT failed: ${redactProviderSecrets(err instanceof Error ? err.message : 'unknown', [apiKey])}` }
+  }
+}
+
+async function resolveGenxVoice(model: string, input: Record<string, unknown> | undefined): Promise<{
+  id: string; voiceId: string; language: string; locale: string
+}> {
+  const requested = readString(input, 'voiceProfileId') ?? readString(input, 'voice')
+  const voices = requested
+    ? await prisma.voiceLibrary.findMany({ where: { enabled: true, provider: 'genx', OR: [{ id: requested }, { voiceId: requested }] } })
+    : await prisma.voiceLibrary.findMany({ where: { enabled: true, provider: 'genx' } })
+  const language = readString(input, 'language')
+  const accent = readString(input, 'accent')?.toLowerCase()
+  const style = readString(input, 'tone')?.toLowerCase() ?? readString(input, 'style')?.toLowerCase()
+  const compatible = voices.filter((voice) => {
+    const models = safeJsonArray(voice.compatibleModels)
+    if (models.length > 0 && !models.includes(model)) return false
+    if (language && voice.language !== language && voice.locale !== language) return false
+    if (accent && !voice.accent.toLowerCase().includes(accent)) return false
+    if (style && !voice.style.toLowerCase().includes(style)) return false
+    return true
+  })
+  const voice = compatible[0]
+  if (!voice) throw new Error(requested ? `Selected voice '${requested}' is not available for model '${model}'` : `No verified GenX voice is compatible with model '${model}' and the requested profile`)
+  return { id: voice.id, voiceId: voice.voiceId, language: voice.language, locale: voice.locale }
+}
+
+function safeJsonArray(value: string): string[] {
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [] } catch { return [] }
+}
+
+export async function executeRegisteredRoute(
+  payload: WorkerJobData,
+  route: ProviderExecutionRoute,
+): Promise<ProcessorResult> {
+  const capability = payload.capability as CapabilityKey
+  const registration = getExecutorRegistration(capability, route.provider)
+  if (!registration || registration.id !== route.executorId) {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `No callable executor registration '${route.executorId}' for ${route.provider}/${capability}.`,
+    }
+  }
+
+  if (registration.executionMode === 'stream') {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Streaming executor '${registration.id}' must run through the authenticated SSE route.`,
+    }
+  }
+
+  const findUnique = (prisma.modelRegistryEntry as typeof prisma.modelRegistryEntry & { findUnique?: typeof prisma.modelRegistryEntry.findUnique }).findUnique
+  const modelRecord = typeof findUnique === 'function'
+    ? await findUnique.call(prisma.modelRegistryEntry, { where: { provider_modelId: { provider: route.provider, modelId: route.model } } }).catch(() => null)
+    : (await prisma.modelRegistryEntry.findMany({ where: { provider: route.provider, modelId: route.model }, take: 1 }).catch(() => []))[0] ?? null
+  const compatibility = executorModelMetadataFromDbRecord(modelRecord ?? { provider: route.provider, modelId: route.model })
+  const togetherStatus = route.provider === 'together' ? await getProviderCredentialStatus('together') : null
+  const dedicatedTogetherEndpoint = togetherStatus?.baseUrl
+    ? togetherStatus.baseUrl.replace(/\/$/, '') !== getProviderDefaultBaseUrl('together').replace(/\/$/, '')
+    : false
+  const accountAccess = String(modelRecord?.accountAccess ?? 'unknown').toLowerCase()
+  const modelAccountAccessible = route.provider === 'together'
+    ? modelRecord?.accountAccess === undefined || accountAccess === 'accessible'
+      || (String(modelRecord?.currentAvailability ?? '').toLowerCase() === 'dedicated_endpoint_required' && dedicatedTogetherEndpoint)
+    : accountAccess !== 'inaccessible'
+  const modelCompatible = modelRecord !== null
+    && modelRecord.enabled !== false
+    && !['blocked', 'retired', 'deprecated', 'account_inaccessible'].includes(String(modelRecord.currentAvailability ?? '').toLowerCase())
+    && modelAccountAccessible
+    && modelRecord.deprecated !== true
+    && isExecutorModelCompatible(registration, route.model, compatibility)
+  if (!modelCompatible) {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor '${registration.id}' is not compatible with model '${route.model}'.`,
+    }
+  }
+
+  const grant = readAppGrantSnapshot(payload)
+  if (registration.sourceArtifactRequired && !grant?.artifactRead) {
+    return { success: false, status: 'failed', provider: route.provider, model: route.model, error: `AppCapabilityGrant denies source-artifact read for '${payload.capability}'.` }
+  }
+  if (registration.artifactOutput && !grant?.artifactWrite) {
+    return { success: false, status: 'failed', provider: route.provider, model: route.model, error: `AppCapabilityGrant denies artifact write for '${payload.capability}'.` }
+  }
+
+  const handler = EXECUTOR_HANDLERS[registration.id]
+  if (typeof handler !== 'function') {
+    return {
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor registration '${registration.id}' has no callable worker handler.`,
+    }
+  }
+
+  try {
+    const result = await handler({
+      ...payload,
+      metadata: { ...payload.metadata, routeModelCompatibility: compatibility },
+    }, route.model)
+    if (result.provider && result.provider !== route.provider) {
       return {
         success: false,
         status: 'failed',
-        error: `Provider execution blocked for '${capability}'. ${err.message}. Truth: ${decision.truth}`,
-        metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
+        provider: route.provider,
+        model: route.model,
+        error: `Executor '${registration.id}' attempted to change provider from '${route.provider}' to '${result.provider}'.`,
       }
     }
-    throw err
-  }
-
-  return {
-    success: false,
-    status: 'failed',
-    error: `Provider execution not implemented for '${capability}' with provider '${provider}'. Truth: ${decision.truth}`,
-    metadata: { brainRouter: { routingMode, selectedProvider: provider, executionAllowed: false, truth: decision.truth } },
+    if (result.model && result.model !== route.model) {
+      return {
+        success: false,
+        status: 'failed',
+        provider: route.provider,
+        model: route.model,
+        error: `Executor '${registration.id}' attempted to change model from '${route.model}' to '${result.model}'.`,
+      }
+    }
+    return attachOrchestraRouteMetadata({ ...result, provider: route.provider, model: route.model }, route)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown provider execution error'
+    return attachOrchestraRouteMetadata({
+      success: false,
+      status: 'failed',
+      provider: route.provider,
+      model: route.model,
+      error: `Executor '${registration.id}' failed: ${redactProviderSecrets(message)}.`,
+    }, route)
   }
 }
 
 export async function executeWithProvider(payload: WorkerJobData): Promise<ProcessorResult> {
   const capability = payload.capability as CapabilityKey
-
-  const { decision, routingMode } = await resolveBrainRouterDecision(payload)
-
-  if (!decision.executionAllowed) {
+  const appGrant = readAppGrantSnapshot(payload)
+  if (!appGrant) {
     return {
       success: false,
       status: 'failed',
-      error: `Brain Router blocked execution for '${capability}' in '${routingMode}' mode. ${decision.blockReason ?? ''}. Truth: ${decision.truth}`,
-      metadata: {
-        brainRouter: {
-          routingMode,
-          executionAllowed: false,
-          blockReason: decision.blockReason,
-          truth: decision.truth,
-        },
-      },
+      error: `Execution denied for '${capability}': immutable AppCapabilityGrant snapshot is missing or invalid.`,
     }
   }
 
-  const selectedProvider = decision.selectedProvider!
+  if (isReleaseFixtureAdapterEnabled()) {
+    const registration = getExecutorRegistrations(capability)[0]
+    await persistJobMetadata(payload.jobId, {
+      evidenceSource: 'local_fixture',
+      fixtureAdapter: 'release-candidate-v1',
+      liveProviderProof: false,
+      orchestraSelectedProvider: registration?.provider ?? null,
+      orchestraSelectedExecutorId: registration?.id ?? null,
+      orchestraActualProvider: registration?.provider ?? null,
+      orchestraActualExecutorId: registration?.id ?? null,
+      directProviderExecutorId: registration?.id ?? null,
+      directProviderRouteType: 'fixture',
+    }).catch(() => {})
+    const result = await executeReleaseFixture(payload)
+    await persistJobMetadata(payload.jobId, {
+      orchestraActualModel: result.model ?? null,
+      orchestraActualOutcome: result.success ? 'completed' : 'failed',
+      directProviderUsage: result.metadata?.usage ?? null,
+      directProviderOutputValidation: result.metadata?.outputValidation ?? null,
+      fixtureEvidence: {
+        adapter: 'release-candidate-v1',
+        liveProviderProof: false,
+        ffmpegMedia: Boolean(result.artifactId),
+      },
+    }).catch(() => {})
+    return result
+  }
 
-  if (!canExecuteProviderForCapability(capability, selectedProvider)) {
-    const fallback = decision.fallbackChain.find((f) => canExecuteProviderForCapability(capability, f.provider as ProviderKey))
-    if (fallback) {
-      return await executeWithSelectedProvider(payload, capability, fallback.provider as ProviderKey, decision, routingMode)
-    }
+  const { decision: orchestraDecision, reusedPersistedRoute } = await resolveOrchestraDecision(payload, appGrant)
 
+  await persistJobMetadata(payload.jobId, {
+    ...(reusedPersistedRoute ? {} : {
+      orchestraExecutionId: orchestraDecision.executionId,
+      orchestraSelectedProvider: orchestraDecision.selectedProvider,
+      orchestraSelectedModel: orchestraDecision.selectedModel,
+      orchestraSelectedExecutorId: orchestraDecision.selectedExecutorId,
+      orchestraSelectionPersistedAt: new Date().toISOString(),
+    }),
+    orchestraSelectionReused: reusedPersistedRoute,
+    orchestraExecutionProfile: orchestraDecision.executionProfile,
+    orchestraScore: orchestraDecision.score,
+    orchestraRoutingMode: orchestraDecision.routingMode,
+    orchestraSnapshotTimestamp: orchestraDecision.snapshotTimestamp,
+    orchestraFallbackCount: orchestraDecision.fallbackRoutes.length,
+  }).catch(() => {})
+
+  if (!orchestraDecision.executionAllowed
+      || !orchestraDecision.selectedProvider
+      || !orchestraDecision.selectedModel
+      || !orchestraDecision.selectedExecutorId) {
     return {
       success: false,
       status: 'failed',
-      error: `Brain Router selected ${selectedProvider}/${decision.selectedModel} but no executor is implemented for '${capability}'. Truth: ${decision.truth}`,
-      metadata: {
-        brainRouter: {
-          routingMode,
-          selectedProvider,
-          selectedModel: decision.selectedModel,
-          executionAllowed: true,
-          executorImplemented: false,
-          truth: decision.truth,
-        },
-      },
+      error: `Orchestra blocked execution for '${capability}' in '${orchestraDecision.routingMode}' mode. ${orchestraDecision.blockReason ?? ''}.`,
+      metadata: { orchestra: orchestraDecision },
     }
   }
 
-  return await executeWithSelectedProvider(payload, capability, selectedProvider, decision, routingMode)
+  const routes: ProviderExecutionRoute[] = [
+    {
+      provider: orchestraDecision.selectedProvider,
+      model: orchestraDecision.selectedModel,
+      executorId: orchestraDecision.selectedExecutorId,
+      routeKind: 'primary' as const,
+    },
+    ...orchestraDecision.fallbackRoutes.map((fallback) => ({
+      provider: fallback.provider,
+      model: fallback.model,
+      executorId: fallback.executorId,
+      routeKind: 'fallback' as const,
+    })),
+  ].filter((route, index, all) => all.findIndex((candidate) => candidate.provider === route.provider && candidate.model === route.model && candidate.executorId === route.executorId) === index)
+  const attempts: Array<{ provider: ProviderKey; model: string; executorId: ExecutorId; success: boolean; error?: string }> = []
+  let lastResult: ProcessorResult | null = null
+
+  for (const route of routes) {
+    const result = await executeRegisteredRoute(payload, route)
+    attempts.push({ provider: route.provider, model: route.model, executorId: route.executorId, success: result.success, error: result.error })
+    lastResult = result
+
+    if (result.metadata?.errorClassification === 'model_not_available') {
+      await recordModelAccessibilityFailure({
+        provider: route.provider,
+        modelId: route.model,
+        blocker: /dedicated|non-serverless|non serverless/i.test(result.error ?? '')
+          ? 'dedicated_endpoint_required'
+          : 'model_not_available',
+      }).catch(() => false)
+    }
+
+    await persistJobMetadata(payload.jobId, {
+      orchestraActualProvider: route.provider,
+      orchestraActualModel: route.model,
+      orchestraActualExecutorId: route.executorId,
+      orchestraActualOutcome: result.success ? 'completed' : 'failed',
+      orchestraRouteAttempts: attempts,
+      directProviderExecutorId: route.executorId,
+      directProviderRouteType: route.routeKind,
+      directProviderUsage: result.metadata?.usage ?? null,
+      directProviderCostEvidence: result.metadata?.usage && typeof result.metadata.usage === 'object'
+        ? {
+          providerReportedCost: (result.metadata.usage as Record<string, unknown>).providerReportedCost ?? null,
+          estimatedCost: (result.metadata.usage as Record<string, unknown>).estimatedCost ?? null,
+          estimated: (result.metadata.usage as Record<string, unknown>).estimated ?? false,
+          currency: (result.metadata.usage as Record<string, unknown>).currency ?? null,
+        }
+        : null,
+      directProviderOutputValidation: result.metadata?.outputValidation ?? null,
+      directProviderErrorClassification: result.metadata?.errorClassification ?? null,
+      directProviderSourceArtifactId: result.metadata?.sourceArtifactId ?? null,
+    }).catch(() => {})
+    await recordCanonicalUsage(payload, route, result).catch(() => {})
+
+    if (result.success) {
+      if (typeof recordModelAccessibilitySuccess === 'function') {
+        await recordModelAccessibilitySuccess({ provider: route.provider, modelId: route.model }).catch(() => false)
+      }
+      await persistJobMetadata(payload.jobId, {
+        orchestraInitialSelectedProvider: orchestraDecision.selectedProvider,
+        orchestraInitialSelectedModel: orchestraDecision.selectedModel,
+        orchestraInitialSelectedExecutorId: orchestraDecision.selectedExecutorId,
+        orchestraSelectedProvider: route.provider,
+        orchestraSelectedModel: route.model,
+        orchestraSelectedExecutorId: route.executorId,
+      }).catch(() => {})
+      return {
+        ...result,
+        metadata: { ...result.metadata, orchestra: orchestraDecision, routeAttempts: attempts },
+      }
+    }
+  }
+
+  return {
+    ...(lastResult ?? { success: false, status: 'failed' as const }),
+    success: false,
+    status: 'failed',
+    error: lastResult?.error ?? `No registered executor route was available for '${capability}'.`,
+    metadata: { ...lastResult?.metadata, orchestra: orchestraDecision, routeAttempts: attempts },
+  }
 }

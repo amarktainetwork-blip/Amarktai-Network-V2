@@ -1,27 +1,26 @@
 'use client'
 import { PageTransition, PageHeader } from '@/components/amarkt/kit'
-import { EmptyState } from '@/components/amarkt/EmptyState'
-import { Button } from '@/components/ui/button'
-import { Boxes, Lock } from 'lucide-react'
-import Link from 'next/link'
+import { RuntimeProofSummary } from '@/components/dashboard/runtime-proof-summary'
+import { Card } from '@/components/ui/card'
+import { ShieldCheck, Terminal } from 'lucide-react'
 
 export default function ProofRunnerPage() {
   return (
-    <PageTransition className="space-y-8">
-      <PageHeader title="Proof Runner" subtitle="Artifact proof will appear after the Fastify backend exposes real job and artifact data." />
-
-      <EmptyState
-        icon={Boxes}
-        title="Backend Integration Pending"
-        description="This page should connect to real /api/v1 job and artifact endpoints before showing proof."
-        action={
-          <Link href="/dashboard/studio">
-            <Button variant="outline" disabled className="border-white/10">
-              <Lock className="mr-1.5 h-4 w-4" /> Real artifact backend pending
-            </Button>
-          </Link>
-        }
-      />
+    <PageTransition className="space-y-6">
+      <PageHeader title="Proof Runner" subtitle="Canonical proof status and the operator commands that produce fixture or deployed evidence." />
+      <RuntimeProofSummary />
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><Terminal className="h-4 w-4 text-cyan-300" />Local release fixture</h3>
+          <code className="mt-3 block rounded bg-black/30 p-3 text-xs">npm run proof:release-candidate</code>
+          <p className="mt-3 text-xs text-muted-foreground">Starts disposable services, uses test-only provider adapters, exercises FFmpeg and artifacts, runs browser E2E, and never records live provider proof.</p>
+        </Card>
+        <Card className="border-white/[0.07] bg-white/[0.02] p-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-emerald-300" />Deployed live proof</h3>
+          <code className="mt-3 block overflow-x-auto rounded bg-black/30 p-3 text-xs">npm run proof:production-release-candidate -- --base-url https://&lt;host&gt; --strict</code>
+          <p className="mt-3 text-xs text-muted-foreground">Runs only after separately authorised deployment with real credentials. Fixture results and static checks do not satisfy this boundary.</p>
+        </Card>
+      </div>
     </PageTransition>
   )
 }

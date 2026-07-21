@@ -10,6 +10,7 @@ import {
   EMPTY_RUNTIME_PROOF_STATUS,
   RUNTIME_PROOF_SOURCE,
   normalizeRuntimeProofStatus,
+  projectRuntimeProofStatusFromTruth,
 } from '@/lib/runtime-proof-status'
 
 export function getAdminToken() {
@@ -43,7 +44,7 @@ export function useRuntimeProofStatus() {
     }
 
     try {
-      const response = await fetch('/api/admin/runtime-proofs', {
+      const response = await fetch('/api/admin/truth', {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await readSafeJson(response)
@@ -54,7 +55,7 @@ export function useRuntimeProofStatus() {
         return
       }
 
-      setStatus(normalizeRuntimeProofStatus(data))
+      setStatus(projectRuntimeProofStatusFromTruth(data))
     } catch {
       setStatus(EMPTY_RUNTIME_PROOF_STATUS)
       setError('Backend unavailable. Runtime proof status was not loaded.')

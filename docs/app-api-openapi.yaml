@@ -1,0 +1,19 @@
+openapi: 3.1.0
+info: { title: AmarktAI Thin-App API, version: 1.0.0 }
+servers: [{ url: https://network.amarktai.com }]
+security: [{ bearerAuth: [] }]
+components:
+  securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
+  schemas:
+    Route: { type: object, required: [provider, model], properties: { provider: { enum: [genx, together, deepinfra] }, model: { type: string } } }
+    Execute: { type: object, required: [capability, prompt], properties: { capability: { type: string }, prompt: { type: string }, input: { type: object }, metadata: { type: object }, route: { $ref: '#/components/schemas/Route' }, callbackUrl: { type: string, format: uri, description: Must exactly match the administrator-configured HTTPS webhook URL. } } }
+paths:
+  /api/v1/capabilities: { get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } } }
+  /api/v1/policy: { get: { summary: Read effective app policy, responses: { '200': { description: Policy } } } }
+  /api/v1/jobs: { post: { summary: Submit a durable capability job, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Execute' } } } }, responses: { '201': { description: Queued }, '403': { description: Route or capability not approved } } } }
+  /api/v1/jobs/{id}: { get: { summary: Read job status and route evidence, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Job } } } }
+  /api/v1/jobs/{id}/cancel: { post: { summary: Cancel a cancellable job, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } } }
+  /api/v1/streaming-chat: { post: { summary: Authenticated SSE chat, responses: { '200': { description: SSE stream } } } }
+  /api/v1/usage: { get: { summary: Read usage and budget state, responses: { '200': { description: Usage } } } }
+  /api/v1/artifacts/{id}: { get: { summary: Read authorised artifact metadata, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Artifact metadata }, '404': { description: Not found or not owned by app } } } }
+  /api/v1/artifacts/{id}/file: { get: { summary: Preview or download authorised artifact bytes with Range support, parameters: [{ in: path, name: id, required: true, schema: { type: string } }, { in: query, name: download, schema: { type: string, enum: ['1'] } }, { in: header, name: Range, schema: { type: string } }], responses: { '200': { description: Artifact bytes }, '206': { description: Partial artifact bytes } } } }

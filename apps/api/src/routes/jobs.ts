@@ -23,11 +23,13 @@ import {
   type JobPayload,
   type CreateJobResponse,
   type JobStatusResponse,
+  validateDirectProviderRequest,
 } from '@amarktai/core'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 // ── Auth Helper ───────────────────────────────────────────────────────────────
 
-async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
+export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   ok: boolean
   statusCode: number
   error?: string
@@ -36,6 +38,7 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   dailyBudgetCents?: number
   tokenBalance?: number
   connectionId?: string
+  webhookUrl?: string
 }> {
   if (!bearerHeader) {
     return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
@@ -59,6 +62,7 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
           status: true,
           allowedCapabilities: true,
           tokenBalance: true,
+          webhookUrl: true,
         },
       },
     },
@@ -98,6 +102,7 @@ async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
     dailyBudgetCents: budget?.dailyBudgetCents ?? 0,
     tokenBalance: conn.tokenBalance,
     connectionId: conn.id,
+    webhookUrl: conn.webhookUrl,
   }
 }
 
@@ -127,6 +132,8 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     // 2. COMPLIANCE GATE: Block provider/model overrides
     const blockedField = hasBlockedOverrides(body)
+      || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
+      || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
     if (blockedField) {
       return reply.status(400).send({
         error: true,
@@ -144,15 +151,59 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const { capability, prompt, input, metadata, callbackUrl } = parsed.data
+    const { capability, prompt, input, metadata, callbackUrl, route } = parsed.data
 
-    // 4. Check capability allowlist
+    const configuredWebhookUrl = auth.webhookUrl || undefined
+    if (callbackUrl && callbackUrl !== configuredWebhookUrl) {
+      return reply.status(400).send({
+        error: true,
+        message: 'callbackUrl must exactly match the app webhook configured by an administrator.',
+      })
+    }
+    const effectiveCallbackUrl = configuredWebhookUrl
+
+    const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
+    if (!capabilityRequest.success) {
+      return reply.status(400).send({
+        error: true,
+        message: capabilityRequest.error,
+        details: capabilityRequest.issues,
+      })
+    }
+    const validatedInput = capabilityRequest.data ?? input
+
+    // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
+    // allowlist is migration input only and is never consulted by the worker.
     const allowedCaps = auth.allowedCapabilities ?? []
-    if (allowedCaps.length > 0 && !allowedCaps.includes(capability)) {
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, allowedCaps)
+    if (!grantResolution || !grantResolution.grant.enabled) {
       return reply.status(403).send({
         error: true,
-        message: `Capability '${capability}' is not allowed for this app. Allowed: ${allowedCaps.join(', ')}`,
+        message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.`,
       })
+    }
+    if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
+      return reply.status(403).send({
+        error: true,
+        message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
+      })
+    }
+    if (route) {
+      const routeKey = `${route.provider}/${route.model}`
+      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist'
+          || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
+        return reply.status(403).send({ error: true, message: `Route '${routeKey}' is not approved for this app and capability.` })
+      }
+    }
+
+    const grantSnapshotAt = new Date().toISOString()
+    const immutableMetadata = {
+      ...metadata,
+      executionProfile: 'external_app',
+      appGrantSnapshot: grantResolution.grant,
+      appGrantSnapshotSource: grantResolution.source,
+      appGrantSnapshotAt: grantSnapshotAt,
+      requestedRoute: route ?? null,
     }
 
     // 5. Check daily budget
@@ -193,11 +244,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         appSlug: auth.app!.slug,
         capability,
         prompt,
-        inputJson: JSON.stringify(input),
-        metadataJson: JSON.stringify(metadata),
+        inputJson: JSON.stringify(validatedInput),
+        metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
-        callbackUrl: callbackUrl ?? null,
+        callbackUrl: effectiveCallbackUrl ?? null,
       },
     })
 
@@ -215,12 +266,14 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       jobId: job.id,
       appSlug: auth.app!.slug,
       capability,
+      executionProfile: 'external_app',
       prompt,
-      input,
-      metadata,
+      input: validatedInput,
+      metadata: immutableMetadata,
       traceId,
-      callbackUrl,
+      callbackUrl: effectiveCallbackUrl,
       routingMode,
+      appGrantSnapshot: grantResolution.grant,
     }
 
     try {
@@ -272,8 +325,13 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(404).send({ error: true, message: 'Job not found' })
     }
 
+    const jobMetadata = parseJobMetadata(job.metadataJson)
+    const routeAttempts = Array.isArray(jobMetadata.orchestraRouteAttempts) ? jobMetadata.orchestraRouteAttempts : []
+
     const response: JobStatusResponse = {
       jobId: job.id,
+      executionId: job.executionId || stringMetadata(jobMetadata.orchestraExecutionId),
+      appSlug: job.appSlug,
       status: job.status as JobStatusResponse['status'],
       capability: job.capability,
       provider: job.provider,
@@ -281,6 +339,18 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       artifactId: job.artifactId,
       progress: job.progress,
       error: job.error,
+      output: job.output,
+      executionEvidence: {
+        grantSnapshotSource: stringMetadata(jobMetadata.appGrantSnapshotSource),
+        executorId: stringMetadata(jobMetadata.directProviderExecutorId) || stringMetadata(jobMetadata.orchestraActualExecutorId) || stringMetadata(jobMetadata.orchestraSelectedExecutorId),
+        routeType: stringMetadata(jobMetadata.directProviderRouteType),
+        fallbackAttempts: routeAttempts,
+        usage: jobMetadata.directProviderUsage ?? null,
+        cost: jobMetadata.directProviderCostEvidence ?? null,
+        outputValidation: jobMetadata.directProviderOutputValidation ?? null,
+        errorClassification: jobMetadata.directProviderErrorClassification ?? null,
+        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId),
+      },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       completedAt: job.completedAt?.toISOString() ?? null,
@@ -288,4 +358,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.send(response)
   })
+}
+
+function parseJobMetadata(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function stringMetadata(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
 }

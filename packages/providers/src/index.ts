@@ -6,17 +6,6 @@
  * No provider-specific routing logic lives here — that belongs in the worker adapters.
  */
 
-// Groq — text chat, speech-to-text, text-to-speech
-export {
-  groqChat,
-  groqStt,
-  groqTts,
-  type GroqChatRequest,
-  type GroqChatResponse,
-  type GroqSttResponse,
-  type GroqTtsResponse,
-} from './groq-client.js'
-
 // DeepInfra — OpenAI-compatible text fallback/runtime diagnostics
 export {
   deepinfraChat,
@@ -35,11 +24,16 @@ export {
   type TogetherImageRequest,
   type TogetherImageResponse,
 } from './together-client.js'
+export {
+  resolveTogetherVoice,
+  togetherTextToSpeech,
+  togetherSpeechToText,
+  type TogetherSpeechRequest,
+  type TogetherTranscriptionRequest,
+} from './together-audio-client.js'
 
 // GenX — video generation with long-polling
 export {
-  DEFAULT_GENX_VIDEO_MODEL,
-  GENX_ROUTER_VIDEO_MODEL_PREFERENCE,
   genxSubmitVideo,
   genxPollVideo,
   genxDownloadVideo,
@@ -56,10 +50,8 @@ export {
   type GenxLongPollCallbacks,
 } from './genx-client.js'
 
-// GenX — music generation with submit/poll/download
+// GenX — enhanced music and full-song generation with submit/poll/download
 export {
-  DEFAULT_GENX_MUSIC_MODEL,
-  GENX_ROUTER_MUSIC_MODEL_PREFERENCE,
   genxSubmitMusic,
   genxPollMusic,
   genxDownloadMusic,
@@ -74,7 +66,30 @@ export {
   type GenxMusicPollResponse,
   type GenxMusicResult,
   type GenxMusicLongPollCallbacks,
-} from './genx-music-client.js'
+} from './genx-song-client.js'
+
+// GenX — voice (TTS and STT) with submit/poll/download
+export {
+  genxSubmitTts,
+  genxPollTts,
+  genxDownloadTts,
+  genxGenerateTts,
+  genxSubmitStt,
+  genxPollStt,
+  genxGenerateStt,
+  GENX_TTS_POLL_INTERVAL_MS,
+  GENX_TTS_POLL_MAX_ATTEMPTS,
+  GENX_STT_POLL_INTERVAL_MS,
+  GENX_STT_POLL_MAX_ATTEMPTS,
+  type GenxTtsRequest,
+  type GenxTtsSubmitResponse,
+  type GenxTtsPollResponse,
+  type GenxTtsResult,
+  type GenxSttRequest,
+  type GenxSttSubmitResponse,
+  type GenxSttPollResponse,
+  type GenxSttResult,
+} from './genx-voice-client.js'
 
 // Qdrant — vector database for RAG
 export {
@@ -94,12 +109,66 @@ export {
   type EmbeddingResponse,
 } from './embeddings-client.js'
 
+// Shared direct-provider transports and canonical failures
+export {
+  CanonicalProviderError,
+  providerHttpError,
+  normalizeProviderError,
+  redactProviderErrorMessage,
+  type ProviderErrorCode,
+} from './provider-errors.js'
+export {
+  openAiChatCompletion,
+  openAiStreamingChat,
+  type OpenAiTransportMessage,
+  type OpenAiToolDefinition,
+  type OpenAiToolCall,
+  type OpenAiChatTransportRequest,
+  type OpenAiChatTransportResponse,
+  type OpenAiStreamChunk,
+} from './openai-transport.js'
+export {
+  deepinfraTaskInference,
+  type DeepInfraTaskRequest,
+} from './deepinfra-task-client.js'
+export {
+  providerEmbeddings,
+  providerRerank,
+  type ProviderEmbeddingRequest,
+  type ProviderEmbeddingResponse,
+  type ProviderRerankDocument,
+  type ProviderRerankRequest,
+  type ProviderRerankResponse,
+} from './retrieval-client.js'
+export {
+  inspectImageBuffer,
+  inspectAudioBuffer,
+  inspectVideoBuffer,
+  type InspectedImage,
+  type InspectedTimedMedia,
+} from './media-inspection.js'
+export {
+  togetherSubmitVideo,
+  togetherPollVideo,
+  togetherDownloadVideo,
+  togetherGenerateVideo,
+  TOGETHER_VIDEO_POLL_INTERVAL_MS,
+  TOGETHER_VIDEO_POLL_MAX_ATTEMPTS,
+  type TogetherVideoRequest,
+  type TogetherVideoJob,
+  type TogetherVideoResult,
+} from './together-video-client.js'
+export {
+  deepinfraGenerateVideo,
+  type DeepInfraVideoRequest,
+  type DeepInfraVideoResult,
+} from './deepinfra-video-client.js'
+
 // Provider model discovery — model-list/catalogue only, no generation calls.
 export {
   runProviderModelDiscovery,
   discoverDeepInfraProviderModels,
   discoverGenXProviderModels,
-  discoverGroqProviderModels,
   discoverMimoProviderModels,
   discoverTogetherProviderModels,
   type ProviderModelDiscoveryRunOptions,

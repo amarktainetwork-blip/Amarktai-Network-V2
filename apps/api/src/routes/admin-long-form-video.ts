@@ -1,27 +1,28 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
-import { prisma, refreshLongFormParentState } from '@amarktai/db'
+import { advanceLongFormWorkflow, prisma, refreshLongFormParentState, type LongFormComponentState } from '@amarktai/db'
+import { saveArtifact } from '@amarktai/artifacts'
 import {
   BLOCKED_OVERRIDE_FIELDS,
   DEFAULT_JOB_OPTIONS,
   QUEUE_NAMES,
   createLongFormVideoPlan,
   createSceneExecutionPayloads,
+  generateSubtitles,
+  getSubtitleMimeType,
   isValidRoutingMode,
+  normalizeRoutingMode,
   validateLongFormVideoRequest,
+  validatePlanCompleteness,
   type JobPayload,
+  type AppCapabilityGrantContext,
   type LongFormVideoPlan,
   type LongFormVideoRequest,
 } from '@amarktai/core'
-import {
-  assembleLongFormVideo,
-  checkFfmpegAvailable,
-  createAssemblyPlan,
-  resolveSceneArtifacts,
-  validateSceneArtifactsForAssembly,
-} from '../lib/long-form-assembly.js'
+import { checkFfmpegAvailable, resolveSceneArtifacts, validateSceneArtifactsForAssembly } from '../lib/long-form-assembly.js'
 import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+import { resolveInternalDashboardCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 const APP_SLUG = 'dashboard-long-form'
 const MAX_SCENE_RETRIES = 3
@@ -92,55 +93,6 @@ function parentMetadata(request: LongFormVideoRequest, plan: LongFormVideoPlan, 
       index: 1,
       batchReady: true,
     },
-    assemblyHandoff: buildAssemblyHandoff({
-      parentJobId: '',
-      executionId,
-      request,
-      plan,
-      sceneJobs: [],
-    }),
-  }
-}
-
-function buildAssemblyHandoff({
-  parentJobId,
-  executionId,
-  request,
-  plan,
-  sceneJobs,
-}: {
-  parentJobId: string
-  executionId: string
-  request: LongFormVideoRequest
-  plan: LongFormVideoPlan
-  sceneJobs: DbJob[]
-}) {
-  const orderedCompleted = sceneJobs
-    .filter((job) => job.status === 'completed' && job.artifactId)
-    .sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
-  const orderedSceneArtifactIds = orderedCompleted.map((job) => job.artifactId as string)
-  const expectedSceneCount = plan.storyboard.scenes.length
-  const missingDependencies = [
-    ...(orderedSceneArtifactIds.length === expectedSceneCount ? [] : ['scene_artifacts_pending']),
-    ...(request.voiceoverEnabled ? ['voiceover_not_implemented'] : []),
-    ...(request.subtitlesEnabled ? ['subtitles_not_implemented'] : []),
-    ...(request.musicBedEnabled ? ['music_bed_not_implemented'] : []),
-    'full_multimedia_assembly_pending',
-  ]
-
-  return {
-    parentJobId,
-    executionId,
-    orderedSceneArtifactIds,
-    expectedSceneCount,
-    expectedDurationSeconds: request.targetDurationSeconds,
-    aspectRatio: request.aspectRatio,
-    outputTitle: `Long-form video ${executionId}`,
-    requestedVoiceover: request.voiceoverEnabled,
-    requestedSubtitles: request.subtitlesEnabled,
-    requestedMusic: request.musicBedEnabled,
-    assemblyStatus: orderedSceneArtifactIds.length === expectedSceneCount ? 'ready_for_video_only' : 'waiting_for_scenes',
-    missingDependencies,
   }
 }
 
@@ -153,30 +105,46 @@ function parseParent(job: DbJob): { request: LongFormVideoRequest; plan: LongFor
   }
 }
 
-function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
+function numericCostEvidence(job: DbJob): number | null {
+  const output = safeJson(job.output)
+  const metadata = safeJson(job.metadataJson)
+  const candidates = [
+    output.costUsdCents,
+    (output.usage as Record<string, unknown> | undefined)?.costUsdCents,
+    (output.executionEvidence as Record<string, unknown> | undefined)?.costUsdCents,
+    metadata.costUsdCents,
+    (metadata.executionEvidence as Record<string, unknown> | undefined)?.costUsdCents,
+  ]
+  const value = candidates.find((candidate) => typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0)
+  return typeof value === 'number' ? value : null
+}
+
+function deriveStatus(parent: DbJob, sceneJobs: DbJob[], componentJobs: DbJob[] = sceneJobs) {
   const { request, plan, metadata } = parseParent(parent)
-  const totalScenes = sceneJobs.length || plan.storyboard.scenes.length
-  const queuedScenes = sceneJobs.filter((job) => job.status === 'queued').length
-  const processingScenes = sceneJobs.filter((job) => job.status === 'processing').length
-  const completedScenes = sceneJobs.filter((job) => job.status === 'completed').length
-  const failedScenes = sceneJobs.filter((job) => job.status === 'failed').length
-  const cancelledScenes = sceneJobs.filter((job) => job.status === 'cancelled').length
-  const retryableFailures = sceneJobs
-    .filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES)
-    .map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber, retryCount: job.retryCount, error: job.error }))
-  const progress = totalScenes > 0 ? Math.round((completedScenes / totalScenes) * 100) : 0
+  const state = metadata.componentState as LongFormComponentState
+  const scenes = state?.scenes
+  const totalScenes = scenes?.requestedCount ?? sceneJobs.length ?? plan.storyboard.scenes.length
+  const queuedScenes = scenes?.queuedCount ?? sceneJobs.filter((job) => job.status === 'queued').length
+  const processingScenes = scenes?.processingCount ?? sceneJobs.filter((job) => job.status === 'processing').length
+  const completedScenes = scenes?.completedCount ?? sceneJobs.filter((job) => job.status === 'completed').length
+  const failedScenes = scenes?.failedCount ?? sceneJobs.filter((job) => job.status === 'failed').length
+  const cancelledScenes = scenes?.cancelledCount ?? sceneJobs.filter((job) => job.status === 'cancelled').length
+  const retryableFailures = scenes?.retryableFailures ?? sceneJobs.filter((job) => job.status === 'failed' && job.retryCount < MAX_SCENE_RETRIES).map((job) => ({ jobId: job.id, sceneNumber: job.sceneNumber, retryCount: job.retryCount, error: job.error }))
+  const progress = state ? parent.progress : totalScenes > 0 ? Math.round(completedScenes / totalScenes * 100) : 0
   const parentIsCancelled = parent.status === 'cancelled'
   const parentIsCancelling = parent.status === 'cancelling'
   const parentIsTerminal = parentIsCancelled || parent.status === 'completed' || parent.status === 'failed'
-  const finalAssemblyReadiness = !parentIsCancelled && !parentIsCancelling && completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0 && cancelledScenes === 0
+  const finalAssemblyReadiness = state
+    ? state.readyToQueueAssembly === true || state.assembly.assemblyQueued === true || state.assembly.assemblyProcessing === true
+    : completedScenes === totalScenes && totalScenes > 0 && failedScenes === 0 && cancelledScenes === 0
   const partialFailure = failedScenes > 0 && completedScenes < totalScenes
   const phase = parent.workflowPhase || (finalAssemblyReadiness ? 'assembly_handoff_ready' : partialFailure ? 'partial_failure' : 'scene_execution')
-  const handoff = buildAssemblyHandoff({ parentJobId: parent.id, executionId: parent.executionId, request, plan, sceneJobs })
   const locallyCancelled = parentIsCancelled || parentIsCancelling
   const remoteExecutionMayFinish = locallyCancelled && sceneJobs.some(
     (job) => (job.status === 'cancelled' || job.status === 'cancelling') && (job.providerClaimAt || !!(safeJson(job.metadataJson).genxProviderJobId))
   )
 
+  const componentCosts = componentJobs.map((job) => ({ jobId: job.id, capability: job.capability, costUsdCents: numericCostEvidence(job) }))
   return {
     parent: {
       id: parent.id,
@@ -230,16 +198,28 @@ function deriveStatus(parent: DbJob, sceneJobs: DbJob[]) {
     lateArtifactLinked: false,
     resumable: !locallyCancelled && !parentIsTerminal,
     assemblyAllowed: finalAssemblyReadiness && !locallyCancelled,
-    blockedReasons: [
-      ...(failedScenes > 0 ? ['scene_failure'] : []),
-      ...(cancelledScenes > 0 ? ['scene_cancelled'] : []),
-      ...((metadata.blockedReasons as string[] | undefined) ?? []),
-      'voiceover_not_implemented',
-      'subtitles_not_implemented',
-      'music_bed_not_implemented',
-      'full_multimedia_not_ready',
-    ],
-    assemblyHandoff: locallyCancelled ? { ...handoff, assemblyStatus: 'cancelled' } : handoff,
+    blockedReasons: state?.blockedReasons ?? [],
+    componentState: state,
+    costEvidence: {
+      knownCostUsdCents: componentCosts.reduce((total, item) => total + (item.costUsdCents ?? 0), 0),
+      unknownCostComponentCount: componentCosts.filter((item) => item.costUsdCents === null).length,
+      complete: componentCosts.length > 0 && componentCosts.every((item) => item.costUsdCents !== null),
+      components: componentCosts,
+    },
+    assemblyHandoff: {
+      parentJobId: parent.id,
+      executionId: parent.executionId,
+      orderedSceneArtifactIds: scenes?.artifactIds ?? sceneJobs.filter((job) => job.status === 'completed' && job.artifactId).sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0)).map((job) => job.artifactId),
+      expectedSceneCount: totalScenes,
+      expectedDurationSeconds: request.targetDurationSeconds,
+      aspectRatio: request.aspectRatio,
+      outputTitle: `Long-form video ${parent.executionId}`,
+      requestedVoiceover: request.voiceoverEnabled,
+      requestedSubtitles: request.subtitlesEnabled,
+      requestedMusic: request.musicBedEnabled,
+      assemblyStatus: locallyCancelled ? 'cancelled' : state?.assembly.ready ? 'completed' : finalAssemblyReadiness ? 'ready' : 'waiting',
+      missingDependencies: state?.blockedReasons ?? [],
+    },
   }
 }
 
@@ -248,15 +228,19 @@ async function loadParentAndScenes(id: string, appSlug: string) {
     where: {
       appSlug,
       capability: 'long_form_video',
+      parentJobId: null,
       OR: [{ id }, { executionId: id }],
     },
   })
   if (!parent) return null
-  const sceneJobs = await prisma.job.findMany({
+  const refreshed = await refreshLongFormParentState(parent.id)
+  const refreshedParent = await prisma.job.findUnique({ where: { id: parent.id } }) ?? parent
+  const childJobs = await prisma.job.findMany({
     where: { appSlug, parentJobId: parent.id },
     orderBy: { sceneNumber: 'asc' },
   })
-  return { parent, sceneJobs }
+  const sceneJobs = (refreshed?.sceneJobs ?? childJobs.filter((job) => job.capability === 'video_generation' && safeJson(job.metadataJson).longFormVideo === true)) as DbJob[]
+  return { parent: refreshedParent, sceneJobs, childJobs }
 }
 
 async function removeQueueJob(q: Queue, sceneJob: DbJob): Promise<string[]> {
@@ -291,11 +275,13 @@ async function enqueueSceneJob(q: Queue, sceneJob: DbJob): Promise<{ queued: boo
     jobId: sceneJob.id,
     appSlug: sceneJob.appSlug,
     capability: 'video_generation',
+    executionProfile: 'internal_dashboard',
     prompt: sceneJob.prompt,
     input: safeJson(sceneJob.inputJson),
     metadata,
     traceId: sceneJob.traceId,
     routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
   }
 
   const queueJobId = sceneJob.retryCount > 0 ? `${sceneJob.id}:attempt:${sceneJob.retryCount}` : sceneJob.id
@@ -385,19 +371,162 @@ async function prepareSceneRetry(q: Queue, scene: DbJob): Promise<DbJob | null> 
   return await prisma.job.findUnique({ where: { id: scene.id } })
 }
 
+async function enqueueVoiceoverJob(q: Queue, voiceoverJob: DbJob): Promise<{ queued: boolean; skipped: boolean; error?: string }> {
+  if (voiceoverJob.status === 'completed' && voiceoverJob.artifactId) return { queued: false, skipped: true }
+  if (TERMINAL_SCENE_STATUSES.has(voiceoverJob.status)) return { queued: false, skipped: true, error: 'terminal_state' }
+  if ((voiceoverJob.status === 'queued' || voiceoverJob.status === 'processing') && voiceoverJob.queueJobId) return { queued: false, skipped: true }
+  if (voiceoverJob.status === 'failed' && voiceoverJob.retryCount >= MAX_SCENE_RETRIES) {
+    return { queued: false, skipped: true, error: 'retry_limit_reached' }
+  }
+
+  const metadata = safeJson(voiceoverJob.metadataJson)
+  const payload: JobPayload = {
+    jobId: voiceoverJob.id,
+    appSlug: voiceoverJob.appSlug,
+    capability: 'tts',
+    executionProfile: 'internal_dashboard',
+    prompt: voiceoverJob.prompt,
+    input: safeJson(voiceoverJob.inputJson),
+    metadata,
+    traceId: voiceoverJob.traceId,
+    routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
+  }
+
+  const queueJobId = voiceoverJob.retryCount > 0 ? `${voiceoverJob.id}:attempt:${voiceoverJob.retryCount}` : voiceoverJob.id
+  await q.add('process', payload, {
+    ...DEFAULT_JOB_OPTIONS,
+    jobId: queueJobId,
+  })
+  await prisma.job.update({
+    where: { id: voiceoverJob.id },
+    data: {
+      status: 'queued',
+      error: null,
+      queueJobId,
+      queuedAt: new Date(),
+      workflowPhase: 'voiceover_queued',
+    },
+  })
+  return { queued: true, skipped: false }
+}
+
+async function enqueueVoiceoverJobs(q: Queue, voiceoverJobs: DbJob[]) {
+  const queued: string[] = []
+  const skipped: string[] = []
+  const failed: Array<{ jobId: string; error: string }> = []
+
+  for (const voiceoverJob of voiceoverJobs) {
+    try {
+      const result = await enqueueVoiceoverJob(q, voiceoverJob)
+      if (result.queued) queued.push(voiceoverJob.id)
+      if (result.skipped) skipped.push(voiceoverJob.id)
+      if (result.error) failed.push({ jobId: voiceoverJob.id, error: result.error })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Queue submission failed'
+      failed.push({ jobId: voiceoverJob.id, error: message })
+      await prisma.job.update({
+        where: { id: voiceoverJob.id },
+        data: {
+          status: 'failed',
+          error: `Voiceover queue submission failed: ${message}`,
+          workflowPhase: 'voiceover_queue_failed',
+          completedAt: new Date(),
+        },
+      })
+    }
+  }
+
+  return { queued, skipped, failed }
+}
+
+async function enqueueMusicBedJob(q: Queue, musicJob: DbJob): Promise<{ queued: boolean; skipped: boolean; error?: string }> {
+  if (musicJob.status === 'completed' && musicJob.artifactId) return { queued: false, skipped: true }
+  if ((musicJob.status === 'queued' || musicJob.status === 'processing') && musicJob.queueJobId) return { queued: false, skipped: true }
+  const metadata = safeJson(musicJob.metadataJson)
+  const queueJobId = musicJob.retryCount > 0 ? `${musicJob.id}:attempt:${musicJob.retryCount}` : musicJob.id
+  await q.add('process', {
+    jobId: musicJob.id,
+    appSlug: musicJob.appSlug,
+    capability: 'music_generation',
+    executionProfile: 'internal_dashboard',
+    prompt: musicJob.prompt,
+    input: safeJson(musicJob.inputJson),
+    metadata,
+    traceId: musicJob.traceId,
+    routingMode: typeof metadata.routingMode === 'string' ? metadata.routingMode : 'balanced',
+    appGrantSnapshot: metadata.appGrantSnapshot as AppCapabilityGrantContext | undefined,
+  } satisfies JobPayload, { ...DEFAULT_JOB_OPTIONS, jobId: queueJobId })
+  await prisma.job.update({ where: { id: musicJob.id }, data: { status: 'queued', queueJobId, queuedAt: new Date(), workflowPhase: 'music_bed_queued', error: null } })
+  return { queued: true, skipped: false }
+}
+
+async function createAutomaticSubtitleArtifact(parent: DbJob, plan: LongFormVideoPlan): Promise<string> {
+  const scenes = plan.storyboard.scenes
+    .filter((scene) => Boolean(scene.subtitleText?.trim()))
+    .map((scene) => ({ sceneNumber: scene.sceneNumber, subtitleText: scene.subtitleText!, durationSeconds: scene.durationSeconds }))
+  const content = generateSubtitles({ scenes, format: 'srt' })
+  if (!content.trim()) throw new Error('subtitle_generation_failed: no subtitle text was generated')
+  const artifact = await saveArtifact({
+    input: {
+      appSlug: parent.appSlug, type: 'transcript', subType: 'subtitles_srt',
+      title: `long-form-${parent.executionId}-subtitles.srt`, description: 'Automatically generated long-form subtitles',
+      provider: 'local', model: 'subtitle-generator', traceId: `trace_longform_${parent.executionId}_subtitles_srt`,
+      mimeType: getSubtitleMimeType('srt'),
+      metadata: { executionId: parent.executionId, parentJobId: parent.id, format: 'srt', sceneCount: scenes.length, automatic: true },
+    },
+    data: Buffer.from(content, 'utf8'),
+    explicitMimeType: getSubtitleMimeType('srt'),
+  })
+  const current = await prisma.job.findUnique({ where: { id: parent.id }, select: { metadataJson: true } })
+  await prisma.job.update({ where: { id: parent.id }, data: { metadataJson: JSON.stringify({
+    ...safeJson(current?.metadataJson), subtitleArtifactId: artifact.id, subtitleFormat: 'srt', subtitlesReady: true,
+  }) } })
+  return artifact.id
+}
+
 async function createDurableLongFormExecution(appSlug: string, input: LongFormVideoRequest, routingMode: string, q: Queue, dryRun = false) {
   const plan = createLongFormVideoPlan(input)
   const executionId = randomUUID()
   const payloads = createSceneExecutionPayloads(plan, routingMode, executionId)
+  const [longFormGrant, videoGrant, voiceGrant, musicGrant] = await Promise.all([
+    resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'long_form_video'),
+    resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'video_generation'),
+    input.voiceoverEnabled ? resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'tts') : Promise.resolve(null),
+    input.musicBedEnabled ? resolveInternalDashboardCapabilityGrantSnapshot(appSlug, 'music_generation') : Promise.resolve(null),
+  ])
+  if (!longFormGrant || !videoGrant) {
+    throw new Error('Long-form execution requires registered internal long_form_video and video_generation capabilities')
+  }
+  if (input.voiceoverEnabled && !voiceGrant) {
+    throw new Error('Voiceover execution requires a registered internal tts capability')
+  }
+  if (input.musicBedEnabled && !musicGrant) {
+    throw new Error('Music-bed execution requires a registered internal music_generation capability')
+  }
+  const snapshotAt = new Date().toISOString()
+  const parentGrantMetadata = {
+    executionProfile: 'internal_dashboard',
+    appGrantSnapshot: longFormGrant.grant,
+    appGrantSnapshotSource: longFormGrant.source,
+    appGrantSnapshotAt: snapshotAt,
+  }
+  const videoGrantMetadata = {
+    executionProfile: 'internal_dashboard',
+    orchestraExecutorConstraint: 'genx.video-generation',
+    appGrantSnapshot: videoGrant.grant,
+    appGrantSnapshotSource: videoGrant.source,
+    appGrantSnapshotAt: snapshotAt,
+  }
 
-  const { parent, sceneJobs } = await prisma.$transaction(async (tx) => {
+  const { parent, sceneJobs, voiceoverJobs, musicJob } = await prisma.$transaction(async (tx) => {
     const parent = await tx.job.create({
       data: {
         appSlug,
         capability: 'long_form_video',
         prompt: input.prompt,
         inputJson: JSON.stringify(input),
-        metadataJson: JSON.stringify(parentMetadata(input, plan, executionId)),
+        metadataJson: JSON.stringify({ ...parentMetadata(input, plan, executionId), ...parentGrantMetadata }),
         traceId: `trace_longform_${executionId}`,
         status: dryRun ? 'planned' : 'processing',
         progress: 0,
@@ -411,9 +540,12 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       const scene = plan.storyboard.scenes.find((item) => item.sceneNumber === payload.sceneNumber)
       const metadata = {
         ...payload.metadata,
+        ...videoGrantMetadata,
         parentJobId: parent.id,
         executionId,
         planVersion: plan.id,
+        planVersionHash: plan.versionHash,
+        routingMode,
         retryGeneration: 0,
       }
       const job = await tx.job.create({
@@ -435,23 +567,97 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
       if (!scene) continue
     }
 
+    const voiceoverJobs: DbJob[] = []
+    if (input.voiceoverEnabled) {
+      const voiceProfile = plan.voiceProfile ?? {}
+      for (const scene of plan.storyboard.scenes) {
+        if (!scene.voiceoverText) continue
+        const voMetadata = {
+          executionProfile: 'internal_dashboard',
+          longFormVideo: true,
+          longFormVoiceover: true,
+          longFormExecutionId: executionId,
+          planId: plan.id,
+          planVersionHash: plan.versionHash,
+          sceneNumber: scene.sceneNumber,
+          sceneTitle: scene.title,
+          parentJobId: parent.id,
+          routingMode,
+          retryGeneration: 0,
+          appGrantSnapshot: voiceGrant!.grant,
+          appGrantSnapshotSource: voiceGrant!.source,
+          appGrantSnapshotAt: snapshotAt,
+        }
+        const voJob = await tx.job.create({
+          data: {
+            appSlug,
+            capability: 'tts',
+            prompt: scene.voiceoverText,
+            inputJson: JSON.stringify({
+              text: scene.voiceoverText,
+              sceneNumber: scene.sceneNumber,
+              ...(voiceProfile.voice ? { voice: voiceProfile.voice } : {}),
+              speed: voiceProfile.speed ?? 1,
+              outputFormat: voiceProfile.outputFormat ?? 'wav',
+              language: voiceProfile.language ?? 'en',
+              style: voiceProfile.tone,
+            }),
+            metadataJson: JSON.stringify(voMetadata),
+            traceId: `trace_longform_${executionId}_voiceover_${scene.sceneNumber}`,
+            status: dryRun ? 'planned' : 'queued',
+            parentJobId: parent.id,
+            executionId,
+            sceneNumber: scene.sceneNumber,
+            workflowPhase: dryRun ? 'voiceover_planned' : 'voiceover_created',
+          },
+        })
+        voiceoverJobs.push(voJob)
+      }
+    }
+
+    let musicJob: DbJob | null = null
+    if (input.musicBedEnabled) {
+      const musicBrief = plan.musicBrief || `${plan.tone} ${plan.style} instrumental background music`
+      musicJob = await tx.job.create({ data: {
+        appSlug, capability: 'music_generation', prompt: musicBrief,
+        inputJson: JSON.stringify({ duration: Math.min(plan.totalDurationSeconds, 300), instrumentalOnly: true, style: plan.style }),
+        metadataJson: JSON.stringify({
+          executionProfile: 'internal_dashboard',
+          longFormVideo: true, longFormMusicBed: true, longFormExecutionId: executionId, parentJobId: parent.id,
+          planId: plan.id, routingMode, retryGeneration: 0, appGrantSnapshot: musicGrant!.grant,
+          appGrantSnapshotSource: musicGrant!.source, appGrantSnapshotAt: snapshotAt,
+        }),
+        traceId: `trace_longform_${executionId}_music_bed`, status: dryRun ? 'planned' : 'queued',
+        parentJobId: parent.id, executionId, workflowPhase: dryRun ? 'music_bed_planned' : 'music_bed_created',
+      } })
+    }
+
     await tx.job.update({
       where: { id: parent.id },
       data: {
         metadataJson: JSON.stringify({
           ...parentMetadata(input, plan, executionId),
-          assemblyHandoff: buildAssemblyHandoff({ parentJobId: parent.id, executionId, request: input, plan, sceneJobs }),
+          ...parentGrantMetadata,
+          voiceoverJobIds: voiceoverJobs.map((j) => j.id),
+          musicBedJobId: musicJob?.id ?? null,
         }),
       },
     })
 
-    return { parent, sceneJobs }
+    return { parent, sceneJobs, voiceoverJobs, musicJob }
   })
 
+  let subtitleArtifactId: string | null = null
+  if (input.subtitlesEnabled && !dryRun) subtitleArtifactId = await createAutomaticSubtitleArtifact(parent, plan)
   await refreshLongFormParentState(parent.id)
   const queueResult = dryRun ? { queued: [], skipped: [], failed: [] } : await enqueueSceneJobs(q, parent, sceneJobs)
+  let voiceoverQueueResult = { queued: [] as string[], skipped: [] as string[], failed: [] as Array<{ jobId: string; error: string }> }
+  if (input.voiceoverEnabled && !dryRun && voiceoverJobs.length > 0) {
+    voiceoverQueueResult = await enqueueVoiceoverJobs(q, voiceoverJobs)
+  }
+  const musicQueueResult = musicJob && !dryRun ? await enqueueMusicBedJob(q, musicJob) : { queued: false, skipped: true }
   const latest = await loadParentAndScenes(parent.id, appSlug)
-  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, queueResult, plan, executionId }
+  return { parent: latest?.parent ?? parent, sceneJobs: latest?.sceneJobs ?? sceneJobs, voiceoverJobs, musicJob, subtitleArtifactId, queueResult, voiceoverQueueResult, musicQueueResult, plan, executionId }
 }
 
 export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<void> {
@@ -464,6 +670,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     return queue
   }
 
+  // ── Plan Endpoint: create and persist plan WITHOUT executing ──────────────────
   app.post('/api/admin/long-form-video/plan', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const body = request.body as Record<string, unknown>
@@ -473,11 +680,39 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     try {
       const validatedRequest = validateLongFormVideoRequest(body)
       const plan = createLongFormVideoPlan(validatedRequest)
+      const validation = validatePlanCompleteness(plan)
+
+      // Persist plan as a durable parent in 'planned' status (dry-run style, no queue calls)
+      const executionId = randomUUID()
+      const parent = await prisma.job.create({
+        data: {
+          appSlug: APP_SLUG,
+          capability: 'long_form_video',
+          prompt: validatedRequest.prompt,
+          inputJson: JSON.stringify(validatedRequest),
+          metadataJson: JSON.stringify({
+            ...parentMetadata(validatedRequest, plan, executionId),
+            planOnly: true,
+            approved: false,
+          }),
+          traceId: `trace_longform_${executionId}`,
+          status: 'planned',
+          progress: 0,
+          executionId,
+          workflowPhase: 'plan_created',
+        },
+      })
+
       return reply.status(200).send({
         success: true,
         plan,
-        durableParentReady: true,
-        message: 'Long-form video plan created. Durable execution can persist a parent job and linked scene jobs.',
+        planId: plan.id,
+        versionHash: plan.versionHash,
+        executionId,
+        parentJobId: parent.id,
+        validation,
+        providerCallsStarted: false,
+        message: 'Long-form video plan created. No media provider calls started. Approve the plan to begin execution.',
       })
     } catch (error) {
       return reply.status(400).send({
@@ -488,6 +723,446 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     }
   })
 
+  // ── Approve Endpoint: verify plan hash, then execute ────────────────────────
+  app.post('/api/admin/long-form-video/approve', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const executionId = body.executionId as string | undefined
+
+    if (!planId || !versionHash || !executionId) {
+      return reply.status(400).send({ error: true, message: 'planId, versionHash, and executionId are required' })
+    }
+
+    try {
+      // Load the persisted planned parent
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const metadata = safeJson(loaded.parent.metadataJson)
+      const storedPlan = metadata.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+
+      // Verify plan ID matches
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+
+      // Verify version hash matches (immutable check)
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match. The plan may have been modified.' })
+      }
+
+      // Validate plan completeness
+      const validation = validatePlanCompleteness(storedPlan)
+      if (!validation.valid) {
+        return reply.status(422).send({ error: true, message: 'Plan validation failed', errors: validation.errors })
+      }
+
+      // Now execute: create scene jobs, voiceover jobs, music jobs using the stored plan
+      const request = metadata.request as LongFormVideoRequest
+      const routingMode = normalizeRoutingMode(metadata.routingMode ?? storedPlan.routingMode)
+
+      // Reuse the existing execution creation logic, but keyed to this executionId
+      const result = await createDurableLongFormExecution(
+        APP_SLUG,
+        request,
+        routingMode,
+        getQueue(),
+        false, // not dry run - actually execute
+      )
+
+      const status = deriveStatus(result.parent, result.sceneJobs)
+      return reply.status(202).send({
+        success: true,
+        parentJobId: result.parent.id,
+        executionId: result.executionId,
+        queuedJobs: result.queueResult.queued,
+        skippedJobs: result.queueResult.skipped,
+        failedQueueSubmissions: result.queueResult.failed,
+        planId: storedPlan.id,
+        versionHash: storedPlan.versionHash,
+        status,
+        providerCallsStarted: true,
+        message: 'Plan approved and execution started.',
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Plan approval failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  // ── Preview Scene Endpoint: preview one scene from a planned parent ─────────
+  app.post('/api/admin/long-form-video/preview-scene', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const executionId = body.executionId as string | undefined
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const sceneNumber = typeof body.sceneNumber === 'number' ? body.sceneNumber : Number(body.sceneNumber)
+
+    if (!executionId || !planId || !versionHash || !sceneNumber) {
+      return reply.status(400).send({ error: true, message: 'executionId, planId, versionHash, and sceneNumber are required' })
+    }
+
+    try {
+      // Load the persisted planned parent
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const metadata = safeJson(loaded.parent.metadataJson)
+      if (metadata.approved === true) {
+        return reply.status(409).send({ error: true, message: 'Plan is already approved and executing' })
+      }
+
+      const storedPlan = metadata.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+
+      // Verify plan ID matches
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+
+      // Verify version hash matches (immutable check)
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match. The plan may have been modified.' })
+      }
+
+      // Validate plan completeness
+      const validation = validatePlanCompleteness(storedPlan)
+      if (!validation.valid) {
+        return reply.status(422).send({ error: true, message: 'Plan validation failed', errors: validation.errors })
+      }
+
+      // Find the requested scene
+      const scene = storedPlan.storyboard.scenes.find((s) => s.sceneNumber === sceneNumber)
+      if (!scene) {
+        return reply.status(404).send({ error: true, message: `Scene ${sceneNumber} not found in plan. Available scenes: ${storedPlan.storyboard.scenes.map((s) => s.sceneNumber).join(', ')}` })
+      }
+
+      const routingMode = normalizeRoutingMode(metadata.routingMode ?? storedPlan.routingMode)
+
+      // Idempotency: check if a preview already exists for this scene/plan/version
+      const previewTraceId = `trace_longform_preview_${executionId}_scene_${sceneNumber}`
+      const existingPreview = await prisma.job.findFirst({
+        where: {
+          traceId: previewTraceId,
+          metadataJson: { contains: '"longFormScenePreview":true' },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (existingPreview) {
+        const existingStatus = existingPreview.status
+        if (['queued', 'processing'].includes(existingStatus)) {
+          return reply.status(200).send({
+            success: true,
+            previewJobId: existingPreview.id,
+            sceneNumber,
+            planId: storedPlan.id,
+            versionHash: storedPlan.versionHash,
+            routingMode,
+            status: existingStatus,
+            providerCallsStarted: true,
+            reused: true,
+            message: `Preview job already ${existingStatus}. Reusing existing job.`,
+          })
+        }
+        if (existingStatus === 'completed') {
+          const existingMeta = safeJson(existingPreview.metadataJson)
+          return reply.status(200).send({
+            success: true,
+            previewJobId: existingPreview.id,
+            sceneNumber,
+            planId: storedPlan.id,
+            versionHash: storedPlan.versionHash,
+            routingMode,
+            status: 'completed',
+            providerCallsStarted: true,
+            artifactId: existingPreview.artifactId ?? existingMeta.artifactId ?? null,
+            provider: existingMeta.orchestraActualProvider ?? existingMeta.directProviderExecutorId ?? null,
+            model: existingMeta.orchestraActualModel ?? null,
+            reused: true,
+            message: 'Preview already completed. Reusing existing artifact.',
+          })
+        }
+        if (existingStatus === 'failed') {
+          return reply.status(409).send({
+            error: true,
+            message: 'Previous preview failed. Use the retry endpoint to re-run.',
+            previewJobId: existingPreview.id,
+            status: 'failed',
+          })
+        }
+      }
+
+      // Resolve video grant for the preview job
+      const videoGrant = await resolveInternalDashboardCapabilityGrantSnapshot(APP_SLUG, 'video_generation')
+      if (!videoGrant) {
+        return reply.status(500).send({ error: true, message: 'No registered internal video_generation capability' })
+      }
+
+      // Build the scene payload using canonical functions
+      const payloads = createSceneExecutionPayloads(storedPlan, routingMode, executionId)
+      const payload = payloads.find((p) => p.sceneNumber === sceneNumber)
+      if (!payload) {
+        return reply.status(500).send({ error: true, message: 'Failed to create scene payload' })
+      }
+
+      const snapshotAt = new Date().toISOString()
+      const videoGrantMetadata = {
+        executionProfile: 'internal_dashboard',
+        orchestraExecutorConstraint: 'genx.video-generation',
+        appGrantSnapshot: videoGrant.grant,
+        appGrantSnapshotSource: videoGrant.source,
+        appGrantSnapshotAt: snapshotAt,
+      }
+
+      // Create exactly one preview job
+      const previewJob = await prisma.job.create({
+        data: {
+          appSlug: APP_SLUG,
+          capability: 'video_generation',
+          prompt: payload.prompt,
+          inputJson: JSON.stringify(payload.input),
+          metadataJson: JSON.stringify({
+            ...payload.metadata,
+            ...videoGrantMetadata,
+            longFormVideo: true,
+            longFormScenePreview: true,
+            sourcePlanId: storedPlan.id,
+            sourcePlanVersionHash: storedPlan.versionHash,
+            sourcePlanExecutionId: executionId,
+            sceneNumber,
+            routingMode,
+            retryGeneration: 0,
+            createdFromApprovedPlan: false,
+            executionProfile: 'internal_dashboard',
+          }),
+          traceId: previewTraceId,
+          status: 'queued',
+          executionId,
+          sceneNumber,
+          workflowPhase: 'scene_preview_queued',
+        },
+      })
+
+      // Queue the preview job using the canonical scene enqueue function
+      const queue = getQueue()
+      const enqueueResult = await enqueueSceneJob(queue, previewJob)
+
+      return reply.status(202).send({
+        success: true,
+        previewJobId: previewJob.id,
+        sceneNumber,
+        planId: storedPlan.id,
+        versionHash: storedPlan.versionHash,
+        routingMode,
+        status: enqueueResult.queued ? 'queued' : enqueueResult.skipped ? 'skipped' : 'failed_to_queue',
+        providerCallsStarted: enqueueResult.queued,
+        downgradeRequired: false,
+        downgradeReason: null,
+        message: enqueueResult.queued
+          ? `Scene ${sceneNumber} preview queued with ${routingMode} routing. No other scenes, audio, or assembly started.`
+          : enqueueResult.skipped
+            ? `Scene ${sceneNumber} preview skipped (already queued or terminal).`
+            : `Failed to queue scene ${sceneNumber} preview.`,
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Scene preview failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  // ── Preview Scene Retry Endpoint ─────────────────────────────────────────────
+  app.post('/api/admin/long-form-video/preview-scene/retry', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const body = request.body as Record<string, unknown>
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const executionId = body.executionId as string | undefined
+    const planId = body.planId as string | undefined
+    const versionHash = body.versionHash as string | undefined
+    const sceneNumber = typeof body.sceneNumber === 'number' ? body.sceneNumber : Number(body.sceneNumber)
+
+    if (!executionId || !planId || !versionHash || !sceneNumber) {
+      return reply.status(400).send({ error: true, message: 'executionId, planId, versionHash, and sceneNumber are required' })
+    }
+
+    try {
+      // 1. Load and validate the parent execution
+      const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+      if (!loaded) return reply.status(404).send({ error: true, message: 'Planned execution not found' })
+      if (loaded.parent.status !== 'planned') {
+        return reply.status(409).send({ error: true, message: `Execution is already in status '${loaded.parent.status}', not 'planned'` })
+      }
+
+      const parentMeta = safeJson(loaded.parent.metadataJson)
+      if (parentMeta.approved === true) {
+        return reply.status(409).send({ error: true, message: 'Plan is already approved. Cannot retry preview.' })
+      }
+
+      const storedPlan = parentMeta.plan as LongFormVideoPlan | undefined
+      if (!storedPlan) return reply.status(409).send({ error: true, message: 'No plan found in execution metadata' })
+      if (storedPlan.id !== planId) {
+        return reply.status(409).send({ error: true, message: 'Plan ID does not match the persisted plan' })
+      }
+      if (storedPlan.versionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Plan version hash does not match' })
+      }
+      if (!storedPlan.storyboard.scenes.some((s) => s.sceneNumber === sceneNumber)) {
+        return reply.status(404).send({ error: true, message: `Scene ${sceneNumber} not found in plan` })
+      }
+
+      // 2. Load and validate the existing preview job
+      const previewTraceId = `trace_longform_preview_${executionId}_scene_${sceneNumber}`
+      const existingPreview = await prisma.job.findFirst({
+        where: {
+          traceId: previewTraceId,
+          metadataJson: { contains: '"longFormScenePreview":true' },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (!existingPreview) {
+        return reply.status(404).send({ error: true, message: 'No preview job found for this scene. Use the preview endpoint to create one.' })
+      }
+
+      // Explicit allowlist: only failed and cancelled previews may be retried
+      if (!['failed', 'cancelled'].includes(existingPreview.status)) {
+        return reply.status(409).send({ error: true, message: `Preview is in status '${existingPreview.status}'. Only failed or cancelled previews can be retried.` })
+      }
+
+      // 3. Validate persisted preview metadata against request
+      const existingMeta = safeJson(existingPreview.metadataJson)
+      if (existingMeta.sourcePlanExecutionId !== executionId) {
+        return reply.status(409).send({ error: true, message: 'Preview job execution ID does not match request' })
+      }
+      if (existingMeta.sourcePlanId !== planId) {
+        return reply.status(409).send({ error: true, message: 'Preview job plan ID does not match request' })
+      }
+      if (existingMeta.sourcePlanVersionHash !== versionHash) {
+        return reply.status(409).send({ error: true, message: 'Preview job version hash does not match request' })
+      }
+      if (existingMeta.sceneNumber !== sceneNumber) {
+        return reply.status(409).send({ error: true, message: 'Preview job scene number does not match request' })
+      }
+
+      // 4. Enforce retry limit against canonical retryCount
+      const currentRetryCount = existingPreview.retryCount ?? 0
+      if (currentRetryCount >= MAX_SCENE_RETRIES) {
+        return reply.status(429).send({ error: true, message: `Retry limit (${MAX_SCENE_RETRIES}) reached for this preview.` })
+      }
+      const newRetryCount = currentRetryCount + 1
+      const newRetryGeneration = (typeof existingMeta.retryGeneration === 'number' ? existingMeta.retryGeneration : 0) + 1
+
+      // 5. Update the job: increment retryCount, clear queueJobId and stale fields
+      const updatedJob = await prisma.job.update({
+        where: { id: existingPreview.id },
+        data: {
+          retryCount: newRetryCount,
+          status: 'queued',
+          progress: 0,
+          error: null,
+          completedAt: null,
+          startedAt: null,
+          queueJobId: '',
+          metadataJson: JSON.stringify({
+            ...existingMeta,
+            retryGeneration: newRetryGeneration,
+            retryAt: new Date().toISOString(),
+          }),
+          workflowPhase: 'scene_preview_retry_queued',
+        },
+      })
+
+      // 6. Enqueue the freshly updated job
+      const queue = getQueue()
+      let enqueueResult: { queued: boolean; skipped: boolean; error?: string }
+      try {
+        enqueueResult = await enqueueSceneJob(queue, updatedJob)
+      } catch (queueError) {
+        // Queue submission failed — return job to failed state
+        const errorMessage = queueError instanceof Error ? queueError.message : 'Queue submission failed'
+        await prisma.job.update({
+          where: { id: updatedJob.id },
+          data: {
+            status: 'failed',
+            error: `Preview retry queue submission failed: ${errorMessage}`,
+            workflowPhase: 'scene_preview_retry_queue_failed',
+            completedAt: new Date(),
+          },
+        })
+        return reply.status(500).send({
+          error: true,
+          message: 'Preview retry queue submission failed',
+          details: errorMessage,
+          retryGeneration: newRetryGeneration,
+        })
+      }
+
+      // If enqueueSceneJob skipped (shouldn't happen after clearing queueJobId, but handle defensively)
+      if (!enqueueResult.queued) {
+        await prisma.job.update({
+          where: { id: updatedJob.id },
+          data: {
+            status: 'failed',
+            error: enqueueResult.error ? `Enqueue skipped: ${enqueueResult.error}` : 'Enqueue skipped for unknown reason',
+            workflowPhase: 'scene_preview_retry_enqueue_skipped',
+            completedAt: new Date(),
+          },
+        })
+        return reply.status(500).send({
+          error: true,
+          message: 'Preview retry was not queued',
+          details: enqueueResult.error ?? 'enqueue_skipped',
+          retryGeneration: newRetryGeneration,
+        })
+      }
+
+      const routingMode = normalizeRoutingMode(existingMeta.routingMode ?? 'balanced')
+      return reply.status(202).send({
+        success: true,
+        previewJobId: updatedJob.id,
+        sceneNumber,
+        planId: existingMeta.sourcePlanId,
+        versionHash: existingMeta.sourcePlanVersionHash,
+        routingMode,
+        status: 'queued',
+        retryGeneration: newRetryGeneration,
+        retryCount: newRetryCount,
+        message: `Scene ${sceneNumber} preview retry #${newRetryGeneration} queued.`,
+      })
+    } catch (error) {
+      return reply.status(400).send({
+        error: true,
+        message: 'Scene preview retry failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
+  // ── Execution Handler (backward-compatible, for simple neutral tests) ───────
   async function createExecutionHandler(request: FastifyRequest, reply: FastifyReply) {
     if (!(await requireAdmin(app, request, reply))) return
     const body = request.body as Record<string, unknown>
@@ -534,7 +1209,7 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     return reply.status(200).send({
       success: true,
-      execution: deriveStatus(loaded.parent, loaded.sceneJobs),
+      execution: deriveStatus(loaded.parent, loaded.sceneJobs, loaded.childJobs),
       message: 'Durable long-form status loaded from parent and linked scene jobs.',
     })
   })
@@ -554,6 +1229,14 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
     if (loaded.parent.status === 'cancelled' || loaded.parent.status === 'cancelling') {
       return reply.status(409).send({ error: true, message: 'Cancelled long-form executions cannot be resumed without an explicit supported transition' })
+    }
+    if (loaded.parent.status === 'completed') {
+      return reply.status(200).send({
+        success: true,
+        alreadyCompleted: true,
+        queueResult: { queued: [], skipped: loaded.sceneJobs.map((job) => job.id), failed: [] },
+        execution: deriveStatus(loaded.parent, loaded.sceneJobs),
+      })
     }
     const resumable = loaded.sceneJobs.filter((job) =>
       job.status === 'planned'
@@ -681,6 +1364,206 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
     })
   })
 
+  app.post('/api/admin/long-form-video/subtitles/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { executionId } = request.params as { executionId: string }
+    const body = request.body as Record<string, unknown>
+    const format = (body.format as string) === 'vtt' ? 'vtt' : 'srt'
+
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+    if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+
+    const metadata = safeJson(loaded.parent.metadataJson)
+    const plan = metadata.plan as LongFormVideoPlan | undefined
+    if (!plan?.storyboard?.scenes) {
+      return reply.status(409).send({ error: true, message: 'No plan found in parent metadata' })
+    }
+
+    const scenes = plan.storyboard.scenes.filter(
+      (s: { subtitleText?: string }) => s.subtitleText?.trim()
+    ) as Array<{ sceneNumber: number; subtitleText: string; durationSeconds: number }>
+    if (scenes.length === 0) {
+      return reply.status(409).send({ error: true, message: 'No scenes with subtitle text found' })
+    }
+
+    const subtitleContent = generateSubtitles({
+      scenes: scenes.map((s) => ({
+        sceneNumber: s.sceneNumber,
+        subtitleText: s.subtitleText,
+        durationSeconds: s.durationSeconds,
+      })),
+      format,
+    })
+
+    if (!subtitleContent) {
+      return reply.status(409).send({ error: true, message: 'Generated subtitle content is empty' })
+    }
+
+    const traceId = `trace_longform_${executionId}_subtitles_${format}`
+    const mimeType = getSubtitleMimeType(format)
+    const filename = `long-form-${executionId}-subtitles.${format}`
+
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: APP_SLUG,
+        type: 'transcript',
+        subType: `subtitles_${format}`,
+        title: filename,
+        description: `Long-form video subtitles (${format.toUpperCase()})`,
+        provider: 'local',
+        model: 'subtitle-generator',
+        traceId,
+        mimeType,
+        metadata: {
+          executionId,
+          parentJobId: loaded.parent.id,
+          format,
+          sceneCount: scenes.length,
+          totalDurationSeconds: scenes.reduce((sum: number, s: { durationSeconds: number }) => sum + s.durationSeconds, 0),
+        },
+      },
+      data: Buffer.from(subtitleContent, 'utf-8'),
+      explicitMimeType: mimeType,
+    })
+
+    await prisma.job.update({
+      where: { id: loaded.parent.id },
+      data: {
+        metadataJson: JSON.stringify({
+          ...metadata,
+          subtitleArtifactId: artifact.id,
+          subtitleFormat: format,
+          subtitlesReady: true,
+        }),
+      },
+    })
+
+    return reply.status(201).send({
+      success: true,
+      artifactId: artifact.id,
+      format,
+      mimeType,
+      sceneCount: scenes.length,
+      artifactUrl: artifact.storageUrl,
+    })
+  })
+
+  app.post('/api/admin/long-form-video/music-bed/:executionId', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { executionId } = request.params as { executionId: string }
+    const body = request.body as Record<string, unknown>
+
+    const loaded = await loadParentAndScenes(executionId, APP_SLUG)
+    if (!loaded) return reply.status(404).send({ error: true, message: 'Long-form parent job not found' })
+
+    const metadata = safeJson(loaded.parent.metadataJson)
+    const plan = metadata.plan as LongFormVideoPlan | undefined
+    if (!plan) {
+      return reply.status(409).send({ error: true, message: 'No plan found in parent metadata' })
+    }
+    const existingMusic = loaded.childJobs.find((job) => job.capability === 'music_generation' && safeJson(job.metadataJson).longFormMusicBed === true)
+    if (existingMusic) {
+      return reply.status(200).send({
+        success: existingMusic.status !== 'failed',
+        musicJobId: existingMusic.id,
+        status: existingMusic.status,
+        artifactId: existingMusic.artifactId,
+        message: 'Canonical long-form music-bed child already exists; no duplicate was created.',
+      })
+    }
+
+    const override = blockedOverrideField(body)
+    if (override) return reply.status(400).send({ error: true, message: `Provider/model override not allowed. Blocked field: ${override}` })
+
+    const prompt = (body.prompt as string) || `${plan.tone} ${plan.style} instrumental background music`
+    const routingMode = isValidRoutingMode(body.routingMode) ? body.routingMode as string : 'balanced'
+
+    try {
+      const musicGrant = await resolveInternalDashboardCapabilityGrantSnapshot(APP_SLUG, 'music_generation')
+      if (!musicGrant) {
+        return reply.status(403).send({ error: true, message: 'Music bed execution requires a registered internal music_generation capability' })
+      }
+      const grantSnapshotAt = new Date().toISOString()
+      const { randomUUID: uuid } = await import('node:crypto')
+      const musicJobId = uuid()
+      const traceId = `trace_longform_${executionId}_music_bed`
+
+      await prisma.job.create({
+        data: {
+          id: musicJobId,
+          appSlug: APP_SLUG,
+          capability: 'music_generation',
+          prompt,
+          inputJson: JSON.stringify({
+            prompt,
+            durationSeconds: plan.totalDurationSeconds,
+            instrumentalOnly: true,
+            style: plan.style,
+            mood: plan.tone,
+          }),
+          metadataJson: JSON.stringify({
+            executionProfile: 'internal_dashboard',
+            longFormVideo: true,
+            longFormMusicBed: true,
+            longFormExecutionId: executionId,
+            parentJobId: loaded.parent.id,
+            planId: plan.id,
+            routingMode,
+            retryGeneration: 0,
+            appGrantSnapshot: musicGrant.grant,
+            appGrantSnapshotSource: musicGrant.source,
+            appGrantSnapshotAt: grantSnapshotAt,
+          }),
+          traceId,
+          status: 'queued',
+          parentJobId: loaded.parent.id,
+          executionId,
+          workflowPhase: 'music_bed_created',
+        },
+      })
+
+      if (getQueue()) {
+        const q = getQueue()
+        const payload: JobPayload = {
+          jobId: musicJobId,
+          appSlug: APP_SLUG,
+          capability: 'music_generation',
+          executionProfile: 'internal_dashboard',
+          prompt,
+          input: { prompt, durationSeconds: plan.totalDurationSeconds, instrumentalOnly: true },
+          metadata: {
+            executionProfile: 'internal_dashboard',
+            longFormVideo: true,
+            longFormMusicBed: true,
+            longFormExecutionId: executionId,
+            parentJobId: loaded.parent.id,
+            routingMode,
+            appGrantSnapshot: musicGrant.grant,
+            appGrantSnapshotSource: musicGrant.source,
+            appGrantSnapshotAt: grantSnapshotAt,
+          },
+          traceId,
+          routingMode,
+          appGrantSnapshot: musicGrant.grant,
+        }
+        await q.add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: musicJobId })
+      }
+
+      return reply.status(202).send({
+        success: true,
+        musicJobId,
+        prompt,
+        message: 'Music bed job submitted. Poll the job for completion.',
+      })
+    } catch (error) {
+      return reply.status(500).send({
+        error: true,
+        message: 'Music bed job creation failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      })
+    }
+  })
+
   app.post('/api/admin/long-form-video/assemble/:executionId', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
     const { executionId } = request.params as { executionId: string }
@@ -700,49 +1583,30 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
       return reply.status(409).send({ error: true, message: 'Cannot assemble: parent execution is already completed', parentStatus: loaded.parent.status })
     }
 
-    const status = deriveStatus(loaded.parent, loaded.sceneJobs)
-    if (!status.finalAssemblyReady) {
+    const refreshed = await refreshLongFormParentState(loaded.parent.id)
+    if (!refreshed?.componentState.readyToQueueAssembly) {
       return reply.status(409).send({
         error: true,
-        message: 'Cannot assemble: not all scenes are completed',
-        completedScenes: status.completedScenes,
-        totalScenes: status.totalScenes,
-        cancelledScenes: status.cancelledScenes,
+        message: 'Cannot queue assembly: requested components are not ready',
+        blockedReasons: refreshed?.componentState.blockedReasons ?? ['component_state_unavailable'],
+        componentState: refreshed?.componentState ?? null,
       })
     }
 
-    const sceneArtifacts = await resolveSceneArtifacts(loaded.parent.executionId)
-    const validation = validateSceneArtifactsForAssembly(sceneArtifacts, status.totalScenes)
-    if (!validation.valid) return reply.status(422).send({ error: true, message: 'Scene artifacts validation failed', errors: validation.errors, warnings: validation.warnings })
     const ffmpeg = await checkFfmpegAvailable()
-    const plan = await createAssemblyPlan(loaded.parent.executionId, status.totalScenes)
-    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, plan, ffmpegAvailable: ffmpeg.available })
+    if (dryRun) return reply.status(200).send({ success: true, dryRun: true, ffmpegAvailable: ffmpeg.available, componentState: refreshed.componentState })
     if (!ffmpeg.available) return reply.status(422).send({ error: true, message: 'Cannot assemble: ffmpeg is not available', ffmpegError: ffmpeg.error })
 
-    const result = await assembleLongFormVideo({
-      executionId: loaded.parent.executionId,
-      sceneArtifacts,
-      outputTitle,
-      aspectRatio: status.request.aspectRatio,
-    })
-    if (!result.success) return reply.status(500).send({ error: true, message: 'Assembly failed', details: result.error })
-    await prisma.job.update({
-      where: { id: loaded.parent.id },
-      data: {
-        status: 'completed',
-        artifactId: result.artifactId,
-        progress: 100,
-        workflowPhase: 'video_only_assembly_completed',
-        completedAt: new Date(),
-        output: JSON.stringify(result),
-      },
-    })
-    await refreshLongFormParentState(loaded.parent.id)
-    return reply.status(200).send({
-      ...result,
+    const result = await advanceLongFormWorkflow(loaded.parent.id, getQueue())
+    return reply.status(202).send({
       success: true,
       executionId: loaded.parent.executionId,
-      note: 'Video-only assembly complete. Voiceover/subtitles/music bed not included.',
+      assemblyJobId: result.assemblyJobId,
+      scheduled: result.scheduled,
+      outputTitle: outputTitle ?? null,
+      note: result.scheduled
+        ? 'Canonical worker assembly queued.'
+        : 'Canonical assembly job already exists or is already running.',
     })
   })
 
@@ -771,35 +1635,26 @@ export async function adminLongFormVideoRoutes(app: FastifyInstance): Promise<vo
 
   app.get('/api/admin/long-form-video/status', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const { LONG_FORM_VIDEO_STATUS } = await import('@amarktai/core')
     const ffmpeg = await checkFfmpegAvailable()
     const truth = await buildAdminRuntimeTruth(app)
     const canonical = truth.capabilities.find((capability) => capability.capability === 'long_form_video')
     return reply.status(200).send({
       success: true,
       status: {
-        ...LONG_FORM_VIDEO_STATUS,
-        canonicalTruth: canonical,
+        ...canonical,
         ffmpegAvailable: ffmpeg.available,
-        durableParentReady: true,
-        durablePlanReady: true,
-        sceneLinkageReady: true,
-        sceneSubmissionReady: true,
-        retryResumeReady: true,
-        progressTrackingReady: true,
-        assemblyHandoffReady: true,
-        fullMultimediaReady: false,
-        liveProven: false,
       },
       ffmpeg,
-      message: 'Long-form durable orchestration and scene recovery are ready. Full multimedia assembly remains pending.',
+      message: canonical?.fullMultimediaReady
+        ? 'Long-form multimedia execution is proven ready.'
+        : 'Long-form component readiness is derived from callable implementations, infrastructure, and proof evidence.',
       limitations: {
-        executionStateStorage: 'Durable parent and linked scene Job rows',
+        executionStateStorage: 'Durable parent and linked Job rows (scene + voiceover)',
         executionStateRecovery: 'Recovered by exact parentJobId/executionId fields',
-        assemblyMode: 'video_only handoff prepared; full multimedia pending',
-        voiceoverIncluded: false,
-        subtitlesIncluded: false,
-        musicBedIncluded: false,
+        assemblyMode: canonical?.fullMultimediaReady ? 'multimedia_ready' : 'video_only_or_blocked',
+        voiceoverIncluded: canonical?.voiceoverReady === true,
+        subtitlesIncluded: canonical?.subtitlesReady === true,
+        musicBedIncluded: canonical?.musicBedReady === true,
       },
     })
   })

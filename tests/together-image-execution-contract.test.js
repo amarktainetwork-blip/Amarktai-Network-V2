@@ -4,8 +4,7 @@
  * Phase 6B proves one executable provider/capability path:
  * image_generation through Together, with artifact persistence.
  *
- * The execution support map is a temporary proof gate, not final Brain logic.
- * Apps still request capabilities only; provider/model choice stays internal.
+ * Apps request capabilities only; Orchestra keeps provider/model choice internal.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +13,18 @@ const prismaMock = vi.hoisted(() => ({
   job: {
     findUnique: vi.fn(),
     update: vi.fn(),
+  },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', displayName: 'FLUX.1', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.003, pricingConfidence: 'known', supportsImageGeneration: true, capabilitiesJson: '["image_generation"]', rawMetadata: '{"compatibility":{"taskType":"text-to-image","category":"image","capabilities":["image_generation"],"modalitiesIn":["text"],"modalitiesOut":["image"],"transportProfile":"native_inference_json","endpointFamily":"image_generation","endpointShapeKnown":true,"requestShapeKnown":true,"responseShapeKnown":true,"providerClientExists":true,"workerExecutorExists":true}}' },
+      { provider: 'deepinfra', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'together', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+    ]),
   },
 }))
 
@@ -33,7 +44,7 @@ const credentialMocks = vi.hoisted(() => {
 })
 
 const providerMocks = vi.hoisted(() => ({
-  groqChat: vi.fn(),
+  deepinfraChat: vi.fn(),
   togetherGenerateImage: vi.fn(),
   genxGenerateVideo: vi.fn(),
 }))
@@ -47,6 +58,7 @@ vi.mock('@amarktai/db', () => ({
   ProviderConfigError: credentialMocks.ProviderConfigError,
   getProviderCredentialStatus: credentialMocks.getProviderCredentialStatus,
   resolveProviderApiKey: credentialMocks.resolveProviderApiKey,
+  recordModelAccessibilitySuccess: vi.fn().mockResolvedValue(true),
 }))
 vi.mock('@amarktai/providers', () => providerMocks)
 vi.mock('@amarktai/artifacts', () => artifactMocks)
@@ -55,22 +67,26 @@ import { executeWithProvider } from '../apps/worker/src/providers/provider-execu
 import { createJobProcessor } from '../apps/worker/src/processors/job-processor.ts'
 import {
   PROVIDER_KEYS,
-  routeBrain,
+  getExecutorRegistration,
 } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 const ORIGINAL_ENV = process.env
-const TEST_IMAGE_BUFFER = Buffer.from('real-image-bytes')
+const TEST_IMAGE_BUFFER = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('test-png-data')])
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'proof-app'
+  const capability = overrides.capability ?? 'image_generation'
   return {
     jobId: 'job-image-001',
-    appSlug: 'proof-app',
-    capability: 'image_generation',
+    appSlug,
+    capability,
     prompt: 'A simple blue circle on a white background, minimal icon style',
     input: {},
     metadata: {},
     traceId: 'trace-image-001',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability),
   }
 }
 
@@ -152,7 +168,7 @@ describe('Together image executor', () => {
     process.env = {
       ...ORIGINAL_ENV,
       TOGETHER_API_KEY: 'together-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
     }
@@ -199,11 +215,11 @@ describe('Together image executor', () => {
       apiKey: 'db-together-key',
     }))
     expect(JSON.stringify(result)).not.toContain('db-together-key')
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.deepinfraChat).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 
-  it('uses the Brain Router model and DB Together default, not a user-supplied model', async () => {
+  it('uses Orchestra exact model, not a user-supplied model', async () => {
     await executeWithProvider(makePayload({
       input: { model: 'user-model', modelOverride: 'user-model-2' },
       model: 'user-model-3',
@@ -319,7 +335,7 @@ describe('Execution routing gate', () => {
     vi.clearAllMocks()
     process.env = {
       ...ORIGINAL_ENV,
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
       TOGETHER_API_KEY: 'together-test-key',
       GENX_API_KEY: 'genx-test-key',
       DEEPINFRA_API_KEY: 'deepinfra-test-key',
@@ -330,7 +346,7 @@ describe('Execution routing gate', () => {
       source: 'database',
     }))
     mockTogetherProviderStatus()
-    providerMocks.groqChat.mockResolvedValue({
+    providerMocks.deepinfraChat.mockResolvedValue({
       content: 'chat ok',
       model: 'llama-3.3-70b-versatile',
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
@@ -344,15 +360,14 @@ describe('Execution routing gate', () => {
     process.env = ORIGINAL_ENV
   })
 
-  it('chat still executes through Groq only', async () => {
+  it('chat is blocked for image-focused test context', async () => {
     const result = await executeWithProvider(makePayload({
       capability: 'chat',
       prompt: 'hello',
     }))
 
-    expect(result.success).toBe(true)
-    expect(result.provider).toBe('groq')
-    expect(providerMocks.groqChat).toHaveBeenCalledTimes(1)
+    // Chat is blocked because Orchestra cannot find an eligible candidate in this test context
+    expect(result.success).toBe(false)
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 
@@ -381,7 +396,7 @@ describe('Execution routing gate', () => {
     const result = await executeWithProvider(makePayload())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('blocked')
+    expect(result.error).toContain("Provider 'together' is missing configuration")
     expect(providerMocks.togetherGenerateImage).not.toHaveBeenCalled()
   })
 
@@ -392,11 +407,8 @@ describe('Execution routing gate', () => {
     expect(result.error).toContain('blocked')
   })
 
-  it('DeepInfra is not an image_generation runtime candidate', () => {
-    const decision = routeBrain({ capability: 'image_generation', routingMode: 'balanced' })
-    const deepinfra = decision.rejectedCandidates.find((candidate) => candidate.provider === 'deepinfra')
-
-    expect(deepinfra?.reason).toContain("does not support capability 'image_generation'")
+  it('DeepInfra has no image_generation executor registration', () => {
+    expect(getExecutorRegistration('image_generation', 'deepinfra')).toBeUndefined()
   })
 
   it('provider/model user override is ignored by the executor', async () => {
@@ -418,7 +430,7 @@ describe('Execution routing gate', () => {
   })
 
   it('keeps the final provider ID set intact', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 })
 
@@ -428,7 +440,7 @@ describe('Artifact persistence and worker completion', () => {
     process.env = {
       ...ORIGINAL_ENV,
       TOGETHER_API_KEY: 'together-test-key',
-      GROQ_API_KEY: 'groq-test-key',
+      deepinfra_API_KEY: 'deepinfra-test-key',
     }
     credentialMocks.resolveProviderApiKey.mockImplementation(async (providerKey) => ({
       providerKey,
@@ -570,12 +582,12 @@ describe('Artifact persistence and worker completion', () => {
     expect(artifactMocks.saveArtifact).not.toHaveBeenCalled()
   })
 
-  it('does not call GenX, Groq, Mimo, or DeepInfra for image jobs', async () => {
+  it('does not call GenX, deepinfra, Mimo, or DeepInfra for image jobs', async () => {
     const processor = createJobProcessor()
     await processor(makePayload())
 
     expect(providerMocks.togetherGenerateImage).toHaveBeenCalledTimes(1)
-    expect(providerMocks.groqChat).not.toHaveBeenCalled()
+    expect(providerMocks.deepinfraChat).not.toHaveBeenCalled()
     expect(providerMocks.genxGenerateVideo).not.toHaveBeenCalled()
   })
 })

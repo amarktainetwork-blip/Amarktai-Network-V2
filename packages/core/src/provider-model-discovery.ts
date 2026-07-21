@@ -1,5 +1,6 @@
 import { CAPABILITY_KEYS, type CapabilityKey } from './capabilities.js'
 import { PROVIDER_KEYS, type ProviderKey } from './providers.js'
+import { hasExecutorRegistration } from './executor-registry.js'
 
 export const MODEL_DISCOVERY_SOURCES = [
   'live_endpoint',
@@ -176,7 +177,7 @@ export function inferCapabilitiesFromModelId(modelId: string, rawType = ''): Cap
   if (text.includes('whisper') || text.includes('transcrib')) caps.add('stt')
   if (text.includes('tts') || text.includes('speech') || text.includes('orpheus') || text.includes('playai')) caps.add('tts')
   if (text.includes('code')) caps.add('code')
-  if (text.includes('vision') || text.includes('multimodal')) caps.add('multimodal')
+  if (text.includes('vision') || text.includes('multimodal')) caps.add('visual_question_answering')
   if (caps.size === 0) caps.add('chat')
 
   return [...caps]
@@ -192,7 +193,7 @@ export function modalitiesForCapabilities(capabilities: CapabilityKey[]): string
     if (['video_generation', 'image_to_video', 'long_form_video', 'avatar_generation'].includes(capability)) modalities.add('video')
     if (['music_generation', 'tts', 'stt'].includes(capability)) modalities.add('audio')
     if (['embeddings', 'reranking', 'rag_search', 'rag_ingest', 'research'].includes(capability)) modalities.add('retrieval')
-    if (capability === 'multimodal') modalities.add('multimodal')
+    if (capability === 'visual_question_answering') modalities.add('multimodal')
   }
   return [...modalities]
 }
@@ -263,8 +264,8 @@ export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel,
     artifactPersistenceExists,
     policyRestrictedByApp,
   })
-  const executableNow = input.executableNow ?? executableBlockers.length === 0
-  const blockedReason = input.blockedReason ?? (executableNow ? '' : executableBlockers.join(', '))
+  const executableNow = false
+  const blockedReason = input.blockedReason ?? (executableBlockers.join(', ') || 'runtime_truth_required')
   const defaultModalities = modalitiesForCapabilities(input.inferredCapabilities)
 
   return {
@@ -293,7 +294,7 @@ export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel,
     webhookSupported: input.webhookSupported ?? false,
     executableNow,
     executableBlockers,
-    catalogueOnlyReason: input.catalogueOnlyReason ?? (executableNow ? '' : blockedReason),
+    catalogueOnlyReason: input.catalogueOnlyReason ?? blockedReason,
     blockedReason,
   }
 }
@@ -317,7 +318,7 @@ function buildDiscoveryBlockers(input: Pick<ProviderDiscoveredModel, 'endpointSh
 export function buildCapabilityReadiness(models: ProviderDiscoveredModel[]): CapabilityExecutionReadiness[] {
   return CAPABILITY_KEYS.map((capability) => {
     const candidates = models.filter((model) => model.inferredCapabilities.includes(capability))
-    const executable = candidates.some((model) => model.executableNow)
+    const executorRegistered = candidates.some((model) => hasExecutorRegistration(capability, model.provider))
     const first = candidates[0]
     return {
       capability,
@@ -325,12 +326,12 @@ export function buildCapabilityReadiness(models: ProviderDiscoveredModel[]): Cap
       modelCatalogued: candidates.length > 0,
       capabilityInferred: candidates.length > 0,
       endpointShapeKnown: candidates.some((model) => model.endpointShapeKnown),
-      providerClientExists: candidates.some((model) => model.providerClientExists),
-      workerExecutorExists: candidates.some((model) => model.workerExecutorExists),
+      providerClientExists: executorRegistered,
+      workerExecutorExists: executorRegistered,
       artifactPersistenceExists: candidates.some((model) => model.artifactOutput),
       liveProbePassed: false,
-      executableNow: executable,
-      blockedReason: executable ? '' : first?.blockedReason ?? 'no_discovered_model',
+      executableNow: false,
+      blockedReason: executorRegistered ? 'runtime_configuration_and_proof_required' : first?.blockedReason ?? 'no_discovered_model',
     }
   })
 }

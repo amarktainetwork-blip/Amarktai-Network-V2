@@ -2,21 +2,16 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
-import { QUEUE_NAMES } from '@amarktai/core'
-import { getRuntimeProofStatus } from '../lib/runtime-proof-status.js'
+import { CAPABILITY_CATALOG, CAPABILITY_KEYS, QUEUE_NAMES, getDashboardAppSlug, getReleaseCandidateCapabilityKeys, validateOrchestraRequest, type CapabilityKey, type JobPayload } from '@amarktai/core'
+import { getRuntimeProofStatus, type RuntimeProofStatusPayload } from '../lib/runtime-proof-status.js'
+import { resolveInternalDashboardCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
-const STUDIO_CAPABILITY_ALIASES: Record<string, string> = {
-  'text.chat': 'chat',
-  'text.reasoning': 'reasoning',
-  'text.code': 'code',
-  'text.summarization': 'summarization',
-  'text.translation': 'translation',
-  'text.classification': 'classification',
-  'text.extraction': 'extraction',
-  'text.structured_output': 'structured_output',
-  'image.generate': 'image_generation',
-  'video.generate': 'video_generation',
-}
+const STUDIO_CAPABILITY_ALIASES = Object.fromEntries(
+  CAPABILITY_CATALOG.map((capability) => [capability.dashboardType, capability.key]),
+) as Record<string, string>
+
+const KNOWN_CAPABILITY_SET = new Set<string>(CAPABILITY_KEYS)
+const RELEASE_CAPABILITY_SET = new Set<string>(getReleaseCandidateCapabilityKeys())
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -37,20 +32,19 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
   }
 }
 
-function getProvenCapabilities(): string[] {
-  return getRuntimeProofStatus()
-    .provenCapabilities
-    .filter((c) => c.readyForDashboardExecution)
-    .map((c) => c.capability)
-}
-
-function normalizeStudioCapability(capability: unknown): string | null {
+function normalizeStudioCapability(capability: unknown, proofStatus: RuntimeProofStatusPayload): string | null {
   if (typeof capability !== 'string' || !capability.trim()) return null
   const value = capability.trim()
   if (STUDIO_CAPABILITY_ALIASES[value]) return STUDIO_CAPABILITY_ALIASES[value]
-  const provenOrKnown = getRuntimeProofStatus().provenCapabilities.some((item) => item.capability === value)
-    || getRuntimeProofStatus().unprovenCapabilities.some((item) => item.capability === value)
+  if (KNOWN_CAPABILITY_SET.has(value)) return value
+  const provenOrKnown = proofStatus.provenCapabilities.some((item) => item.capability === value)
+    || proofStatus.unprovenCapabilities.some((item) => item.capability === value)
   return provenOrKnown ? value : null
+}
+
+function isCapabilityDashboardReady(capability: string, proofStatus: RuntimeProofStatusPayload): boolean {
+  return [...proofStatus.provenCapabilities, ...proofStatus.unprovenCapabilities]
+    .some((item) => item.capability === capability && item.readyForDashboardExecution)
 }
 
 export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
@@ -68,8 +62,11 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/admin/studio/jobs', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 
+    // Load canonical truth once per request
+    const proofStatus = await getRuntimeProofStatus(app)
+
     const body = request.body as Record<string, unknown>
-    const capability = normalizeStudioCapability(body.capability)
+    const capability = normalizeStudioCapability(body.capability, proofStatus)
     const inputObj = (body.input || body) as Record<string, unknown>
     const prompt = String(body.prompt || inputObj.prompt || inputObj.text || '')
     const metadata = (body.metadata || {}) as Record<string, unknown>
@@ -78,19 +75,39 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: true, message: 'Capability is not mapped to a backend execution key' })
     }
 
-    // Reject provider/model override
-    if (body.provider || body.model || metadata.provider || metadata.model) {
-      return reply.status(400).send({ error: true, message: 'Provider/model override not allowed. Runtime selects provider/model.' })
+    // Reject provider/model/routing override using shared validation
+    const blockedField = validateOrchestraRequest(body) || validateOrchestraRequest(inputObj) || validateOrchestraRequest(metadata)
+    if (blockedField) {
+      return reply.status(400).send({ error: true, message: `Provider/model/routing override not allowed. Orchestra selects provider and model. Blocked field: ${blockedField}` })
     }
 
-    // Evaluate runtime proof per request
-    const provenCapabilities = getProvenCapabilities()
-    if (!provenCapabilities.includes(capability)) {
-      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not proven or not ready for dashboard execution` })
+    const canonicalCapability = capability as CapabilityKey
+    if (!RELEASE_CAPABILITY_SET.has(canonicalCapability)) {
+      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
+    }
+    const appSlug = getDashboardAppSlug(canonicalCapability)
+    const grantResolution = await resolveInternalDashboardCapabilityGrantSnapshot(appSlug, canonicalCapability)
+    if (!grantResolution) {
+      return reply.status(403).send({ error: true, message: `Capability ${appSlug}/${capability} is not part of the internal dashboard authority` })
+    }
+    if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
+      return reply.status(403).send({ error: true, message: `Adult execution requires an explicit adult AppCapabilityGrant` })
+    }
+
+    // Evaluate runtime readiness only after authorization so a missing or
+    // disabled grant is reported as an access denial, not a contract error.
+    if (!isCapabilityDashboardReady(capability, proofStatus)) {
+      return reply.status(400).send({ error: true, message: `Capability "${capability}" is not ready for dashboard execution` })
     }
 
     // Create job
-    const appSlug = 'dashboard-studio'
+    const immutableMetadata = {
+      ...metadata,
+      executionProfile: 'internal_dashboard',
+      appGrantSnapshot: grantResolution.grant,
+      appGrantSnapshotSource: grantResolution.source,
+      appGrantSnapshotAt: new Date().toISOString(),
+    }
     const traceId = `trace_${randomUUID()}`
     const safePrompt = prompt.substring(0, 10000)
     const job = await prisma.job.create({
@@ -99,7 +116,7 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
         capability: capability as never,
         prompt: safePrompt,
         inputJson: JSON.stringify(inputObj),
-        metadataJson: JSON.stringify(metadata),
+        metadataJson: JSON.stringify(immutableMetadata),
         traceId,
         status: 'queued',
       },
@@ -108,14 +125,17 @@ export async function adminStudioRoutes(app: FastifyInstance): Promise<void> {
     // Enqueue in BullMQ
     try {
       const q = getQueue()
-      const payload = {
+      const payload: JobPayload = {
         jobId: job.id,
         appSlug,
-        capability,
+        capability: canonicalCapability,
+        executionProfile: 'internal_dashboard',
         prompt: safePrompt,
         input: inputObj,
-        metadata,
+        metadata: immutableMetadata,
         traceId,
+        routingMode: 'balanced',
+        appGrantSnapshot: grantResolution.grant,
       }
       app.log.info({ queueName: QUEUE_NAMES.JOBS, jobId: job.id, appSlug, capability, traceId }, 'Enqueuing Studio job')
       await q.add('process-job', payload, { jobId: job.id })

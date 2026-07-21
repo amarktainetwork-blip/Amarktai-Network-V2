@@ -10,18 +10,22 @@ import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
-const ADMIN_EMAIL = 'amarktainetwork@gmail.com'
-const ADMIN_PASSWORD = 'Ashmor12@'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || 'amarktainetwork@gmail.com'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim()
 
 async function main(): Promise<void> {
+  if (!ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD must be configured before seeding an admin account')
   console.log(`[seed] Ensuring admin account exists for ${ADMIN_EMAIL}...`)
 
-  const passwordHash = await hash(ADMIN_PASSWORD, 12)
+  const existing = await prisma.adminUser.findUnique({ where: { email: ADMIN_EMAIL } })
+  if (existing) {
+    console.log(`[seed] Admin account already exists: ${existing.email} (id: ${existing.id})`)
+    return
+  }
 
-  const admin = await prisma.adminUser.upsert({
-    where: { email: ADMIN_EMAIL },
-    update: { passwordHash },
-    create: { email: ADMIN_EMAIL, passwordHash },
+  const passwordHash = await hash(ADMIN_PASSWORD, 12)
+  const admin = await prisma.adminUser.create({
+    data: { email: ADMIN_EMAIL, passwordHash, enabled: true },
   })
 
   console.log(`[seed] Admin account ready: ${admin.email} (id: ${admin.id})`)

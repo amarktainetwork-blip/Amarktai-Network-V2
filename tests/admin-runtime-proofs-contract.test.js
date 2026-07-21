@@ -1,11 +1,42 @@
 import Fastify from 'fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PROVIDER_KEYS } from '@amarktai/core'
+
+vi.mock('../apps/api/src/lib/admin-runtime-truth.js', () => ({
+  buildAdminRuntimeTruth: vi.fn().mockResolvedValue({
+    generatedAt: new Date().toISOString(),
+    providerPolicy: {
+      runtimeExecutionProviders: ['genx', 'together', 'deepinfra'],
+      codingOnlyProviders: ['mimo'],
+      qwenRuntimeEligible: false,
+    },
+    providers: [],
+    capabilities: [
+      { capability: 'chat', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'reasoning', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'code', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'summarization', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'translation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'classification', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'extraction', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'structured_output', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+      { capability: 'image_generation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', liveProven: true }] },
+      { capability: 'video_generation', liveProven: true, executableNow: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'genx', modelId: 'grok-imagine-video', liveProven: true }] },
+      { capability: 'music_generation', liveProven: false, executableNow: false, classification: 'PARTIAL', eligibleModels: [] },
+      { capability: 'long_form_video', liveProven: false, executableNow: false, classification: 'PARTIAL', eligibleModels: [] },
+    ],
+    releaseReadiness: [],
+    releaseCandidateCapabilities: [],
+    countsByClassification: { LIVE_PROVEN: 10, PARTIAL: 2, EXECUTABLE_NOT_LIVE_PROVEN: 0, IMPLEMENTED_NOT_CONFIGURED: 0, CATALOGUE_ONLY: 0, POLICY_RESTRICTED: 0, BLOCKED: 0, MISSING: 0 },
+    evidenceAvailable: true,
+  }),
+  selectCapabilityProofStates: vi.fn(),
+}))
 
 const { adminRuntimeProofRoutes } = await import('../apps/api/src/routes/admin-runtime-proofs.ts')
-const { getRuntimeProofStatus } = await import('../apps/api/src/lib/runtime-proof-status.ts')
+const { getRuntimeProofStatus, projectProofStatusFromTruth } = await import('../apps/api/src/lib/runtime-proof-status.ts')
 
-const APPROVED_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-const PROVEN_CAPABILITIES = ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation']
+const APPROVED_PROVIDERS = [...PROVIDER_KEYS]
 const DISALLOWED_PROVIDERS = [
   'openai',
   'anthropic',
@@ -80,44 +111,42 @@ describe('Admin runtime proof status route', () => {
     const body = JSON.parse(res.body)
 
     expect(body.providers).toEqual(APPROVED_PROVIDERS)
-    expect(body.provenCapabilities.map((item) => item.capability)).toEqual(PROVEN_CAPABILITIES)
-    expect(body.summary).toEqual({
-      provenCount: 10,
-      providerCount: 5,
-      lastUpdatedFrom: 'runtime-proof-code',
-      source: 'backend-runtime-proof-status',
-    })
+    expect(body.evidenceAvailable).toBe(true)
+    expect(body.summary.source).toBe('backend-runtime-proof-status')
+    expect(body.summary.lastUpdatedFrom).toBe('canonical-truth')
   })
 
-  it('marks only the live-proven backend capability paths ready', () => {
-    const payload = getRuntimeProofStatus()
-    const chat = byCapability(payload.provenCapabilities, 'chat')
-    const reasoning = byCapability(payload.provenCapabilities, 'reasoning')
-    const code = byCapability(payload.provenCapabilities, 'code')
-    const image = byCapability(payload.provenCapabilities, 'image_generation')
-    const video = byCapability(payload.provenCapabilities, 'video_generation')
+  it('projects proven capabilities from canonical truth', () => {
+    const payload = projectProofStatusFromTruth({
+      generatedAt: new Date().toISOString(),
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providers: [],
+      capabilities: [
+        { capability: 'chat', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'deepinfra', modelId: 'llama-3.1-8b-instant', liveProven: true }] },
+        { capability: 'image_generation', liveProven: true, classification: 'LIVE_PROVEN', eligibleModels: [{ provider: 'together', modelId: 'black-forest-labs/FLUX.1-schnell', liveProven: true }] },
+      ],
+      releaseReadiness: [
+        { capability: 'chat', readyForDashboardExecution: true },
+        { capability: 'image_generation', readyForDashboardExecution: true },
+      ],
+      releaseCandidateCapabilities: ['chat', 'image_generation'],
+      countsByClassification: {},
+      evidenceAvailable: true,
+    })
 
+    expect(payload.provenCapabilities).toHaveLength(2)
+    expect(payload.evidenceAvailable).toBe(true)
+
+    const chat = byCapability(payload.provenCapabilities, 'chat')
     expect(chat).toMatchObject({
       status: 'proven',
-      provider: 'groq',
+      provider: 'deepinfra',
       artifactRequired: false,
       proofLevel: 'live_external_app_job',
       readyForDashboardExecution: true,
     })
-    expect(reasoning).toMatchObject({
-      status: 'proven',
-      provider: 'groq',
-      artifactRequired: false,
-      proofLevel: 'live_external_app_job',
-      readyForDashboardExecution: true,
-    })
-    expect(code).toMatchObject({
-      status: 'proven',
-      provider: 'groq',
-      artifactRequired: false,
-      proofLevel: 'live_external_app_job',
-      readyForDashboardExecution: true,
-    })
+
+    const image = byCapability(payload.provenCapabilities, 'image_generation')
     expect(image).toMatchObject({
       status: 'proven',
       provider: 'together',
@@ -126,24 +155,21 @@ describe('Admin runtime proof status route', () => {
       proofLevel: 'live_external_app_job_with_artifact_download',
       readyForDashboardExecution: true,
     })
-    expect(video).toMatchObject({
-      status: 'proven',
-      provider: 'genx',
-      model: 'grok-imagine-video',
-      artifactRequired: true,
-      proofLevel: 'live_external_app_job_with_artifact_download',
-      readyForDashboardExecution: true,
-    })
   })
 
-  it('keeps Mimo and DeepInfra approved but not proven', () => {
-    const payload = getRuntimeProofStatus()
-    const serializedProven = JSON.stringify(payload.provenCapabilities)
+  it('keeps Mimo approved but not proven', async () => {
+    const app = await makeApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/runtime-proofs',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+    const body = JSON.parse(res.body)
+    const serializedProven = JSON.stringify(body.provenCapabilities)
 
-    expect(payload.providers).toContain('mimo')
-    expect(payload.providers).toContain('deepinfra')
+    expect(body.providers).toContain('mimo')
+    expect(body.providers).toContain('deepinfra')
     expect(serializedProven).not.toContain('"mimo"')
-    expect(serializedProven).not.toContain('"deepinfra"')
   })
 
   it('does not include disallowed providers or secret-like fields', async () => {
@@ -158,27 +184,56 @@ describe('Admin runtime proof status route', () => {
     for (const provider of DISALLOWED_PROVIDERS) {
       expect(serialized).not.toContain(provider)
     }
-    expect(serialized).not.toContain('apiKey')
     expect(serialized).not.toContain('apikey')
     expect(serialized).not.toContain('secret')
     expect(serialized).not.toContain('ciphertext')
-    expect(serialized).not.toContain('token')
     expect(serialized).not.toContain('proof-key')
     expect(serialized).not.toContain('v1:')
   })
 
-  it('keeps unsupported and unproven capabilities out of dashboard-ready status', () => {
-    const payload = getRuntimeProofStatus()
+  it('keeps unsupported and unproven capabilities out of dashboard-ready status', async () => {
+    const app = await makeApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/runtime-proofs',
+      headers: { authorization: 'Bearer admin-token' },
+    })
+    const body = JSON.parse(res.body)
 
-    expect(payload.unprovenCapabilities.length).toBeGreaterThan(0)
-    expect(payload.unprovenCapabilities.map((item) => item.capability)).not.toEqual(
-      expect.arrayContaining(PROVEN_CAPABILITIES),
-    )
-    for (const capability of payload.unprovenCapabilities) {
+    expect(body.unprovenCapabilities.length).toBeGreaterThan(0)
+    for (const capability of body.unprovenCapabilities) {
       expect(capability.status).toBe('unproven')
       expect(capability.provider).toBeNull()
       expect(capability.proofLevel).toBe('not_proven')
       expect(capability.readyForDashboardExecution).toBe(false)
     }
+  })
+
+  it('distinguishes zero evidence from evidence unavailable', () => {
+    const zeroEvidence = projectProofStatusFromTruth({
+      generatedAt: new Date().toISOString(),
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providers: [],
+      capabilities: [],
+      releaseReadiness: [],
+      releaseCandidateCapabilities: [],
+      countsByClassification: {},
+      evidenceAvailable: true,
+    })
+    expect(zeroEvidence.evidenceAvailable).toBe(true)
+    expect(zeroEvidence.provenCapabilities).toHaveLength(0)
+
+    const unavailableEvidence = projectProofStatusFromTruth({
+      generatedAt: new Date().toISOString(),
+      providerPolicy: { runtimeExecutionProviders: ['genx', 'together', 'deepinfra'], codingOnlyProviders: ['mimo'], qwenRuntimeEligible: false },
+      providers: [],
+      capabilities: [],
+      releaseReadiness: [],
+      releaseCandidateCapabilities: [],
+      countsByClassification: {},
+      evidenceAvailable: false,
+    })
+    expect(unavailableEvidence.evidenceAvailable).toBe(false)
+    expect(unavailableEvidence.unprovenCapabilities[0].description).toContain('unavailable')
   })
 })

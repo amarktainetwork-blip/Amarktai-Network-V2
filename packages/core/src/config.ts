@@ -47,12 +47,6 @@ export const WORKER_CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 5)
 
 // ── Provider API Keys ─────────────────────────────────────────────────────────
 
-export function getGroqApiKey(): string {
-  const key = process.env.GROQ_API_KEY
-  if (!key) throw new Error('GROQ_API_KEY environment variable is required')
-  return key
-}
-
 export function getTogetherApiKey(): string {
   const key = process.env.TOGETHER_API_KEY
   if (!key) throw new Error('TOGETHER_API_KEY environment variable is required')
@@ -77,19 +71,14 @@ export function getDeepinfraApiKey(): string {
 
 // ── Provider Defaults ─────────────────────────────────────────────────────────
 
-export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const TOGETHER_BASE_URL = 'https://api.together.xyz/v1'
 export const DEEPINFRA_BASE_URL = 'https://api.deepinfra.com/v1'
 export const DEEPINFRA_OPENAI_BASE_URL = 'https://api.deepinfra.com/v1/openai'
 
-export const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile'
 export const DEEPINFRA_DEFAULT_CHAT_MODEL = process.env.DEEPINFRA_DEFAULT_MODEL ?? 'meta-llama/Meta-Llama-3.1-8B-Instruct'
-export const GROQ_STT_MODEL = 'whisper-large-v3'
-export const GROQ_TTS_MODEL = 'canopylabs/orpheus-v1-english'
 // No unsafe repository fallback is set for Together image generation. Configure
 // a serverless-accessible model through the provider defaultModel or env.
 export const TOGETHER_DEFAULT_IMAGE_MODEL = ''
-export const GROQ_TTS_MAX_CHARS = 200
 
 export function getTogetherImageModel(): string {
   return process.env.TOGETHER_IMAGE_MODEL?.trim() || TOGETHER_DEFAULT_IMAGE_MODEL
@@ -127,35 +116,75 @@ export const CRAWLEE_TIMEOUT_MS = Number(process.env.CRAWLEE_TIMEOUT_MS ?? 60_00
 // ── Token Ledger ──────────────────────────────────────────────────────────────
 
 export const TOKEN_COST_MULTIPLIER: Record<string, number> = {
+  // Language and Agent
   chat: 1,
+  streaming_chat: 1,
   reasoning: 2,
   code: 1,
   summarization: 1,
   translation: 1,
+  question_answering: 1,
   classification: 1,
+  zero_shot_classification: 1,
   extraction: 1,
+  token_classification: 1,
+  fill_mask: 1,
+  feature_extraction: 1,
+  sentence_similarity: 1,
+  table_qa: 1,
+  structured_output: 1,
+  tool_use: 1,
+  // Image and Vision
   image_generation: 5,
   image_edit: 5,
-  image_to_video: 20,
-  long_form_video: 40,
-  tts: 3,
-  stt: 2,
-  video_generation: 20,
-  music_generation: 10,
-  avatar_generation: 15,
-  embeddings: 1,
-  reranking: 1,
-  research: 2,
-  multimodal: 2,
-  tool_use: 1,
-  structured_output: 1,
-  brand_scrape: 3,
-  rag_ingest: 2,
-  rag_search: 1,
+  image_to_image: 5,
+  image_upscale: 5,
+  image_classification: 1,
+  object_detection: 2,
+  image_segmentation: 3,
+  depth_estimation: 2,
+  keypoint_detection: 2,
+  visual_question_answering: 2,
   document_qa: 2,
   ocr: 2,
+  zero_shot_object_detection: 2,
+  mask_generation: 3,
+  visual_document_retrieval: 2,
+  // Video, Avatar and 3D
+  video_generation: 20,
+  image_to_video: 20,
+  video_to_video: 25,
+  long_form_video: 40,
+  video_understanding: 5,
+  video_classification: 3,
+  storyboard_generation: 5,
+  subtitle_generation: 3,
+  lip_sync: 10,
+  avatar_generation: 15,
+  text_to_3d: 15,
+  image_to_3d: 15,
+  // Audio, Voice and Music
+  tts: 3,
+  stt: 2,
+  voice_clone: 5,
+  voice_conversion: 5,
+  text_to_audio: 3,
+  audio_to_audio: 3,
+  audio_classification: 2,
+  voice_activity_detection: 1,
+  music_generation: 10,
+  song_generation: 12,
+  // Retrieval, Research and Business
+  embeddings: 1,
+  reranking: 1,
+  rag_ingest: 2,
+  rag_search: 1,
+  research: 2,
+  brand_scrape: 3,
+  document_ingest: 2,
   campaign_generation: 5,
   social_content_generation: 5,
+  // Governed Adult
   adult_text: 3,
   adult_image: 10,
   adult_voice: 8,

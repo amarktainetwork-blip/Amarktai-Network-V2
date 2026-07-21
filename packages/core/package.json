@@ -9,6 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./premium-media-policy": {
+      "types": "./dist/premium-media-policy.d.ts",
+      "import": "./dist/premium-media-policy.js"
+    },
+    "./song-generation": {
+      "types": "./dist/song-generation.d.ts",
+      "import": "./dist/song-generation.js"
+    },
+    "./premium-advert": {
+      "types": "./dist/premium-advert.d.ts",
+      "import": "./dist/premium-advert.js"
     }
   },
   "scripts": {

@@ -10,7 +10,12 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { CAPABILITY_BY_KEY, CAPABILITY_KEYS } from '../packages/core/src/capabilities.ts'
+import { getExecutorRegistrations } from '../packages/core/src/executor-registry.ts'
+import { MODEL_CATALOGUE } from '../packages/core/src/model-catalog.ts'
+import { APPROVED_PROVIDER_DEFINITIONS } from '../packages/core/src/providers.ts'
 import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
+import { buildLongFormComponentRuntimeState } from '../apps/api/src/lib/admin-runtime-truth.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -37,69 +42,28 @@ async function fileExists(filePath) {
 
 // Extract provider list from providers.ts
 async function extractProviders() {
-  const content = await safeRead('packages/core/src/providers.ts')
-  if (!content) return { found: false, providers: [] }
-  
-  const match = content.match(/PROVIDER_KEYS\s*=\s*\[([^\]]+)\]/)
-  if (!match) return { found: false, providers: [] }
-  
-  const providers = match[1]
-    .split(',')
-    .map(p => p.trim().replace(/['"]/g, ''))
-    .filter(Boolean)
-  
-  return { found: true, providers }
+  return { found: true, providers: APPROVED_PROVIDER_DEFINITIONS.map(provider => provider.key) }
 }
 
 // Extract capabilities from capabilities.ts
 async function extractCapabilities() {
-  const content = await safeRead('packages/core/src/capabilities.ts')
-  if (!content) return { found: false, capabilities: [] }
-  
-  const match = content.match(/CAPABILITY_KEYS\s*=\s*\[([^\]]+)\]/s)
-  if (!match) return { found: false, capabilities: [] }
-  
-  const capabilities = match[1]
-    .split(',')
-    .map(c => c.trim().replace(/['"]/g, '').replace(/,\s*$/, ''))
-    .filter(Boolean)
-  
-  return { found: true, capabilities }
+  return { found: true, capabilities: [...CAPABILITY_KEYS] }
 }
 
 // Extract model catalogue from model-catalog.ts
 async function extractModelCatalogue() {
-  const content = await safeRead('packages/core/src/model-catalog.ts')
-  if (!content) return { found: false, models: [] }
-  
-  const models = []
-  // Match each model object in the MODEL_CATALOGUE array
-  const modelRegex = /{\s*provider:\s*'([^']+)',\s*modelId:\s*'([^']+)',\s*displayName:\s*'([^']+)',\s*capabilities:\s*\[([^\]]+)\],[\s\S]*?status:\s*'([^']+)',[\s\S]*?executable:\s*(true|false)/g
-  
-  let match
-  while ((match = modelRegex.exec(content)) !== null) {
-    models.push({
-      provider: match[1],
-      modelId: match[2],
-      displayName: match[3],
-      capabilities: match[4].split(',').map(c => c.trim().replace(/['"]/g, '')).filter(Boolean),
-      status: match[5],
-      executable: match[6] === 'true'
-    })
-  }
-  
-  return { found: true, models }
+  return { found: true, models: MODEL_CATALOGUE.map(model => ({ ...model, capabilities: [...model.capabilities] })) }
 }
 
-// Check Brain Router integration
-async function checkBrainRouter() {
-  const brainRouter = await safeRead('packages/core/src/brain-router.ts')
+// Check canonical Orchestra integration
+async function checkOrchestra() {
+  const orchestra = await safeRead('packages/core/src/orchestra.ts')
   const providerExecutor = await safeRead('apps/worker/src/providers/provider-executor.ts')
   
   return {
-    exists: !!brainRouter,
-    integratedInWorker: providerExecutor?.includes('routeBrain') || false,
-    routingModes: brainRouter?.match(/ROUTING_MODES\s*=\s*\[([^\]]+)\]/)?.[1]
+    exists: !!orchestra,
+    integratedInWorker: providerExecutor?.includes('resolveOrchestraDecision') && !providerExecutor?.includes('routeBrain') || false,
+    routingModes: orchestra?.match(/ORCHESTRA_ROUTING_MODES\s*=\s*\[([^\]]+)\]/)?.[1]
       ?.split(',').map(m => m.trim().replace(/['"]/g, '')).filter(Boolean) || []
   }
 }
@@ -107,19 +71,28 @@ async function checkBrainRouter() {
 // Check worker execution paths
 async function checkWorkerExecution() {
   const content = await safeRead('apps/worker/src/providers/provider-executor.ts')
+  const direct = await safeRead('apps/worker/src/providers/direct-provider-executor.ts')
+  const streaming = await safeRead('apps/api/src/routes/streaming-chat.ts')
   if (!content) return { found: false, executors: {} }
   
   return {
     found: true,
     executors: {
-      groqChat: content.includes('executeGroqChat') || content.includes('groqChat'),
-      groqText: content.includes('executeGroqTextCapability'),
-      deepinfraText: content.includes('executeDeepInfraTextCapability'),
+      deepinfraChat: direct?.includes('executedeepinfraChat') || false,
+      deepinfraText: direct?.includes('executeValidatedTextCapability') || false,
+      deepinfraStreaming: streaming?.includes('openAiStreamingChat') || false,
+      deepinfraToolUse: direct?.includes('executedeepinfraToolUse') || false,
+      deepinfraTts: direct?.includes('executedeepinfraTts') || false,
+      deepinfraStt: direct?.includes('executedeepinfraStt') || false,
+      deepinfraText: direct?.includes('executeValidatedTextCapability') || false,
+      deepinfraTasks: direct?.includes('executeDeepInfraTaskCapability') || false,
+      embeddings: direct?.includes('executeEmbeddingsCapability') || false,
+      reranking: direct?.includes('executeRerankingCapability') || false,
       togetherImage: content.includes('executeTogetherImage'),
       genxVideo: content.includes('executeGenxVideo'),
       musicWorker: content.includes('executeGenxMusic')
     },
-    usesBrainRouter: content.includes('routeBrain')
+    usesOrchestra: content.includes('resolveOrchestraDecision') && !content.includes('routeBrain')
   }
 }
 
@@ -266,7 +239,7 @@ async function checkProviderClients() {
   return {
     found: true,
     clients: {
-      groq: content.includes('groqChat') || content.includes('groq'),
+      deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
       together: content.includes('togetherGenerateImage') || content.includes('together'),
       genx: content.includes('genxGenerateVideo') || content.includes('genx'),
       deepinfra: content.includes('deepinfraChat') || content.includes('deepinfra'),
@@ -283,7 +256,7 @@ async function checkRoutingMap() {
   
   return {
     found: true,
-    hasBrainRouter: content.includes('BRAIN_ROUTER_V1'),
+    hasOrchestra: content.includes('ORCHESTRA'),
     hasModelCatalogue: content.includes('MODEL_CATALOGUE_SUMMARY'),
     hasRoutingTruth: content.includes('ROUTING_TRUTH')
   }
@@ -297,7 +270,7 @@ async function runAudit() {
     providers,
     capabilities,
     modelCatalogue,
-    brainRouter,
+    orchestraRouter,
     workerExecution,
     dashboardPages,
     appContract,
@@ -308,7 +281,7 @@ async function runAudit() {
     extractProviders(),
     extractCapabilities(),
     extractModelCatalogue(),
-    checkBrainRouter(),
+    checkOrchestra(),
     checkWorkerExecution(),
     checkDashboardPages(),
     checkAppContract(),
@@ -326,56 +299,29 @@ async function runAudit() {
   const pendingCapabilities = []
   const blockedCapabilities = []
   
-  // Text capabilities supported by Groq/DeepInfra text executor
-  const textRouterCapabilities = [
-    'chat', 'reasoning', 'code', 'summarization', 
-    'translation', 'classification', 'extraction', 'structured_output'
-  ]
-  
-  // Media capabilities supported by Together/GenX
-  const mediaWorkerCapabilities = ['image_generation', 'video_generation']
-  
+  const baselineRuntimeTruth = getRuntimeTruth()
+  const runtimeByCapability = new Map(baselineRuntimeTruth.capabilities.map(capability => [capability.capability, capability]))
+
   if (capabilities.found) {
     for (const cap of capabilities.capabilities) {
-      // Check if capability has executable models in catalogue
-      const hasExecutableModel = modelCatalogue.models.some(
-        m => m.capabilities.includes(cap) && m.status === 'available' && m.executable
-      )
-      
-      // Check if worker has executor for this capability
-      const hasWorkerExecutor = 
-        (textRouterCapabilities.includes(cap) && workerExecution.executors.groqText) ||
-        (cap === 'image_generation' && workerExecution.executors.togetherImage) ||
-        (cap === 'video_generation' && workerExecution.executors.genxVideo)
-      
-      if (cap.startsWith('adult_')) {
-        blockedCapabilities.push({ capability: cap, reason: 'adult_permission_required' })
-      } else if (['music_generation', 'long_form_video'].includes(cap)) {
-        pendingCapabilities.push({ capability: cap, reason: 'backend_not_wired' })
-      } else if (textRouterCapabilities.includes(cap) && hasExecutableModel && hasWorkerExecutor) {
-        // Text capabilities executable via Groq/DeepInfra
-        executableViaTextRouter.push({ 
-          capability: cap, 
-          status: 'live_via_text_router',
-          providers: ['groq', 'deepinfra']
-        })
-        executableCapabilities.push({ capability: cap, status: 'live' })
-      } else if (mediaWorkerCapabilities.includes(cap) && hasExecutableModel && hasWorkerExecutor) {
-        // Media capabilities executable via Together/GenX
-        executableViaMediaWorker.push({ 
-          capability: cap, 
-          status: 'live_via_media_worker',
-          providers: cap === 'image_generation' ? ['together'] : ['genx']
-        })
-        executableCapabilities.push({ capability: cap, status: 'live' })
-      } else if (hasExecutableModel) {
-        // Has model but no worker executor
-        catalogueOnlyCapabilities.push({ capability: cap, reason: 'no_worker_executor' })
-        pendingCapabilities.push({ capability: cap, reason: 'no_worker_executor' })
-      } else if (['tts', 'stt', 'embeddings', 'research'].includes(cap)) {
-        pendingCapabilities.push({ capability: cap, reason: 'partial_implementation' })
-      } else {
-        pendingCapabilities.push({ capability: cap, reason: 'not_yet_wired' })
+      const truth = runtimeByCapability.get(cap)
+      const registrations = getExecutorRegistrations(cap)
+      const providers = [...new Set(registrations.map(registration => registration.provider))]
+      if (!truth) continue
+
+      if (truth.classification === 'POLICY_RESTRICTED' || truth.classification === 'BLOCKED') {
+        blockedCapabilities.push({ capability: cap, reason: truth.blockedReasons.join(',') || truth.classification.toLowerCase() })
+      }
+      if (truth.classification === 'CATALOGUE_ONLY') {
+        catalogueOnlyCapabilities.push({ capability: cap, reason: 'catalogue_without_executor' })
+      }
+      if (truth.executableNow) {
+        const executable = { capability: cap, status: truth.classification.toLowerCase(), providers }
+        executableCapabilities.push(executable)
+        if (CAPABILITY_BY_KEY[cap].artifactRequired) executableViaMediaWorker.push(executable)
+        else executableViaTextRouter.push(executable)
+      } else if (truth.classification !== 'POLICY_RESTRICTED') {
+        pendingCapabilities.push({ capability: cap, reason: truth.classification.toLowerCase(), providers })
       }
     }
   }
@@ -407,26 +353,42 @@ async function runAudit() {
   
   if (dashboardPages.found) {
     for (const [page, pageInfo] of Object.entries(dashboardPages.pages)) {
-      if (pageInfo.status === 'execution-ready') {
+      const claimedReady = pageInfo.executionReadyCapabilities || []
+      const canonicalReady = claimedReady.filter(capability => runtimeByCapability.get(capability)?.executableNow === true)
+      const canonicalPending = [...new Set([
+        ...(pageInfo.pendingCapabilities || []),
+        ...claimedReady.filter(capability => !canonicalReady.includes(capability)),
+      ])]
+      const effectiveStatus = claimedReady.length === 0
+        ? pageInfo.status
+        : canonicalReady.length === claimedReady.length && canonicalPending.length === 0
+          ? 'execution-ready'
+          : canonicalReady.length > 0
+            ? 'partial_execution'
+            : 'design_ready_pending_backend'
+
+      if (effectiveStatus === 'execution-ready') {
         executionReadyPages.push(page)
-      } else if (pageInfo.status === 'partial_execution') {
+      } else if (effectiveStatus === 'partial_execution') {
         partialExecutionPages.push(page)
-      } else if (pageInfo.status === 'design-ready') {
+      } else if (effectiveStatus === 'design-ready') {
         designReadyPages.push(page)
-      } else if (pageInfo.status === 'design_ready_pending_backend') {
+      } else if (effectiveStatus === 'design_ready_pending_backend') {
         designReadyPendingBackendPages.push(page)
-      } else if (pageInfo.status === 'display-only') {
+      } else if (effectiveStatus === 'display-only') {
         displayOnlyPages.push(page)
       }
       
       // Add detailed page info
       pageDetails.push({
         route: `/dashboard/${page}`,
-        status: pageInfo.status,
-        executionReadyCapabilities: pageInfo.executionReadyCapabilities || [],
-        pendingCapabilities: pageInfo.pendingCapabilities || [],
+        status: effectiveStatus,
+        executionReadyCapabilities: canonicalReady,
+        pendingCapabilities: canonicalPending,
         hasBackendIntegration: pageInfo.hasBackendIntegration || false,
-        reason: pageInfo.reason || ''
+        reason: claimedReady.length > 0
+          ? 'Capability readiness is projected from canonical runtime truth.'
+          : pageInfo.reason || ''
       })
     }
   }
@@ -452,7 +414,7 @@ async function runAudit() {
     if (libs.canvas) openSourceInstalled.push('canvas')
     
     // Check what's actually wired (has real workflow implementation)
-    if (libs.bullmq && libs.ioredis && workerExecution.usesBrainRouter) {
+    if (libs.bullmq && libs.ioredis && workerExecution.usesOrchestra) {
       openSourceWired.push('bullmq-queue')
     }
     if (libs.prisma) {
@@ -486,10 +448,6 @@ async function runAudit() {
   const musicSchemaReady = await fileExists('packages/core/src/music-generation.ts')
   const musicRouteExists = await fileExists('apps/api/src/routes/admin-music.ts')
   const musicDashboardReady = dashboardPages.found && dashboardPages.pages['music']?.exists
-  const musicModelCatalogueEntryExists = modelCatalogue.models.some(m => m.capabilities.includes('music_generation'))
-  const musicWorkerExecutorExists = workerExecution.found && workerExecution.executors.musicWorker === true
-  const musicProviderClientExists = providerClients.clients.music === true
-  const musicArtifactPersistenceReady = await fileExists('packages/artifacts/src/manager.ts')
   const discoveredCatalogue = JSON.parse(await safeRead('packages/core/src/generated/provider-model-catalogue.generated.json') || '[]')
   const discoveryReport = JSON.parse(await safeRead('BUILD_MODEL_DISCOVERY_REPORT.json') || '{}')
   const discoveredMusicModels = Array.isArray(discoveredCatalogue)
@@ -500,23 +458,10 @@ async function runAudit() {
   const genxMusicCapabilityKnown = genxMusicModels.length > 0
   const lyriaClipDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-clip-preview')
   const lyriaProDiscovered = genxMusicModels.some(model => model.modelId === 'lyria-3-pro-preview')
-  const musicImplementationReady = musicProviderClientExists && musicRouteExists && musicModelCatalogueEntryExists && musicWorkerExecutorExists && musicArtifactPersistenceReady
-  const musicConfigured = false
-  const musicPolicyAllowed = true
-  const musicInfrastructureReady = false
-  const musicLiveProven = false
-  const musicExecutableNow = musicImplementationReady && musicConfigured && musicPolicyAllowed && musicInfrastructureReady
-  const musicBlockedReasons = [
-    !musicProviderClientExists ? 'provider_client_missing' : null,
-    !musicWorkerExecutorExists ? 'worker_executor_missing' : null,
-    !musicRouteExists ? 'route_missing' : null,
-    !musicArtifactPersistenceReady ? 'artifact_path_missing' : null,
-    !musicConfigured ? 'genx_api_key_not_configured' : null,
-    !musicInfrastructureReady ? 'infrastructure_not_verified_by_audit' : null,
-  ].filter(Boolean)
-  const musicBlockedReason = musicExecutableNow
+  const musicTruth = runtimeByCapability.get('music_generation')
+  const musicBlockedReason = musicTruth.executableNow
     ? 'Music execution is ready for first live proof; live proof is still pending.'
-    : `Music execution blocked: ${musicBlockedReasons.join(', ')}.`
+    : `Music execution blocked: ${musicTruth.blockedReasons.join(', ')}.`
 
   const providerDiscoveryReadiness = {
     discoveryFrameworkReady: await fileExists('scripts/discover-provider-models.mjs') && await fileExists('packages/core/src/provider-model-discovery.ts'),
@@ -551,33 +496,20 @@ async function runAudit() {
   }
 
   const musicReadiness = {
+    ...musicTruth,
     schemaReady: musicSchemaReady,
     plannerReady: musicSchemaReady,
-    providerClientExists: musicProviderClientExists,
-    clientImplemented: musicProviderClientExists,
-    modelCatalogueEntryExists: musicModelCatalogueEntryExists,
-    workerExecutorExists: musicWorkerExecutorExists,
-    executorRegistered: musicWorkerExecutorExists,
-    artifactPersistenceReady: musicArtifactPersistenceReady,
-    artifactPathImplemented: musicArtifactPersistenceReady,
-    queuePathImplemented: musicRouteExists,
-    routeImplemented: musicRouteExists,
-    implementationReady: musicImplementationReady,
-    catalogueKnown: genxMusicCapabilityKnown,
-    configured: musicConfigured,
-    policyAllowed: musicPolicyAllowed,
-    infrastructureReady: musicInfrastructureReady,
-    executableNow: musicExecutableNow,
-    liveProven: musicLiveProven,
-    lastProofAt: null,
-    blockedReasons: musicBlockedReasons,
+    providerClientExists: musicTruth.clientImplemented,
+    modelCatalogueEntryExists: musicTruth.discoveredModelCount > 0,
+    workerExecutorExists: musicTruth.executorRegistered,
+    artifactPersistenceReady: musicTruth.artifactPathImplemented,
     dashboardReady: musicDashboardReady,
     adminRoutesReady: musicRouteExists,
     instrumentalReady: musicSchemaReady,
     vocalsReady: false,
     lyricsReady: false,
-    musicGenerationReady: musicExecutableNow,
-    executionBlocked: !musicExecutableNow,
+    musicGenerationReady: musicTruth.executableNow,
+    executionBlocked: !musicTruth.executableNow,
     blockedReason: musicBlockedReason,
     discoveredMusicModels: discoveredMusicModels.length,
     genxMusicCapabilityKnown,
@@ -586,30 +518,32 @@ async function runAudit() {
     lyriaClipDiscovered,
     lyriaProDiscovered,
     musicProviderCapabilityKnown: discoveredMusicModels.length > 0,
-    musicExecutorReady: musicWorkerExecutorExists && musicProviderClientExists,
+    musicExecutorReady: musicTruth.executorRegistered && musicTruth.clientImplemented,
     togetherMusicModels: discoveredMusicModels.filter(model => model.provider === 'together').map(model => model.modelId),
     deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
-    groqMusicModels: discoveredMusicModels.filter(model => model.provider === 'groq').map(model => model.modelId),
+    deepinfraMusicModels: discoveredMusicModels.filter(model => model.provider === 'deepinfra').map(model => model.modelId),
     endpointShapeKnown: musicEndpointShapeKnown,
-    executableNow: musicExecutableNow,
-    providerCapabilityAudit: [
-      { provider: 'genx', musicClient: musicProviderClientExists, executable: musicExecutableNow, note: 'GenX music client exists; execution still requires configuration/infrastructure gates.' },
-      { provider: 'groq', musicClient: false, executable: false, note: 'Groq chat/TTS/STT clients exist; no music generation client.' },
-      { provider: 'together', musicClient: false, executable: false, note: 'Together image client exists; no music generation client.' },
-      { provider: 'mimo', musicClient: false, executable: false, note: 'MiMo remains coding_tools_only and is never runtime-selected.' },
-      { provider: 'deepinfra', musicClient: false, executable: false, note: 'DeepInfra chat client exists; no music generation client.' }
-    ],
+    providerCapabilityAudit: baselineRuntimeTruth.providers.map(provider => ({
+      provider: provider.provider,
+      musicClient: provider.registeredExecutorCapabilities.includes('music_generation'),
+      executable: provider.provider === 'genx' && musicTruth.executableNow,
+      note: provider.codingOnly
+        ? 'coding_tools_only and never runtime-selected'
+        : provider.registeredExecutorCapabilities.includes('music_generation')
+          ? 'Callable music executor registered; canonical runtime gates still apply.'
+          : 'No callable music executor registered.',
+    })),
     // Legacy keys retained for existing audit consumers.
-    providerClient: musicProviderClientExists,
-    modelCatalogueEntries: musicModelCatalogueEntryExists,
-    workerExecutor: musicWorkerExecutorExists,
+    providerClient: musicTruth.clientImplemented,
+    modelCatalogueEntries: musicTruth.discoveredModelCount > 0,
+    workerExecutor: musicTruth.executorRegistered,
     dashboardPage: musicDashboardReady,
     missingParts: [
       !musicSchemaReady ? 'music_schema' : null,
-      !musicProviderClientExists ? 'music_provider_client' : null,
-      !musicModelCatalogueEntryExists ? 'music_models_in_catalogue' : null,
-      !musicWorkerExecutorExists ? 'music_worker_executor' : null,
-      !musicArtifactPersistenceReady ? 'music_artifact_persistence' : null,
+      !musicTruth.clientImplemented ? 'music_provider_client' : null,
+      musicTruth.discoveredModelCount === 0 ? 'music_models_in_catalogue' : null,
+      !musicTruth.executorRegistered ? 'music_worker_executor' : null,
+      !musicTruth.artifactPathImplemented ? 'music_artifact_persistence' : null,
       !musicDashboardReady ? 'music_dashboard_enablement' : null
     ].filter(Boolean)
   }
@@ -624,20 +558,31 @@ async function runAudit() {
   let longFormExecuteRouteExists = false
   let longFormAssemblyRouteExists = false
   let longFormAssemblyModuleExists = false
+  let automaticVoiceoverReady = false
+  let automaticSubtitlesReady = false
+  let automaticMusicBedReady = false
+  let automaticAssemblyReady = false
   if (longFormPlanRouteExists) {
     const routeContent = await safeRead('apps/api/src/routes/admin-long-form-video.ts')
-    longFormExecuteRouteExists = routeContent?.includes('execute-scenes') || false
+    longFormExecuteRouteExists = routeContent?.includes('enqueueSceneJobs') || false
     longFormAssemblyRouteExists = routeContent?.includes('/assemble/') || false
+    automaticVoiceoverReady = routeContent?.includes('enqueueVoiceoverJobs') || false
+    automaticSubtitlesReady = routeContent?.includes('createAutomaticSubtitleArtifact') || false
+    automaticMusicBedReady = routeContent?.includes('enqueueMusicBedJob') || false
+    automaticAssemblyReady = routeContent?.includes('advanceLongFormWorkflow') || false
   }
   
-  // Check for assembly module
-  longFormAssemblyModuleExists = await fileExists('apps/api/src/lib/long-form-assembly.ts')
+  // The normal path executes assembly durably in the worker. The API-local
+  // module remains diagnostics/recovery-only.
+  longFormAssemblyModuleExists = await fileExists('apps/worker/src/long-form-assembly.ts')
+  const longFormWorkflowModuleExists = await fileExists('packages/db/src/long-form-workflow.ts')
+  const longFormComponentStateExists = await fileExists('packages/db/src/long-form-parent-state.ts')
   
   // Check for ffmpeg availability (system-level, not package.json)
   let ffmpegAvailableLocal = false
   try {
     const { execSync } = await import('child_process')
-    execSync('ffmpeg -version', { stdio: 'ignore', timeout: 2000 })
+    execSync(`"${process.env.FFMPEG_PATH || 'ffmpeg'}" -version`, { stdio: 'ignore', timeout: 5000 })
     ffmpegAvailableLocal = true
   } catch {
     ffmpegAvailableLocal = false
@@ -657,17 +602,38 @@ async function runAudit() {
   } catch {
     ffmpegExpectedInRuntime = false
   }
+  if (ffmpegAvailableLocal || ffmpegExpectedInRuntime) {
+    const missingIndex = openSourceMissing.indexOf('ffmpeg-for-video-stitching')
+    if (missingIndex >= 0) openSourceMissing.splice(missingIndex, 1)
+    if (!openSourceInstalled.includes('ffmpeg-runtime')) openSourceInstalled.push('ffmpeg-runtime')
+    if (longFormAssemblyModuleExists && !openSourceWired.includes('ffmpeg-long-form-assembly')) openSourceWired.push('ffmpeg-long-form-assembly')
+  }
   
   // Use local availability for videoOnlyReady (actual execution capability)
   const ffmpegAvailable = ffmpegAvailableLocal
-  
+  const longFormComponentState = buildLongFormComponentRuntimeState(false, {})
+  const longFormTruth = getRuntimeTruth({ longFormComponents: longFormComponentState })
+    .capabilities.find(capability => capability.capability === 'long_form_video')
+  const longFormImplementationClosureReady = longFormSchemaExists
+    && longFormPlannerExists
+    && longFormExecutionExists
+    && longFormExecuteRouteExists
+    && longFormAssemblyModuleExists
+    && longFormWorkflowModuleExists
+    && longFormComponentStateExists
+    && automaticVoiceoverReady
+    && automaticSubtitlesReady
+    && automaticMusicBedReady
+    && automaticAssemblyReady
+
   const longFormReadiness = {
+    ...longFormTruth,
     // Phase 1: Schema and planning
     schemaReady: longFormSchemaExists,
-    plannerReady: longFormPlannerExists,
+    plannerReady: longFormTruth.plannerReady,
     
     // Phase 2: Scene execution
-    sceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
+    sceneExecutionReady: longFormExecuteRouteExists,
     
     // Phase 3: Assembly pipeline
     assemblyModuleExists: longFormAssemblyModuleExists,
@@ -675,51 +641,53 @@ async function runAudit() {
     ffmpegAvailableLocal: ffmpegAvailableLocal,
     ffmpegExpectedInRuntime: ffmpegExpectedInRuntime,
     ffmpegAvailable: ffmpegAvailable,
-    artifactStorageReady: longFormAssemblyModuleExists, // Module handles storage
+    artifactStorageReady: longFormAssemblyModuleExists,
     
     // Pipeline readiness (components exist)
-    videoOnlyAssemblyPipelineReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists,
+    videoOnlyAssemblyPipelineReady: longFormAssemblyModuleExists && longFormWorkflowModuleExists,
     
     // Actual readiness (can execute now)
-    videoOnlyReady: longFormSchemaExists && longFormPlannerExists && longFormExecutionExists && 
-                    longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
+    videoOnlyReady: longFormAssemblyModuleExists && longFormWorkflowModuleExists && ffmpegAvailable,
     
-    // Multimedia readiness (always false for now)
-    fullMultimediaReady: false,
-    voiceoverReady: false,
-    subtitlesReady: false,
-    musicBedReady: false,
+    // Multimedia readiness (code exists but not live-proven)
+    fullMultimediaReady: longFormImplementationClosureReady,
+    voiceoverReady: automaticVoiceoverReady,
+    subtitlesReady: automaticSubtitlesReady,
+    musicBedReady: automaticMusicBedReady,
+    localImplementationClosureReady: longFormImplementationClosureReady,
+    liveProven: false,
+    liveProofPending: true,
     
     // Legacy fields for backward compatibility
-    orchestrationFoundationReady: longFormSchemaExists && longFormPlannerExists,
+    orchestrationFoundationReady: longFormSchemaExists && longFormTruth.plannerReady,
     schemaExists: longFormSchemaExists,
     plannerExists: longFormPlannerExists,
     executionModuleExists: longFormExecutionExists,
     planRouteExists: longFormPlanRouteExists,
     executeScenesRouteExists: longFormExecuteRouteExists,
-    perSceneExecutionReady: longFormExecutionExists && longFormExecuteRouteExists,
-    sceneStitchingReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
-    finalAssemblyReady: longFormAssemblyModuleExists && longFormAssemblyRouteExists && ffmpegAvailable,
-    scriptPlanner: longFormPlannerExists,
-    sceneSplitter: longFormPlannerExists,
-    sceneExecutionPayloadBuilder: longFormExecutionExists,
+    perSceneExecutionReady: longFormExecuteRouteExists,
+    sceneStitchingReady: longFormAssemblyModuleExists && ffmpegAvailable,
+    finalAssemblyReady: longFormImplementationClosureReady && ffmpegAvailable,
+    scriptPlanner: longFormTruth.plannerReady,
+    sceneSplitter: longFormTruth.plannerReady,
+    sceneExecutionPayloadBuilder: longFormTruth.batchStructureReady,
     sceneJobCreation: longFormExecuteRouteExists,
-    promptEnhancement: longFormExecutionExists,
+    promptEnhancement: longFormTruth.sceneLinkageReady,
     perSceneGeneration: longFormExecuteRouteExists,
     ffmpegIntegration: ffmpegAvailable,
     artifactPersistence: longFormAssemblyModuleExists,
-    voiceover: false,
-    subtitles: false,
-    musicBed: false,
-    progressTracking: false,
-    partialFailureHandling: false,
+    voiceover: automaticVoiceoverReady,
+    subtitles: automaticSubtitlesReady,
+    musicBed: automaticMusicBedReady,
+    progressTracking: longFormTruth.progressTrackingReady,
+    partialFailureHandling: longFormTruth.retryResumeReady,
     dashboardSceneStatus: false,
     missingParts: [
-      'voiceover_integration',
-      'subtitles_integration',
-      'music_bed_integration',
-      'full_multimedia_assembly'
-    ]
+      !automaticVoiceoverReady ? 'automatic_voiceover_integration' : null,
+      !automaticSubtitlesReady ? 'automatic_subtitle_integration' : null,
+      !automaticMusicBedReady ? 'automatic_music_bed_integration' : null,
+      !automaticAssemblyReady || !longFormWorkflowModuleExists ? 'durable_automatic_assembly' : null,
+    ].filter(Boolean)
   }
   
   // Marketing app readiness
@@ -741,15 +709,15 @@ async function runAudit() {
   
   // Media quality status with clearer findings
   const imageModel = modelCatalogue.models.find(m => m.provider === 'together' && m.capabilities.includes('image_generation'))
-  const videoModel = modelCatalogue.models.find(m => m.provider === 'genx' && m.capabilities.includes('video_generation'))
+  const videoModels = modelCatalogue.models.filter(m => ['genx', 'together', 'deepinfra'].includes(m.provider) && m.capabilities.includes('video_generation'))
   
   const mediaQualityStatus = {
     imageGeneration: {
       provider: 'together',
       model: imageModel?.modelId || 'unknown',
       executable: !!imageModel?.executable,
-      routingModesSupported: brainRouter.routingModes.length > 0,
-      premiumRouting: brainRouter.routingModes.includes('premium'),
+      routingModesSupported: orchestraRouter.routingModes.length > 0,
+      premiumRouting: orchestraRouter.routingModes.includes('quality'),
       premiumExecutable: false, // No premium image model wired yet
       findings: [
         'image currently Together executable only',
@@ -758,16 +726,16 @@ async function runAudit() {
       ]
     },
     videoGeneration: {
-      provider: 'genx',
-      model: videoModel?.modelId || 'unknown',
-      executable: !!videoModel?.executable,
-      routingModesSupported: brainRouter.routingModes.length > 0,
-      premiumRouting: brainRouter.routingModes.includes('premium'),
-      premiumExecutable: false, // No premium video model wired yet
+      provider: 'dynamic',
+      model: `${videoModels.length} catalogued video model(s)`,
+      executable: videoModels.some(model => model.executable),
+      routingModesSupported: orchestraRouter.routingModes.length > 0,
+      premiumRouting: orchestraRouter.routingModes.includes('quality'),
+      premiumExecutable: videoModels.some(model => model.executable && ['premium', 'high'].includes(model.costTier)),
       findings: [
-        'video currently GenX seedance-v1-fast only',
-        'video quality issue likely needs model selection/prompt payload/duration/aspect ratio/provider model discovery audit',
-        'routing modes exist but premium mode only affects selection if executable alternative models exist'
+        'video executor eligibility derives from canonical compatibility metadata across GenX, Together, and verified DeepInfra transports',
+        'Orchestra selects the exact provider/model; media transports do not choose defaults or perform hidden provider fallback',
+        'runtime execution remains gated by app grants, credentials, provider health, pricing, and policy'
       ]
     }
   }
@@ -784,8 +752,8 @@ async function runAudit() {
   }
   
   // Check foundation blockers
-  if (!brainRouter.integratedInWorker) {
-    redeployReadiness.blockers.push('brain_router_not_integrated_in_worker')
+  if (!orchestraRouter.integratedInWorker) {
+    redeployReadiness.blockers.push('orchestra_not_integrated_in_worker')
     redeployReadiness.safe_to_redeploy_foundation = false
   }
   
@@ -819,8 +787,8 @@ async function runAudit() {
     redeployReadiness.warnings.push(`long_form_missing_${longFormReadiness.missingParts.length}_parts`)
   }
   
-  if (providers.providers.length !== 5) {
-    redeployReadiness.warnings.push('provider_list_not_exactly_5')
+  if (providers.providers.length !== APPROVED_PROVIDER_DEFINITIONS.length) {
+    redeployReadiness.warnings.push('provider_list_differs_from_canonical_definitions')
   }
   
   if (blockedModels.length === 0) {
@@ -850,15 +818,15 @@ async function runAudit() {
   const recommendedNextPRs = [
     {
       priority: 1,
-      title: 'feat: add music generation backend',
-      description: 'Wire an approved music provider client and worker executor after provider capability is verified',
-      effort: 'large'
+      title: 'ops: activate configured runtime and collect live proofs',
+      description: 'Verify provider credentials, Redis/worker infrastructure, and immutable app grants before recording provider-backed proofs',
+      effort: 'medium'
     },
     {
       priority: 2,
-      title: 'feat: add long-form video backend',
-      description: 'Implement script planner, scene splitter, per-scene generation, stitching with ffmpeg',
-      effort: 'very_large'
+      title: 'ops: collect deployed long-form multimedia evidence',
+      description: 'After deployment is separately authorised, prove provider-backed scenes, TTS, music, subtitles, and final assembly on the VPS without changing the locally closed workflow',
+      effort: 'medium'
     },
     {
       priority: 3,
@@ -874,16 +842,16 @@ async function runAudit() {
     },
     {
       priority: 5,
-      title: 'feat: add TTS/STT execution',
-      description: 'Wire Groq TTS/STT models to worker executor and dashboard',
-      effort: 'medium'
+      title: 'feat: begin the next approved capability family after live proof',
+      description: 'Only after foundational VPS proof, implement the separately scoped visual or knowledge capabilities that remain catalogue-only',
+      effort: 'large'
     }
   ]
 
   const canonicalRuntimeTruth = getRuntimeTruth({
     providers: {
       genx: { enabled: false, configured: false, healthStatus: 'unconfigured' },
-      groq: { enabled: false, configured: false, healthStatus: 'unconfigured' },
+      deepinfra: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       together: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       deepinfra: { enabled: false, configured: false, healthStatus: 'unconfigured' },
       mimo: {
@@ -993,7 +961,7 @@ async function runAudit() {
     workerExecutionStatus: {
       found: workerExecution.found,
       executors: workerExecution.executors,
-      usesBrainRouter: workerExecution.usesBrainRouter
+      usesOrchestra: workerExecution.usesOrchestra
     },
     
     appContractStatus: {
@@ -1049,7 +1017,7 @@ async function runAudit() {
   
   console.log('⚡ EXECUTABLE CAPABILITIES')
   console.log(`   Total executable: ${executableCapabilities.length}`)
-  console.log(`   Via text router (Groq/DeepInfra): ${executableViaTextRouter.length}`)
+  console.log(`   Via text router (deepinfra/DeepInfra): ${executableViaTextRouter.length}`)
   for (const cap of executableViaTextRouter) {
     console.log(`     ✓ ${cap.capability} (${cap.status})`)
   }
@@ -1118,7 +1086,7 @@ async function runAudit() {
   
   console.log('🔧 WORKER EXECUTION')
   console.log(`   Found: ${completionMap.workerExecutionStatus.found}`)
-  console.log(`   Uses Brain Router: ${completionMap.workerExecutionStatus.usesBrainRouter}`)
+  console.log(`   Uses Orchestra: ${completionMap.workerExecutionStatus.usesOrchestra}`)
   console.log('   Executors:')
   for (const [key, value] of Object.entries(completionMap.workerExecutionStatus.executors)) {
     console.log(`     ${key}: ${value ? '✓' : '✗'}`)
@@ -1211,7 +1179,7 @@ async function runAudit() {
   for (const finding of mediaQualityStatus.videoGeneration.findings) {
     console.log(`     • ${finding}`)
   }
-  console.log(`   Routing modes: ${brainRouter.routingModes.join(', ')}`)
+  console.log(`   Routing modes: ${orchestraRouter.routingModes.join(', ')}`)
   console.log()
   
   console.log('🚀 REDEPLOY READINESS')

@@ -10,6 +10,7 @@
  */
 
 import { getGenxApiKey, getGenxBaseUrl } from '@amarktai/core'
+import { inspectVideoBuffer } from './media-inspection.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,11 +21,11 @@ export interface GenxVideoRequest {
   aspectRatio?: string
   style?: string
   negativePrompt?: string
+  sourceImageDataUrl?: string
+  referenceVideoUrl?: string
   apiKey?: string
   baseUrl?: string
-  providerDefaultModel?: string
-  providerFallbackModel?: string
-  providerAvailableModels?: string[]
+  onSubmitted?: (jobId: string, model: string) => void | Promise<void>
 }
 
 export interface GenxVideoSubmitResponse {
@@ -53,13 +54,6 @@ export interface GenxVideoResult {
   metadata: Record<string, unknown>
 }
 
-export const DEFAULT_GENX_VIDEO_MODEL = 'seedance-v1-fast'
-export const GENX_ROUTER_VIDEO_MODEL_PREFERENCE = [
-  'grok-imagine-video',
-  'kling-v2.5-turbo',
-  DEFAULT_GENX_VIDEO_MODEL,
-]
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveGenxApiKey(requestApiKey?: string): string {
@@ -81,36 +75,11 @@ function resolveOptionalGenxApiKey(requestApiKey?: string): string {
 }
 
 export function resolveGenxVideoModel(
-  request: Pick<GenxVideoRequest, 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxVideoRequest, 'model'> = {},
 ): string {
   const explicitModel = request.model?.trim()
   if (explicitModel) return explicitModel
-
-  const availableModels = normalizeModelList(request.providerAvailableModels)
-  const providerDefaultModel = request.providerDefaultModel?.trim()
-  const providerFallbackModel = request.providerFallbackModel?.trim()
-
-  if (availableModels.length) {
-    if (providerDefaultModel && modelListIncludes(availableModels, providerDefaultModel) && isUsableTextToVideoModel(providerDefaultModel)) {
-      return providerDefaultModel
-    }
-
-    if (providerFallbackModel && modelListIncludes(availableModels, providerFallbackModel) && isUsableTextToVideoModel(providerFallbackModel)) {
-      return providerFallbackModel
-    }
-
-    const preferred = GENX_ROUTER_VIDEO_MODEL_PREFERENCE.find((candidate) => (
-      modelListIncludes(availableModels, candidate) && isUsableTextToVideoModel(candidate)
-    ))
-    if (preferred) return preferred
-
-    const discovered = availableModels.find(isUsableTextToVideoModel)
-    if (discovered) return discovered
-  }
-
-  return providerDefaultModel
-    || providerFallbackModel
-    || DEFAULT_GENX_VIDEO_MODEL
+  throw new Error('GenX video transport requires the exact Orchestra-selected model')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -145,27 +114,6 @@ function extractResultUrl(data: Record<string, unknown>): string | undefined {
   }
 
   return undefined
-}
-
-function normalizeModelList(models: string[] | undefined): string[] {
-  return (models ?? [])
-    .map((model) => model.trim())
-    .filter((model, index, all): model is string => !!model && all.indexOf(model) === index)
-}
-
-function modelListIncludes(models: string[], model: string): boolean {
-  return models.some((candidate) => candidate.toLowerCase() === model.toLowerCase())
-}
-
-function isUsableTextToVideoModel(model: string): boolean {
-  const lower = model.toLowerCase()
-  if (lower.includes('avatar')) return false
-  return lower.includes('video')
-    || lower.includes('imagine')
-    || lower.includes('kling')
-    || lower.includes('seedance')
-    || lower.includes('veo')
-    || lower.includes('wan')
 }
 
 function redactSecrets(message: string, secrets: string[]): string {
@@ -206,6 +154,8 @@ export async function genxSubmitVideo(request: GenxVideoRequest): Promise<GenxVi
     aspect_ratio: request.aspectRatio ?? '16:9',
     style: request.style,
     negative_prompt: request.negativePrompt,
+    source_image: request.sourceImageDataUrl,
+    reference_video: request.referenceVideoUrl,
   })
 
   const body = removeUndefined({
@@ -307,7 +257,7 @@ export async function genxPollVideo(
 
 export async function genxDownloadVideo(
   url: string,
-  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxVideoRequest, 'apiKey' | 'baseUrl' | 'model'> = {},
 ): Promise<GenxVideoResult> {
   const apiKey = resolveOptionalGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
@@ -332,15 +282,16 @@ export async function genxDownloadVideo(
 
   const arrayBuffer = await response.arrayBuffer()
   const videoBuffer = Buffer.from(arrayBuffer)
+  const inspected = inspectVideoBuffer(videoBuffer, mimeType, 'genx')
 
   return {
     videoBuffer,
     mimeType,
-    duration: 5,
-    width: 1920,
-    height: 1080,
+    duration: inspected.duration,
+    width: inspected.width!,
+    height: inspected.height!,
     model: resolveGenxVideoModel(request),
-    metadata: { downloaded: true, sizeBytes: videoBuffer.length, authenticated },
+    metadata: { downloaded: true, sizeBytes: videoBuffer.length, authenticated, durationSource: inspected.durationSource },
   }
 }
 
@@ -364,6 +315,7 @@ export const GENX_POLL_TRANSIENT_MAX_RETRIES = 5
 
 export interface GenxLongPollCallbacks {
   onProgress?: (progress: number, status: string) => void
+  onSubmitted?: (jobId: string, model: string) => void | Promise<void>
 }
 
 export async function genxGenerateVideo(
@@ -378,6 +330,7 @@ export async function genxGenerateVideo(
   if (!submitResult.jobId) {
     throw new Error('GenX did not return a job ID')
   }
+  await (callbacks?.onSubmitted ?? request.onSubmitted)?.(submitResult.jobId, model)
 
   let attempts = 0
   let transientPollFailures = 0
@@ -428,7 +381,6 @@ export async function genxGenerateVideo(
             apiKey,
             baseUrl,
             model,
-            providerAvailableModels: request.providerAvailableModels,
           })
           return {
             ...video,

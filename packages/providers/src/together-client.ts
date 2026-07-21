@@ -10,6 +10,8 @@ import {
   getTogetherImageModel,
   TOGETHER_BASE_URL,
 } from '@amarktai/core'
+import { inspectImageBuffer } from './media-inspection.js'
+import { providerHttpError } from './provider-errors.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,7 +89,11 @@ export async function togetherGenerateImage(
 
   if (!response.ok) {
     const errBody = await response.text()
-    throw new Error(`Together image error ${response.status}: ${errBody}`)
+    throw providerHttpError({
+      provider: 'together',
+      status: response.status,
+      body: errBody.split(apiKey).join('[redacted]'),
+    })
   }
 
   const data = await response.json() as Record<string, unknown>
@@ -100,12 +106,13 @@ export async function togetherGenerateImage(
   const images = rawData.map((img) => {
     const b64 = (img.b64_json as string) ?? (img.base64 as string) ?? ''
     const buffer = Buffer.from(b64, 'base64')
+    const inspected = inspectImageBuffer(buffer, 'together')
     return {
       base64: b64,
       buffer,
-      width,
-      height,
-      mimeType: 'image/png',
+      width: inspected.width,
+      height: inspected.height,
+      mimeType: inspected.mimeType,
     }
   })
 

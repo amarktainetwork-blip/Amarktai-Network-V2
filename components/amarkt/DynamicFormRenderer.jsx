@@ -163,7 +163,7 @@ function groupFields(entries) {
   return groups
 }
 
-const BACKEND_PENDING_GROUPS = ['Backend Pending', 'Provider', 'Gate']
+const IMPLEMENTATION_DETAIL_GROUPS = ['Provider', 'Gate']
 
 // ─── Card wrapper for a group ──────────────────────────────────
 function GroupCard({ title, children }) {
@@ -187,8 +187,8 @@ export default function DynamicFormRenderer({ schema, values, onChange, mode = '
   }
 
   const allEntries = Object.entries(schema).filter(([, def]) => isVisible(def))
-  const mainEntries = allEntries.filter(([, def]) => !def.advanced && !BACKEND_PENDING_GROUPS.includes(def.group))
-  const advancedEntries = allEntries.filter(([, def]) => def.advanced || BACKEND_PENDING_GROUPS.includes(def.group))
+  const mainEntries = allEntries.filter(([, def]) => !def.advanced && !IMPLEMENTATION_DETAIL_GROUPS.includes(def.group))
+  const advancedEntries = allEntries.filter(([, def]) => def.advanced || IMPLEMENTATION_DETAIL_GROUPS.includes(def.group))
 
   const mainGroups = groupFields(mainEntries)
   const advancedGroups = groupFields(advancedEntries)
@@ -204,7 +204,7 @@ export default function DynamicFormRenderer({ schema, values, onChange, mode = '
         <Accordion type="single" collapsible>
           <AccordionItem value="advanced" className="rounded-xl border border-white/[0.06] px-4">
             <AccordionTrigger className="text-xs py-3">
-              <span className="flex items-center gap-1.5 text-muted-foreground"><Settings className="h-3 w-3" /> Advanced & Backend Details</span>
+              <span className="flex items-center gap-1.5 text-muted-foreground"><Settings className="h-3 w-3" /> Advanced details</span>
             </AccordionTrigger>
             <AccordionContent className="pt-2">
               <div className="space-y-4">

@@ -54,8 +54,8 @@ describe('video budget planner contract', () => {
       qualityTier: 'standard',
       targetDurationSeconds: 120,
       selectedCandidates: {
-        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
-        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        script: candidate({ provider: 'deepinfra', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'deepinfra', model: 'catalog-prompts', estimatedCost: 1 }),
         style_frames: candidate({ provider: 'together', model: 'catalog-image', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', pricingBlocker: 'pricing_unknown' }),
         main_clips: candidate({ provider: 'genx', model: 'catalog-video', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', pricingBlocker: 'genx_pricing_missing_for_model' }),
       },
@@ -76,8 +76,8 @@ describe('video budget planner contract', () => {
       targetDurationSeconds: 120,
       heroShotCount: 1,
       selectedCandidates: {
-        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
-        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        script: candidate({ provider: 'deepinfra', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'deepinfra', model: 'catalog-prompts', estimatedCost: 1 }),
         style_frames: candidate({ provider: 'together', model: 'catalog-image', estimatedCost: 2 }),
         main_clips: candidate({ provider: 'genx', model: 'catalog-video', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown' }),
         hero_shots: candidate({ provider: 'genx', model: 'catalog-hero', estimatedCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown' }),
@@ -94,8 +94,8 @@ describe('video budget planner contract', () => {
     const plan = await planVideoBudget({
       qualityTier: 'standard',
       selectedCandidates: {
-        script: candidate({ provider: 'groq', model: 'catalog-script', estimatedCost: 1 }),
-        prompts: candidate({ provider: 'groq', model: 'catalog-prompts', estimatedCost: 1 }),
+        script: candidate({ provider: 'deepinfra', model: 'catalog-script', estimatedCost: 1 }),
+        prompts: candidate({ provider: 'deepinfra', model: 'catalog-prompts', estimatedCost: 1 }),
         style_frames: candidate({ provider: 'together', model: 'catalog-style-frame', estimatedCost: 3 }),
         main_clips: candidate({ provider: 'genx', model: 'catalog-main-video', estimatedCost: 75 }),
       },

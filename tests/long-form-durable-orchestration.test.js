@@ -4,6 +4,7 @@ import Fastify from 'fastify'
 const db = vi.hoisted(() => {
   const jobs = []
   let counter = 0
+  let appGrantOverrides = {}
   const makeJob = (data) => {
     counter += 1
     const now = new Date(`2026-07-10T00:00:${String(counter).padStart(2, '0')}.000Z`)
@@ -95,7 +96,7 @@ const db = vi.hoisted(() => {
     const parent = jobs.find((job) => job.id === parentJobId)
     if (!parent) return null
     const sceneJobs = jobs
-      .filter((job) => job.parentJobId === parent.id)
+      .filter((job) => job.parentJobId === parent.id && job.capability === 'video_generation')
       .sort((a, b) => (a.sceneNumber ?? 0) - (b.sceneNumber ?? 0))
     const metadata = JSON.parse(parent.metadataJson || '{}')
     const completed = sceneJobs.filter((job) => job.status === 'completed')
@@ -165,10 +166,12 @@ const db = vi.hoisted(() => {
     reset: () => {
       jobs.splice(0, jobs.length)
       counter = 0
+      appGrantOverrides = {}
       Object.values(jobApi).forEach((fn) => fn.mockClear())
       refreshLongFormParentState.mockClear()
     },
     refreshLongFormParentState,
+    setAppGrantOverrides: (value) => { appGrantOverrides = value },
     prisma: {
       job: jobApi,
       artifact: {
@@ -178,6 +181,36 @@ const db = vi.hoisted(() => {
       },
       aiProvider: {
         findMany: vi.fn(async () => []),
+      },
+      appCapabilityGrant: {
+        findUnique: vi.fn(async ({ where }) => {
+          const { appSlug, capability } = where.app_capability_grant_unique
+          return {
+            appSlug,
+            capability,
+            enabled: true,
+            qualityFloor: 'balanced',
+            budgetPolicy: 'balanced',
+            maxCostPerRequest: 0,
+            maxCostPerWorkflow: 0,
+            latencyPreference: 'medium',
+            allowFallback: true,
+            maxFallbackAttempts: 3,
+            liveProofRequired: false,
+            approvalRequired: false,
+            artifactRead: true,
+            artifactWrite: true,
+            memoryRead: false,
+            memoryWrite: false,
+            ragNamespaces: '[]',
+            policyProfile: 'test',
+            adultPermission: false,
+            dataRetentionPolicy: 'default',
+            passthroughModelAllowed: false,
+            providerResidencyConstraints: '[]',
+            ...appGrantOverrides,
+          }
+        }),
       },
       $transaction: vi.fn(async (fn) => fn({ job: jobApi })),
     },
@@ -218,16 +251,24 @@ const auth = { authorization: 'Bearer admin-token' }
 function requestPayload(overrides = {}) {
   return {
     prompt: 'Create a durable long-form documentary about resilient orchestration',
-    targetDurationSeconds: 60,
+    targetDurationSeconds: 30,
     sceneCount: 3,
     aspectRatio: '16:9',
-    style: 'documentary',
-    tone: 'informative',
+    style: 'cinematic',
+    tone: 'professional',
+    voiceoverEnabled: false,
+    subtitlesEnabled: false,
+    musicBedEnabled: false,
     ...overrides,
   }
 }
 
 describe('durable long-form orchestration', () => {
+  it('loads status by root parent identity rather than the assembly child sharing its execution ID', async () => {
+    const source = await import('node:fs/promises').then((fs) => fs.readFile('apps/api/src/routes/admin-long-form-video.ts', 'utf8'))
+    expect(source).toContain('parentJobId: null')
+  })
+
   beforeEach(() => {
     db.reset()
     queue.add.mockReset()
@@ -249,24 +290,59 @@ describe('durable long-form orchestration', () => {
     expect(response.statusCode).toBe(202)
     const body = response.json()
     const parent = db.jobs.find((job) => job.id === body.parentJobId)
-    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const childJobs = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const scenes = childJobs.filter((job) => job.capability === 'video_generation')
+    const voiceovers = childJobs.filter((job) => job.capability === 'tts')
     const parentMeta = JSON.parse(parent.metadataJson)
 
     expect(parent.capability).toBe('long_form_video')
     expect(parent.executionId).toBe(body.executionId)
     expect(parentMeta.plan.storyboard.scenes).toHaveLength(3)
+    expect(parentMeta.request.targetDurationSeconds).toBe(30)
+    expect(parentMeta.request.voiceoverEnabled).toBe(false)
+    expect(parentMeta.request.subtitlesEnabled).toBe(false)
+    expect(parentMeta.request.musicBedEnabled).toBe(false)
     expect(parentMeta.assemblyHandoff.parentJobId).toBe(parent.id)
     expect(scenes).toHaveLength(3)
     expect(scenes.map((scene) => scene.sceneNumber)).toEqual([1, 2, 3])
     expect(scenes.every((scene) => scene.executionId === parent.executionId)).toBe(true)
+    expect(scenes.every((scene) => JSON.parse(scene.metadataJson).orchestraExecutorConstraint === 'genx.video-generation')).toBe(true)
+    expect(queue.add).toHaveBeenCalledTimes(3)
+
+    await app.close()
+  })
+
+  it('does not let external-app disablement or cost ceilings block the authenticated internal dashboard', async () => {
+    db.setAppGrantOverrides({ enabled: false, approvalRequired: true, maxCostPerRequest: 0.000001, maxCostPerWorkflow: 0.000001 })
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload(),
+    })
+
+    expect(response.statusCode).toBe(202)
+    const scenes = db.jobs.filter((job) => job.parentJobId === response.json().parentJobId && job.capability === 'video_generation')
+    expect(scenes).toHaveLength(3)
+    for (const scene of scenes) {
+      const metadata = JSON.parse(scene.metadataJson)
+      expect(metadata.executionProfile).toBe('internal_dashboard')
+      expect(metadata.appGrantSnapshot.enabled).toBe(true)
+      expect(metadata.appGrantSnapshot.maxCostPerRequest).toBe(0)
+      expect(metadata.appGrantSnapshot.maxCostPerWorkflow).toBe(0)
+    }
     expect(queue.add).toHaveBeenCalledTimes(3)
 
     await app.close()
   })
 
   it('migration covers every durable Job field, index, and self relation', async () => {
-    const source = await import('node:fs/promises').then((fs) => fs.readFile('prisma/migrations/20260711_add_long_form_job_orchestration_fields/migration.sql', 'utf8'))
-    for (const column of ['parent_job_id', 'execution_id', 'scene_number', 'workflow_phase', 'retry_count', 'queue_job_id', 'queued_at']) {
+    const source = await import('node:fs/promises').then((fs) => fs.readFile('prisma/migrations/20260711_add_job_orchestration/migration.sql', 'utf8'))
+    for (const column of ['provider_claim_at', 'parent_job_id', 'execution_id', 'scene_number', 'workflow_phase', 'retry_count', 'queue_job_id', 'queued_at']) {
       expect(source).toContain(`\`${column}\``)
     }
     expect(source).toContain('jobs_parent_job_id_idx')
@@ -281,7 +357,16 @@ describe('durable long-form orchestration', () => {
   it('does not use metadata substring lookup as canonical scene relation', async () => {
     const source = await import('node:fs/promises').then((fs) => fs.readFile('apps/api/src/routes/admin-long-form-video.ts', 'utf8'))
     expect(source).toContain('parentJobId')
-    expect(source).not.toContain('metadataJson: { contains')
+    // Canonical scene relation uses parentJobId, not metadata substring lookup.
+    // The preview-scene endpoint uses metadata lookup only for idempotent preview job reuse,
+    // not for canonical scene relationships.
+    const lines = source.split('\n')
+    const canonicalRelationLines = lines.filter((line) =>
+      line.includes('metadataJson: { contains') &&
+      !line.includes('longFormScenePreview') &&
+      !line.includes('trace_longform_preview')
+    )
+    expect(canonicalRelationLines).toHaveLength(0)
   })
 
   it('keeps partial queue failure recoverable', async () => {
@@ -336,7 +421,8 @@ describe('durable long-form orchestration', () => {
     })
     const body = create.json()
     const parent = db.jobs.find((job) => job.id === body.parentJobId)
-    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parent.id && job.capability === 'video_generation')
+    const voiceovers = db.jobs.filter((job) => job.parentJobId === parent.id && job.capability === 'tts')
 
     expect(create.statusCode).toBe(200)
     expect(parent.status).toBe('planned')
@@ -438,11 +524,11 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     await db.prisma.job.update({ where: { id: scenes[0].id }, data: { status: 'completed', artifactId: 'artifact-stays', progress: 100 } })
 
     const cancel = await app.inject({ method: 'POST', url: `/api/admin/long-form-video/executions/${parentId}/cancel`, headers: auth })
-    const updatedScenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const updatedScenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
 
     expect(cancel.statusCode).toBe(200)
     expect(cancel.json().cancellation.locallyCancelled).toBe(true)
@@ -492,7 +578,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     await db.prisma.job.update({ where: { id: scenes[0].id }, data: { status: 'completed', artifactId: 'artifact-1', progress: 100 } })
     await db.prisma.job.update({ where: { id: scenes[1].id }, data: { status: 'failed', error: 'provider failed', progress: 0 } })
 
@@ -515,7 +601,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     expect(JSON.parse(db.jobs.find((job) => job.id === parentId).metadataJson).assemblyHandoff.orderedSceneArtifactIds).toEqual([])
 
     await db.prisma.job.update({ where: { id: scenes[2].id }, data: { status: 'completed', artifactId: 'artifact-3', progress: 100 } })
@@ -546,6 +632,22 @@ describe('durable long-form orchestration', () => {
       payload: requestPayload({ provider: 'genx' }),
     })
     expect(override.statusCode).toBe(400)
+
+    const executionProfileOverride = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload({ executionProfile: 'internal_dashboard' }),
+    })
+    expect(executionProfileOverride.statusCode).toBe(400)
+
+    const executorOverride = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload({ orchestraExecutorConstraint: 'together.video-generation' }),
+    })
+    expect(executorOverride.statusCode).toBe(400)
 
     db.jobs.push({
       id: 'foreign-parent',
@@ -644,13 +746,13 @@ describe('durable long-form orchestration', () => {
     await app.close()
   })
 
-  it('canonical truth exposes durable components while full multimedia remains false', () => {
+  it('core-only canonical truth does not invent API component evidence', () => {
     const longForm = getRuntimeTruth().capabilities.find((capability) => capability.capability === 'long_form_video')
-    expect(longForm.durableParentReady).toBe(true)
-    expect(longForm.durablePlanReady).toBe(true)
-    expect(longForm.sceneLinkageReady).toBe(true)
-    expect(longForm.retryResumeReady).toBe(true)
-    expect(longForm.assemblyHandoffReady).toBe(true)
+    expect(longForm.durableParentReady).toBe(false)
+    expect(longForm.durablePlanReady).toBe(false)
+    expect(longForm.sceneLinkageReady).toBe(false)
+    expect(longForm.retryResumeReady).toBe(false)
+    expect(longForm.assemblyHandoffReady).toBe(false)
     expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.liveProven).toBe(false)
   })
@@ -831,7 +933,7 @@ describe('durable long-form orchestration', () => {
     expect(cancel.statusCode).toBe(200)
     expect(cancel.json().execution.parent.status).toBe('cancelled')
 
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       if (scene.status === 'completed') continue
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}` } })
@@ -909,7 +1011,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
     }
@@ -950,7 +1052,7 @@ describe('durable long-form orchestration', () => {
     await app.ready()
     const create = await app.inject({ method: 'POST', url: '/api/admin/long-form-video/executions', headers: auth, payload: requestPayload() })
     const parentId = create.json().parentJobId
-    const scenes = db.jobs.filter((job) => job.parentJobId === parentId)
+    const scenes = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'video_generation')
     for (const scene of scenes) {
       await db.prisma.job.update({ where: { id: scene.id }, data: { status: 'completed', artifactId: `artifact-${scene.sceneNumber}`, progress: 100 } })
     }

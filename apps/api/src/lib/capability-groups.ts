@@ -1,5 +1,15 @@
-import { prisma } from '@amarktai/db'
-import { getRuntimeProofStatus } from './runtime-proof-status.js'
+import {
+  CAPABILITY_BY_KEY,
+  CAPABILITY_CATALOG,
+  CAPABILITY_FIELD_MAP,
+  isValidCapability,
+  getExecutorRegistration,
+  isExecutorModelCompatible,
+  executorModelMetadataFromDbRecord,
+  type CapabilityKey,
+  type ProviderKey,
+  type RuntimeTruth,
+} from '@amarktai/core'
 
 export interface CapabilityGroupSummary {
   capabilityKey: string
@@ -30,81 +40,35 @@ export interface CapabilityGroupSummary {
   missingExecutorBlockers: string[]
 }
 
-const MEDIA_CAPABILITIES = new Set(['image_generation', 'image_edit', 'video_generation', 'text_to_speech', 'speech_to_text', 'tts', 'stt'])
-const HEALTHY_PROVIDER_STATUSES = new Set(['configured', 'live'])
-const EXECUTOR_ADAPTER_PROVIDERS: Record<string, string[]> = {
-  chat: ['groq', 'deepinfra'],
-  reasoning: ['groq', 'deepinfra'],
-  code: ['groq', 'deepinfra'],
-  summarization: ['groq', 'deepinfra'],
-  translation: ['groq', 'deepinfra'],
-  classification: ['groq', 'deepinfra'],
-  extraction: ['groq', 'deepinfra'],
-  structured_output: ['groq', 'deepinfra'],
-  image_generation: ['together'],
-  video_generation: ['genx'],
+interface ModelRecord {
+  provider: string
+  costTier: string
+  isLiveDiscovered: boolean
+  source: string
+  estimatedUnitCost: number | null
+  pricingSource: string | null
+  pricingConfidence: string | null
+  enabled: boolean
+  [key: string]: unknown
 }
 
-const CAPABILITY_LABELS: Record<string, { label: string; category: string }> = {
-  chat: { label: 'Chat', category: 'text' },
-  reasoning: { label: 'Reasoning', category: 'text' },
-  code: { label: 'Code Explanation', category: 'text' },
-  summarization: { label: 'Summarization', category: 'text' },
-  translation: { label: 'Translation', category: 'text' },
-  classification: { label: 'Classification', category: 'text' },
-  extraction: { label: 'Extraction', category: 'text' },
-  structured_output: { label: 'Structured Output', category: 'text' },
-  image_generation: { label: 'Image Generation', category: 'image' },
-  image_edit: { label: 'Image Edit', category: 'image' },
-  video_generation: { label: 'Video Generation', category: 'video' },
-  text_to_speech: { label: 'Text to Speech', category: 'audio' },
-  speech_to_text: { label: 'Speech to Text', category: 'audio' },
-  embeddings: { label: 'Embeddings', category: 'text' },
-  reranking: { label: 'Reranking', category: 'text' },
-  research: { label: 'Research', category: 'text' },
-  moderation: { label: 'Moderation', category: 'text' },
+function pricingIsKnown(model: ModelRecord): boolean {
+  return model.estimatedUnitCost !== null
+    && (model.pricingSource === 'provider_api' || model.pricingSource === 'admin_manual')
+    && (model.pricingConfidence === 'known' || model.pricingConfidence === 'admin_manual')
 }
 
-const CAPABILITY_TO_MODEL_FIELD: Record<string, string> = {
-  chat: 'supportsChat',
-  reasoning: 'supportsReasoning',
-  code: 'supportsCode',
-  summarization: 'supportsText',
-  translation: 'supportsText',
-  classification: 'supportsText',
-  extraction: 'supportsText',
-  structured_output: 'supportsStructuredOutput',
-  image_generation: 'supportsImageGeneration',
-  image_edit: 'supportsImageEditing',
-  video_generation: 'supportsVideoGeneration',
-  text_to_speech: 'supportsTts',
-  speech_to_text: 'supportsStt',
-  tts: 'supportsTts',
-  stt: 'supportsStt',
-  embeddings: 'supportsEmbeddings',
-  reranking: 'supportsReranking',
-  research: 'supportsResearch',
-  moderation: 'supportsText',
-}
-
-function providerIsHealthyForRuntime(health: { enabled?: boolean; status?: string } | undefined): boolean {
-  if (!health) return false
-  if (health.enabled === false) return false
-  return HEALTHY_PROVIDER_STATUSES.has(health.status || 'unconfigured')
-}
-
-export async function getCapabilityGroupSummary(capabilityKey: string): Promise<CapabilityGroupSummary> {
-  const meta = CAPABILITY_LABELS[capabilityKey] || { label: capabilityKey, category: 'text' }
-  const modelField = CAPABILITY_TO_MODEL_FIELD[capabilityKey] || 'supportsText'
-
-  const allModels = await prisma.modelRegistryEntry.findMany({
-    where: { enabled: true },
-  })
-
-  const eligible = allModels.filter((m) => {
-    const record = m as Record<string, unknown>
-    return record[modelField] === true
-  })
+export function buildCapabilityGroupSummary(
+  capabilityKey: string,
+  allModels: ModelRecord[],
+  runtimeTruth: RuntimeTruth,
+): CapabilityGroupSummary {
+  const validCapability = isValidCapability(capabilityKey) ? capabilityKey : null
+  const meta = validCapability ? CAPABILITY_BY_KEY[validCapability] : null
+  const modelField = validCapability ? CAPABILITY_FIELD_MAP[validCapability] : undefined
+  const eligible = modelField
+    ? allModels.filter((model) => (model as Record<string, unknown>)[modelField] === true)
+    : []
 
   const modelsByProvider: Record<string, number> = {}
   const modelsByTier: Record<string, number> = {}
@@ -113,91 +77,67 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
   let curatedFallbackCount = 0
   let pricingKnownCount = 0
   let pricingUnknownCount = 0
-  let standardEligibleCount = 0
-  let premiumEligibleCount = 0
-  let blockedUnknownPricingCount = 0
 
-  for (const m of eligible) {
-    modelsByProvider[m.provider] = (modelsByProvider[m.provider] || 0) + 1
-    modelsByTier[m.costTier] = (modelsByTier[m.costTier] || 0) + 1
-    if (m.isLiveDiscovered) liveDiscoveredCount++
-    if (m.source === 'provider_api' || m.source === 'provider_docs_catalog') providerCatalogCount++
-    if (m.source === 'curated_seed' || m.source === 'curated_provider_catalog') curatedFallbackCount++
-
-    const pricingKnown = m.estimatedUnitCost !== null
-      && (m.pricingSource === 'provider_api' || m.pricingSource === 'admin_manual')
-      && (m.pricingConfidence === 'known' || m.pricingConfidence === 'admin_manual')
-    if (pricingKnown) pricingKnownCount++
+  for (const model of eligible) {
+    modelsByProvider[model.provider] = (modelsByProvider[model.provider] || 0) + 1
+    modelsByTier[model.costTier] = (modelsByTier[model.costTier] || 0) + 1
+    if (model.isLiveDiscovered) liveDiscoveredCount++
+    if (model.source === 'provider_api' || model.source === 'provider_docs_catalog') providerCatalogCount++
+    if (model.source === 'curated_seed' || model.source === 'curated_provider_catalog') curatedFallbackCount++
+    if (pricingIsKnown(model)) pricingKnownCount++
     else pricingUnknownCount++
-
-    if (m.provider !== 'mimo' && MEDIA_CAPABILITIES.has(capabilityKey) && !pricingKnown) {
-      blockedUnknownPricingCount++
-    }
   }
 
-  const costs = eligible
-    .map((m) => m.estimatedUnitCost)
-    .filter((c): c is number => c !== null && c > 0)
-    .sort((a, b) => a - b)
-
-  // Check provider health for blockers
-  const providers = await prisma.aiProvider.findMany()
-  const providerHealth: Record<string, { enabled: boolean; status: string }> = {}
-  for (const p of providers) {
-    providerHealth[p.providerKey] = { enabled: p.enabled, status: p.healthStatus || 'unconfigured' }
-  }
-
+  const capabilityTruth = validCapability
+    ? runtimeTruth.capabilities.find((capability) => capability.capability === validCapability)
+    : undefined
+  const executableModels = validCapability ? eligible.filter((model) => {
+    const registration = getExecutorRegistration(validCapability as CapabilityKey, model.provider as ProviderKey)
+    return Boolean(registration && isExecutorModelCompatible(registration, String(model.modelId ?? ''), executorModelMetadataFromDbRecord(model as never)))
+  }) : []
+  const executableProviders = new Set(executableModels.map((model) => model.provider))
   const providerHealthBlockers: string[] = []
   const missingExecutorBlockers: string[] = []
-  const implementedProviders = EXECUTOR_ADAPTER_PROVIDERS[capabilityKey] ?? []
-  const implementedProviderSet = new Set(implementedProviders)
-  let executorAdapterImplementedCount = 0
 
   for (const [provider, count] of Object.entries(modelsByProvider)) {
-    const health = providerHealth[provider]
-    const healthStatus = health?.status || 'unconfigured'
-    if (healthStatus === 'failed') providerHealthBlockers.push(`${provider}: health check failed`)
-    if (healthStatus === 'unconfigured') providerHealthBlockers.push(`${provider}: not configured`)
-    if (provider === 'mimo') {
-      missingExecutorBlockers.push('mimo: coding_tool_only, not normal runtime')
-    } else if (implementedProviderSet.has(provider)) {
-      executorAdapterImplementedCount++
-    } else {
-      missingExecutorBlockers.push(`${provider}: discovered_but_no_executor_adapter for ${capabilityKey} (${count} model(s))`)
+    const providerTruth = runtimeTruth.providers.find((entry) => entry.provider === provider)
+    if (providerTruth?.configured !== true) providerHealthBlockers.push(`${provider}: not runtime ready`)
+    if (!executableProviders.has(provider)) {
+      missingExecutorBlockers.push(`${provider}: catalogued but no compatible executable adapter for ${capabilityKey} (${count} model(s))`)
     }
   }
 
-  for (const m of eligible) {
-    const pricingKnown = m.estimatedUnitCost !== null
-      && (m.pricingSource === 'provider_api' || m.pricingSource === 'admin_manual')
-      && (m.pricingConfidence === 'known' || m.pricingConfidence === 'admin_manual')
-    const hasExecutorAdapter = implementedProviderSet.has(m.provider)
-    const providerReady = providerIsHealthyForRuntime(providerHealth[m.provider])
-    if (m.provider !== 'mimo' && pricingKnown && hasExecutorAdapter && providerReady) {
-      if (m.costTier !== 'premium' && m.costTier !== 'high') standardEligibleCount++
-      premiumEligibleCount++
-    }
-  }
-
+  const mediaCapability = meta?.artifactRequired === true
+  const blockedUnknownPricingCount = mediaCapability
+    ? eligible.filter((model) => model.provider !== 'mimo' && !pricingIsKnown(model)).length
+    : 0
   if (blockedUnknownPricingCount > 0) {
     missingExecutorBlockers.push(`${capabilityKey}: ${blockedUnknownPricingCount} media model(s) blocked by unknown pricing`)
   }
 
-  const runtimeProof = getRuntimeProofStatus()
-  const proof = runtimeProof.provenCapabilities.find((item) => item.capability === capabilityKey)
-  const isLiveJobProven = proof?.status === 'proven'
-  const isDashboardReady = proof?.readyForDashboardExecution === true
-  const liveJobProvenCount = isLiveJobProven ? 1 : 0
-  const dashboardReadyCount = isDashboardReady ? liveJobProvenCount : 0
-  if (!isLiveJobProven) missingExecutorBlockers.push(`${capabilityKey}: not_live_job_proven`)
-  if (!isDashboardReady) missingExecutorBlockers.push(`${capabilityKey}: not_dashboard_ready`)
+  const executable = capabilityTruth?.executableNow
+    ? executableModels
+    : []
+  const standardEligibleCount = executable.filter((model) =>
+    pricingIsKnown(model) && model.costTier !== 'premium' && model.costTier !== 'high',
+  ).length
+  const premiumEligibleCount = executable.filter(pricingIsKnown).length
+  const costs = eligible
+    .map((model) => model.estimatedUnitCost)
+    .filter((cost): cost is number => cost !== null && cost > 0)
+    .sort((a, b) => a - b)
+  const liveJobProvenCount = capabilityTruth?.liveProven === true ? 1 : 0
+  const dashboardReadyCount = capabilityTruth?.liveProven === true ? 1 : 0
+
+  if (!liveJobProvenCount) missingExecutorBlockers.push(`${capabilityKey}: not_live_job_proven`)
+  if (!dashboardReadyCount) missingExecutorBlockers.push(`${capabilityKey}: not_dashboard_ready`)
 
   return {
     capabilityKey,
-    label: meta.label,
-    category: meta.category,
+    label: meta?.label ?? capabilityKey,
+    category: meta?.category ?? 'system_ops',
     totalModels: eligible.length,
-    totalAvailableModels: eligible.length,
+    totalAvailableModels: eligible.filter((model) => model.enabled).length,
     modelsByProvider,
     modelsByTier,
     liveDiscoveredCount,
@@ -208,20 +148,25 @@ export async function getCapabilityGroupSummary(capabilityKey: string): Promise<
     standardEligibleCount,
     premiumEligibleCount,
     blockedUnknownPricingCount,
-    executorAdapterImplementedCount,
+    executorAdapterImplementedCount: executableProviders.size,
     liveJobProvenCount,
     dashboardReadyCount,
-    executableModels: executorAdapterImplementedCount,
+    executableModels: executable.length,
     provenModels: liveJobProvenCount,
     dashboardReadyModels: dashboardReadyCount,
-    cheapestEstimatedCost: costs[0] || null,
-    standardEstimatedCost: costs[Math.floor(costs.length * 0.25)] || null,
-    premiumEstimatedCost: costs[Math.floor(costs.length * 0.75)] || null,
+    cheapestEstimatedCost: costs[0] ?? null,
+    standardEstimatedCost: costs[Math.floor(costs.length * 0.25)] ?? null,
+    premiumEstimatedCost: costs[Math.floor(costs.length * 0.75)] ?? null,
     providerHealthBlockers,
     missingExecutorBlockers,
   }
 }
 
-export async function getAllCapabilityGroupSummaries(): Promise<CapabilityGroupSummary[]> {
-  return Promise.all(Object.keys(CAPABILITY_LABELS).map(getCapabilityGroupSummary))
+export async function getAllCapabilityGroupSummaries(
+  allModels: ModelRecord[],
+  runtimeTruth: RuntimeTruth,
+): Promise<CapabilityGroupSummary[]> {
+  return CAPABILITY_CATALOG.map((capability) =>
+    buildCapabilityGroupSummary(capability.key, allModels, runtimeTruth),
+  )
 }

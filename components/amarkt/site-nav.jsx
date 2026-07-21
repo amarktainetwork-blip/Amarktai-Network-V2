@@ -51,7 +51,7 @@ export function SiteNav() {
         {/* Desktop CTA */}
         <div className="hidden md:block">
           {isAuthed ? (
-            <Link href="/dashboard/command-center">
+            <Link href="/dashboard">
               <Button className="bg-white text-black hover:bg-white/90">
                 Open Console <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
@@ -80,7 +80,7 @@ export function SiteNav() {
                 {link.label}
               </Link>
             ))}
-            <Link href={isAuthed ? '/dashboard/command-center' : '/login'} onClick={() => setMobileOpen(false)} className="mt-2">
+            <Link href={isAuthed ? '/dashboard' : '/login'} onClick={() => setMobileOpen(false)} className="mt-2">
               <Button className="w-full bg-white text-black hover:bg-white/90">
                 {isAuthed ? 'Open Console' : 'Sign In'} <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>

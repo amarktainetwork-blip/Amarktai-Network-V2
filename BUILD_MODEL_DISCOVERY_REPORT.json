@@ -5,14 +5,12 @@
   "generatedAt": "1970-01-01T00:00:00.000Z",
   "approvedProviders": [
     "genx",
-    "groq",
     "together",
     "mimo",
     "deepinfra"
   ],
   "runtimeExecutableProviders": [
     "genx",
-    "groq",
     "together",
     "deepinfra"
   ],
@@ -21,7 +19,7 @@
   "providerDiscoveryStatus": [
     {
       "provider": "genx",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "media_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -41,7 +39,7 @@
       "apiKeyPresent": true,
       "mode": "safe_static",
       "source": "last_known_good",
-      "totalDiscovered": 61,
+      "totalDiscovered": 65,
       "liveDiscoveryAttempted": false,
       "liveDiscoverySucceeded": false,
       "liveDiscoverySkipped": true,
@@ -55,11 +53,11 @@
       "error": null,
       "returnedModelCount": 0,
       "publicEndpointModelCount": 0,
-      "staticFallbackCount": 61,
-      "docsFallbackCount": 61,
-      "previousInventoryCount": 61,
-      "lastKnownGoodCount": 61,
-      "effectiveCatalogueCount": 61,
+      "staticFallbackCount": 65,
+      "docsFallbackCount": 65,
+      "previousInventoryCount": 65,
+      "lastKnownGoodCount": 65,
+      "effectiveCatalogueCount": 65,
       "discoveredAt": "1970-01-01T00:00:00.000Z",
       "notes": [
         "genx discovery skipped (safe_static_mode); preserved previous last-known-good inventory and supplemented docs fallback metadata."
@@ -68,54 +66,8 @@
       "docsFallbackComplete": true
     },
     {
-      "provider": "groq",
-      "providerRole": "runtime_execution_provider",
-      "docsCapabilityKnown": true,
-      "liveDiscoverySupported": true,
-      "docsFallbackSupported": true,
-      "apiKeyEnvName": "GROQ_API_KEY",
-      "apiKeyRequiredForLiveDiscovery": true,
-      "baseUrl": "https://api.groq.com/openai/v1",
-      "alternateBaseUrls": [],
-      "modelsEndpoint": "https://api.groq.com/openai/v1/models",
-      "modelsEndpointRequiresAuth": true,
-      "modelsEndpointScope": "authenticated_model_list",
-      "runtimeExecutionAllowed": true,
-      "policyRestrictedByApp": false,
-      "policyExecutionDisabled": false,
-      "policyBlockedReason": null,
-      "apiKeyPresent": false,
-      "mode": "safe_static",
-      "source": "last_known_good",
-      "totalDiscovered": 7,
-      "liveDiscoveryAttempted": false,
-      "liveDiscoverySucceeded": false,
-      "liveDiscoverySkipped": true,
-      "liveDiscoverySkipReason": "safe_static_mode",
-      "docsFallbackUsed": true,
-      "providerUniverseKnown": false,
-      "providerUniversePartiallyKnown": true,
-      "publicDocsUniverseKnown": true,
-      "authenticatedUniverseKnown": false,
-      "endpointSource": "https://api.groq.com/openai/v1/models",
-      "error": null,
-      "returnedModelCount": 0,
-      "publicEndpointModelCount": 0,
-      "staticFallbackCount": 7,
-      "docsFallbackCount": 7,
-      "previousInventoryCount": 7,
-      "lastKnownGoodCount": 7,
-      "effectiveCatalogueCount": 7,
-      "discoveredAt": "1970-01-01T00:00:00.000Z",
-      "notes": [
-        "groq discovery skipped (safe_static_mode); preserved previous last-known-good inventory and supplemented docs fallback metadata."
-      ],
-      "docsFallbackRepresentative": false,
-      "docsFallbackComplete": false
-    },
-    {
       "provider": "together",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "media_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -165,7 +117,7 @@
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": false,
       "docsFallbackSupported": true,
-      "apiKeyEnvName": null,
+      "apiKeyEnvName": "MIMO_API_KEY",
       "apiKeyRequiredForLiveDiscovery": false,
       "baseUrl": "https://api.xiaomimimo.com/v1",
       "alternateBaseUrls": [
@@ -178,7 +130,7 @@
       "policyRestrictedByApp": true,
       "policyExecutionDisabled": true,
       "policyBlockedReason": "coding_agent_only_not_backend_runtime",
-      "apiKeyPresent": false,
+      "apiKeyPresent": true,
       "mode": "safe_static",
       "source": "last_known_good",
       "totalDiscovered": 6,
@@ -207,7 +159,7 @@
     },
     {
       "provider": "deepinfra",
-      "providerRole": "runtime_execution_provider",
+      "providerRole": "language_runtime",
       "docsCapabilityKnown": true,
       "liveDiscoverySupported": true,
       "docsFallbackSupported": true,
@@ -227,7 +179,7 @@
       "apiKeyPresent": false,
       "mode": "safe_static",
       "source": "public_endpoint_with_last_known_good",
-      "totalDiscovered": 342,
+      "totalDiscovered": 351,
       "liveDiscoveryAttempted": false,
       "liveDiscoverySucceeded": true,
       "liveDiscoverySkipped": false,
@@ -242,13 +194,13 @@
       "authenticatedUniverseKnown": false,
       "endpointSource": "https://api.deepinfra.com/models/list",
       "error": null,
-      "returnedModelCount": 339,
-      "publicEndpointModelCount": 339,
-      "staticFallbackCount": 10,
-      "docsFallbackCount": 10,
+      "returnedModelCount": 343,
+      "publicEndpointModelCount": 343,
+      "staticFallbackCount": 17,
+      "docsFallbackCount": 17,
       "previousInventoryCount": 342,
-      "lastKnownGoodCount": 3,
-      "effectiveCatalogueCount": 342,
+      "lastKnownGoodCount": 8,
+      "effectiveCatalogueCount": 351,
       "discoveredAt": "1970-01-01T00:00:00.000Z",
       "notes": [
         "DeepInfra public model-list discovery succeeded and was merged with previous last-known-good inventory to avoid destructive catalogue shrinkage. Models are catalogue truth only unless executor/client/readiness gates are satisfied."
@@ -272,22 +224,22 @@
     "genxMusicEndpointFamily": [
       "/api/v1/generate + /api/v1/jobs/:id"
     ],
-    "genxMusicExecutorReady": true,
-    "genxMusicBlockers": []
+    "genxMusicExecutorReady": false,
+    "genxMusicBlockers": [
+      "execution_readiness_not_derived_from_discovery"
+    ]
   },
   "fullProviderModelUniverseKnown": false,
   "liveDiscoveryPartial": true,
   "providersWithFullUniverseKnown": [],
   "providersPartiallyKnown": [
     "genx",
-    "groq",
     "together",
     "mimo",
     "deepinfra"
   ],
   "providersUsingDocsFallback": [
     "genx",
-    "groq",
     "together",
     "mimo",
     "deepinfra"
@@ -297,24 +249,22 @@
   ],
   "providersSkipped": [
     "genx",
-    "groq",
     "together",
     "mimo"
   ],
   "providersFailed": [],
   "staticFallbackUsedByProvider": {
-    "genx": 61,
-    "groq": 7,
+    "genx": 65,
     "together": 10,
     "mimo": 6,
-    "deepinfra": 10
+    "deepinfra": 17
   },
   "totalLiveDiscoveredModels": 0,
-  "totalDocsFallbackModels": 86,
-  "totalPublicEndpointModels": 340,
-  "totalEffectiveCatalogueModels": 426,
-  "modelsExecutableNow": 7,
-  "modelsKnownButBlocked": 419,
+  "totalDocsFallbackModels": 88,
+  "totalPublicEndpointModels": 344,
+  "totalEffectiveCatalogueModels": 432,
+  "modelsExecutableNow": 0,
+  "modelsKnownButBlocked": 432,
   "policyRestrictedModels": 6,
   "transportProfilesPresent": [
     "anthropic_messages_sse",
@@ -330,7 +280,7 @@
     "websocket_realtime_audio"
   ],
   "genxMusicCapabilityKnown": true,
-  "genxMusicExecutionReady": true,
+  "genxMusicExecutionReady": false,
   "mimoCapabilityKnown": true,
   "mimoPolicyRestricted": true,
   "togetherStaticFallbackCount": 10,
@@ -357,8 +307,8 @@
   ],
   "deepinfraPublicDiscoveryAttempted": true,
   "deepinfraPublicDiscoverySucceeded": true,
-  "deepinfraReturnedModelCount": 339,
-  "deepinfraEffectiveCatalogueCount": 342,
+  "deepinfraReturnedModelCount": 343,
+  "deepinfraEffectiveCatalogueCount": 351,
   "deepinfraProviderUniverseKnown": false,
   "deepinfraProviderUniversePartiallyKnown": true,
   "deepinfraCapabilitiesCovered": [
@@ -381,52 +331,50 @@
     "video_generation"
   ],
   "countsByProvider": {
-    "genx": 61,
-    "groq": 7,
+    "genx": 65,
     "together": 10,
     "mimo": 6,
-    "deepinfra": 342
+    "deepinfra": 351
   },
   "totals": {
-    "discovered": 426,
-    "executableNow": 7,
-    "catalogueOnly": 419,
-    "missingClient": 415,
-    "missingExecutor": 419
+    "discovered": 432,
+    "executableNow": 0,
+    "catalogueOnly": 432,
+    "missingClient": 421,
+    "missingExecutor": 425
   },
   "capabilityCoverage": {
-    "image_generation": {
-      "total": 64,
-      "executable": 1,
-      "docsKnown": 64,
+    "tts": {
+      "total": 28,
+      "executable": 0,
+      "docsKnown": 28,
       "liveDiscovered": 0,
       "providers": [
         "genx",
         "together",
+        "mimo",
         "deepinfra"
       ]
     },
     "chat": {
-      "total": 254,
-      "executable": 3,
-      "docsKnown": 254,
+      "total": 257,
+      "executable": 0,
+      "docsKnown": 257,
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "groq",
         "together",
         "mimo",
         "deepinfra"
       ]
     },
     "reasoning": {
-      "total": 165,
-      "executable": 3,
-      "docsKnown": 165,
+      "total": 164,
+      "executable": 0,
+      "docsKnown": 164,
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "groq",
         "together",
         "mimo",
         "deepinfra"
@@ -439,9 +387,19 @@
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "groq",
         "together",
         "mimo",
+        "deepinfra"
+      ]
+    },
+    "image_generation": {
+      "total": 64,
+      "executable": 0,
+      "docsKnown": 64,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx",
+        "together",
         "deepinfra"
       ]
     },
@@ -456,9 +414,9 @@
       ]
     },
     "structured_output": {
-      "total": 167,
+      "total": 166,
       "executable": 0,
-      "docsKnown": 167,
+      "docsKnown": 166,
       "liveDiscovered": 0,
       "providers": [
         "genx",
@@ -466,19 +424,9 @@
         "deepinfra"
       ]
     },
-    "music_generation": {
-      "total": 4,
-      "executable": 2,
-      "docsKnown": 4,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx",
-        "deepinfra"
-      ]
-    },
     "video_generation": {
       "total": 50,
-      "executable": 1,
+      "executable": 0,
       "docsKnown": 50,
       "liveDiscovered": 0,
       "providers": [
@@ -487,16 +435,22 @@
         "deepinfra"
       ]
     },
-    "tts": {
-      "total": 28,
+    "avatar_generation": {
+      "total": 1,
       "executable": 0,
-      "docsKnown": 28,
+      "docsKnown": 1,
+      "liveDiscovered": 0,
+      "providers": [
+        "genx"
+      ]
+    },
+    "music_generation": {
+      "total": 4,
+      "executable": 0,
+      "docsKnown": 4,
       "liveDiscovered": 0,
       "providers": [
         "genx",
-        "groq",
-        "together",
-        "mimo",
         "deepinfra"
       ]
     },
@@ -510,75 +464,40 @@
         "deepinfra"
       ]
     },
-    "avatar_generation": {
-      "total": 1,
-      "executable": 0,
-      "docsKnown": 1,
-      "liveDiscovered": 0,
-      "providers": [
-        "genx"
-      ]
-    },
     "summarization": {
       "total": 5,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 5,
       "liveDiscovered": 0,
       "providers": [
-        "groq",
         "together",
         "deepinfra"
       ]
     },
     "classification": {
       "total": 6,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 6,
       "liveDiscovered": 0,
       "providers": [
-        "groq",
         "together",
         "deepinfra"
       ]
     },
     "extraction": {
       "total": 5,
-      "executable": 3,
+      "executable": 0,
       "docsKnown": 5,
       "liveDiscovered": 0,
       "providers": [
-        "groq",
         "together",
-        "deepinfra"
-      ]
-    },
-    "multimodal": {
-      "total": 142,
-      "executable": 0,
-      "docsKnown": 142,
-      "liveDiscovered": 0,
-      "providers": [
-        "groq",
-        "mimo",
-        "deepinfra"
-      ]
-    },
-    "stt": {
-      "total": 15,
-      "executable": 0,
-      "docsKnown": 15,
-      "liveDiscovered": 0,
-      "providers": [
-        "groq",
-        "together",
-        "mimo",
         "deepinfra"
       ]
     },
     "embeddings": {
-      "total": 33,
+      "total": 36,
       "executable": 0,
-      "docsKnown": 33,
+      "docsKnown": 36,
       "liveDiscovered": 0,
       "providers": [
         "together",
@@ -592,6 +511,27 @@
       "liveDiscovered": 0,
       "providers": [
         "together",
+        "deepinfra"
+      ]
+    },
+    "stt": {
+      "total": 15,
+      "executable": 0,
+      "docsKnown": 15,
+      "liveDiscovered": 0,
+      "providers": [
+        "together",
+        "mimo",
+        "deepinfra"
+      ]
+    },
+    "multimodal": {
+      "total": 142,
+      "executable": 0,
+      "docsKnown": 142,
+      "liveDiscovered": 0,
+      "providers": [
+        "mimo",
         "deepinfra"
       ]
     },
@@ -616,7 +556,6 @@
       "ACE-Step/acestep-v15-xl-sft",
       "facebook/musicgen-large"
     ],
-    "groqMusicModels": [],
     "lyriaLikeModels": [
       "genx/lyria-3-clip-preview",
       "genx/lyria-3-pro-preview"
@@ -624,6 +563,6 @@
     "endpointShapeKnown": true,
     "providerClientExists": true,
     "workerExecutorExists": true,
-    "executableNow": true
+    "executableNow": false
   }
 }

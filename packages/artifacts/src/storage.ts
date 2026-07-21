@@ -7,6 +7,7 @@
  */
 
 import fs from 'fs/promises'
+import { createReadStream, type ReadStream } from 'node:fs'
 import path from 'path'
 import { lookup } from 'mime-types'
 import {
@@ -108,6 +109,10 @@ export class ArtifactStorageDriver {
     } catch {
       return { exists: false, sizeBytes: 0, mimeType: '' }
     }
+  }
+
+  createReadStream(key: string, range?: { start: number; end: number }): ReadStream {
+    return createReadStream(assertInsideBase(this.basePath, key), range)
   }
 
   buildStorageKey(appSlug: string, type: ArtifactType, filename: string): string {

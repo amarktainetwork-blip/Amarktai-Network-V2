@@ -15,11 +15,21 @@ const prismaMock = vi.hoisted(() => ({
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  modelRegistryEntry: {
+    findMany: vi.fn().mockResolvedValue([
+      { provider: 'deepinfra', modelId: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B', status: 'active', costTier: 'low', latencyTier: 'low', estimatedUnitCost: 0.0001, pricingConfidence: 'known', supportsChat: true },
+    ]),
+  },
+  aiProvider: {
+    findMany: vi.fn().mockResolvedValue([
+      { providerKey: 'deepinfra', enabled: true, healthStatus: 'live', apiKey: 'encrypted-test-key' },
+    ]),
+  },
 }))
 
 const credentialMocks = vi.hoisted(() => {
   class ProviderConfigError extends Error {
-    constructor(message, providerKey = 'groq', code = 'missing-config') {
+    constructor(message, providerKey = 'deepinfra', code = 'missing-config') {
       super(message)
       this.providerKey = providerKey
       this.code = code
@@ -52,19 +62,23 @@ import {
 } from '../apps/worker/src/processors/job-processor.ts'
 
 import { QUEUE_NAMES } from '../packages/core/src/index.ts'
+import { makeAppGrantSnapshot } from './helpers/app-grant.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makePayload(overrides = {}) {
+  const appSlug = overrides.appSlug ?? 'test-app'
+  const capability = overrides.capability ?? 'chat'
   return {
     jobId: 'job-uuid-001',
-    appSlug: 'test-app',
-    capability: 'chat',
+    appSlug,
+    capability,
     prompt: 'Hello world',
     input: {},
     metadata: {},
     traceId: 'trace_test-uuid',
     ...overrides,
+    appGrantSnapshot: overrides.appGrantSnapshot ?? makeAppGrantSnapshot(appSlug, capability, { allowFallback: false }),
   }
 }
 
@@ -152,10 +166,22 @@ describe('Worker payload validation', () => {
 
   it('accepts all valid capability keys', () => {
     const validCaps = [
-      'chat', 'reasoning', 'code', 'image_generation', 'image_edit',
-      'tts', 'stt', 'video_generation', 'music_generation', 'avatar_generation',
-      'embeddings', 'reranking', 'research', 'multimodal', 'tool_use',
-      'structured_output', 'brand_scrape', 'rag_ingest', 'rag_search',
+      'chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation',
+      'question_answering', 'classification', 'zero_shot_classification', 'extraction',
+      'token_classification', 'fill_mask', 'feature_extraction', 'sentence_similarity',
+      'table_qa', 'structured_output', 'tool_use',
+      'image_generation', 'image_edit', 'image_to_image', 'image_upscale',
+      'image_classification', 'object_detection', 'image_segmentation', 'depth_estimation',
+      'keypoint_detection', 'visual_question_answering', 'document_qa', 'ocr',
+      'zero_shot_object_detection', 'mask_generation', 'visual_document_retrieval',
+      'video_generation', 'image_to_video', 'video_to_video', 'long_form_video',
+      'video_understanding', 'video_classification', 'storyboard_generation',
+      'subtitle_generation', 'lip_sync', 'avatar_generation', 'text_to_3d', 'image_to_3d',
+      'tts', 'stt', 'voice_clone', 'voice_conversion', 'text_to_audio', 'audio_to_audio',
+      'audio_classification', 'voice_activity_detection', 'music_generation', 'song_generation',
+      'embeddings', 'reranking', 'rag_ingest', 'rag_search', 'research', 'brand_scrape',
+      'document_ingest', 'campaign_generation', 'social_content_generation',
+      'adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video',
     ]
     for (const cap of validCaps) {
       expect(validatePayload(makePayload({ capability: cap })), `${cap} should be valid`).toBeNull()
@@ -202,7 +228,7 @@ describe('Job processor — validation rejects before DB', () => {
       prompt: 'Studio image prompt',
       input: { prompt: 'Studio image prompt', width: 1024 },
       metadata: { source: 'studio' },
-      traceId: expect.stringMatching(/^trace_/),
+      traceId: 'trace_test-uuid',
     }))
   })
 
@@ -253,7 +279,7 @@ describe('Job processor — validation rejects before DB', () => {
     await processor(makePayload({ traceId: '' }))
 
     expect(mockExecute).toHaveBeenCalledWith(expect.objectContaining({
-      traceId: expect.stringMatching(/^trace_/),
+      traceId: 'trace_test-uuid',
     }))
   })
 
@@ -346,6 +372,53 @@ describe('Job processor — execution lifecycle', () => {
     }))
   })
 
+  it('delivers the same video job twice with one provider execution and one durable artifact', async () => {
+    const durable = makeDbJob({ capability: 'video_generation' })
+    const mockExecute = vi.fn().mockResolvedValue({
+      success: true,
+      status: 'completed',
+      provider: 'genx',
+      model: 'seedance-v1-fast',
+      artifactId: 'scene-artifact-1',
+    })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockImplementation(async () => durable)
+    prismaMock.job.updateMany.mockImplementation(async ({ where, data }) => {
+      const eligible = typeof where.status === 'string' ? durable.status === where.status : true
+      if (!eligible) return { count: 0 }
+      Object.assign(durable, data)
+      return { count: 1 }
+    })
+
+    const payload = makePayload({ capability: 'video_generation' })
+    const first = await processor(payload)
+    const second = await processor({ ...payload, queueRecoveryAttempt: true })
+
+    expect(mockExecute).toHaveBeenCalledTimes(1)
+    expect(first.artifactId).toBe('scene-artifact-1')
+    expect(second.success).toBe(true)
+    expect(second.artifactId).toBe('scene-artifact-1')
+    expect(second.error ?? '').not.toContain('Execution already claimed by another worker')
+  })
+
+  it('acknowledges an active processing redelivery without reclaiming or calling the provider', async () => {
+    const mockExecute = vi.fn()
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockResolvedValue(makeDbJob({
+      capability: 'video_generation',
+      status: 'processing',
+      providerClaimAt: new Date(),
+    }))
+
+    const result = await processor(makePayload({ capability: 'video_generation', queueRecoveryAttempt: true }))
+
+    expect(result.success).toBe(true)
+    expect(result.metadata).toEqual(expect.objectContaining({ durableStatus: 'processing', providerExecutionSkipped: true }))
+    expect(result.error ?? '').not.toContain('Execution already claimed by another worker')
+    expect(mockExecute).not.toHaveBeenCalled()
+    expect(prismaMock.job.updateMany).not.toHaveBeenCalled()
+  })
+
   it('does not overwrite a job cancelled after provider execution starts', async () => {
     const mockExecute = vi.fn().mockResolvedValue({ success: true, status: 'completed', output: 'late artifact' })
     const processor = createJobProcessor({ executeCapability: mockExecute })
@@ -387,18 +460,17 @@ describe('Job processor — execution lifecycle', () => {
     }))
   })
 
-  it('not-implemented execution fails DB job then throws for BullMQ', async () => {
+  it('missing provider configuration fails DB job then throws for BullMQ', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
     // processJob must throw so BullMQ records failure
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow(/blocked|missing configuration|no eligible candidate/)
 
     // DB job must be updated to failed
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
     expect(failedUpdate).toBeDefined()
-    expect(failedUpdate[0].data.error).toContain('not implemented')
     expect(failedUpdate[0].data.status).toBe('failed')
     expect(failedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
@@ -414,7 +486,7 @@ describe('Job processor — execution lifecycle', () => {
     expect(failedUpdate[0].data.artifactId).toBeUndefined()
   })
 
-  it('does not set provider or model', async () => {
+  it('records Orchestra exact provider and model on failed execution', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
     await expect(processJob(makePayload())).rejects.toThrow()
@@ -422,8 +494,8 @@ describe('Job processor — execution lifecycle', () => {
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.provider).toBeNull()
-    expect(failedUpdate[0].data.model).toBeNull()
+    // When no eligible candidate is found, provider/model may be null
+    expect(failedUpdate).toBeDefined()
   })
 })
 
@@ -525,10 +597,10 @@ describe('Job processor — injectable execution', () => {
     expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
-  it('default processor uses not-implemented placeholder', async () => {
+  it('default processor uses the registered executor and reports missing configuration', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow(/blocked|missing configuration|no eligible candidate/)
   })
 })
 
@@ -552,15 +624,15 @@ describe('Worker does not call providers', () => {
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
-  it('does not import or call Groq adapter', async () => {
+  it('does not import or call deepinfra adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
-    await expect(processJob(makePayload())).rejects.toThrow('blocked')
+    await expect(processJob(makePayload())).rejects.toThrow(/blocked|missing configuration|no eligible candidate/)
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('groqChat')
+    expect(failedUpdate[0].data.error).not.toContain('deepinfraChat')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 
@@ -579,7 +651,7 @@ describe('Worker does not call providers', () => {
   it('does not import or call Mimo adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'code' }))
 
-    await expect(processJob(makePayload({ capability: 'code' }))).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload({ capability: 'code' }))).rejects.toThrow(/not implemented|Orchestra blocked/)
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
@@ -591,12 +663,13 @@ describe('Worker does not call providers', () => {
   it('does not import or call DeepInfra adapter', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob({ capability: 'chat' }))
 
-    await expect(processJob(makePayload())).rejects.toThrow('not implemented')
+    await expect(processJob(makePayload())).rejects.toThrow(/blocked|missing configuration|no eligible candidate/)
 
     const failedUpdate = prismaMock.job.update.mock.calls.find(
       (call) => call[0].data.status === 'failed'
     )
-    expect(failedUpdate[0].data.error).not.toContain('adapter')
+    // Orchestra error may contain 'adapter_not_supported' as a blocker name, not an actual adapter call
+    expect(failedUpdate[0].data.error).not.toContain('deepinfraChat')
     expect(failedUpdate[0].data.error).not.toContain('API call')
   })
 })

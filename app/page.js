@@ -6,21 +6,22 @@ import { ParticleField } from '@/components/amarkt/particles'
 import { SiteNav, SiteFooter } from '@/components/amarkt/site-nav'
 import ParticleEntry from '@/components/amarkt/ParticleEntry'
 import { Button } from '@/components/ui/button'
+import { PROVIDER_CONTRACTS } from '@/lib/dashboard-contract'
 import {
   Boxes, Server, Database, Workflow, ShieldCheck, ArrowRight, Cpu, Layers, Sparkles,
 } from 'lucide-react'
 
 const FEATURES = [
   { icon: Workflow, title: 'AI Orchestration', desc: 'Route any capability — text, image, video, audio — through a single control plane with intelligent provider selection.' },
-  { icon: Server, title: 'Background Jobs', desc: 'Contract-ready job queues for worker pipelines, progress tracking, retries and artifact lineage once backend routes are wired.' },
-  { icon: Database, title: 'Asset Storage', desc: 'Artifact contracts for secure storage, signed paths and retrieval once backend storage is connected.' },
+  { icon: Server, title: 'Background Jobs', desc: 'Durable job queues provide worker pipelines, progress tracking, retry controls, recovery and artifact lineage.' },
+  { icon: Database, title: 'Asset Storage', desc: 'Canonical authenticated artifact routes provide previews, byte-range playback and downloads.' },
   { icon: Layers, title: 'Capability Contracts', desc: 'Strict typed input/output schemas per capability. Connected apps stay lightweight clients.' },
   { icon: ShieldCheck, title: 'Tenant Isolation', desc: 'Absolute data isolation between apps with per-connection keys, scopes and daily budgets.' },
   { icon: Cpu, title: 'Multi-Provider', desc: 'Swap underlying providers without touching client code. Fallback chains are automatic.' },
 ]
 
-const FINAL_PROVIDERS = ['GenX', 'Groq', 'Together', 'Mimo', 'DeepInfra gated lane']
-const WORKFLOW = ['App request', 'Capability contract', 'Provider/runtime route', 'Artifact/proof after backend wiring']
+const FINAL_PROVIDERS = PROVIDER_CONTRACTS.map((provider) => provider.name)
+const WORKFLOW = ['App request', 'Capability contract', 'Orchestra route', 'Validated result or artifact evidence']
 
 export default function Landing() {
   const [isAuthed, setIsAuthed] = useState(false)
@@ -73,11 +74,11 @@ export default function Landing() {
           </h1>
 
           <p className="animate-fade-up mt-6 max-w-2xl text-lg text-muted-foreground" style={{ animationDelay: '0.18s' }}>
-            AmarktAI Network defines the central AI capability runtime: connected apps request capabilities through one controlled contract layer while backend execution is wired behind it.
+            AmarktAI Network is the central AI capability runtime: connected apps request capabilities through one controlled contract layer and Orchestra selects an authorised backend route.
           </p>
 
           <div className="animate-fade-up mt-9 flex flex-col items-center gap-3 sm:flex-row" style={{ animationDelay: '0.28s' }}>
-            <Link href={isAuthed ? '/dashboard/command-center' : '/login'}>
+            <Link href={isAuthed ? '/dashboard' : '/login'}>
               <Button size="lg" className="h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-7 text-black transition-transform duration-200 hover:scale-105 hover:opacity-90 glow-cyan">
                 {isAuthed ? 'Launch Command Center' : 'Get Started'} <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -126,7 +127,7 @@ export default function Landing() {
           <Reveal>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Final provider lanes</h2>
             <p className="mt-3 text-muted-foreground">
-              The frontend is locked to five provider contracts: GenX, Groq, Together, Mimo, and the gated DeepInfra lane.
+              Provider identities and runtime policy are projected from the same canonical definitions used by the API and worker.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {FINAL_PROVIDERS.map((provider) => (
@@ -157,7 +158,7 @@ export default function Landing() {
                 <Boxes className="mx-auto mb-5 h-10 w-10 text-cyan-300" />
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ship AI features without the AI overhead</h2>
                 <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Explore the full operational console — command center, studio, jobs, artifacts and more.</p>
-                <Link href={isAuthed ? '/dashboard/command-center' : '/login'}>
+                <Link href={isAuthed ? '/dashboard' : '/login'}>
                   <Button size="lg" className="mt-8 h-12 bg-white px-8 text-black transition-transform duration-200 hover:scale-105 hover:bg-white/90">
                     {isAuthed ? 'Enter the Console' : 'Sign In to Start'} <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>

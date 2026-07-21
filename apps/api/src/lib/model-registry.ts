@@ -1,4 +1,13 @@
 import { prisma } from '@amarktai/db'
+import {
+  APPROVED_PROVIDER_DEFINITIONS,
+  CAPABILITY_FIELD_MAP,
+  MODEL_CATALOGUE,
+  hasExecutorRegistration,
+  type CapabilityKey,
+  type ModelRecord,
+  type ProviderDiscoveryResult,
+} from '@amarktai/core'
 import type { DiscoveryResult, GenXPricingResult } from './provider-discovery.js'
 
 const MAX_METADATA_CHARS = 500_000
@@ -15,6 +24,7 @@ export interface ModelCatalogEntry {
   latencyTier: string
   contextWindow: number
   capabilities: Record<string, boolean>
+  canonicalCapabilities?: CapabilityKey[]
   estimatedUnitCost: number | null
   qualityTier: string
   source: string
@@ -29,6 +39,9 @@ export interface ModelCatalogEntry {
   pricingRawMetadata?: Record<string, unknown>
   lastPricingSyncedAt?: string | null
   pricingBlocker?: string
+  rawMetadata?: Record<string, unknown>
+  providerRawType?: string
+  providerRawCategory?: string
 }
 
 export interface ModelCatalogRefreshSummary {
@@ -86,6 +99,7 @@ interface GenXPricingCatalogData {
   supportsImageGeneration: boolean
   supportsImageEditing: boolean
   supportsVideoGeneration: boolean
+  supportsMusicGeneration: boolean
   supportsStt: boolean
   supportsTts: boolean
   supportsEmbeddings: boolean
@@ -203,7 +217,7 @@ function mapGenXPricingCapabilities(rawCategoryInput: string, modelId: string): 
   }
 
   if (text.includes('audio') || text.includes('music')) {
-    return { category: 'audio', primaryRole: 'music_generation', capabilities: {} }
+    return { category: 'audio', primaryRole: 'music_generation', capabilities: { supportsMusicGeneration: true } }
   }
 
   if (text.includes('text') || text.includes('chat') || text.includes('reason')) {
@@ -222,6 +236,7 @@ function defaultCapabilityFlags(): Pick<
   | 'supportsImageGeneration'
   | 'supportsImageEditing'
   | 'supportsVideoGeneration'
+  | 'supportsMusicGeneration'
   | 'supportsStt'
   | 'supportsTts'
   | 'supportsEmbeddings'
@@ -239,6 +254,7 @@ function defaultCapabilityFlags(): Pick<
     supportsImageGeneration: false,
     supportsImageEditing: false,
     supportsVideoGeneration: false,
+    supportsMusicGeneration: false,
     supportsStt: false,
     supportsTts: false,
     supportsEmbeddings: false,
@@ -309,36 +325,243 @@ function buildGenXPricingCatalogData(
   }
 }
 
-// Curated seed catalog — source = curated_seed, catalogCompleteness = curated_fallback_only
-export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = [
-  // ── MiMo: coding-tool only ───────────────────────────────────────────────
-  {
-    provider: 'mimo',
-    modelId: 'mimo-coding-agent',
-    displayName: 'MiMo Coding Agent',
-    family: 'mimo',
-    category: 'code',
-    primaryRole: 'coding_tool',
-    costTier: 'medium',
-    latencyTier: 'medium',
-    contextWindow: 128000,
-    capabilities: { supportsCode: true, supportsToolUse: true },
-    estimatedUnitCost: 0.00001,
+// Curated DB projection is derived from the canonical core model catalogue.
+// Always include ALL static catalogue entries so curated seed can overwrite
+// discovery metadata with correct compatibility fields for TTS, music, etc.
+const STATIC_MODEL_IDS = new Set(
+  MODEL_CATALOGUE.filter((m) => !m.discoveredModel).map((m) => `${m.provider}/${m.modelId}`)
+)
+
+export const CURATED_MODEL_CATALOG: ModelCatalogEntry[] = MODEL_CATALOGUE
+  .filter((model) => !model.discoveredModel || STATIC_MODEL_IDS.has(`${model.provider}/${model.modelId}`))
+  .map(modelRecordToCatalogEntry)
+
+function modelRecordToCatalogEntry(model: ModelRecord): ModelCatalogEntry {
+  const capabilities: Record<string, boolean> = {}
+  for (const capability of model.capabilities) capabilities[CAPABILITY_FIELD_MAP[capability]] = true
+  return {
+    provider: model.provider,
+    modelId: model.modelId,
+    displayName: model.displayName,
+    family: model.modelId.split('/')[0] ?? model.provider,
+    category: model.category ?? (model.capabilities.includes('embeddings') ? 'embeddings' : model.capabilities.includes('reranking') ? 'reranking' : 'text'),
+    primaryRole: model.capabilities[0] ?? 'chat',
+    costTier: model.costTier,
+    latencyTier: model.latencyTier,
+    contextWindow: 0,
+    capabilities,
+    canonicalCapabilities: [...model.capabilities],
+    estimatedUnitCost: null,
+    qualityTier: model.qualityTier,
+    source: model.source ?? 'curated_seed',
+    catalogCompleteness: 'curated_fallback_only',
+    isLiveDiscovered: model.liveDiscovered === true,
+    modelOwner: model.upstreamProvider ?? model.provider,
+    notes: model.notes,
     pricingSource: 'unknown',
     pricingConfidence: 'unknown',
     pricingUnit: '',
     pricingCurrency: '',
     pricingRawMetadata: {},
     lastPricingSyncedAt: null,
-    pricingBlocker: 'coding_tool_only_not_backend_runtime',
-    qualityTier: 'premium',
-    source: 'curated_seed',
-    catalogCompleteness: 'curated_fallback_only',
-    isLiveDiscovered: false,
-    modelOwner: 'mimo',
-    notes: 'CODING_TOOL_ONLY. Not backend runtime. Not Studio. Requires server-side terminal.',
-  },
-]
+    pricingBlocker: 'pricing_unknown',
+    providerRawType: model.category ?? '',
+    providerRawCategory: model.providerCategory ?? model.category ?? '',
+    rawMetadata: {
+      ...(model.rawMetadata ?? {}),
+      compatibility: compatibilityMetadata(model),
+    },
+  }
+}
+
+function compatibilityMetadata(model: ModelRecord): Record<string, unknown> {
+  return {
+    category: model.category ?? null,
+    capabilities: model.capabilities,
+    modalitiesIn: model.modalitiesIn ?? [],
+    modalitiesOut: model.modalitiesOut ?? [],
+    transportProfile: model.transportProfile ?? null,
+    endpointFamily: model.endpointFamily ?? null,
+    endpointShapeKnown: model.endpointShapeKnown === true,
+    requestShapeKnown: model.requestShapeKnown === true,
+    responseShapeKnown: model.responseShapeKnown === true,
+    providerClientExists: model.providerClientExists === true,
+    workerExecutorExists: model.workerExecutorExists === true,
+  }
+}
+
+function canonicalCapabilitiesFromFlags(flags: Record<string, boolean>): CapabilityKey[] {
+  return Object.entries(CAPABILITY_FIELD_MAP)
+    .filter(([, field]) => flags[field] === true)
+    .map(([capability]) => capability as CapabilityKey)
+}
+
+function canonicalCapabilitiesForDiscovered(model: DiscoveryResult['models'][number]): CapabilityKey[] {
+  const explicit = Array.isArray(model.rawMetadata?.canonicalCapabilities)
+    ? model.rawMetadata.canonicalCapabilities.filter((value): value is CapabilityKey => typeof value === 'string' && value in CAPABILITY_FIELD_MAP)
+    : []
+  if (explicit.length > 0) return [...new Set(explicit)]
+  const task = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
+  const byTask: Record<string, CapabilityKey[]> = {
+    'zero-shot-classification': ['zero_shot_classification'], 'token-classification': ['token_classification'],
+    'fill-mask': ['fill_mask'], 'table-question-answering': ['table_qa'], 'question-answering': ['question_answering'],
+    'feature-extraction': ['feature_extraction', 'embeddings'], embeddings: ['feature_extraction', 'sentence_similarity', 'embeddings'],
+    'sentence-similarity': ['sentence_similarity'], reranker: ['reranking'], rerank: ['reranking'],
+    'text-to-image': ['image_generation'], 'image-to-image': ['image_edit', 'image_to_image'],
+    'image-classification': ['image_classification'], 'object-detection': ['object_detection'],
+    'image-segmentation': ['image_segmentation'], 'depth-estimation': ['depth_estimation'],
+    'visual-question-answering': ['visual_question_answering'], 'document-question-answering': ['document_qa'], ocr: ['ocr'],
+    'text-to-video': ['video_generation'], 'image-to-video': ['image_to_video'], 'video-to-video': ['video_to_video'],
+    'automatic-speech-recognition': ['stt'], transcription: ['stt'], 'text-to-speech': ['tts'],
+    'text-to-music': ['music_generation'], music: ['music_generation'], song: ['song_generation'],
+  }
+  if (byTask[task]) return byTask[task]
+  if (['text-generation', 'chat', 'text'].includes(task)) return ['chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification', 'extraction', 'structured_output', 'tool_use']
+  return canonicalCapabilitiesFromFlags(model.capabilities)
+}
+
+function discoveredCompatibility(model: DiscoveryResult['models'][number], capabilities: CapabilityKey[]): Record<string, unknown> | null {
+  const category = (model.providerRawCategory || model.category).toLowerCase()
+  const taskType = (model.providerRawCategory || model.providerRawType || model.category).toLowerCase().replace(/_/g, '-')
+  if (model.provider === 'deepinfra' && capabilities.length > 0) {
+    const text = ['text-generation', 'chat', 'text'].includes(taskType)
+    const embeddings = ['embedding', 'embeddings', 'feature-extraction', 'sentence-similarity'].includes(taskType)
+    const rerank = ['reranker', 'rerank'].includes(taskType)
+    const specialist = ['zero-shot-classification', 'token-classification', 'fill-mask', 'table-question-answering'].includes(taskType)
+    if (!text && !embeddings && !rerank && !specialist) return null
+    const hasNativeExecutor = capabilities.some((capability) => hasExecutorRegistration(capability, 'deepinfra'))
+    const hasTextFallback = text || capabilities.some((capability) =>
+      ['zero_shot_classification', 'token_classification', 'fill_mask', 'table_qa'].includes(capability),
+    )
+    const supportedParameters = Array.isArray(model.rawMetadata?.supportedParameters)
+      ? model.rawMetadata.supportedParameters
+      : Array.isArray(model.rawMetadata?.supported_parameters) ? model.rawMetadata.supported_parameters : []
+    return {
+      taskType, category: taskType, capabilities,
+      modalitiesIn: embeddings || text || rerank ? ['text'] : [],
+      modalitiesOut: embeddings ? ['embedding'] : text ? ['text'] : ['json'],
+      transportProfile: text ? 'openai_chat_sse' : 'native_inference_json',
+      endpointFamily: text ? 'deepinfra_openai_v1/openai_chat' : embeddings ? 'deepinfra_openai_v1/embeddings' : rerank ? 'deepinfra_native_v1/rerank/native_inference' : 'deepinfra_native_v1/native_inference',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true,
+      workerExecutorExists: hasNativeExecutor || hasTextFallback,
+      streamingSupported: text,
+      structuredOutputModes: Array.isArray(model.rawMetadata?.structuredOutputModes)
+        ? model.rawMetadata.structuredOutputModes
+        : Array.isArray(model.rawMetadata?.structured_output_modes) ? model.rawMetadata.structured_output_modes : ['none'],
+      supportedParameters,
+      ...(specialist ? { nativeSpecialist: true } : {}),
+    }
+  }
+  if (model.provider === 'together' && capabilities.length > 0) {
+    const text = ['text', 'text-generation', 'chat', 'language', 'code', 'reasoning'].includes(taskType)
+    const embeddings = ['embedding', 'embeddings'].includes(taskType) || ['embedding', 'embeddings'].includes(category)
+    const rerank = ['rerank', 'reranker', 'reranking'].includes(taskType) || ['rerank', 'reranker', 'reranking'].includes(category)
+    const image = ['image', 'text-to-image', 'image-generation'].includes(taskType) || ['image', 'text-to-image'].includes(category)
+    const tts = capabilities.includes('tts')
+    const stt = capabilities.includes('stt')
+    if (!text && !embeddings && !rerank && !image && !tts && !stt) return null
+    return {
+      taskType: tts ? 'text-to-speech' : stt ? 'automatic-speech-recognition' : taskType,
+      category: text ? 'text' : embeddings ? 'embeddings' : rerank ? 'reranking' : image ? 'image' : tts ? 'tts' : 'stt', capabilities,
+      modalitiesIn: stt ? ['audio'] : ['text'], modalitiesOut: text || stt ? ['text'] : embeddings ? ['embedding'] : image ? ['image'] : tts ? ['audio'] : ['json'],
+      transportProfile: text ? 'openai_chat_sse' : tts ? 'openai_audio_speech_binary' : stt ? 'openai_audio_transcription_multipart' : 'native_inference_json',
+      endpointFamily: text ? 'together_openai_v1/openai_chat' : embeddings ? 'embeddings' : rerank ? 'rerank' : image ? 'image_generation' : tts ? 'audio_speech' : 'audio_transcriptions',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true, providerClientExists: true,
+      workerExecutorExists: capabilities.some((capability) => hasExecutorRegistration(capability, 'together')),
+      streamingSupported: text,
+      structuredOutputModes: Array.isArray(model.rawMetadata?.structuredOutputModes) ? model.rawMetadata.structuredOutputModes : ['none'],
+      supportedParameters: Array.isArray(model.rawMetadata?.supportedParameters) ? model.rawMetadata.supportedParameters : [],
+    }
+  }
+  if (model.provider === 'genx' && category === 'video') {
+    return {
+      taskType, category: 'video', capabilities, modalitiesIn: taskType === 'image-to-video' ? ['text','image'] : taskType === 'video-to-video' ? ['text','video'] : ['text'], modalitiesOut: ['video'],
+      transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true,
+    }
+  }
+  if (model.provider === 'genx' && (category === 'audio' || category === 'music')) {
+    const isMusic = capabilities.includes('music_generation')
+    return {
+      taskType, category: isMusic ? 'music' : category, capabilities, modalitiesIn: capabilities.includes('stt') ? ['audio'] : ['text'], modalitiesOut: capabilities.includes('stt') ? ['text'] : ['audio'],
+      transportProfile: 'async_job_poll', endpointFamily: 'genx_generation_v1',
+      endpointShapeKnown: true, requestShapeKnown: true, responseShapeKnown: true,
+      providerClientExists: true, workerExecutorExists: true,
+      ...(isMusic ? { primaryRole: 'music_generation' } : {}),
+    }
+  }
+  return null
+}
+
+export interface DiscoveredModelAccessibility {
+  currentAvailability: string
+  accountAccess: string
+  serverlessAvailable: boolean | null
+  dedicatedEndpointRequired: boolean
+  executable: boolean
+  blocker: string | null
+  evidenceSource: string
+}
+
+function metadataBoolean(metadata: Record<string, unknown>, names: string[]): boolean | null {
+  for (const name of names) {
+    if (typeof metadata[name] === 'boolean') return metadata[name] as boolean
+  }
+  return null
+}
+
+/** Catalogue presence is deliberately not treated as credential-scoped access. */
+export function deriveDiscoveredModelAccessibility(model: DiscoveryResult['models'][number]): DiscoveredModelAccessibility {
+  if (!model.isLiveDiscovered) {
+    return { currentAvailability: 'defined', accountAccess: 'unknown', serverlessAvailable: null, dedicatedEndpointRequired: false, executable: false, blocker: 'account_access_unknown', evidenceSource: 'non_live_catalogue' }
+  }
+  if (model.provider !== 'together') {
+    const isNativeCatalogueOnly = model.rawMetadata?.nativeCatalogueOnly === true
+      || model.rawMetadata?.native_catalogue_only === true
+    if (isNativeCatalogueOnly) {
+      return {
+        currentAvailability: 'available',
+        accountAccess: 'accessible',
+        serverlessAvailable: true,
+        dedicatedEndpointRequired: false,
+        executable: true,
+        blocker: null,
+        evidenceSource: 'native_catalogue_callable',
+      }
+    }
+    return { currentAvailability: 'available', accountAccess: 'accessible', serverlessAvailable: true, dedicatedEndpointRequired: false, executable: true, blocker: null, evidenceSource: 'authenticated_provider_catalogue' }
+  }
+
+  const metadata = model.rawMetadata ?? {}
+  const endpointType = String(metadata.endpoint_type ?? metadata.endpointType ?? '').toLowerCase()
+  const availability = String(metadata.availability ?? metadata.status ?? '').toLowerCase()
+  const explicitServerless = metadataBoolean(metadata, ['serverless', 'serverless_available', 'serverlessAvailable'])
+  const explicitDedicated = metadataBoolean(metadata, ['dedicated_endpoint_required', 'dedicatedEndpointRequired'])
+  const task = String(model.providerRawCategory || model.providerRawType || model.category).toLowerCase()
+  const dedicated = explicitDedicated === true || endpointType.includes('dedicated') || availability.includes('dedicated') || (task.includes('rerank') && explicitServerless !== true)
+  const serverless = dedicated ? false
+    : explicitServerless ?? (endpointType.includes('serverless') || availability.includes('serverless') ? true : null)
+  const deprecated = metadata.deprecated === true || availability.includes('deprecated')
+  const unavailable = ['unavailable', 'disabled', 'retired'].some((value) => availability.includes(value))
+  const executable = serverless === true && !deprecated && !unavailable
+  const blocker = deprecated ? 'deprecated'
+    : unavailable ? 'provider_unavailable'
+      : dedicated ? 'dedicated_endpoint_required'
+        : serverless === null ? 'account_access_unknown' : 'serverless_unavailable'
+  return {
+    currentAvailability: executable ? 'available' : blocker ?? 'unavailable',
+    accountAccess: executable ? 'accessible' : blocker === 'account_access_unknown' ? 'unknown' : 'inaccessible',
+    serverlessAvailable: serverless,
+    dedicatedEndpointRequired: dedicated,
+    executable,
+    blocker,
+    evidenceSource: explicitServerless !== null || explicitDedicated !== null || endpointType || availability
+      ? 'provider_model_metadata'
+      : 'catalogue_only',
+  }
+}
 
 export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<ModelCatalogRefreshSummary> {
   let created = 0
@@ -352,7 +575,23 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         where: { provider_modelId: { provider: model.provider, modelId: model.modelId } },
       })
 
-      const rawMetadata = stringifyMetadataSafely(model.rawMetadata, 'raw_metadata')
+      const canonicalCapabilities = canonicalCapabilitiesForDiscovered(model)
+      const compatibility = discoveredCompatibility(model, canonicalCapabilities)
+      let accessibility = deriveDiscoveredModelAccessibility(model)
+      if (model.provider === 'together'
+          && accessibility.blocker === 'account_access_unknown'
+          && existing?.accountAccess === 'accessible'
+          && (existing.lastProofAt !== null || existing.liveProvenRouteCount > 0)) {
+        accessibility = {
+          currentAvailability: 'available', accountAccess: 'accessible', serverlessAvailable: true,
+          dedicatedEndpointRequired: false, executable: true, blocker: null, evidenceSource: 'persisted_live_provider_proof',
+        }
+      }
+      const rawMetadata = stringifyMetadataSafely({
+        ...model.rawMetadata,
+        ...(compatibility ? { compatibility } : {}),
+        accessibility,
+      }, 'raw_metadata')
       const pricingRawMetadata = stringifyMetadataSafely(model.pricingRawMetadata, 'pricing_raw_metadata')
       const metadataWarning = [rawMetadata.warning, pricingRawMetadata.warning].filter(Boolean).join(';')
 
@@ -362,6 +601,7 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         category: model.category,
         primaryRole: model.primaryRole,
         costTier: model.costTier,
+        qualityTier: model.qualityTier,
         latencyTier: model.latencyTier,
         contextWindow: model.contextWindow,
         estimatedUnitCost: model.estimatedUnitCost,
@@ -372,6 +612,15 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         providerRawType: model.providerRawType,
         providerRawCategory: model.providerRawCategory,
         rawMetadata: rawMetadata.json,
+        currentAvailability: accessibility.currentAvailability,
+        accountAccess: accessibility.accountAccess,
+        endpointFamily: typeof compatibility?.endpointFamily === 'string' ? compatibility.endpointFamily : '',
+        transportProfile: typeof compatibility?.transportProfile === 'string' ? compatibility.transportProfile : '',
+        structuredOutputModes: JSON.stringify(Array.isArray(model.rawMetadata?.structuredOutputModes) ? model.rawMetadata.structuredOutputModes : ['none']),
+        supportedParameters: JSON.stringify(Array.isArray(model.rawMetadata?.supportedParameters) ? model.rawMetadata.supportedParameters : []),
+        compatibilityVersion: compatibility ? 'transport-task-v1' : '',
+        deprecated: model.rawMetadata?.deprecated === true,
+        replacementModel: typeof model.rawMetadata?.replacedBy === 'string' ? model.rawMetadata.replacedBy : '',
         discoveredAt: new Date(model.discoveredAt),
         lastSyncedAt: new Date(model.lastSyncedAt),
         pricingSource: model.pricingSource,
@@ -382,6 +631,8 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
         lastPricingSyncedAt: model.lastPricingSyncedAt ? new Date(model.lastPricingSyncedAt) : null,
         pricingBlocker: appendBlocker(model.pricingBlocker, metadataWarning),
         notes: appendNote(model.notes, metadataWarning),
+        capabilitiesJson: JSON.stringify(canonicalCapabilities),
+        ...defaultCapabilityFlags(),
         ...model.capabilities,
       }
 
@@ -406,7 +657,87 @@ export async function upsertDiscoveredModels(result: DiscoveryResult): Promise<M
     }
   }
 
+  await reconcileStoredProviderDefault(result.provider).catch(() => {})
+
   return { providerKey: result.provider, totalFetched: result.models.length, created, updated, failedRows, errors }
+}
+
+/** Persist authenticated provider discovery into the registry used by Orchestra. */
+export async function upsertCanonicalProviderDiscovery(result: ProviderDiscoveryResult): Promise<ModelCatalogRefreshSummary> {
+  const liveModels = result.models.filter((model) => model.liveDiscovered)
+  const legacy: DiscoveryResult = {
+    provider: result.provider,
+    totalDiscovered: liveModels.length,
+    source: result.source,
+    catalogCompleteness: result.providerUniverseKnown ? 'complete_from_provider_api' : 'partial_from_provider_api',
+    discoveredAt: result.discoveredAt,
+    error: result.error,
+    models: liveModels.map((model) => {
+      const capabilities: Record<string, boolean> = {}
+      const persistedFlags = defaultCapabilityFlags() as Record<string, boolean>
+      for (const capability of model.inferredCapabilities) {
+        const field = CAPABILITY_FIELD_MAP[capability]
+        if (field in persistedFlags) capabilities[field] = true
+      }
+      return {
+        provider: model.provider,
+        modelId: model.modelId,
+        displayName: model.displayName,
+        family: model.upstreamProvider || model.modelId.split('/')[0] || model.provider,
+        category: model.category,
+        primaryRole: model.inferredCapabilities[0] ?? 'contract_unknown',
+        costTier: 'unknown',
+        latencyTier: 'medium',
+        contextWindow: model.contextWindow ?? 0,
+        capabilities,
+        estimatedUnitCost: model.inputPrice,
+        qualityTier: 'standard',
+        source: model.discoverySource,
+        catalogCompleteness: result.providerUniverseKnown ? 'complete_from_provider_api' : 'partial_from_provider_api',
+        isLiveDiscovered: true,
+        modelOwner: model.upstreamProvider || model.provider,
+        providerRawType: model.rawProviderType,
+        providerRawCategory: model.providerCategory || model.rawProviderType,
+        notes: result.notes.join(' ') || `Authenticated ${model.provider} discovery`,
+        rawMetadata: {
+          ...(model.rawMetadata ?? {}),
+          taskType: model.rawProviderType,
+          category: model.category,
+          capabilities: model.inferredCapabilities,
+          canonicalCapabilities: model.inferredCapabilities,
+          modalitiesIn: model.modalitiesIn,
+          modalitiesOut: model.modalitiesOut,
+          transportProfile: model.transportProfile,
+          endpointFamily: model.endpointFamily,
+          endpointShapeKnown: model.endpointShapeKnown,
+          requestShapeKnown: model.requestShapeKnown,
+          responseShapeKnown: model.responseShapeKnown,
+          providerClientExists: model.providerClientExists,
+          workerExecutorExists: model.workerExecutorExists,
+          streamingSupported: model.streamingSupported,
+        },
+        discoveredAt: model.lastDiscoveredAt,
+        lastSyncedAt: model.lastDiscoveredAt,
+        pricingSource: model.inputPrice !== null || model.outputPrice !== null ? 'provider_api' : 'unknown',
+        pricingConfidence: model.inputPrice !== null || model.outputPrice !== null ? 'known' : 'unknown',
+        pricingUnit: '',
+        pricingCurrency: '',
+        pricingRawMetadata: {},
+        lastPricingSyncedAt: null,
+        pricingBlocker: model.inputPrice !== null || model.outputPrice !== null ? '' : 'pricing_unknown',
+      }
+    }),
+  }
+  return upsertDiscoveredModels(legacy)
+}
+
+async function reconcileStoredProviderDefault(provider: string): Promise<void> {
+  const [stored, accessible] = await Promise.all([
+    prisma.aiProvider.findUnique({ where: { providerKey: provider } }),
+    prisma.modelRegistryEntry.findMany({ where: { provider, enabled: true, isLiveDiscovered: true }, orderBy: [{ qualityTier: 'desc' }, { modelId: 'asc' }] }),
+  ])
+  if (!stored?.defaultModel || accessible.some((model) => model.modelId === stored.defaultModel)) return
+  await prisma.aiProvider.update({ where: { providerKey: provider }, data: { defaultModel: accessible[0]?.modelId ?? '' } })
 }
 
 export async function seedCuratedFallback(): Promise<{ created: number; updated: number }> {
@@ -418,7 +749,17 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
       where: { provider_modelId: { provider: model.provider, modelId: model.modelId } },
     })
 
+    const statusModel = MODEL_CATALOGUE.find((m) => m.provider === model.provider && m.modelId === model.modelId)
+    const shouldBeEnabled = statusModel?.status === 'available'
+
     if (existing) {
+      // Curated fallback may supplement an absent catalogue, but it must never
+      // erase authenticated discovery timestamps, source, access, or transport
+      // compatibility from a live registry row.
+      if (existing.isLiveDiscovered) {
+        updated++
+        continue
+      }
       await prisma.modelRegistryEntry.update({
         where: { id: existing.id },
         data: {
@@ -441,7 +782,12 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
+          providerRawType: model.providerRawType ?? '',
+          providerRawCategory: model.providerRawCategory ?? model.category,
+          rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
+          capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
+          enabled: shouldBeEnabled,
           ...model.capabilities,
         },
       })
@@ -470,7 +816,12 @@ export async function seedCuratedFallback(): Promise<{ created: number; updated:
           catalogCompleteness: model.catalogCompleteness,
           isLiveDiscovered: model.isLiveDiscovered,
           modelOwner: model.modelOwner,
+          providerRawType: model.providerRawType ?? '',
+          providerRawCategory: model.providerRawCategory ?? model.category,
+          rawMetadata: stringifyMetadataSafely(model.rawMetadata ?? {}, 'raw_metadata').json,
           notes: model.notes,
+          capabilitiesJson: JSON.stringify(model.canonicalCapabilities ?? []),
+          enabled: shouldBeEnabled,
           ...model.capabilities,
         },
       })
@@ -601,10 +952,10 @@ export async function getModelCatalog(options?: {
 }
 
 export async function getCatalogSummary() {
-  const providers = ['genx', 'groq', 'together', 'deepinfra', 'mimo']
   const summaries = []
 
-  for (const provider of providers) {
+  for (const definition of APPROVED_PROVIDER_DEFINITIONS) {
+    const provider = definition.key
     const models = await prisma.modelRegistryEntry.findMany({ where: { provider } })
     const healthRow = await prisma.aiProvider.findUnique({ where: { providerKey: provider } })
 
@@ -613,6 +964,9 @@ export async function getCatalogSummary() {
     const modelsByCapability: Record<string, number> = {}
     let pricingKnown = 0
     let pricingUnknown = 0
+    let accountAccessible = 0
+    let executable = 0
+    let liveProven = 0
 
     for (const m of models) {
       modelsByCategory[m.category] = (modelsByCategory[m.category] || 0) + 1
@@ -622,9 +976,12 @@ export async function getCatalogSummary() {
       } else {
         pricingUnknown++
       }
+      if (m.accountAccess === 'accessible') accountAccessible++
+      if (m.accountAccess === 'accessible' && m.currentAvailability === 'available' && !m.deprecated) executable++
+      if (m.liveProvenRouteCount > 0 || m.lastProofAt) liveProven++
 
       // Count capabilities
-      const capFields = ['supportsChat', 'supportsText', 'supportsReasoning', 'supportsCode', 'supportsImageGeneration', 'supportsVideoGeneration', 'supportsStt', 'supportsTts', 'supportsEmbeddings', 'supportsReranking', 'supportsMultimodal']
+      const capFields = ['supportsChat', 'supportsText', 'supportsReasoning', 'supportsCode', 'supportsImageGeneration', 'supportsVideoGeneration', 'supportsMusicGeneration', 'supportsStt', 'supportsTts', 'supportsEmbeddings', 'supportsReranking', 'supportsMultimodal']
       for (const field of capFields) {
         if ((m as Record<string, unknown>)[field]) {
           const capKey = field.replace('supports', '').toLowerCase()
@@ -640,13 +997,16 @@ export async function getCatalogSummary() {
       catalogSource: models.length > 0 && models[0] ? models[0].source : 'none',
       catalogCompleteness: models.length > 0 && models[0] ? models[0].catalogCompleteness : 'unknown',
       totalModels: models.length,
+      accountAccessibleCount: accountAccessible,
+      executableCount: executable,
+      liveProvenCount: liveProven,
       modelsByCapability,
       modelsByCategory,
       modelsBySource,
       pricingKnownCount: pricingKnown,
       pricingUnknownCount: pricingUnknown,
       lastSyncedAt: models.length > 0 && models[0] ? models[0].lastSyncedAt?.toISOString() : null,
-      warnings: provider === 'mimo' ? ['coding_tool_only, not normal runtime'] : [],
+      warnings: definition.codingOnly ? ['coding_tool_only, not normal runtime'] : [],
     })
   }
 

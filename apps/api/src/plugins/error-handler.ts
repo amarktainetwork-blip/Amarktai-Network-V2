@@ -21,7 +21,6 @@ export async function errorHandlerPlugin(app: FastifyInstance): Promise<void> {
       error: true,
       statusCode,
       message: isServerError ? 'Internal server error' : error.message,
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
     })
   })
 

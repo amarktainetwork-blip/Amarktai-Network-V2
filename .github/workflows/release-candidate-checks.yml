@@ -1,0 +1,228 @@
+name: release-candidate-checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/production-activation-music-longform]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Generate ephemeral test credentials
+        shell: bash
+        run: |
+          JWT_SECRET="$(openssl rand -hex 32)"
+          PROVIDER_KEY_ENCRYPTION_SECRET="$(openssl rand -hex 32)"
+          FIXTURE_DB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          FIXTURE_DB_PASSWORD="$(openssl rand -hex 24)"
+          FIXTURE_JWT_SECRET="$(openssl rand -hex 32)"
+          FIXTURE_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          for value in "$JWT_SECRET" "$PROVIDER_KEY_ENCRYPTION_SECRET" "$FIXTURE_DB_ROOT_PASSWORD" "$FIXTURE_DB_PASSWORD" "$FIXTURE_JWT_SECRET" "$FIXTURE_ADMIN_PASSWORD"; do
+            echo "::add-mask::$value"
+          done
+          {
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "PROVIDER_KEY_ENCRYPTION_SECRET=$PROVIDER_KEY_ENCRYPTION_SECRET"
+            echo "FIXTURE_DB_ROOT_PASSWORD=$FIXTURE_DB_ROOT_PASSWORD"
+            echo "FIXTURE_DB_PASSWORD=$FIXTURE_DB_PASSWORD"
+            echo "FIXTURE_JWT_SECRET=$FIXTURE_JWT_SECRET"
+            echo "FIXTURE_ADMIN_PASSWORD=$FIXTURE_ADMIN_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci 2>&1 | tee npm-ci-output.log
+
+      - name: Validate and generate Prisma client
+        run: |
+          npx prisma generate --schema=prisma/schema.prisma
+          npm run prisma:validate
+
+      - name: Build backend packages
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build:backend 2>&1 | tee backend-build-output.log
+
+      - name: Run complete unit and contract suite
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee static-test-output.log
+
+      - name: Upload static and compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-test-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            npm-ci-output.log
+            backend-build-output.log
+            static-test-output.log
+
+      - name: Build dashboard
+        run: npm run build
+
+      - name: Completion audit
+        run: npm run audit
+
+      - name: Router and app proof three times
+        run: |
+          npm run proof:router-app-contract
+          npm run proof:router-app-contract
+          npm run proof:router-app-contract
+
+      - name: Direct-provider static proof
+        run: node scripts/proof-direct-provider-capabilities.mjs --static --strict
+
+      - name: Long-form runtime static proof
+        run: node scripts/proof-long-form-runtime.mjs --static-only
+
+      - name: Long-form closure static proof
+        run: node scripts/proof-long-form-closure.mjs --static --strict
+
+      - name: Music regression proof
+        run: npm run proof:music-regression
+
+      - name: Production preflight and proof syntax
+        run: |
+          npm run proof:production-preflight
+          node --check scripts/proof-production-release-candidate.mjs
+          node --check scripts/proof-release-fixture.mjs
+          node --check scripts/release-fixture-queue-control.mjs
+          node --check tests/browser/release-candidate.spec.mjs
+
+      - name: Docker Compose and deployment shell syntax
+        env:
+          GIT_SHA: ${{ github.sha }}
+          BUILD_TIME: '2026-01-01T00:00:00.000Z'
+          FIXTURE_GIT_SHA: ${{ github.sha }}
+          FIXTURE_BUILD_TIME: '2026-01-01T00:00:00.000Z'
+        run: |
+          trap 'rm -f .env' EXIT
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f docker-compose.release-fixture.yml config --quiet
+          bash -n deploy/*.sh scripts/*.sh
+
+      - name: Production dependency audit
+        shell: bash
+        run: |
+          set -o pipefail
+          npm audit --omit=dev 2>&1 | tee production-dependency-audit.log
+
+      - name: Upload production dependency audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: production-dependency-audit.log
+
+      - name: Patch hygiene
+        run: |
+          git diff --check
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+  real-service-fixture:
+    needs: static-and-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      NODE_ENV: test
+      RELEASE_FIXTURE_OUTPUT_DIR: release-fixture-output
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Generate ephemeral fixture credentials
+        shell: bash
+        run: |
+          FIXTURE_DB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          FIXTURE_DB_PASSWORD="$(openssl rand -hex 24)"
+          FIXTURE_JWT_SECRET="$(openssl rand -hex 32)"
+          FIXTURE_ADMIN_PASSWORD="$(openssl rand -hex 24)"
+          for value in "$FIXTURE_DB_ROOT_PASSWORD" "$FIXTURE_DB_PASSWORD" "$FIXTURE_JWT_SECRET" "$FIXTURE_ADMIN_PASSWORD"; do
+            echo "::add-mask::$value"
+          done
+          {
+            echo "FIXTURE_DB_ROOT_PASSWORD=$FIXTURE_DB_ROOT_PASSWORD"
+            echo "FIXTURE_DB_PASSWORD=$FIXTURE_DB_PASSWORD"
+            echo "FIXTURE_JWT_SECRET=$FIXTURE_JWT_SECRET"
+            echo "FIXTURE_ADMIN_PASSWORD=$FIXTURE_ADMIN_PASSWORD"
+            echo "FIXTURE_GIT_SHA=$GITHUB_SHA"
+            echo "FIXTURE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          } >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Confirm Docker and Docker Compose
+        run: |
+          docker version
+          docker compose version
+
+      - name: Verify disposable MariaDB migrations
+        shell: bash
+        run: |
+          mkdir -p "$RELEASE_FIXTURE_OUTPUT_DIR"
+          set -o pipefail
+          bash scripts/verify-migrations-disposable.sh 2>&1 | tee "$RELEASE_FIXTURE_OUTPUT_DIR/migration.log"
+
+      - name: Run authoritative real-service release fixture
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run proof 2>&1 | tee "$RELEASE_FIXTURE_OUTPUT_DIR/fixture-run.log"
+
+      - name: Upload fixture proof and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-service-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            release-fixture-output/
+            playwright-report/
+            test-results/
+
+      - name: Remove fixture containers, networks, and volumes
+        if: always()
+        run: docker compose -f docker-compose.release-fixture.yml down --volumes --remove-orphans

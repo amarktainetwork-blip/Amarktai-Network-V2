@@ -9,7 +9,11 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
   }
   try {
     const payload = await app.jwtVerify(auth.replace('Bearer ', ''))
-    if (payload?.role !== 'admin') {
+    if (!payload) {
+      reply.status(401).send({ error: true, message: 'Invalid authorization' })
+      return false
+    }
+    if (payload.role !== 'admin') {
       reply.status(403).send({ error: true, message: 'Admin access required' })
       return false
     }

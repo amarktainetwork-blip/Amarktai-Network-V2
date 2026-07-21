@@ -12,7 +12,7 @@ function truth(overrides = {}) {
   return getRuntimeTruth({
     providers: {
       genx: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
-      groq: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
+      deepinfra: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       together: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       deepinfra: { enabled: true, runtimeEnabled: true, configured: false, healthStatus: 'unconfigured' },
       mimo: { enabled: false, runtimeEnabled: false, configured: true, credentialUsagePolicy: 'coding_tools_only', healthStatus: 'runtime_restricted' },
@@ -79,8 +79,8 @@ describe('canonical runtime truth', () => {
   it('exposes one provider policy with only approved runtime providers', () => {
     const runtimeTruth = truth()
 
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(runtimeTruth.providerPolicy.runtimeExecutionProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
+    expect(runtimeTruth.providerPolicy.runtimeExecutionProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(runtimeTruth.providerPolicy.codingOnlyProviders).toEqual(['mimo'])
     expect(runtimeTruth.providerPolicy.qwenRuntimeEligible).toBe(false)
   })
@@ -99,14 +99,14 @@ describe('canonical runtime truth', () => {
     expect(mimo.policyRestrictions).toContain('coding_tools_only_not_backend_runtime')
   })
 
-  it('catalogue presence does not imply implementation', () => {
+  it('tool use has an executor but remains blocked without credentials and infrastructure', () => {
     const runtimeTruth = truth()
     const toolUse = capability(runtimeTruth, 'tool_use')
 
     expect(toolUse.catalogueKnown).toBe(true)
-    expect(toolUse.implementationReady).toBe(false)
-    expect(toolUse.classification).toBe('CATALOGUE_ONLY')
-    expect(toolUse.blockedReasons).toContain('executor_missing')
+    expect(toolUse.implementationReady).toBe(true)
+    expect(toolUse.classification).toBe('EXECUTOR_PRESENT')
+    expect(toolUse.blockedReasons.length).toBeGreaterThan(0)
   })
 
   it('implementationReady does not imply configured', () => {
@@ -116,8 +116,8 @@ describe('canonical runtime truth', () => {
     expect(music.implementationReady).toBe(true)
     expect(music.configured).toBe(false)
     expect(music.executableNow).toBe(false)
-    expect(music.classification).toBe('IMPLEMENTED_NOT_CONFIGURED')
-    expect(music.blockedReasons).toContain('genx_api_key_not_configured')
+    expect(music.classification).toBe('EXECUTOR_PRESENT')
+    expect(music.blockedReasons).toContain('credentials_missing')
   })
 
   it('configured does not imply infrastructureReady', () => {
@@ -132,7 +132,7 @@ describe('canonical runtime truth', () => {
     expect(music.infrastructureReady).toBe(false)
     expect(music.executableNow).toBe(false)
     expect(music.classification).toBe('BLOCKED')
-    expect(music.blockedReasons).toContain('infrastructure_not_ready')
+    expect(music.blockedReasons).toContain('infrastructure_missing')
   })
 
   it('executableNow requires implementation, configuration, infrastructure, policy, and eligible model path', () => {
@@ -151,7 +151,9 @@ describe('canonical runtime truth', () => {
     expect(music.infrastructureReady).toBe(true)
     expect(music.policyAllowed).toBe(true)
     expect(music.eligibleProviders).toEqual(['genx'])
-    expect(music.eligibleModels.map((model) => model.modelId)).toEqual(expect.arrayContaining(['lyria-3-clip-preview', 'lyria-3-pro-preview']))
+    expect(music.eligibleModels).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'genx', modelId: 'lyria-3-clip-preview', executorId: 'genx.music-generation' }),
+    ]))
     expect(music.executableNow).toBe(true)
     expect(music.liveProven).toBe(false)
     expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
@@ -168,7 +170,8 @@ describe('canonical runtime truth', () => {
       providers: { together: { enabled: true, runtimeEnabled: true, configured: true, healthStatus: 'live' } },
       capabilities: { image_generation: { infrastructureReady: true, liveProven: true, lastProofAt: '2026-07-10T00:00:00.000Z' } },
     })
-    expect(capability(proven, 'image_generation').classification).toBe('LIVE_PROVEN')
+    expect(capability(proven, 'image_generation').classification).toBe('EXECUTOR_PRESENT')
+    expect(capability(proven, 'image_generation').liveProven).toBe(false)
     expect(capability(proven, 'image_generation').lastProofAt).toBe('2026-07-10T00:00:00.000Z')
   })
 
@@ -188,40 +191,37 @@ describe('canonical runtime truth', () => {
     expect(image.blockedReasons).toContain('credentials_missing')
   })
 
-  it('long-form remains partial with component-level accuracy', () => {
+  it('long-form remains catalogue-only without inventing component evidence', () => {
     const runtimeTruth = truth()
     const longForm = capability(runtimeTruth, 'long_form_video')
 
-    expect(longForm.classification).toBe('PARTIAL')
+    expect(longForm.classification).toBe('CATALOGUE_ONLY')
     expect(longForm.liveProven).toBe(false)
     expect(longForm.executableNow).toBe(false)
     expect(longForm.clientImplemented).toBe(false)
     expect(longForm.executorRegistered).toBe(false)
-    expect(longForm.routeImplemented).toBe(true)
-    expect(longForm.queuePathImplemented).toBe(true)
-    expect(longForm.artifactPathImplemented).toBe(true)
-    expect(longForm.durableParentReady).toBe(true)
-    expect(longForm.durablePlanReady).toBe(true)
-    expect(longForm.sceneLinkageReady).toBe(true)
-    expect(longForm.sceneSubmissionReady).toBe(true)
-    expect(longForm.retryResumeReady).toBe(true)
-    expect(longForm.progressTrackingReady).toBe(true)
-    expect(longForm.assemblyHandoffReady).toBe(true)
+    expect(longForm.routeImplemented).toBe(false)
+    expect(longForm.queuePathImplemented).toBe(false)
+    expect(longForm.artifactPathImplemented).toBe(false)
+    expect(longForm.durableParentReady).toBe(false)
+    expect(longForm.durablePlanReady).toBe(false)
+    expect(longForm.sceneLinkageReady).toBe(false)
+    expect(longForm.sceneSubmissionReady).toBe(false)
+    expect(longForm.retryResumeReady).toBe(false)
+    expect(longForm.progressTrackingReady).toBe(false)
+    expect(longForm.assemblyHandoffReady).toBe(false)
     expect(longForm.fullMultimediaReady).toBe(false)
     expect(longForm.blockedReasons).toContain('executor_missing')
     expect(longForm.blockedReasons).toContain('provider_client_missing')
-    expect(longForm.blockedReasons).toContain('no_executable_provider_model_path')
-    // Accurate component-level blockers
-    expect(longForm.blockedReasons).toContain('voiceover_missing')
-    expect(longForm.blockedReasons).toContain('subtitles_missing')
-    expect(longForm.blockedReasons).toContain('music_bed_missing')
-    expect(longForm.blockedReasons).toContain('full_multimedia_not_ready')
+    expect(longForm.blockedReasons).toContain('route_missing')
+    expect(longForm.blockedReasons).toContain('queue_path_missing')
+    expect(longForm.blockedReasons).toContain('artifact_support_missing')
   })
 
   it('adult capabilities remain policy restricted', () => {
     const runtimeTruth = truth()
     expect(capability(runtimeTruth, 'adult_text').classification).toBe('POLICY_RESTRICTED')
-    expect(capability(runtimeTruth, 'adult_image').blockedReasons).toContain('provider_policy_restriction')
+    expect(capability(runtimeTruth, 'adult_image').blockedReasons).toContain('policy_restricted')
   })
 
   it('admin truth route, capability API, dashboard proxy, and audit consume canonical truth', () => {
@@ -247,37 +247,41 @@ describe('canonical runtime truth', () => {
   })
 
   it('valid media proof requires a completed matching artifact trace', () => {
-    const proofs = selectCapabilityProofStates([proofJob()], [proofArtifact()])
+    const result = selectCapabilityProofStates([proofJob()], [proofArtifact()])
 
-    expect(proofs.image_generation.liveProven).toBe(true)
-    expect(proofs.image_generation.lastProofAt).toEqual(newerProofAt)
+    expect(result.capabilities.image_generation.liveProven).toBe(true)
+    expect(result.capabilities.image_generation.lastProofAt).toEqual(newerProofAt)
+    expect(result.evidenceAvailable).toBe(true)
   })
 
   it('rejects media proof when artifact is missing, failed, or not linked to the job trace', () => {
-    expect(selectCapabilityProofStates([proofJob()], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ status: 'failed' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ traceId: 'trace-other-job' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ appSlug: 'other-app' })])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob()], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ status: 'failed' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ traceId: 'trace-other-job' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ appSlug: 'other-app' })])).toEqual(empty)
   })
 
   it('rejects media proof when artifact type, subtype, provider, model, or output id do not match', () => {
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ type: 'document', mimeType: 'application/json' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ subType: 'video_generation' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ provider: 'genx' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ model: 'other-model' })])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ output: JSON.stringify({ artifactId: 'other-artifact' }) })], [proofArtifact()])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ type: 'document', mimeType: 'application/json' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ subType: 'video_generation' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ provider: 'genx' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob()], [proofArtifact({ model: 'other-model' })])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ output: JSON.stringify({ artifactId: 'other-artifact' }) })], [proofArtifact()])).toEqual(empty)
   })
 
   it('rejects placeholder media artifacts and failed jobs', () => {
-    expect(selectCapabilityProofStates([proofJob({ status: 'failed' })], [proofArtifact()])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob({ status: 'failed' })], [proofArtifact()])).toEqual(empty)
     expect(selectCapabilityProofStates(
       [proofJob()],
       [proofArtifact({ metadata: JSON.stringify({ source: 'mock fixture' }) })],
-    )).toEqual({})
+    )).toEqual(empty)
     expect(selectCapabilityProofStates(
       [proofJob({ output: 'Backend integration pending. Real previews will appear here.' })],
       [proofArtifact()],
-    )).toEqual({})
+    )).toEqual(empty)
   })
 
   it('uses the newest valid proof and skips newer invalid proof records', () => {
@@ -295,32 +299,33 @@ describe('canonical runtime truth', () => {
       storageUrl: '/api/v1/artifacts/artifact-old-valid/file',
     })
 
-    const proofs = selectCapabilityProofStates([newerInvalid, olderValid], [artifact])
-    expect(proofs.image_generation.liveProven).toBe(true)
-    expect(proofs.image_generation.lastProofAt).toEqual(olderProofAt)
+    const result = selectCapabilityProofStates([newerInvalid, olderValid], [artifact])
+    expect(result.capabilities.image_generation.liveProven).toBe(true)
+    expect(result.capabilities.image_generation.lastProofAt).toEqual(olderProofAt)
   })
 
   it('text proof requires runtime provider, model, trace, and non-placeholder output', () => {
     const validText = proofJob({
       id: 'job-chat-valid',
       capability: 'chat',
-      provider: 'groq',
-      model: 'llama-3.3-70b-versatile',
+      provider: 'deepinfra',
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
       artifactId: null,
-      output: 'Groq Brain runtime proof passed.',
+      output: 'DeepInfra runtime proof passed.',
       traceId: 'trace-chat-valid',
     })
 
-    const proofs = selectCapabilityProofStates([validText], [])
-    expect(proofs.chat.liveProven).toBe(true)
-    expect(proofs.chat.lastProofAt).toEqual(newerProofAt)
+    const result = selectCapabilityProofStates([validText], [])
+    expect(result.capabilities.chat.liveProven).toBe(true)
+    expect(result.capabilities.chat.lastProofAt).toEqual(newerProofAt)
   })
 
   it('text proof rejects placeholders and missing trusted execution provenance', () => {
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: '', artifactId: null, output: 'real output' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual({})
-    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'groq', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual({})
+    const empty = { capabilities: {}, evidenceAvailable: true }
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: '', artifactId: null, output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'mimo', model: 'mimo-v2.5', artifactId: null, output: 'real output' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: 'llama-3.3-70b-versatile', artifactId: null, output: 'Not implemented yet' })], [])).toEqual(empty)
+    expect(selectCapabilityProofStates([proofJob({ capability: 'chat', provider: 'deepinfra', model: 'llama-3.3-70b-versatile', artifactId: null, traceId: '', output: 'real output' })], [])).toEqual(empty)
   })
 
   it('music proof requires a valid audio artifact path before liveProven is true', () => {
@@ -344,8 +349,9 @@ describe('canonical runtime truth', () => {
       storageUrl: '/api/v1/artifacts/artifact-music-valid/file',
     })
 
-    expect(selectCapabilityProofStates([job], [validArtifact]).music_generation.liveProven).toBe(true)
-    expect(selectCapabilityProofStates([job], [proofArtifact({ ...validArtifact, mimeType: 'application/json', type: 'document' })])).toEqual({})
+    const result = selectCapabilityProofStates([job], [validArtifact])
+    expect(result.capabilities.music_generation.liveProven).toBe(true)
+    expect(selectCapabilityProofStates([job], [proofArtifact({ ...validArtifact, mimeType: 'application/json', type: 'document' })]).capabilities).toEqual({})
   })
 
   it('music remains false without explicit live proof evidence', () => {
@@ -360,6 +366,7 @@ describe('canonical runtime truth', () => {
     const music = capability(runtimeTruth, 'music_generation')
 
     expect(music.liveProven).toBe(false)
+    expect(music.executableNow).toBe(true)
     expect(music.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
   })
 

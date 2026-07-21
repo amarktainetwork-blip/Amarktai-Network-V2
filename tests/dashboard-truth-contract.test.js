@@ -26,19 +26,19 @@ describe('dashboard truth contract', () => {
     expect(content).not.toContain("'route_pending'")
   })
 
-  it('Command Center shows Marketing-first platform roadmap', () => {
+  it('Command Center uses canonical System Monitoring', () => {
     const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
     const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('Marketing-First Platform Roadmap')
-    expect(content).toContain('Proven Capabilities')
-    expect(content).toContain('Marketing App MVP Dependencies')
+    expect(content).toContain("export { default } from '../operations/page'")
+    const operations = fs.readFileSync(path.join(ROOT, 'app/dashboard/operations/page.js'), 'utf8')
+    expect(operations).toContain('/api/system/health')
+    expect(operations).toContain('/api/admin/truth')
   })
 
   it('Command Center shows correct integration status', () => {
     const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
     const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('Studio job submission')
-    expect(content).toContain('Wired')
+    expect(content).toContain("export { default } from '../operations/page'")
     expect(content).not.toContain('UI not connected')
   })
 
@@ -48,16 +48,15 @@ describe('dashboard truth contract', () => {
     expect(content).toContain('Disabled until backend proof passes')
   })
 
-  it('provider list remains exactly 5', () => {
-    const providers = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-    expect(providers).toHaveLength(5)
+  it('provider list remains Exactly 4', async () => {
+    const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
+    expect(PROVIDER_KEYS).toHaveLength(4)
   })
 
-  it('MiMo remains coding_tools_only', () => {
-    const truthPath = path.join(ROOT, 'packages/core/src/runtime-truth.ts')
-    const content = fs.readFileSync(truthPath, 'utf8')
-    expect(content).toContain("CODING_ONLY_PROVIDERS = ['mimo']")
-    expect(content).toContain('coding_tools_only_not_backend_runtime')
+  it('MiMo remains coding_tools_only', async () => {
+    const { APPROVED_PROVIDER_DEFINITIONS, CODING_ONLY_PROVIDERS } = await import('../packages/core/src/index.ts')
+    expect([...CODING_ONLY_PROVIDERS]).toEqual(['mimo'])
+    expect(APPROVED_PROVIDER_DEFINITIONS.find(provider => provider.key === 'mimo')).toMatchObject({ codingOnly: true, backendExecutionAllowed: false })
   })
 
   it('no provider/model selectors are exposed', () => {
@@ -68,10 +67,9 @@ describe('dashboard truth contract', () => {
     expect(content).not.toContain('SelectModel')
   })
 
-  it('adult generation remains on hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('adult generation remains policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    const adult = getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_'))
+    expect(adult.every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 })

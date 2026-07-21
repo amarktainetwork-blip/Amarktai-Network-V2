@@ -18,6 +18,9 @@ node_modules/
 
 # Testing
 /coverage
+/playwright-report/
+/test-results/
+/release-fixture-output/
 
 # Next.js
 /.next/

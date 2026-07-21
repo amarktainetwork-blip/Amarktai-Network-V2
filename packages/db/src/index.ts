@@ -4,6 +4,12 @@
 
 export { prisma } from './client.js'
 export {
+  REQUIRED_SCHEMA_MIGRATION,
+  getDatabaseSchemaStatus,
+  assertDatabaseSchemaCurrent,
+  type DatabaseSchemaStatus,
+} from './schema-guard.js'
+export {
   ProviderConfigError,
   MIMO_BACKEND_RUNTIME_BLOCKED_MESSAGE,
   MIMO_BACKEND_RUNTIME_DISABLED_MESSAGE,
@@ -22,4 +28,23 @@ export {
   type UpdateProviderHealthInput,
 } from './provider-credentials.js'
 
-export { refreshLongFormParentState } from './long-form-parent-state.js'
+export {
+  refreshLongFormParentState,
+  classifyLongFormChildJobs,
+  deriveLongFormComponentState,
+  type ClassifiedLongFormJobs,
+  type LongFormComponentState,
+  type LongFormJobLike,
+  type LongFormArtifactLike,
+} from './long-form-parent-state.js'
+
+export {
+  advanceLongFormWorkflow,
+  longFormAssemblyJobId,
+} from './long-form-workflow.js'
+
+export {
+  recordModelAccessibilityFailure,
+  recordModelAccessibilitySuccess,
+  type ModelAccessibilityBlocker,
+} from './model-accessibility.js'

@@ -1,0 +1,71 @@
+{
+  "prompt": "Course2Career AI Career Programme - premium 30-second British career-development advertisement for UK adults, beginners and career changers entering AI and data careers without previous coding experience.",
+  "targetDurationSeconds": 30,
+  "sceneCount": 3,
+  "aspectRatio": "16:9",
+  "style": "premium realistic British commercial",
+  "tone": "warm, confident, professional",
+  "routingMode": "quality",
+  "planningMode": "explicit",
+  "count": 1,
+  "voiceoverEnabled": true,
+  "subtitlesEnabled": true,
+  "musicBedEnabled": true,
+  "campaignTitle": "Course2Career AI Career Programme",
+  "brandName": "Course2Career",
+  "brandWebsite": "Course2Career.com",
+  "objective": "Generate qualified enquiries for the AI Career Programme.",
+  "audience": "UK adults, beginners and career changers entering AI and data careers without previous coding experience.",
+  "callToAction": "Visit Course2Career.com and enquire today.",
+  "legalQualifier": "Eligibility and programme terms apply. Salary and employment outcomes vary.",
+  "musicBrief": "Original premium instrumental corporate music. Begin warm and thoughtful, build confidence and finish uplifting but credible. No vocals and no imitation of any existing song or artist.",
+  "voiceProfile": {
+    "language": "en-GB",
+    "accent": "British",
+    "tone": "warm, confident, professional commercial delivery",
+    "purpose": "commercial narration",
+    "speed": 1,
+    "outputFormat": "wav"
+  },
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "durationSeconds": 8,
+      "title": "A New Career Direction",
+      "objective": "Introduce a relatable beginner or career changer.",
+      "visualPrompt": "A realistic British adult career changer at a clean home workspace in natural morning light discovers a professional AI and data training programme. Uncertainty shifts naturally to confidence. Consistent lead character, cinematic camera movement, text-free frame.",
+      "negativePrompt": "No robots, holograms, generated words, logos, distorted hands, duplicate people or exaggerated expressions.",
+      "cameraDirection": "Wide establishing shot, natural over-the-shoulder laptop view, confident close-up.",
+      "voiceoverText": "Ready for a career in AI and data? Course2Career's AI Career Programme is built for beginners and career changers, with no previous coding experience needed.",
+      "subtitleText": "Ready for a career in AI and data? Course2Career's AI Career Programme is built for beginners and career changers, with no previous coding experience needed.",
+      "overlays": [{ "id": "c2c_s1", "sceneNumber": 1, "startSeconds": 3, "endSeconds": 8, "type": "benefit", "text": "No previous coding experience required", "position": "bottom_center", "emphasis": "bold", "legal": false }]
+    },
+    {
+      "sceneNumber": 2,
+      "durationSeconds": 13,
+      "title": "Training and Expert Support",
+      "objective": "Show practical training and personal support.",
+      "visualPrompt": "The same lead learner completes credible online AI and data coursework, analyses a clean business dashboard and speaks with a supportive expert tutor. Consistent identity and wardrobe, modern British home-learning environment, text-free frame.",
+      "negativePrompt": "No generated words, certification logos, fake certificates, employer logos, floating interfaces, robots or character changes.",
+      "cameraDirection": "Medium shots, over-the-shoulder learning views, tutor-call close-up and smooth tracking shot.",
+      "voiceoverText": "Complete six accredited CompTIA courses, including Data Plus and DataX, with 120 to 150 hours of training, expert tutor support and recruitment guidance.",
+      "subtitleText": "Complete six accredited CompTIA courses, including Data Plus and DataX, with 120 to 150 hours of training, expert tutor support and recruitment guidance.",
+      "overlays": [{ "id": "c2c_s2", "sceneNumber": 2, "startSeconds": 2, "endSeconds": 13, "type": "text", "text": "6 accredited CompTIA courses", "position": "top_right", "emphasis": "bold", "legal": false }]
+    },
+    {
+      "sceneNumber": 3,
+      "durationSeconds": 9,
+      "title": "Your Next Career Starts Here",
+      "objective": "Show a credible career outcome and call to action.",
+      "visualPrompt": "The same lead learner attends a professional interview and enters a bright modern British data workplace. Finish on a stable premium end-card background with clean negative space, text-free generated footage.",
+      "negativePrompt": "No generated words, fake employer logos, guaranteed-employment imagery, robots, identity changes or excessive celebration.",
+      "cameraDirection": "Composed interview shot, confident workplace entrance, stable end-card background.",
+      "voiceoverText": "Build employer-ready skills with a guaranteed route to job placement on completion, or your money back, subject to terms. Visit Course2Career.com and enquire today.",
+      "subtitleText": "Build employer-ready skills with a guaranteed route to job placement on completion, or your money back, subject to terms. Visit Course2Career.com and enquire today.",
+      "overlays": [
+        { "id": "c2c_s3_cta", "sceneNumber": 3, "startSeconds": 4, "endSeconds": 9, "type": "cta", "text": "Course2Career.com - Enquire Now", "position": "bottom_center", "emphasis": "bold", "legal": false },
+        { "id": "c2c_s3_legal", "sceneNumber": 3, "startSeconds": 0, "endSeconds": 9, "type": "legal", "text": "Eligibility and programme terms apply. Salary and employment outcomes vary.", "position": "bottom_right", "emphasis": "normal", "legal": true }
+      ]
+    }
+  ]
+}

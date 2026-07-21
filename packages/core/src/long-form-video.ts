@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VALID_ROUTING_MODES, ROUTING_MODE_ALIASES } from './jobs.js'
 
 // ── Long-Form Video Schema ────────────────────────────────────────────────────
 
@@ -59,7 +60,65 @@ export const LongFormRenderStatus = z.enum([
 ])
 export type LongFormRenderStatus = z.infer<typeof LongFormRenderStatus>
 
+// ── Planning Mode ─────────────────────────────────────────────────────────────
+
+export const PlanningMode = z.enum(['automatic', 'explicit'])
+export type PlanningMode = z.infer<typeof PlanningMode>
+
+// ── Voice Profile ─────────────────────────────────────────────────────────────
+
+export const VoiceProfileSchema = z.object({
+  voice: z.string().optional(),
+  language: z.string().optional(),
+  accent: z.string().optional(),
+  tone: z.string().optional(),
+  speed: z.number().min(0.5).max(2).optional(),
+  outputFormat: z.enum(['wav', 'mp3', 'ogg']).optional(),
+})
+export type VoiceProfile = z.infer<typeof VoiceProfileSchema>
+
+// ── Overlay Schema ────────────────────────────────────────────────────────────
+
+export const LongFormOverlaySchema = z.object({
+  id: z.string(),
+  sceneNumber: z.number().int().min(1),
+  startSeconds: z.number().min(0),
+  endSeconds: z.number().min(0),
+  type: z.enum(['brand', 'text', 'cta', 'legal', 'subtitle', 'price', 'url', 'benefit']),
+  text: z.string().min(1).max(500),
+  position: z.enum(['top_left', 'top_right', 'top_center', 'bottom_left', 'bottom_right', 'bottom_center', 'center']).default('bottom_center'),
+  emphasis: z.enum(['normal', 'bold', 'highlight']).default('normal'),
+  legal: z.boolean().default(false),
+  styleRole: z.string().optional(),
+})
+export type LongFormOverlay = z.infer<typeof LongFormOverlaySchema>
+
+// ── Structured Scene Schema ───────────────────────────────────────────────────
+
+export const StructuredSceneSchema = z.object({
+  sceneNumber: z.number().int().min(1),
+  durationSeconds: z.number().min(1).max(120),
+  title: z.string().min(1).max(200),
+  objective: z.string().min(1).max(500),
+  visualPrompt: z.string().min(10).max(5000),
+  negativePrompt: z.string().max(2000).optional(),
+  cameraDirection: z.string().max(500).optional(),
+  continuityNotes: z.string().max(1000).optional(),
+  voiceoverText: z.string().max(5000).optional(),
+  subtitleText: z.string().max(1000).optional(),
+  overlays: z.array(LongFormOverlaySchema).optional(),
+})
+export type StructuredScene = z.infer<typeof StructuredSceneSchema>
+
 // ── Request Schema ────────────────────────────────────────────────────────────
+
+const CanonicalRoutingMode = z.enum(VALID_ROUTING_MODES)
+const RoutingModeWithAliases = z.string().transform((val) => {
+  const lower = val.trim().toLowerCase()
+  if ((VALID_ROUTING_MODES as readonly string[]).includes(lower)) return lower
+  if (lower in ROUTING_MODE_ALIASES) return ROUTING_MODE_ALIASES[lower]
+  return 'balanced'
+}).pipe(CanonicalRoutingMode)
 
 export const LongFormVideoRequestSchema = z.object({
   prompt: z.string().min(10).max(5000),
@@ -73,9 +132,22 @@ export const LongFormVideoRequestSchema = z.object({
   voiceoverEnabled: z.boolean().default(false),
   subtitlesEnabled: z.boolean().default(false),
   musicBedEnabled: z.boolean().default(false),
-  routingMode: z.enum(['balanced', 'premium', 'fast', 'budget']).default('balanced'),
+  routingMode: RoutingModeWithAliases.default('balanced'),
   brandContext: z.string().optional(),
-  safetyLevel: LongFormVideoSafetyLevel.default('standard')
+  safetyLevel: LongFormVideoSafetyLevel.default('standard'),
+  // Structured creative contract fields
+  planningMode: PlanningMode.default('automatic'),
+  campaignTitle: z.string().max(200).optional(),
+  brandName: z.string().max(200).optional(),
+  brandWebsite: z.string().max(500).optional(),
+  objective: z.string().max(1000).optional(),
+  callToAction: z.string().max(500).optional(),
+  legalQualifier: z.string().max(1000).optional(),
+  voiceoverScript: z.string().max(10000).optional(),
+  voiceProfile: VoiceProfileSchema.optional(),
+  musicBrief: z.string().max(2000).optional(),
+  overlays: z.array(LongFormOverlaySchema).optional(),
+  scenes: z.array(StructuredSceneSchema).optional(),
 })
 
 export type LongFormVideoRequest = z.infer<typeof LongFormVideoRequestSchema>
@@ -86,14 +158,18 @@ export const LongFormSceneSchema = z.object({
   sceneNumber: z.number().int().min(1),
   title: z.string(),
   description: z.string(),
+  objective: z.string().optional(),
   visualPrompt: z.string(),
+  negativePrompt: z.string().optional(),
   cameraDirection: z.string().optional(),
+  continuityNotes: z.string().optional(),
   durationSeconds: z.number().min(1),
   transitionIn: z.string().optional(),
   transitionOut: z.string().optional(),
   voiceoverText: z.string().optional(),
   subtitleText: z.string().optional(),
   musicCue: z.string().optional(),
+  overlays: z.array(LongFormOverlaySchema).optional(),
   status: LongFormSceneStatus.default('planned')
 })
 
@@ -138,11 +214,25 @@ export type LongFormVideoArtifactPlan = z.infer<typeof LongFormVideoArtifactPlan
 
 export const LongFormVideoPlanSchema = z.object({
   id: z.string(),
+  versionHash: z.string(),
   prompt: z.string(),
   totalDurationSeconds: z.number(),
   aspectRatio: LongFormVideoAspectRatio,
   style: LongFormVideoStyle,
   tone: LongFormVideoTone,
+  planningMode: PlanningMode,
+  routingMode: CanonicalRoutingMode,
+  // Structured creative contract
+  campaignTitle: z.string().optional(),
+  brandName: z.string().optional(),
+  brandWebsite: z.string().optional(),
+  objective: z.string().optional(),
+  audience: z.string().optional(),
+  callToAction: z.string().optional(),
+  legalQualifier: z.string().optional(),
+  musicBrief: z.string().optional(),
+  voiceProfile: VoiceProfileSchema.optional(),
+  globalOverlays: z.array(LongFormOverlaySchema).optional(),
   storyboard: LongFormStoryboardSchema,
   renderSteps: z.array(LongFormRenderStepSchema),
   artifactPlan: LongFormVideoArtifactPlanSchema,
@@ -150,7 +240,8 @@ export const LongFormVideoPlanSchema = z.object({
   executableNow: z.boolean(),
   perSceneVideoGenerationPossible: z.boolean(),
   finalAssemblyReady: z.boolean(),
-  reasonIfBlocked: z.string().optional()
+  reasonIfBlocked: z.string().optional(),
+  providerCallsStarted: z.boolean(),
 })
 
 export type LongFormVideoPlan = z.infer<typeof LongFormVideoPlanSchema>
@@ -164,33 +255,3 @@ export function validateLongFormVideoRequest(input: unknown): LongFormVideoReque
 export function validateLongFormVideoPlan(input: unknown): LongFormVideoPlan {
   return LongFormVideoPlanSchema.parse(input)
 }
-
-// ── Capability Status ─────────────────────────────────────────────────────────
-
-export const LONG_FORM_VIDEO_STATUS = {
-  orchestrationFoundationReady: true,
-  schemaReady: true,
-  plannerReady: true,
-  durableParentReady: true,
-  durablePlanReady: true,
-  sceneLinkageReady: true,
-  sceneSubmissionReady: true,
-  sceneExecutionReady: true,
-  retryResumeReady: true,
-  progressTrackingReady: true,
-  batchStructureReady: true,
-  assemblyHandoffReady: true,
-  videoOnlyAssemblyReady: true,
-  sceneSplitterReady: true,
-  perSceneVideoGenerationPossible: true, // Can use existing video_generation
-  voiceoverReady: false,
-  subtitlesReady: false,
-  musicBedReady: false,
-  fullMultimediaReady: false,
-  liveProven: false,
-  sceneStitchingReady: false,
-  finalAssemblyReady: false,
-  executableNow: false // Final long-form video is not executable yet
-} as const
-
-export type LongFormVideoStatus = typeof LONG_FORM_VIDEO_STATUS

@@ -10,31 +10,29 @@ function read(rel) {
 
 describe('dashboard creation workspace redesign', () => {
   describe('navigation structure', () => {
-    it('main nav contains Chat, Image, Video, Music, Research, Library, Operations, Settings', () => {
+    it('main nav contains the canonical production sections', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
-      expect(labels).toContain('Chat')
-      expect(labels).toContain('Image')
-      expect(labels).toContain('Video')
-      expect(labels).toContain('Music')
-      expect(labels).toContain('Research')
-      expect(labels).toContain('Library')
-      expect(labels).toContain('Operations')
+      expect(labels).toContain('Overview')
+      expect(labels).toContain('Apps')
+      expect(labels).toContain('Capabilities')
+      expect(labels).toContain('Models')
+      expect(labels).toContain('Jobs & Workflows')
+      expect(labels).toContain('Artifacts')
+      expect(labels).toContain('Monitoring')
       expect(labels).toContain('Settings')
     })
 
-    it('main nav has exactly 8 items', () => {
+    it('main nav includes the complete production workspaces including Voices', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
-      expect(DASHBOARD_PAGES).toHaveLength(8)
+      expect(DASHBOARD_PAGES.length).toBeGreaterThanOrEqual(13)
+      expect(DASHBOARD_PAGES.map((page) => page.label)).toContain('Voices')
     })
 
-    it('main nav does not show old confusing primary items', () => {
+    it('main nav does not show old duplicate primary items', () => {
       const { DASHBOARD_PAGES } = require('../lib/dashboard-contract.js')
       const labels = DASHBOARD_PAGES.map((p) => p.label)
-      expect(labels).not.toContain('Studio')
-      expect(labels).not.toContain('Capabilities')
       expect(labels).not.toContain('Command Center')
-      expect(labels).not.toContain('Apps')
       expect(labels).not.toContain('Brand Library')
       expect(labels).not.toContain('Agents & Learning')
       expect(labels).not.toContain('Work Library')
@@ -43,10 +41,8 @@ describe('dashboard creation workspace redesign', () => {
     it('advanced pages exist for internal/engineering access', () => {
       const { ADVANCED_PAGES } = require('../lib/dashboard-contract.js')
       const ids = ADVANCED_PAGES.map((p) => p.id)
-      expect(ids).toContain('studio')
-      expect(ids).toContain('artifacts')
-      expect(ids).toContain('capabilities')
-      expect(ids).toContain('command-center')
+      expect(ids).toContain('model-lab')
+      expect(ids).toContain('developer')
     })
 
     it('dashboard layout imports NAV and ADVANCED_NAV', () => {
@@ -61,34 +57,31 @@ describe('dashboard creation workspace redesign', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/dashboard/chat/page.js'))).toBe(true)
     })
 
-    it('chat page is honest about backend/memory status', () => {
+    it('chat page uses real SSE with local history', () => {
       const chat = read('app/dashboard/chat/page.js')
-      expect(chat).toContain('Backend conversation memory endpoint pending')
-      expect(chat).toContain('Memory backend pending')
+      expect(chat).toContain('/api/admin/streaming-chat')
+      expect(chat).toContain('HISTORY_KEY')
     })
 
-    it('chat page has message list, prompt composer, memory panel, attached tools', () => {
+    it('chat page has message list, prompt composer, cancellation, and evidence', () => {
       const chat = read('app/dashboard/chat/page.js')
       expect(chat).toContain('messages')
-      expect(chat).toContain('Input')
-      expect(chat).toContain('Memory')
-      expect(chat).toContain('Attached Tools')
+      expect(chat).toContain('Message AmarktAI...')
+      expect(chat).toContain('controllerRef')
+      expect(chat).toContain('evidence')
     })
 
-    it('chat attached tools link to real pages', () => {
+    it('chat does not retain stale attached-tool placeholders', () => {
       const chat = read('app/dashboard/chat/page.js')
-      expect(chat).toContain('/dashboard/image')
-      expect(chat).toContain('/dashboard/video')
-      expect(chat).toContain('/dashboard/music')
-      expect(chat).toContain('/dashboard/research')
-      expect(chat).toContain('/dashboard/library')
+      expect(chat).not.toContain('Attached Tools')
+      expect(chat).not.toContain('Backend Pending')
     })
 
-    it('chat tool statuses are honest based on runtime proof', () => {
+    it('chat reports route and chunk evidence', () => {
       const chat = read('app/dashboard/chat/page.js')
-      expect(chat).toContain('imageReady')
-      expect(chat).toContain('videoReady')
-      expect(chat).toContain('pending')
+      expect(chat).toContain("event === 'route'")
+      expect(chat).toContain("event === 'chunk'")
+      expect(chat).toContain("event === 'complete'")
     })
   })
 
@@ -146,19 +139,18 @@ describe('dashboard creation workspace redesign', () => {
       expect(video).toContain('pollJob')
     })
 
-    it('video page distinguishes short video vs long-form durable Phase 1 status', () => {
+    it('video page exposes canonical text/source/long-form modes', () => {
       const video = read('app/dashboard/video/page.js')
-      expect(video).toContain('Short Video')
-      expect(video).toContain('Long-Form Video')
-      expect(video).toContain('Phase 1 Ready')
-      expect(video).toContain('Durable Orchestration Ready')
-      expect(video).toContain('Full multimedia assembly is pending')
+      expect(video).toContain('Text to video')
+      expect(video).toContain('Image to video')
+      expect(video).toContain('Video to video')
+      expect(video).toContain('Long-form video')
     })
 
-    it('video page does not claim Live unless using real job flow', () => {
+    it('video page derives execution readiness from canonical runtime proof', () => {
       const video = read('app/dashboard/video/page.js')
-      expect(video).toContain('shortReady')
-      expect(video).toContain('runtimeProofStatusClasses')
+      expect(video).toContain('getRuntimeCapabilityProof')
+      expect(video).toContain('readyForDashboardExecution')
     })
 
     it('video page does not expose provider/model selectors', () => {
@@ -187,8 +179,8 @@ describe('dashboard creation workspace redesign', () => {
 
     it('research page does not fake research results', () => {
       const research = read('app/dashboard/research/page.js')
-      expect(research).toContain('Backend Pending')
-      expect(research).toContain('not yet wired')
+      expect(research).toContain('Excluded from this release')
+      expect(research).toContain('cannot fabricate')
     })
   })
 
@@ -203,9 +195,10 @@ describe('dashboard creation workspace redesign', () => {
       expect(library).toContain('Artifacts')
     })
 
-    it('library page does not fake chats/music/research history', () => {
+    it('library page distinguishes browser-local chat and excluded research', () => {
       const library = read('app/dashboard/library/page.js')
-      expect(library).toContain('backend pending')
+      expect(library).toContain('Browser local')
+      expect(library).toContain('Research is outside this release candidate')
     })
   })
 
@@ -214,23 +207,19 @@ describe('dashboard creation workspace redesign', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/dashboard/operations/page.js'))).toBe(true)
     })
 
-    it('operations page shows capacity/upgrade monitoring placeholders honestly', () => {
+    it('operations page consumes real dependency health and build identity', () => {
       const ops = read('app/dashboard/operations/page.js')
-      expect(ops).toContain('metric pending')
-      expect(ops).toContain('Active Users')
-      expect(ops).toContain('Jobs Queued')
-      expect(ops).toContain('Provider Spend')
-      expect(ops).toContain('Revenue')
-      expect(ops).toContain('Margin')
-      expect(ops).toContain('Upgrade Warning')
+      expect(ops).toContain('/api/system/health')
+      expect(ops).toContain('Worker heartbeat')
+      expect(ops).toContain('Expected SHA')
     })
   })
 
   describe('provider list', () => {
-    it('provider list remains exactly genx, groq, together, mimo, deepinfra', () => {
+    it('provider list remains exactly genx, deepinfra, together, mimo, deepinfra', () => {
       const { PROVIDER_CONTRACTS } = require('../lib/dashboard-contract.js')
       const ids = PROVIDER_CONTRACTS.map((p) => p.id)
-      expect(ids).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+      expect(ids).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     })
 
     it('MiMo remains coding_tools_only', () => {
@@ -240,17 +229,16 @@ describe('dashboard creation workspace redesign', () => {
       expect(mimo.credentialUsagePolicy).toBe('coding_tools_only')
     })
 
-    it('adult generation remains on hold', () => {
-      const cc = read('app/dashboard/command-center/page.js')
-      expect(cc).toContain('On Hold')
-      expect(cc).toContain('adult_generation')
+    it('adult generation remains policy restricted', async () => {
+      const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+      expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
     })
   })
 
   describe('existing routes preserved', () => {
-    it('/dashboard redirects to /dashboard/chat', () => {
+    it('/dashboard renders the canonical overview', () => {
       const index = read('app/dashboard/page.js')
-      expect(index).toContain('/dashboard/chat')
+      expect(index).toContain('Platform overview')
     })
 
     it('existing studio page still exists', () => {

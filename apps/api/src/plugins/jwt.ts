@@ -8,12 +8,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import fp from 'fastify-plugin'
 import { getJwtSecret, JWT_EXPIRY_SECONDS } from '@amarktai/core'
+import { prisma } from '@amarktai/db'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface JwtPayload {
   sub: string       // subject (admin user email or app slug)
   role: string      // 'admin' | 'app'
+  tokenVersion?: number
   iat: number       // issued at
   exp: number       // expiry
 }
@@ -101,7 +103,14 @@ async function verifyJwt(token: string): Promise<JwtPayload | null> {
   try {
     const payload = JSON.parse(base64urlDecode(body)) as JwtPayload
     const now = Math.floor(Date.now() / 1000)
-    if (payload.exp && payload.exp < now) return null
+    if (payload.exp && payload.exp <= now) return null
+    if (payload.role === 'admin') {
+      const admin = await prisma.adminUser.findUnique({
+        where: { email: payload.sub },
+        select: { enabled: true, tokenVersion: true },
+      })
+      if (!admin?.enabled || admin.tokenVersion !== payload.tokenVersion) return null
+    }
     return payload
   } catch {
     return null

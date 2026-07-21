@@ -9,11 +9,9 @@ import { Button } from '@/components/ui/button'
 import { useStudioStore } from '@/lib/useStudioStore'
 import { useRuntimeProofStatus } from '@/components/dashboard/runtime-proof-summary'
 import { getRuntimeCapabilityProof, runtimeProofStatusClasses, runtimeProofStatusLabel } from '@/lib/runtime-proof-status'
-import { Image as ImageIcon, Send, Zap, AlertTriangle, Download, Loader2, Clock } from 'lucide-react'
+import { Image as ImageIcon, Send, Zap, Download, Loader2 } from 'lucide-react'
 
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
-const QUALITY_MODES = ['Balanced', 'Premium', 'Fast', 'Budget']
-const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4']
 
 function artifactErrorMessage(status) {
   if (status === 401) return 'Unauthorized'
@@ -178,9 +176,7 @@ export default function ImageStudioPage() {
               {jobResult.provider && <span>Provider: <span className="text-violet-300">{jobResult.provider}</span></span>}
               {jobResult.model && <span>Model: <span className="font-mono text-[10px]">{jobResult.model}</span></span>}
               {jobResult.artifactId && (
-                <Link href={`/dashboard/artifacts`} className="text-cyan-300 hover:underline flex items-center gap-1">
-                  <Download className="h-3 w-3" /> Artifacts
-                </Link>
+                <><a href={`/api/admin/artifacts/${jobResult.artifactId}/file?download=1`} className="text-cyan-300 hover:underline flex items-center gap-1"><Download className="h-3 w-3" /> Download</a><Link href="/dashboard/artifacts" className="text-cyan-300 hover:underline">Artifacts</Link></>
               )}
             </div>
           </div>
@@ -201,84 +197,8 @@ export default function ImageStudioPage() {
       </Card>
 
       <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4 text-amber-300" /> Planned Controls</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">Quality Mode</label>
-            <div className="flex flex-wrap gap-2">
-              {QUALITY_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  disabled
-                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-[10px] text-muted-foreground/60">Routing backend pending. Quality mode will map to Balanced/Premium/Fast/Budget routing tiers.</p>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">Aspect Ratio</label>
-            <div className="flex flex-wrap gap-2">
-              {ASPECT_RATIOS.map((ratio) => (
-                <button
-                  key={ratio}
-                  disabled
-                  className="rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5 text-xs text-muted-foreground/40 cursor-not-allowed"
-                >
-                  {ratio}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium">Style</label>
-              <Input disabled placeholder="e.g. photorealistic, anime, oil painting" className="bg-white/[0.04] text-sm" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium">Image Count</label>
-              <Input disabled type="number" min="1" max="4" placeholder="1" className="bg-white/[0.04] text-sm" />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium">Negative Prompt</label>
-            <Input disabled placeholder="What to avoid in the generated image" className="bg-white/[0.04] text-sm" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium">Seed</label>
-              <Input disabled type="number" placeholder="Optional" className="bg-white/[0.04] text-sm" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium">Brand Mode</label>
-              <Input disabled placeholder="Pending" className="bg-white/[0.04] text-sm" />
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="border-white/[0.07] bg-white/[0.02] p-5">
-        <h3 className="mb-3 text-sm font-semibold">Pending Capabilities</h3>
-        <div className="space-y-2">
-          {[
-            { label: 'Image Edit / Inpaint', status: 'pending' },
-            { label: 'Upscale', status: 'pending' },
-            { label: 'Variations', status: 'pending' },
-          ].map((cap) => (
-            <div key={cap.label} className="flex items-center justify-between rounded-md border border-white/[0.06] bg-black/20 px-3 py-2">
-              <span className="text-xs">{cap.label}</span>
-              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-[9px]">
-                <Clock className="mr-1 h-2.5 w-2.5" /> {cap.status}
-              </Badge>
-            </div>
-          ))}
-        </div>
+        <h3 className="mb-2 text-sm font-semibold">Release scope</h3>
+        <p className="text-xs text-muted-foreground">This page executes image generation only. Image editing, inpainting, upscaling, and variations remain outside the current release candidate and are not presented as executable.</p>
       </Card>
 
       <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">

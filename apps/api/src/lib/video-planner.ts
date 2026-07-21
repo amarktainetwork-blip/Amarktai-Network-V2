@@ -184,7 +184,7 @@ export async function planVideoBudget(rawInput: PlannerInput = {}): Promise<Budg
   const heroShots = heroShotCount > 0 && profile.allowHero
     ? await candidateFor(rawInput, 'hero_shots', 'video_generation', 'premium')
     : null
-  const narration = needsNarration ? await candidateFor(rawInput, 'tts', 'text_to_speech', 'standard') : null
+  const narration = needsNarration ? await candidateFor(rawInput, 'tts', 'tts', 'standard') : null
   const music = needsMusic ? await candidateFor(rawInput, 'music', 'music_generation', 'standard') : null
   const captions = needsCaptions ? await candidateFor(rawInput, 'captions', 'structured_output', 'draft') : null
 
@@ -199,7 +199,7 @@ export async function planVideoBudget(rawInput: PlannerInput = {}): Promise<Budg
     steps.push(makeStep({ stepKey: 'hero_shots', role: 'hero_clip', capability: 'video_generation', candidate: heroShots, estimatedCostCents: knownCost(heroShots), qualityTier: 'premium', notes: `${heroShotCount} premium hero shot(s) require admin-approved priced candidate.` }))
   }
   if (needsNarration) {
-    steps.push(makeStep({ stepKey: 'tts', role: 'narration', capability: 'text_to_speech', candidate: narration, estimatedCostCents: knownCost(narration), qualityTier: 'standard', notes: 'Narration requires priced catalog TTS candidate.' }))
+    steps.push(makeStep({ stepKey: 'tts', role: 'narration', capability: 'tts', candidate: narration, estimatedCostCents: knownCost(narration), qualityTier: 'standard', notes: 'Narration requires priced catalog TTS candidate.' }))
   }
   if (needsMusic) {
     steps.push(makeStep({ stepKey: 'music', role: 'music', capability: 'music_generation', candidate: music, estimatedCostCents: knownCost(music), qualityTier: 'standard', notes: 'Music generation is pending priced eligible catalog support.' }))

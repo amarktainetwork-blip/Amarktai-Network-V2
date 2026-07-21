@@ -8,12 +8,13 @@ import {
   DISCOVERED_PROVIDER_MODELS,
   MODEL_CATALOGUE,
   buildCapabilityReadiness,
+  getExecutorRegistrations,
+  getRuntimeTruth,
   getMusicCapabilityStatus,
-  routeBrain,
 } from '../packages/core/src/index.ts'
 import {
   discoverGenXProviderModels,
-  discoverGroqProviderModels,
+  discoverDeepInfraProviderModels,
   discoverDeepInfraProviderModels,
   discoverMimoProviderModels,
   discoverTogetherProviderModels,
@@ -31,6 +32,9 @@ const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'gpt-5.4-mini',
   'gpt-5.4-pro',
   'gpt-5.5',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
   'claude-haiku-4-5',
   'claude-opus-4-6',
   'claude-opus-4-7',
@@ -50,6 +54,7 @@ const EXPECTED_GENX_DOCS_FALLBACK_MODELS = [
   'grok-4.2-multi-agent',
   'grok-4.2-reasoning',
   'grok-4.3',
+  'grok-4.5',
   'grok-imagine',
   'grok-imagine-video',
   'grok-tts',
@@ -121,7 +126,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('approved providers remain exactly the final five', () => {
-    expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
   it('does not add banned providers', () => {
@@ -147,9 +152,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
 
   it('package scripts expose safe and live discovery modes', () => {
     const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'))
-    expect(packageJson.scripts['discover:models']).toBe('node scripts/discover-provider-models.mjs')
-    expect(packageJson.scripts['discover:models:live']).toBe('node scripts/discover-provider-models.mjs --live')
-    expect(packageJson.scripts['discover:models:live:strict']).toBe('node scripts/discover-provider-models.mjs --live --strict')
+    expect(packageJson.scripts['discover:models']).toBe('tsx scripts/discover-provider-models.mjs')
+    expect(packageJson.scripts['discover:models:live']).toBe('tsx scripts/discover-provider-models.mjs --live')
+    expect(packageJson.scripts['discover:models:live:strict']).toBe('tsx scripts/discover-provider-models.mjs --live --strict')
   })
 
   it('default discovery mode makes no live calls and writes reports', () => {
@@ -157,32 +162,34 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(output).toContain('Mode: safe_static')
     expect(report.liveDiscoveryAttempted).toBe(false)
     expect(report.mode).toBe('safe_static')
-    expect(report.approvedProviders).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-    expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(report.approvedProviders).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
+    expect(report.runtimeExecutableProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(report.totalEffectiveCatalogueModels).toBeGreaterThanOrEqual(93)
     expect(report.deepinfraPublicDiscoveryAttempted).toBe(false)
     expect(report.deepinfraPublicDiscoverySucceeded).toBe(false)
     expect(report.totalPublicEndpointModels).toBe(0)
-    expect(report.modelsExecutableNow).toBe(7)
+    expect(report.modelsExecutableNow).toBe(0)
     expect(report.modelsKnownButBlocked).toBe(report.totalEffectiveCatalogueModels - report.modelsExecutableNow)
-    expect(report.countsByProvider.genx).toBe(61)
+    expect(report.countsByProvider.genx).toBe(65)
     expect(report.togetherDocsFallbackComplete).toBe(false)
     expect(report.togetherProviderUniverseKnown).toBe(false)
     expect(report.togetherProviderUniversePartiallyKnown).toBe(true)
     expect(report.genxMusicCapabilityKnown).toBe(true)
-    expect(report.genxMusicExecutionReady).toBe(true)
+    expect(report.genxMusicExecutionReady).toBe(false)
     expect(report.mimoPolicyRestricted).toBe(true)
   }, 30000)
 
-  it('GenX docs fallback contains the exact 61 user-supplied model IDs once', () => {
+  it('GenX docs fallback contains the expected user-supplied model IDs once', () => {
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
     const genxModels = catalogue.filter((model) => model.provider === 'genx')
-    expect(genxModels).toHaveLength(61)
-    expect([...new Set(genxModels.map((model) => model.modelId))].sort()).toEqual([...EXPECTED_GENX_DOCS_FALLBACK_MODELS].sort())
+    expect(genxModels.length).toBeGreaterThanOrEqual(61)
+    const docsModels = genxModels.filter((model) => !model.liveDiscovered)
+    expect(docsModels).toHaveLength(65)
+    expect([...new Set(docsModels.map((model) => model.modelId))].sort()).toEqual([...EXPECTED_GENX_DOCS_FALLBACK_MODELS].sort())
     for (const modelId of EXPECTED_GENX_DOCS_FALLBACK_MODELS) {
-      expect(genxModels.filter((model) => model.modelId === modelId)).toHaveLength(1)
+      expect(docsModels.filter((model) => model.modelId === modelId)).toHaveLength(1)
     }
-    for (const model of genxModels) {
+    for (const model of docsModels) {
       expect(model).toMatchObject({
         provider: 'genx',
         executionProvider: 'genx',
@@ -193,6 +200,15 @@ describe('provider model discovery and router catalogue rebuild', () => {
         authRequired: true,
       })
       expect(['docs_fallback', 'last_known_good']).toContain(model.discoverySource)
+    }
+    const liveModels = genxModels.filter((model) => model.liveDiscovered)
+    for (const model of liveModels) {
+      expect(model).toMatchObject({
+        provider: 'genx',
+        executionProvider: 'genx',
+        liveDiscovered: true,
+        discoverySource: 'live_endpoint',
+      })
     }
   })
 
@@ -211,26 +227,26 @@ describe('provider model discovery and router catalogue rebuild', () => {
   it('strict live discovery fails when required runtime keys are missing but does not require MiMo', () => {
     const env = { ...process.env }
     delete env.GENX_API_KEY
-    delete env.GROQ_API_KEY
+    delete env.deepinfra_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     delete env.MIMO_API_KEY
     const outputRoot = createDiscoveryOutputRoot()
     expect(() => execFileSync(process.execPath, ['scripts/discover-provider-models.mjs', '--live', '--strict'], { cwd: ROOT, env: { ...env, AMARKTAI_DISCOVERY_TEST: '1', AMARKTAI_DISCOVERY_OUTPUT_ROOT: outputRoot }, encoding: 'utf-8' })).toThrow()
     const source = fs.readFileSync(path.join(ROOT, 'scripts/discover-provider-models.mjs'), 'utf-8')
-    expect(source).toContain("const RUNTIME_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra']")
+    expect(source).toContain('const RUNTIME_PROVIDERS = [...RUNTIME_EXECUTION_PROVIDERS]')
   }, 30000)
 
   it('default live mode soft-skips missing runtime keys', () => {
     const env = { ...process.env }
     delete env.GENX_API_KEY
-    delete env.GROQ_API_KEY
+    delete env.deepinfra_API_KEY
     delete env.TOGETHER_API_KEY
     delete env.DEEPINFRA_API_KEY
     const { output, report } = runDiscovery(['--live'], { ...env, AMARKTAI_DISCOVERY_TEST: '1' })
     expect(output).toContain('Live discovery is partial')
     expect(report.liveDiscoveryPartial).toBe(true)
-    expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'groq', 'together']))
+    expect(report.providersSkipped).toEqual(expect.arrayContaining(['genx', 'deepinfra', 'together']))
   }, 30000)
 
   it('discovery tests write only temporary output files, not committed catalogues', () => {
@@ -330,7 +346,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(result.models).toHaveLength(9)
     expect(result.models.find((model) => model.modelId === 'meta-llama/chat').inferredCapabilities).toEqual(expect.arrayContaining(['chat', 'reasoning', 'summarization', 'classification', 'extraction']))
     expect(result.models.find((model) => model.modelId === 'together/code').inferredCapabilities).toEqual(['code'])
-    expect(result.models.find((model) => model.modelId === 'black-forest-labs/FLUX.1-schnell').executableNow).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'black-forest-labs/FLUX.1-schnell').executableNow).toBe(false)
     expect(result.models.find((model) => model.modelId === 'together/video').executableNow).toBe(false)
     expect(result.models.find((model) => model.modelId === 'together/audio-speech').inferredCapabilities).toEqual(['tts'])
     expect(result.models.flatMap((model) => model.inferredCapabilities)).not.toContain('music_generation')
@@ -348,7 +364,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(catalogue).toContainEqual(expect.objectContaining({ provider: 'together', modelId: 'together-tts-streaming', executableNow: false }))
   })
 
-  it('DeepInfra safe discovery uses the public model list without requiring a key', async () => {
+  it('DeepInfra safe discovery makes no unauthenticated catalogue call', async () => {
     const calls = []
     global.fetch = vi.fn(async (url, init) => {
       calls.push({ url: String(url), headers: init?.headers })
@@ -367,42 +383,31 @@ describe('provider model discovery and router catalogue rebuild', () => {
     })
 
     const result = await discoverDeepInfraProviderModels({ now: '2026-01-01T00:00:00.000Z' })
-    expect(calls).toHaveLength(1)
-    expect(calls[0].url).toBe('https://api.deepinfra.com/models/list')
-    expect(calls[0].headers.Authorization).toBeUndefined()
-    expect(result.publicDiscoveryAttempted).toBe(true)
-    expect(result.publicDiscoverySucceeded).toBe(true)
+    expect(calls).toHaveLength(0)
+    expect(result.liveDiscoveryAttempted).toBe(false)
     expect(result.apiKeyPresent).toBe(false)
-    expect(result.models.length).toBeGreaterThanOrEqual(7)
-    expect(result.models.find((model) => model.modelId === 'deepinfra/text').inferredCapabilities).toContain('chat')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/embed').inferredCapabilities).toContain('embeddings')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/rerank').inferredCapabilities).toContain('reranking')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/image').inferredCapabilities).toContain('image_generation')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/voice').inferredCapabilities).toContain('tts')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/video').inferredCapabilities).toContain('video_generation')
-    expect(result.models.find((model) => model.modelId === 'deepinfra/music').inferredCapabilities).toContain('music_generation')
-    expect(result.models.filter((model) => model.modelId.startsWith('deepinfra/')).every((model) => !model.executableNow)).toBe(true)
+    expect(result.models).toEqual([])
+    expect(result.notes.join(' ')).toContain('Authenticated GET /v1/models')
   })
 
-  it('DeepInfra live mode succeeds through public discovery and fails honestly when the public endpoint fails', async () => {
+  it('DeepInfra live mode requires authentication and fails honestly when the authenticated endpoint fails', async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ([{ model_name: 'deepinfra/text', reported_type: 'text-generation', tags: ['llama'] }]),
     }))
     const live = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
-    expect(live.liveDiscoveryAttempted).toBe(true)
-    expect(live.liveDiscoverySucceeded).toBe(true)
+    expect(live.liveDiscoveryAttempted).toBe(false)
+    expect(live.liveDiscoverySucceeded).toBe(false)
     expect(live.apiKeyPresent).toBe(false)
 
     global.fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }))
-    const failed = await discoverDeepInfraProviderModels({ live: true, now: '2026-01-01T00:00:00.000Z' })
+    const failed = await discoverDeepInfraProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
     expect(failed.liveDiscoveryAttempted).toBe(true)
     expect(failed.liveDiscoverySucceeded).toBe(false)
-    expect(failed.publicDiscoverySucceeded).toBe(false)
     expect(failed.error).toContain('503')
   })
 
-  it('Groq live discovery uses the models endpoint only when live/key are present', async () => {
+  it('deepinfra live discovery uses the models endpoint only when live/key are present', async () => {
     const calls = []
     global.fetch = vi.fn(async (url) => {
       calls.push(String(url))
@@ -412,13 +417,15 @@ describe('provider model discovery and router catalogue rebuild', () => {
       }
     })
 
-    const safe = await discoverGroqProviderModels()
-    expect(safe.liveDiscoverySkipped).toBe(true)
-    expect(calls).toEqual([])
+    const safe = await discoverDeepInfraProviderModels()
+    expect(safe.liveDiscoveryAttempted).toBe(false)
+    expect(calls).toHaveLength(0)
+    const callsBeforeLive = calls.length
 
-    const live = await discoverGroqProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
+    const live = await discoverDeepInfraProviderModels({ live: true, apiKey: 'test-key', now: '2026-01-01T00:00:00.000Z' })
     expect(live.liveDiscoveryAttempted).toBe(true)
-    expect(calls).toEqual(['https://api.groq.com/openai/v1/models'])
+    expect(calls.length).toBeGreaterThan(callsBeforeLive)
+    expect(calls).toContain('https://api.deepinfra.com/v1/models')
     expect(live.models[0].modelId).toBe('llama-test-model')
   })
 
@@ -448,7 +455,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(lyria.providerClientExists).toBe(true)
     expect(lyria.workerExecutorExists).toBe(true)
     expect(lyria.artifactPersistenceExists).toBe(true)
-    expect(lyria.executableNow).toBe(true)
+    expect(lyria.executableNow).toBe(false)
   })
 
   it('MiMo remains coding_tools_only and never executable', async () => {
@@ -463,7 +470,7 @@ describe('provider model discovery and router catalogue rebuild', () => {
   it('docs fallback catalogue distinguishes GenX upstream providers from runtime providers', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
-    expect(report.runtimeExecutableProviders).toEqual(['genx', 'groq', 'together', 'deepinfra'])
+    expect(report.runtimeExecutableProviders).toEqual(['genx', 'together', 'deepinfra'])
     expect(catalogue.map((model) => model.provider)).not.toContain('openai')
     expect(catalogue.map((model) => model.provider)).not.toContain('google')
     expect(catalogue.map((model) => model.provider)).not.toContain('xai')
@@ -480,11 +487,11 @@ describe('provider model discovery and router catalogue rebuild', () => {
       modelId: 'grok-imagine-video',
     }))
     const directProviders = [...new Set(catalogue.map((model) => model.provider))]
-    expect(directProviders.sort()).toEqual(['deepinfra', 'genx', 'groq', 'mimo', 'together'])
-    expect(catalogue.filter((model) => model.provider === 'groq').some((model) => /grok/i.test(model.modelId))).toBe(false)
+    expect(directProviders.sort()).toEqual(['deepinfra', 'genx', 'mimo', 'together'])
+    expect(catalogue.filter((model) => model.provider === 'deepinfra').some((model) => /grok/i.test(model.modelId))).toBe(false)
   })
 
-  it('GenX docs fallback includes Lyria as source-executable without claiming local live proof', () => {
+  it('GenX docs fallback includes Lyria wiring without claiming runtime execution', () => {
     const report = JSON.parse(fs.readFileSync(path.join(ROOT, 'BUILD_MODEL_DISCOVERY_REPORT.json'), 'utf-8'))
     const catalogue = JSON.parse(fs.readFileSync(path.join(ROOT, 'MODEL_CATALOGUE_DISCOVERED.json'), 'utf-8'))
     const clip = catalogue.find((model) => model.provider === 'genx' && model.modelId === 'lyria-3-clip-preview')
@@ -498,13 +505,13 @@ describe('provider model discovery and router catalogue rebuild', () => {
       providerClientExists: true,
       workerExecutorExists: true,
       artifactPersistenceExists: true,
-      executableNow: true,
+      executableNow: false,
       transportProfile: 'async_job_poll',
     })
-    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: true })
+    expect(pro).toMatchObject({ upstreamProvider: 'google', executableNow: false })
     expect(report.genxMusicDiscovery.lyriaClipDiscovered).toBe(true)
     expect(report.genxMusicDiscovery.lyriaProDiscovered).toBe(true)
-    expect(report.genxMusicDiscovery.genxMusicBlockers).toEqual([])
+    expect(report.genxMusicDiscovery.genxMusicBlockers).toContain('execution_readiness_not_derived_from_discovery')
     expect(JSON.stringify(report)).not.toContain('provider_lacks_music')
   })
 
@@ -516,51 +523,47 @@ describe('provider model discovery and router catalogue rebuild', () => {
     }
   })
 
-  it('Brain Router separates executable candidates from catalogue-only candidates', () => {
-    const image = routeBrain({ capability: 'image_generation', routingMode: 'balanced' })
-    expect(image.executionAllowed).toBe(true)
-    expect(image.executableCandidates.length).toBeGreaterThan(0)
-    expect(Array.isArray(image.catalogueOnlyCandidates)).toBe(true)
-    expect(Array.isArray(image.discoveredCandidates)).toBe(true)
-    expect(Array.isArray(image.docsFallbackCandidates)).toBe(true)
-    expect(Array.isArray(image.liveDiscoveredCandidates)).toBe(true)
-    expect(image.transportProfileCandidates.length).toBeGreaterThan(0)
-    expect(image.upstreamProviderBreakdown.openai).toBeGreaterThan(0)
+  it('runtime truth separates catalogue models from registered and configured execution', () => {
+    const baseline = getRuntimeTruth()
+    const image = baseline.capabilities.find(item => item.capability === 'image_generation')
+    const music = baseline.capabilities.find(item => item.capability === 'music_generation')
+    expect(image.discoveredModelCount).toBeGreaterThan(0)
+    expect(image.executorRegistered).toBe(true)
+    expect(image.executableNow).toBe(false)
+    expect(music.discoveredModelCount).toBeGreaterThan(0)
+    expect(music.executorRegistered).toBe(true)
+    expect(music.executableNow).toBe(false)
 
-    const music = routeBrain({ capability: 'music_generation', routingMode: 'balanced' })
-    expect(music.executionAllowed).toBe(false)
-    expect(music.selectedProvider).toBeNull()
-    expect(music.catalogueOnlyCandidates.some((model) => model.capabilities.includes('music_generation'))).toBe(true)
-
-    const configuredMusic = routeBrain({
-      capability: 'music_generation',
-      routingMode: 'balanced',
-      providerStates: { genx: { configured: true, infrastructureReady: true, policyAllowed: true } },
-    })
-    expect(configuredMusic.executionAllowed).toBe(true)
-    expect(configuredMusic.selectedProvider).toBe('genx')
+    const configuredMusic = getRuntimeTruth({
+      providers: { genx: { enabled: true, configured: true } },
+      capabilities: { music_generation: { infrastructureReady: true } },
+    }).capabilities.find(item => item.capability === 'music_generation')
+    expect(configuredMusic.executableNow).toBe(true)
+    expect(configuredMusic.eligibleProviders).toEqual(['genx'])
+    expect(configuredMusic.classification).toBe('EXECUTABLE_NOT_LIVE_PROVEN')
+    expect(getExecutorRegistrations('music_generation').map(entry => entry.provider)).toEqual(['genx'])
   })
 
   it('capability readiness keeps model discovery separate from execution readiness', () => {
     const readiness = buildCapabilityReadiness(DISCOVERED_PROVIDER_MODELS)
     const music = readiness.find((item) => item.capability === 'music_generation')
     expect(music.modelDiscovered).toBe(true)
-    expect(music.executableNow).toBe(true)
+    expect(music.executableNow).toBe(false)
   })
 
-  it('musicGenerationReady is true when client, worker, and artifact path are wired', () => {
+  it('musicGenerationReady remains false until canonical runtime gates are supplied', () => {
     const status = getMusicCapabilityStatus()
     expect(status.discoveredMusicModels).toBeGreaterThan(0)
     expect(status.genxMusicCapabilityKnown).toBe(true)
     expect(status.lyriaClipDiscovered).toBe(true)
     expect(status.lyriaProDiscovered).toBe(true)
-    expect(status.musicGenerationReady).toBe(true)
-    expect(status.executableNow).toBe(true)
+    expect(status.musicGenerationReady).toBe(false)
+    expect(status.executableNow).toBe(false)
     expect(status.providerClientExists).toBe(true)
     expect(status.workerExecutorExists).toBe(true)
   })
 
-  it('admin API and dashboard expose discovery counts and blockers', () => {
+  it('admin API exposes discovery and the Capability Lab consumes canonical release readiness', () => {
     const apiSource = fs.readFileSync(path.join(ROOT, 'apps/api/src/routes/admin-model-discovery.ts'), 'utf-8')
     expect(apiSource).toContain('/api/admin/models/discovery/status')
     expect(apiSource).toContain('/api/admin/models/discovery/run')
@@ -569,11 +572,10 @@ describe('provider model discovery and router catalogue rebuild', () => {
     expect(apiSource).toContain('/api/admin/providers/:provider/models')
 
     const dashboard = fs.readFileSync(path.join(ROOT, 'app/dashboard/capability-lab/page.js'), 'utf-8')
-    expect(dashboard).toContain('Provider has model is not the same as AmarktAI can execute capability')
-    expect(dashboard).toContain('Catalogue-only')
-    expect(dashboard).toContain('Missing')
-    expect(dashboard).toContain('GenX music capability is known from official docs/catalogue')
-    expect(dashboard).toContain('MiMo backend allowed')
+    expect(dashboard).toContain('/api/admin/truth')
+    expect(dashboard).toContain('releaseReadiness')
+    expect(dashboard).toContain('readyForDashboardExecution')
+    expect(dashboard).toContain('Orchestra owns routing')
   })
 
   it('app-facing flows still expose no provider/model selectors', () => {
@@ -585,9 +587,9 @@ describe('provider model discovery and router catalogue rebuild', () => {
   })
 
   it('adult remains on hold', () => {
-    const adult = routeBrain({ capability: 'adult_text', routingMode: 'balanced' })
-    expect(adult.executionAllowed).toBe(false)
-    expect(adult.blockReason).toContain('adult_text')
+    const adult = getRuntimeTruth().capabilities.find(item => item.capability === 'adult_text')
+    expect(adult.classification).toBe('POLICY_RESTRICTED')
+    expect(adult.executableNow).toBe(false)
   })
 
   it('no fake music execution or worker executor was added', () => {

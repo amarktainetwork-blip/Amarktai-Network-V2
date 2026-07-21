@@ -5,9 +5,9 @@
  * - Loads DB Job row and verifies ownership
  * - Updates status to processing with startedAt
  * - Delegates execution to the provider executor
- * - Currently proven execution paths are Groq chat, Together image generation,
+ * - Runtime execution paths are selected dynamically from approved providers,
  *   and GenX video generation
- * - Fails all other capabilities honestly as not implemented
+ * - Fails closed when no canonical executor is registered
  * - Successful text jobs may store output
  * - Successful media jobs may store artifactId and safe output metadata
  * - Failed execution updates the DB and throws so BullMQ records queue failure
@@ -16,7 +16,8 @@
 
 import { randomUUID } from 'node:crypto'
 import { prisma, refreshLongFormParentState } from '@amarktai/db'
-import { QUEUE_NAMES, isValidCapability } from '@amarktai/core'
+import { QUEUE_NAMES, isValidCapability, type AppCapabilityGrantContext, type ExecutionProfile } from '@amarktai/core'
+import { deliverTerminalJobWebhook } from '../webhook-delivery.js'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -24,12 +25,15 @@ export interface WorkerJobData {
   jobId: string
   appSlug: string
   capability: string
+  executionProfile?: ExecutionProfile
   prompt: string
   input?: Record<string, unknown>
   metadata?: Record<string, unknown>
   traceId: string
   callbackUrl?: string
   routingMode?: string
+  appGrantSnapshot?: AppCapabilityGrantContext
+  queueRecoveryAttempt?: boolean
 }
 
 export interface ProcessorResult {
@@ -45,10 +49,54 @@ export interface ProcessorResult {
 
 export interface ProcessorDeps {
   executeCapability?: (payload: WorkerJobData) => Promise<ProcessorResult>
+  advanceLongFormWorkflow?: (parentJobId: string) => Promise<unknown>
 }
 
 type PartialWorkerJobData = Partial<WorkerJobData> & { jobId?: string }
 const TERMINAL_JOB_STATUSES = new Set(['completed', 'cancelled', 'cancelling'])
+
+function durableDeliveryResult(job: {
+  status: string
+  error?: string | null
+  output?: string | null
+  provider?: string | null
+  model?: string | null
+  artifactId?: string | null
+}): ProcessorResult {
+  if (job.status === 'completed') {
+    return {
+      success: true,
+      status: 'completed',
+      output: job.output ?? undefined,
+      provider: job.provider ?? undefined,
+      model: job.model ?? undefined,
+      artifactId: job.artifactId ?? undefined,
+      metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status },
+    }
+  }
+  if (job.status === 'processing') {
+    // A BullMQ retry can redeliver while the original worker still owns the
+    // provider claim. The database is authoritative: acknowledge the duplicate
+    // delivery without invoking the provider or turning it into a user failure.
+    return {
+      success: true,
+      status: 'completed',
+      provider: job.provider ?? undefined,
+      model: job.model ?? undefined,
+      artifactId: job.artifactId ?? undefined,
+      metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status, providerExecutionSkipped: true },
+    }
+  }
+  return {
+    success: false,
+    status: 'failed',
+    error: job.error ?? `Job is not execution-eligible: ${job.status}`,
+    provider: job.provider ?? undefined,
+    model: job.model ?? undefined,
+    artifactId: job.artifactId ?? undefined,
+    metadata: { skipped: true, terminalStatus: job.status, deduplicatedDelivery: true, durableStatus: job.status, providerExecutionSkipped: true },
+  }
+}
 
 // ── Canonical queue name (must match API ingestion) ────────────────────────────
 
@@ -111,10 +159,51 @@ async function markJobFailed(jobId: string, error: string): Promise<void> {
   })
 }
 
-async function refreshParentFromPayload(payload: WorkerJobData): Promise<void> {
+async function refreshParentFromPayload(payload: WorkerJobData, advance?: (parentJobId: string) => Promise<unknown>): Promise<void> {
   const parentJobId = typeof payload.metadata?.parentJobId === 'string' ? payload.metadata.parentJobId : null
   if (parentJobId) {
     await refreshLongFormParentState(parentJobId).catch(() => {})
+    if (advance) await advance(parentJobId)
+  }
+}
+
+async function deliverWebhookSafely(
+  payload: WorkerJobData,
+  status: 'completed' | 'failed',
+  result: ProcessorResult | undefined,
+  error?: string,
+): Promise<void> {
+  if (!payload.callbackUrl) return
+  try {
+    const delivery = await deliverTerminalJobWebhook({
+      jobId: payload.jobId,
+      appSlug: payload.appSlug,
+      capability: payload.capability,
+      status,
+      callbackUrl: payload.callbackUrl,
+      traceId: payload.traceId,
+      provider: result?.provider,
+      model: result?.model,
+      artifactId: result?.artifactId,
+      output: result?.output,
+      error: status === 'failed' ? (error ?? result?.error ?? 'Execution failed') : null,
+      completedAt: new Date(),
+    })
+    console.info('[worker] terminal webhook delivery', {
+      dbJobId: payload.jobId,
+      eventId: delivery.eventId ?? null,
+      attempted: delivery.attempted,
+      delivered: delivery.delivered,
+      attempts: delivery.attempts,
+      reason: delivery.reason ?? null,
+    })
+  } catch (deliveryError) {
+    // Webhook delivery has its own durable attempt log. It must never rewrite a
+    // truthful provider result or cause BullMQ to retry paid provider execution.
+    console.error('[worker] terminal webhook delivery failed unexpectedly', {
+      dbJobId: payload.jobId,
+      message: deliveryError instanceof Error ? deliveryError.message : 'Unknown webhook delivery error',
+    })
   }
 }
 
@@ -134,27 +223,39 @@ async function hydratePayload(rawPayload: PartialWorkerJobData): Promise<{
     return { payload: rawPayload as WorkerJobData, dbJob: null }
   }
 
+  const durableMetadata = safeParseJsonObject(dbJob.metadataJson)
   return {
     payload: {
       jobId: rawPayload.jobId!,
       appSlug: rawPayload.appSlug || dbJob.appSlug,
       capability: rawPayload.capability || dbJob.capability,
+      executionProfile: rawPayload.executionProfile
+        ?? (durableMetadata.executionProfile === 'internal_dashboard' ? 'internal_dashboard' : 'external_app'),
       prompt: rawPayload.prompt?.trim() ? rawPayload.prompt : dbJob.prompt,
       input: rawPayload.input ?? safeParseJsonObject(dbJob.inputJson),
       metadata: rawPayload.metadata ?? safeParseJsonObject(dbJob.metadataJson),
-      traceId: rawPayload.traceId || makeTraceId(),
+      // Recovery deliveries may contain only jobId. Preserve the durable trace
+      // so retries reuse provider output and artifact identity.
+      traceId: rawPayload.traceId || dbJob.traceId || makeTraceId(),
       callbackUrl: rawPayload.callbackUrl ?? dbJob.callbackUrl ?? undefined,
-      routingMode: rawPayload.routingMode ?? (safeParseJsonObject(dbJob.metadataJson).routingMode as string | undefined),
+      routingMode: rawPayload.routingMode ?? (durableMetadata.routingMode as string | undefined),
+      appGrantSnapshot: rawPayload.appGrantSnapshot
+        ?? (durableMetadata.appGrantSnapshot as AppCapabilityGrantContext | undefined),
+      queueRecoveryAttempt: rawPayload.queueRecoveryAttempt === true,
     },
     dbJob,
   }
 }
 
 // ── Default execution — delegates to provider executor ────────────────────────
-// Delegates to the provider executor, which currently supports Groq chat,
+// Delegates to the provider executor, which supports approved runtime routes,
 // Together image generation, and GenX video generation.
 
 async function defaultExecuteCapability(payload: WorkerJobData): Promise<ProcessorResult> {
+  if (payload.capability === 'long_form_video' && payload.metadata?.longFormAssembly === true && payload.metadata.internalLocalExecution === true) {
+    const { executeLongFormAssembly } = await import('../long-form-assembly.js')
+    return executeLongFormAssembly(payload)
+  }
   const { executeWithProvider } = await import('../providers/provider-executor.js')
   return executeWithProvider(payload)
 }
@@ -163,6 +264,7 @@ async function defaultExecuteCapability(payload: WorkerJobData): Promise<Process
 
 export function createJobProcessor(deps: ProcessorDeps = {}) {
   const executeCapability = deps.executeCapability ?? defaultExecuteCapability
+  const advanceWorkflow = deps.advanceLongFormWorkflow
 
   return async function processJob(rawPayload: WorkerJobData): Promise<ProcessorResult> {
     const rawJobId = (rawPayload as PartialWorkerJobData).jobId
@@ -208,14 +310,15 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
     // 5. Atomically claim an execution-eligible queued job.
     if (TERMINAL_JOB_STATUSES.has(job.status)) {
       console.info('[worker] skipping terminal job', { dbJobId: jobId, appSlug, capability, status: job.status })
-      return {
-        success: false,
-        status: 'failed',
-        error: `Job skipped because it is already terminal: ${job.status}`,
-        metadata: { skipped: true, terminalStatus: job.status },
-      }
+      await refreshParentFromPayload(payload, advanceWorkflow)
+      return durableDeliveryResult(job)
     }
 
+    if (job.status === 'processing') {
+      console.info('[worker] acknowledging duplicate delivery for active durable execution', { dbJobId: jobId, appSlug, capability })
+      await refreshParentFromPayload(payload, advanceWorkflow)
+      return durableDeliveryResult(job)
+    }
     console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, from: job.status, to: 'processing' })
     const processingClaim = await updateJobMany({
       where: { id: jobId, status: 'queued' },
@@ -230,17 +333,14 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
     if (processingClaim.count !== 1) {
       const latest = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
       console.info('[worker] skipped non-executable job state', { dbJobId: jobId, appSlug, capability, status: latest?.status ?? job.status })
-      return {
-        success: false,
-        status: 'failed',
-        error: `Job skipped because status is not execution-eligible: ${latest?.status ?? job.status}`,
-        metadata: { skipped: true, terminalStatus: latest?.status ?? job.status },
-      }
+      return durableDeliveryResult(latest ?? job)
     }
 
+    let terminalResult: ProcessorResult | undefined
     try {
       // 6. Call execution (does NOT call providers in Phase 4)
       const result = await executeCapability(payload)
+      terminalResult = result
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
@@ -280,7 +380,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
               jobStatus: latest?.status,
               lateArtifactId: result.artifactId ?? null,
             })
-            await refreshParentFromPayload(payload)
+            await refreshParentFromPayload(payload, advanceWorkflow)
             return {
               ...result,
               metadata: {
@@ -290,14 +390,15 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
               },
             }
           }
-          await refreshParentFromPayload(payload)
+          await refreshParentFromPayload(payload, advanceWorkflow)
           return {
             ...result,
             metadata: { ...result.metadata, skippedTerminalOverwrite: true },
           }
         }
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'completed' })
-        await refreshParentFromPayload(payload)
+        await refreshParentFromPayload(payload, advanceWorkflow)
+        await deliverWebhookSafely(payload, 'completed', result)
         return result
       }
 
@@ -323,11 +424,11 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
             dbJobId: jobId,
             jobStatus: latest?.status,
           })
-          await refreshParentFromPayload(payload)
+          await refreshParentFromPayload(payload, advanceWorkflow)
         }
       } else {
         console.info('[worker] status transition', { dbJobId: jobId, appSlug, capability, to: 'failed' })
-        await refreshParentFromPayload(payload)
+        await refreshParentFromPayload(payload, advanceWorkflow)
       }
 
       // Throw so BullMQ records the queue job as failed too
@@ -343,7 +444,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
       // Attempt to update DB to failed state
       // If step 8 already updated it, this is a harmless no-op (same status)
       // If executeCapability threw, this records the error
-      await updateJobMany({
+      const failedTerminalUpdate = await updateJobMany({
         where: { id: jobId, status: { notIn: ['completed', 'cancelled', 'cancelling'] } },
         data: {
           status: 'failed',
@@ -352,8 +453,12 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
         },
       }).catch(() => {
         // If DB update fails, the original error is more important
+        return { count: 0 }
       })
-      await refreshParentFromPayload(payload)
+      await refreshParentFromPayload(payload, advanceWorkflow)
+      if (failedTerminalUpdate.count === 1) {
+        await deliverWebhookSafely(payload, 'failed', terminalResult, errorMessage)
+      }
 
       // Re-throw so BullMQ records the failure
       throw err

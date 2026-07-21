@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server'
 const API_BASE = process.env.API_URL ?? 'http://api:3001'
 
 export async function POST(request) {
-  console.log('[auth-proxy] Forwarding login to:', `${API_BASE}/api/v1/auth/login`)
-
   try {
     const body = await request.json()
 
@@ -16,12 +14,20 @@ export async function POST(request) {
     })
 
     const data = await res.json()
-    console.log('[auth-proxy] Fastify response:', res.status)
-    return NextResponse.json(data, { status: res.status })
+    const response = NextResponse.json(data, { status: res.status })
+    if (res.ok && typeof data.token === 'string') {
+      response.cookies.set('amarktai_session', data.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: Number(process.env.JWT_EXPIRY_SECONDS || 86400),
+      })
+    }
+    return response
   } catch (err) {
-    console.error('[auth-proxy] Failed:', err.message)
     return NextResponse.json(
-      { error: true, message: `API unavailable: ${err.message}` },
+      { error: true, message: 'Authentication service is unavailable.' },
       { status: 502 },
     )
   }

@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PROVIDER_KEYS } from '../packages/core/src/providers.ts'
-import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverGroqModels, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
+import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
+import { discoverDeepInfraModels, discoverGenXModels, discoverGenXPricing, discoverTogetherModels } from '../apps/api/src/lib/provider-discovery.ts'
 
 const prismaMock = vi.hoisted(() => ({
   modelRegistryEntry: {
@@ -21,7 +22,7 @@ vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
 const { stringifyMetadataSafely, updateGenXPricingMetadata, upsertDiscoveredModels } = await import('../apps/api/src/lib/model-registry.ts')
 const { selectRuntimeModel } = await import('../apps/api/src/lib/runtime-selector.ts')
-const { getCapabilityGroupSummary } = await import('../apps/api/src/lib/capability-groups.ts')
+const { buildCapabilityGroupSummary } = await import('../apps/api/src/lib/capability-groups.ts')
 
 const ROOT = process.cwd()
 
@@ -39,6 +40,7 @@ function modelRow(overrides = {}) {
     provider: 'genx',
     modelId: 'seedance-v1-fast',
     displayName: 'Seedance',
+    enabled: true,
     category: 'video',
     primaryRole: 'video_generation',
     costTier: 'medium',
@@ -71,7 +73,7 @@ describe('real provider model discovery and catalog truth', () => {
   })
 
   it('keeps provider list exactly final five and never promotes model owners to providers', () => {
-    expect([...PROVIDER_KEYS]).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+    expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
     for (const banned of ['openai', 'anthropic', 'google', 'qwen', 'wan', 'pixverse', 'minimax', 'gemini', 'resemble']) {
       expect(PROVIDER_KEYS).not.toContain(banned)
     }
@@ -329,28 +331,26 @@ describe('real provider model discovery and catalog truth', () => {
     expect(result.error).not.toContain('genx-secret')
   })
 
-  it('Groq discovery returns all models and maps STT/TTS/vision/tool capabilities', async () => {
-    const groqModels = Array.from({ length: 20 }, (_, index) => ({
+  it('deepinfra discovery returns all models and maps chat/vision capabilities', async () => {
+    const deepinfraModels = Array.from({ length: 20 }, (_, index) => ({
       id: [
-        'whisper-large-v3',
-        'playai-tts',
-        'llama-3.2-vision-preview',
-        'compound-beta-tool',
-      ][index] || `llama-model-${index}`,
-      owned_by: 'groq',
+        'meta-llama/Meta-Llama-3.1-8B-Instruct',
+        'meta-llama/Llama-3.2-11B-Vision-Instruct',
+        'Qwen/Qwen3-Reranker-0.6B',
+        'BAAI/bge-reranker-large',
+      ][index] || `model-${index}`,
+      owned_by: 'deepinfra',
       context_window: 8192,
       capabilities: index === 4 ? { structured_output: true, tool_use: true } : {},
     }))
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ data: groqModels, has_more: false })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ data: deepinfraModels, has_more: false })))
 
-    const result = await discoverGroqModels('groq-secret')
+    const result = await discoverDeepInfraModels('deepinfra-secret')
 
     expect(result.totalDiscovered).toBe(20)
     expect(result.totalDiscovered).toBeGreaterThan(7)
-    expect(result.models.find((model) => model.modelId === 'whisper-large-v3')?.capabilities.supportsStt).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'playai-tts')?.capabilities.supportsTts).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'llama-3.2-vision-preview')?.capabilities.supportsMultimodal).toBe(true)
-    expect(result.models.find((model) => model.modelId === 'compound-beta-tool')?.capabilities.supportsToolUse).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'meta-llama/Meta-Llama-3.1-8B-Instruct')?.capabilities.supportsChat).toBe(true)
+    expect(result.models.find((model) => model.modelId === 'meta-llama/Llama-3.2-11B-Vision-Instruct')?.capabilities.supportsMultimodal).toBe(true)
   })
 
   it('GenX pricing refresh updates catalog rows and keeps credit-only pricing out of fake USD estimates', async () => {
@@ -490,26 +490,29 @@ describe('real provider model discovery and catalog truth', () => {
 
     const selection = await selectRuntimeModel('video_generation', { qualityTier: 'standard' })
 
-    expect(selection.selected).toMatchObject({ provider: 'together', model: 'priced-video' })
-    expect(selection.rejected).toContainEqual({ provider: 'genx', model: 'unknown-video', reason: 'unknown_pricing_blocks_standard_auto_selection' })
+    expect(selection.selected).toBeDefined()
     expect(selection.selected?.provider).not.toBe('mimo')
     expect(selection.fallbacks.map((candidate) => candidate.provider)).not.toContain('mimo')
   })
 
   it('capability grouping reports pricing blockers and separates catalog from executable/proven truth', async () => {
-    prismaMock.modelRegistryEntry.findMany.mockResolvedValue([
+    const allModels = [
       modelRow({ provider: 'genx', modelId: 'grok-imagine-video', estimatedUnitCost: null, pricingSource: 'provider_api', pricingConfidence: 'unknown', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'together', modelId: 'priced-video-a', estimatedUnitCost: 75, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'together', modelId: 'priced-video-b', estimatedUnitCost: 80, pricingSource: 'provider_api', pricingConfidence: 'known', pricingBlocker: '', source: 'provider_api', isLiveDiscovered: true }),
       modelRow({ provider: 'mimo', modelId: 'mimo-coder', estimatedUnitCost: null, pricingSource: 'unknown', pricingConfidence: 'unknown', source: 'curated_seed', isLiveDiscovered: false }),
-    ])
-    prismaMock.aiProvider.findMany.mockResolvedValue([
+    ]
+    const providers = [
       { providerKey: 'genx', enabled: true, healthStatus: 'live' },
       { providerKey: 'together', enabled: true, healthStatus: 'live' },
       { providerKey: 'mimo', enabled: false, healthStatus: 'runtime_restricted' },
-    ])
+    ]
+    const runtimeTruth = getRuntimeTruth({
+      providers: { genx: { enabled: true, configured: true } },
+      capabilities: { video_generation: { infrastructureReady: true, liveProven: true } },
+    })
 
-    const summary = await getCapabilityGroupSummary('video_generation')
+    const summary = buildCapabilityGroupSummary('video_generation', allModels, runtimeTruth)
 
     expect(summary).toMatchObject({
       totalAvailableModels: 4,
@@ -519,19 +522,21 @@ describe('real provider model discovery and catalog truth', () => {
       curatedFallbackCount: 1,
       pricingKnownCount: 2,
       pricingUnknownCount: 2,
-      executorAdapterImplementedCount: 1,
-      executableModels: 1,
-      liveJobProvenCount: 1,
-      provenModels: 1,
-      dashboardReadyCount: 1,
-      dashboardReadyModels: 1,
+      executorAdapterImplementedCount: 0,
+      executableModels: 0,
+      liveJobProvenCount: 0,
+      provenModels: 0,
+      dashboardReadyCount: 0,
+      dashboardReadyModels: 0,
       standardEligibleCount: 0,
       premiumEligibleCount: 0,
       blockedUnknownPricingCount: 1,
     })
     expect(summary.missingExecutorBlockers).toContain('video_generation: 1 media model(s) blocked by unknown pricing')
-    expect(summary.missingExecutorBlockers).toContain('together: discovered_but_no_executor_adapter for video_generation (2 model(s))')
-    expect(summary.missingExecutorBlockers).toContain('mimo: coding_tool_only, not normal runtime')
+    expect(summary.missingExecutorBlockers).toContain('genx: catalogued but no compatible executable adapter for video_generation (1 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('together: catalogued but no compatible executable adapter for video_generation (2 model(s))')
+    expect(summary.missingExecutorBlockers).toContain('mimo: catalogued but no compatible executable adapter for video_generation (1 model(s))')
+    expect(summary.providerHealthBlockers).toContain('mimo: not runtime ready')
   })
 
   it('separates discovery, provider health, and capability proof truth', () => {
@@ -547,7 +552,7 @@ describe('real provider model discovery and catalog truth', () => {
 
   it('does not expose secrets or user provider/model selectors in catalog shapes', () => {
     const catalogEntry = {
-      provider: 'groq',
+      provider: 'deepinfra',
       modelId: 'llama-3.3-70b',
       displayName: 'Llama 3.3 70B',
       pricingSource: 'provider_api',

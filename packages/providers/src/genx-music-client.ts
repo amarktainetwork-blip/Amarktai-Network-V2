@@ -11,6 +11,7 @@
  */
 
 import { getGenxApiKey, getGenxBaseUrl } from '@amarktai/core'
+import { inspectAudioBuffer } from './media-inspection.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,15 +20,14 @@ export interface GenxMusicRequest {
   model?: string
   duration?: number
   instrumental?: boolean
+  lyrics?: string
+  vocals?: boolean
   genre?: string
   mood?: string
   tempo?: string
   negativePrompt?: string
   apiKey?: string
   baseUrl?: string
-  providerDefaultModel?: string
-  providerFallbackModel?: string
-  providerAvailableModels?: string[]
 }
 
 export interface GenxMusicSubmitResponse {
@@ -54,16 +54,6 @@ export interface GenxMusicResult {
   metadata: Record<string, unknown>
 }
 
-export const GENX_MUSIC_MODELS = ['lyria-3-pro-preview', 'lyria-3-clip-preview'] as const
-export type GenxMusicModel = (typeof GENX_MUSIC_MODELS)[number]
-
-export const DEFAULT_GENX_MUSIC_MODEL: GenxMusicModel = 'lyria-3-clip-preview'
-
-export const GENX_ROUTER_MUSIC_MODEL_PREFERENCE = [
-  'lyria-3-clip-preview',
-  'lyria-3-pro-preview',
-]
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveGenxApiKey(requestApiKey?: string): string {
@@ -85,36 +75,11 @@ function resolveOptionalGenxApiKey(requestApiKey?: string): string {
 }
 
 export function resolveGenxMusicModel(
-  request: Pick<GenxMusicRequest, 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxMusicRequest, 'model'> = {},
 ): string {
   const explicitModel = request.model?.trim()
   if (explicitModel) return explicitModel
-
-  const availableModels = normalizeModelList(request.providerAvailableModels)
-  const providerDefaultModel = request.providerDefaultModel?.trim()
-  const providerFallbackModel = request.providerFallbackModel?.trim()
-
-  if (availableModels.length) {
-    if (providerDefaultModel && modelListIncludes(availableModels, providerDefaultModel) && isUsableMusicModel(providerDefaultModel)) {
-      return providerDefaultModel
-    }
-
-    if (providerFallbackModel && modelListIncludes(availableModels, providerFallbackModel) && isUsableMusicModel(providerFallbackModel)) {
-      return providerFallbackModel
-    }
-
-    const preferred = GENX_ROUTER_MUSIC_MODEL_PREFERENCE.find((candidate) => (
-      modelListIncludes(availableModels, candidate) && isUsableMusicModel(candidate)
-    ))
-    if (preferred) return preferred
-
-    const discovered = availableModels.find(isUsableMusicModel)
-    if (discovered) return discovered
-  }
-
-  return providerDefaultModel
-    || providerFallbackModel
-    || DEFAULT_GENX_MUSIC_MODEL
+  throw new Error('GenX music transport requires the exact Orchestra-selected model')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -148,25 +113,6 @@ function extractResultUrl(data: Record<string, unknown>): string | undefined {
   }
 
   return undefined
-}
-
-function normalizeModelList(models: string[] | undefined): string[] {
-  return (models ?? [])
-    .map((model) => model.trim())
-    .filter((model, index, all): model is string => !!model && all.indexOf(model) === index)
-}
-
-function modelListIncludes(models: string[], model: string): boolean {
-  return models.some((candidate) => candidate.toLowerCase() === model.toLowerCase())
-}
-
-function isUsableMusicModel(model: string): boolean {
-  const lower = model.toLowerCase()
-  return lower.includes('lyria')
-    || lower.includes('music')
-    || lower.includes('song')
-    || lower.includes('audio-generation')
-    || lower.includes('text-to-music')
 }
 
 function redactSecrets(message: string, secrets: string[]): string {
@@ -257,6 +203,8 @@ export async function genxSubmitMusic(request: GenxMusicRequest): Promise<GenxMu
 
   const params: Record<string, unknown> = removeUndefined({
     prompt: request.prompt,
+    ...(request.lyrics ? { lyrics: request.lyrics } : {}),
+    ...(request.vocals ? { vocals: request.vocals } : {}),
   })
 
   const body = removeUndefined({
@@ -358,7 +306,7 @@ export async function genxPollMusic(
 
 export async function genxDownloadMusic(
   url: string,
-  request: Pick<GenxMusicRequest, 'apiKey' | 'baseUrl' | 'model' | 'providerDefaultModel' | 'providerFallbackModel' | 'providerAvailableModels'> = {},
+  request: Pick<GenxMusicRequest, 'apiKey' | 'baseUrl' | 'model'> = {},
 ): Promise<GenxMusicResult> {
   const apiKey = resolveOptionalGenxApiKey(request.apiKey)
   const baseUrl = resolveGenxBaseUrl(request.baseUrl)
@@ -391,13 +339,14 @@ export async function genxDownloadMusic(
 
   const mimeType = contentType || 'audio/mpeg'
   const model = resolveGenxMusicModel(request)
+  const inspected = inspectAudioBuffer(audioBuffer, mimeType, 'genx')
 
   return {
     audioBuffer,
     mimeType,
-    duration: 0,
+    duration: inspected.duration,
     model,
-    metadata: { downloaded: true, sizeBytes: audioBuffer.length, authenticated },
+    metadata: { downloaded: true, sizeBytes: audioBuffer.length, authenticated, durationSource: inspected.durationSource },
   }
 }
 
@@ -469,7 +418,6 @@ export async function genxGenerateMusic(
             apiKey,
             baseUrl,
             model,
-            providerAvailableModels: request.providerAvailableModels,
           })
           return {
             ...music,

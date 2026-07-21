@@ -4,7 +4,16 @@ import {
   getRuntimeTruth,
   CAPABILITY_CATALOG,
   RUNTIME_EXECUTION_PROVIDERS,
+  calculateLongFormProgress,
+  createLongFormVideoPlan,
+  createSceneExecutionPayloads,
+  generateSubtitles,
+  getExecutorRegistrations,
+  getReleaseCandidateCapabilityKeys,
+  hasExecutorRegistration,
+  normalizeDbModelRecords,
   type CapabilityKey,
+  type LongFormComponentRuntimeState,
   type RuntimeTruth,
   type RuntimeTruthInput,
 } from '@amarktai/core'
@@ -51,23 +60,23 @@ type ProofArtifact = {
   errorMessage?: string | null
 }
 
-const CAPABILITY_ARTIFACT_SHAPES: Partial<Record<CapabilityKey, {
-  types: readonly string[]
-  mimePrefixes: readonly string[]
-}>> = {
-  image_generation: { types: ['image'], mimePrefixes: ['image/'] },
-  image_edit: { types: ['image'], mimePrefixes: ['image/'] },
-  image_to_video: { types: ['video'], mimePrefixes: ['video/'] },
-  long_form_video: { types: ['video'], mimePrefixes: ['video/'] },
-  video_generation: { types: ['video'], mimePrefixes: ['video/'] },
-  music_generation: { types: ['music', 'audio'], mimePrefixes: ['audio/'] },
-  tts: { types: ['audio', 'music'], mimePrefixes: ['audio/'] },
-  avatar_generation: { types: ['video', 'image'], mimePrefixes: ['video/', 'image/'] },
-  adult_image: { types: ['image'], mimePrefixes: ['image/'] },
-  adult_voice: { types: ['audio', 'music'], mimePrefixes: ['audio/'] },
-  adult_avatar: { types: ['video', 'image'], mimePrefixes: ['video/', 'image/'] },
-  adult_video: { types: ['video'], mimePrefixes: ['video/'] },
-}
+const CAPABILITY_ARTIFACT_SHAPES = Object.fromEntries(
+  CAPABILITY_CATALOG.filter((capability) => capability.artifactRequired).map((capability) => {
+    const artifactType = capability.artifactType ?? capability.outputType
+    const audio = artifactType === 'audio'
+    const types = audio ? ['audio', 'music'] : [artifactType]
+    const mimePrefixes = audio
+      ? ['audio/']
+      : artifactType === 'image'
+        ? ['image/']
+        : artifactType === 'video'
+          ? ['video/']
+          : artifactType === 'document'
+            ? ['application/', 'text/']
+            : ['application/']
+    return [capability.key, { types, mimePrefixes }]
+  }),
+) as Partial<Record<CapabilityKey, { types: readonly string[]; mimePrefixes: readonly string[] }>>
 
 const PLACEHOLDER_PATTERN = /\b(mock|simulate|simulation|fake|fabricated|fixture|placeholder|backend pending|backend integration pending|not implemented|foundation only|proof pending)\b/i
 
@@ -108,7 +117,9 @@ function outputArtifactId(output: string | null | undefined): string {
 function hasRuntimeProviderAndModel(job: ProofJob): boolean {
   const provider = job.provider ?? ''
   const model = job.model ?? ''
-  return RUNTIME_PROVIDER_SET.has(provider) && model.trim().length > 0
+  return RUNTIME_PROVIDER_SET.has(provider)
+    && model.trim().length > 0
+    && hasExecutorRegistration(job.capability as CapabilityKey, provider as never)
 }
 
 function isTrustedTextProof(job: ProofJob): boolean {
@@ -152,7 +163,7 @@ function isValidArtifactProof(job: ProofJob, artifact: ProofArtifact | undefined
 export function selectCapabilityProofStates(
   jobs: readonly ProofJob[],
   artifacts: readonly ProofArtifact[],
-): RuntimeTruthInput['capabilities'] {
+): { capabilities: RuntimeTruthInput['capabilities']; evidenceAvailable: boolean } {
   const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
   const capabilities: RuntimeTruthInput['capabilities'] = {}
   const sortedJobs = [...jobs].sort((a, b) => {
@@ -178,58 +189,127 @@ export function selectCapabilityProofStates(
     }
   }
 
-  return capabilities
+  return { capabilities, evidenceAvailable: true }
 }
 
-export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth> {
-  const [providerStatuses, completedJobs] = await Promise.all([
-    listProviderCredentialStatuses().catch(() => []),
-    prisma.job.findMany({
-      where: { status: 'completed' },
-      orderBy: { completedAt: 'desc' },
-      select: {
-        id: true,
-        appSlug: true,
-        capability: true,
-        status: true,
-        completedAt: true,
-        artifactId: true,
-        provider: true,
-        model: true,
-        output: true,
-        traceId: true,
-        metadataJson: true,
-      },
-      take: 500,
-    }).catch(() => []),
-  ])
+/**
+ * Component truth is bound to the callable implementation references used by
+ * the API. Infrastructure and live proof remain separate gates.
+ */
+export function buildLongFormComponentRuntimeState(
+  queueInfrastructureReady: boolean,
+  _capabilityProofs: NonNullable<RuntimeTruthInput['capabilities']> = {},
+  jobPersistenceReady = false,
+): LongFormComponentRuntimeState {
+  const plannerReady = typeof createLongFormVideoPlan === 'function'
+  const scenePayloadBuilderReady = typeof createSceneExecutionPayloads === 'function'
+  const parentStateReady = jobPersistenceReady
+  const videoExecutorReady = getExecutorRegistrations('video_generation').length > 0
+  const voiceExecutorReady = getExecutorRegistrations('tts').length > 0
+  const musicExecutorReady = getExecutorRegistrations('music_generation').length > 0
+  const assemblyHandoffReady = jobPersistenceReady
+  const videoOnlyAssemblyReady = assemblyHandoffReady && queueInfrastructureReady
+  const voiceoverReady = voiceExecutorReady && queueInfrastructureReady
+  const subtitlesReady = typeof generateSubtitles === 'function' && jobPersistenceReady
+  const musicBedReady = musicExecutorReady
+    && queueInfrastructureReady
+  const fullMultimediaReady = videoOnlyAssemblyReady
+    && voiceoverReady
+    && subtitlesReady
+    && musicBedReady
 
-  // Batch-fetch artifact records for jobs that reference them
-  const artifactIds = completedJobs
-    .map((job) => job.artifactId)
-    .filter((id): id is string => id != null && id.length > 0)
-  const artifactRecords = artifactIds.length > 0
-    ? await prisma.artifact.findMany({
-        where: { id: { in: artifactIds } },
+  return {
+    plannerReady,
+    durableParentReady: parentStateReady && jobPersistenceReady,
+    durablePlanReady: plannerReady && jobPersistenceReady,
+    sceneLinkageReady: scenePayloadBuilderReady && jobPersistenceReady,
+    sceneSubmissionReady: scenePayloadBuilderReady && queueInfrastructureReady,
+    sceneExecutionReady: videoExecutorReady && queueInfrastructureReady,
+    retryResumeReady: parentStateReady && jobPersistenceReady && queueInfrastructureReady,
+    progressTrackingReady: parentStateReady && typeof calculateLongFormProgress === 'function',
+    batchStructureReady: scenePayloadBuilderReady,
+    assemblyHandoffReady,
+    videoOnlyAssemblyReady,
+    voiceoverReady,
+    subtitlesReady,
+    musicBedReady,
+    fullMultimediaReady,
+  }
+}
+
+export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<RuntimeTruth & { evidenceAvailable: boolean }> {
+  let providerStatuses: Awaited<ReturnType<typeof listProviderCredentialStatuses>> = []
+  let completedJobs: ProofJob[] = []
+  let appGrantRows: Array<{ appSlug: string; capability: string; enabled: boolean }> = []
+  let registryModels: Awaited<ReturnType<typeof prisma.modelRegistryEntry.findMany>> = []
+  let evidenceAvailable = true
+  let jobPersistenceReady = false
+
+  try {
+    jobPersistenceReady = typeof prisma.job.create === 'function' && typeof prisma.job.update === 'function'
+    ;[providerStatuses, completedJobs, appGrantRows, registryModels] = await Promise.all([
+      listProviderCredentialStatuses(),
+      prisma.job.findMany({
+        where: { status: 'completed' },
+        orderBy: { completedAt: 'desc' },
         select: {
           id: true,
           appSlug: true,
-          type: true,
-          subType: true,
+          capability: true,
           status: true,
+          completedAt: true,
+          artifactId: true,
           provider: true,
           model: true,
+          output: true,
           traceId: true,
-          mimeType: true,
-          fileSizeBytes: true,
-          storagePath: true,
-          storageUrl: true,
-          metadata: true,
-          description: true,
-          errorMessage: true,
+          metadataJson: true,
         },
-      }).catch(() => [])
-    : []
+        take: 500,
+      }),
+      prisma.appCapabilityGrant.findMany({
+        where: { capability: { in: getReleaseCandidateCapabilityKeys() } },
+        select: { appSlug: true, capability: true, enabled: true },
+      }),
+      prisma.modelRegistryEntry.findMany({ where: { enabled: true } }),
+    ])
+  } catch {
+    evidenceAvailable = false
+  }
+
+  // Batch-fetch artifact records for jobs that reference them
+  let artifactRecords: ProofArtifact[] = []
+  if (evidenceAvailable) {
+    const artifactIds = completedJobs
+      .map((job) => job.artifactId)
+      .filter((id): id is string => id != null && id.length > 0)
+    try {
+      artifactRecords = artifactIds.length > 0
+        ? await prisma.artifact.findMany({
+            where: { id: { in: artifactIds } },
+            select: {
+              id: true,
+              appSlug: true,
+              type: true,
+              subType: true,
+              status: true,
+              provider: true,
+              model: true,
+              traceId: true,
+              mimeType: true,
+              fileSizeBytes: true,
+              storagePath: true,
+              storageUrl: true,
+              metadata: true,
+              description: true,
+              errorMessage: true,
+            },
+          })
+        : []
+    } catch {
+      evidenceAvailable = false
+    }
+  }
 
   const providers: RuntimeTruthInput['providers'] = {}
   for (const status of providerStatuses) {
@@ -247,15 +327,33 @@ export async function buildAdminRuntimeTruth(app: FastifyInstance): Promise<Runt
     }
   }
 
-  const capabilities = selectCapabilityProofStates(completedJobs, artifactRecords) ?? {}
+  const proofResult = evidenceAvailable
+    ? selectCapabilityProofStates(completedJobs, artifactRecords)
+    : { capabilities: {} as RuntimeTruthInput['capabilities'], evidenceAvailable: false }
+  const capabilities = proofResult.capabilities ?? {}
 
   const queueInfrastructureReady = Boolean(app.redis)
-  for (const capability of ['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'image_generation', 'video_generation', 'music_generation', 'long_form_video'] as CapabilityKey[]) {
+  for (const capability of CAPABILITY_CATALOG.filter((definition) => definition.requiresQueueExecution).map((definition) => definition.key)) {
     capabilities[capability] = {
       ...capabilities[capability],
       infrastructureReady: queueInfrastructureReady,
     }
   }
 
-  return getRuntimeTruth({ providers, capabilities })
+  const longFormComponents = buildLongFormComponentRuntimeState(queueInfrastructureReady, capabilities, jobPersistenceReady)
+  const appGrants: NonNullable<RuntimeTruthInput['appGrants']> = {}
+  for (const grant of appGrantRows) {
+    if (!grant.enabled) continue
+    const existing = appGrants[grant.appSlug] ?? {}
+    existing[grant.capability as CapabilityKey] = true
+    appGrants[grant.appSlug] = existing
+  }
+  const truth = getRuntimeTruth({
+    providers,
+    capabilities,
+    longFormComponents,
+    appGrants,
+    models: normalizeDbModelRecords(registryModels),
+  })
+  return { ...truth, evidenceAvailable: proofResult.evidenceAvailable && evidenceAvailable }
 }

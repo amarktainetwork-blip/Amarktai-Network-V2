@@ -23,13 +23,25 @@ import { adminJobRoutes } from './routes/admin-jobs.js'
 import { adminArtifactRoutes } from './routes/admin-artifacts.js'
 import { adminStudioRoutes } from './routes/admin-studio.js'
 import { adminLongFormVideoRoutes } from './routes/admin-long-form-video.js'
+import { adminPremiumAdvertRoutes } from './routes/admin-premium-advert.js'
 import { adminMusicRoutes } from './routes/admin-music.js'
+import { adminSongRoutes } from './routes/admin-song.js'
 import { adminModelDiscoveryRoutes } from './routes/admin-model-discovery.js'
 import { modelRegistryRoutes } from './routes/model-registry.js'
+import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
+import { appGrantRoutes } from './routes/admin-app-grants.js'
+import { appPlatformRoutes } from './routes/app-platform.js'
+import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
+import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
+import { assertDatabaseSchemaCurrent } from '@amarktai/db'
+import { assertReleaseFixtureModeConfiguration, bootstrapReleaseFixtureProviders } from './lib/release-fixture-mode.js'
 
 async function main(): Promise<void> {
+  assertReleaseFixtureModeConfiguration()
+  await assertDatabaseSchemaCurrent()
+  await bootstrapReleaseFixtureProviders()
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
@@ -41,7 +53,23 @@ async function main(): Promise<void> {
     trustProxy: true,
   })
 
-  await app.register(cors, { origin: true })
+  const allowedCorsOrigins = new Set(
+    (process.env.CORS_ALLOWED_ORIGINS ?? process.env.PUBLIC_API_URL ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  )
+  const allowUnrestrictedDevelopmentCors = process.env.NODE_ENV !== 'production' && allowedCorsOrigins.size === 0
+
+  await app.register(cors, {
+    origin(origin, callback) {
+      if (!origin || allowUnrestrictedDevelopmentCors || allowedCorsOrigins.has(origin)) {
+        callback(null, true)
+        return
+      }
+      callback(new Error('Origin is not allowed by CORS policy'), false)
+    },
+  })
   await app.register(rateLimit, {
     max: RATE_LIMIT_MAX,
     timeWindow: RATE_LIMIT_WINDOW_MS,
@@ -59,14 +87,21 @@ async function main(): Promise<void> {
   await app.register(adminArtifactRoutes)
   await app.register(adminStudioRoutes)
   await app.register(adminLongFormVideoRoutes)
+  await app.register(adminPremiumAdvertRoutes)
   await app.register(adminMusicRoutes)
+  await app.register(adminSongRoutes)
   await app.register(adminModelDiscoveryRoutes)
   await app.register(modelRegistryRoutes)
+  await app.register(streamingChatRoutes)
   await app.register(adminAppConnectionRoutes)
+  await app.register(appGrantRoutes)
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
+  await app.register(appPlatformRoutes)
+  await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
+  await bootstrapInternalDashboardApps(app.log)
 
   try {
     await app.listen({ port: API_PORT, host: API_HOST })

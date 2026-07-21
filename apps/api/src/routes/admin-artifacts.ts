@@ -68,6 +68,8 @@ export async function adminArtifactRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params as { id: string }
     const artifact = await prisma.artifact.findUnique({ where: { id } })
     if (!artifact) return reply.status(404).send({ error: true, message: 'Artifact not found' })
+    const metadata = safeJson(artifact.metadata)
+    const durationSeconds = positiveNumber(metadata.duration) ?? positiveNumber(metadata.totalDurationSeconds)
 
     return reply.send({
       id: artifact.id,
@@ -84,9 +86,33 @@ export async function adminArtifactRoutes(app: FastifyInstance): Promise<void> {
       fileSizeBytes: artifact.fileSizeBytes || null,
       previewable: artifact.previewable,
       downloadable: artifact.downloadable,
+      media: {
+        durationSeconds,
+        width: positiveNumber(metadata.width),
+        height: positiveNumber(metadata.height),
+        finalVideoValidated: metadata.finalVideoValidated === true,
+        finalAudioValidated: metadata.finalAudioValidated === true,
+        voiceoverIncluded: metadata.voiceoverIncluded === true,
+        subtitlesIncluded: metadata.subtitlesIncluded === true,
+        musicBedIncluded: metadata.musicBedIncluded === true,
+      },
       errorMessage: artifact.errorMessage || null,
       createdAt: artifact.createdAt?.toISOString(),
       updatedAt: artifact.updatedAt?.toISOString(),
     })
   })
+}
+
+function safeJson(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'string' || !value.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function positiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }

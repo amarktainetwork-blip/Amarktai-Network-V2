@@ -1,26 +1,36 @@
-import { CAPABILITY_CATALOG, CAPABILITY_KEYS, type CapabilityKey } from './capabilities.js'
-import { MODEL_CATALOGUE, type ModelRecord } from './model-catalog.js'
-import { PROVIDER_KEYS, type ProviderKey } from './providers.js'
-import { routeBrain, type BrainRouterProviderState, type RoutingMode } from './brain-router.js'
-import { getMusicCapabilityStatus } from './music-generation.js'
+import { ATOMIC_CAPABILITY_KEYS, CAPABILITY_BY_KEY, CAPABILITY_KEYS, COMPOSITE_CAPABILITY_KEYS, type CapabilityKey } from './capabilities.js'
+import { EXECUTOR_REGISTRATIONS, getExecutorRegistrations } from './executor-registry.js'
+import { MODEL_CATALOGUE, isModelRouteCompatible, type ModelRecord } from './model-catalog.js'
+import {
+  APPROVED_PROVIDER_DEFINITIONS,
+  CODING_ONLY_PROVIDERS,
+  RUNTIME_EXECUTION_PROVIDERS,
+  type ProviderKey,
+  type RuntimeExecutionProvider,
+} from './providers.js'
+import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
+import { getDashboardAppSlug, getReleaseCandidateCapabilityKeys } from './dashboard-apps.js'
 
-export const RUNTIME_EXECUTION_PROVIDERS = ['genx', 'groq', 'together', 'deepinfra'] as const
-export type RuntimeExecutionProvider = (typeof RUNTIME_EXECUTION_PROVIDERS)[number]
-
-export const CODING_ONLY_PROVIDERS = ['mimo'] as const
+export { CODING_ONLY_PROVIDERS, RUNTIME_EXECUTION_PROVIDERS }
+export type { RuntimeExecutionProvider }
 
 export const CAPABILITY_RUNTIME_CLASSIFICATIONS = [
-  'LIVE_PROVEN',
-  'EXECUTABLE_NOT_LIVE_PROVEN',
-  'IMPLEMENTED_NOT_CONFIGURED',
-  'PARTIAL',
   'CATALOGUE_ONLY',
+  'CLIENT_PRESENT',
+  'ADAPTER_PRESENT',
+  'EXECUTOR_PRESENT',
+  'LOCALLY_PROVEN',
+  'EXECUTABLE_NOT_LIVE_PROVEN',
+  'LIVE_PROVEN',
   'POLICY_RESTRICTED',
   'BLOCKED',
-  'MISSING',
+  'NOT_IMPLEMENTED',
 ] as const
 
 export type CapabilityRuntimeClassification = (typeof CAPABILITY_RUNTIME_CLASSIFICATIONS)[number]
+
+export const CAPABILITY_OPERATIONAL_STATES = ['defined', 'compatible_route_available', 'executable', 'live_proven', 'setup_required', 'account_access_required', 'provider_temporarily_unavailable', 'contract_unknown', 'deprecated'] as const
+export type CapabilityOperationalState = (typeof CAPABILITY_OPERATIONAL_STATES)[number]
 
 export interface ProviderRuntimeStateInput {
   enabled?: boolean
@@ -39,6 +49,7 @@ export interface CapabilityRuntimeStateInput {
   configured?: boolean
   infrastructureReady?: boolean
   policyAllowed?: boolean
+  locallyProven?: boolean
   liveProven?: boolean
   lastProofAt?: string | Date | null
   routeImplemented?: boolean
@@ -49,12 +60,56 @@ export interface CapabilityRuntimeStateInput {
 export interface RuntimeTruthInput {
   providers?: Partial<Record<ProviderKey, ProviderRuntimeStateInput>>
   capabilities?: Partial<Record<CapabilityKey, CapabilityRuntimeStateInput>>
-  routingMode?: RoutingMode
+  longFormComponents?: Partial<LongFormComponentRuntimeState>
+  appGrants?: Partial<Record<string, Partial<Record<CapabilityKey, boolean>>>>
+  localStaticEvidence?: Partial<Record<CapabilityKey, boolean>>
   generatedAt?: string
+  liveProvenRoutes?: ReadonlySet<string>
+  /** Canonical persisted registry projection. Static catalogue is the deterministic fallback. */
+  models?: readonly ModelRecord[]
+}
+
+export interface ReleaseReadinessProjection {
+  capability: CapabilityKey
+  appSlug: string
+  releaseCandidate: boolean
+  catalogued: boolean
+  clientPresent: boolean
+  executorPresent: boolean
+  workflowPresent: boolean
+  schemaPresent: boolean
+  appGrantPresent: boolean
+  infrastructureRequired: string[]
+  locallyProven: boolean
+  liveProven: boolean
+  readyForDashboardExecution: boolean
+  blockedReasons: string[]
+}
+
+export interface LongFormComponentRuntimeState {
+  plannerReady: boolean
+  durableParentReady: boolean
+  durablePlanReady: boolean
+  sceneLinkageReady: boolean
+  sceneSubmissionReady: boolean
+  sceneExecutionReady: boolean
+  retryResumeReady: boolean
+  progressTrackingReady: boolean
+  batchStructureReady: boolean
+  assemblyHandoffReady: boolean
+  videoOnlyAssemblyReady: boolean
+  voiceoverReady: boolean
+  subtitlesReady: boolean
+  musicBedReady: boolean
+  fullMultimediaReady: boolean
 }
 
 export interface ProviderRuntimeTruth {
   provider: ProviderKey
+  displayName: string
+  runtimeRole: string
+  credentialEnvironmentKey: string
+  discoveryPolicy: string
   known: true
   runtimeExecutionProvider: boolean
   codingOnly: boolean
@@ -70,6 +125,7 @@ export interface ProviderRuntimeTruth {
   fallbackModel: string
   credentialUsagePolicy: string
   supportedCapabilities: CapabilityKey[]
+  registeredExecutorCapabilities: CapabilityKey[]
   discoveredModelCount: number
   eligibleModelCount: number
   liveProvenCapabilities: CapabilityKey[]
@@ -85,16 +141,30 @@ export interface CapabilityRuntimeTruth {
   category: string
   outputType: string
   artifactRequired: boolean
+  artifactType: string | null
+  orchestrated: boolean
+  governed: boolean
+  adult: boolean
+  requiresSourceArtifact: boolean
+  requiresQueueExecution: boolean
+  inputContractReference: string
+  outputContractReference: string
   policyRequirement: string
   schemaKey: string
   studioMode: string
   dashboardType: string
   classification: CapabilityRuntimeClassification
+  operationalState: CapabilityOperationalState
+  kind: 'atomic' | 'composite'
   catalogueKnown: boolean
   discoveredModels: string[]
   discoveredModelCount: number
   clientImplemented: boolean
+  adapterPresent: boolean
   executorRegistered: boolean
+  executorRegistrationIds: string[]
+  requestShapeKnown: boolean
+  responseShapeKnown: boolean
   routeImplemented: boolean
   queuePathImplemented: boolean
   artifactPathImplemented: boolean
@@ -103,6 +173,7 @@ export interface CapabilityRuntimeTruth {
   infrastructureReady: boolean
   policyAllowed: boolean
   executableNow: boolean
+  locallyProven: boolean
   liveProven: boolean
   lastProofAt: string | null
   eligibleProviders: ProviderKey[]
@@ -110,6 +181,7 @@ export interface CapabilityRuntimeTruth {
     provider: ProviderKey
     modelId: string
     displayName: string
+    executorId: string
     preferred: boolean
     fallback: boolean
     liveProven: boolean
@@ -143,143 +215,87 @@ export interface RuntimeTruth {
   providers: ProviderRuntimeTruth[]
   capabilities: CapabilityRuntimeTruth[]
   countsByClassification: Record<CapabilityRuntimeClassification, number>
+  releaseReadiness: ReleaseReadinessProjection[]
+  releaseCandidateCapabilities: CapabilityKey[]
+  metrics: RuntimeTruthMetrics
 }
 
-const TEXT_ROUTER_CAPABILITIES = new Set<CapabilityKey>([
-  'chat',
-  'reasoning',
-  'code',
-  'summarization',
-  'translation',
-  'classification',
-  'extraction',
-  'structured_output',
-])
-
-const MEDIA_WORKER_CAPABILITIES = new Set<CapabilityKey>([
-  'image_generation',
-  'video_generation',
-  'music_generation',
-])
-
-const PARTIAL_SOURCE_CAPABILITIES = new Set<CapabilityKey>([
-  'long_form_video',
-  'tts',
-  'stt',
-  'embeddings',
-  'research',
-  'rag_ingest',
-  'rag_search',
-])
-
-const ADULT_CAPABILITIES = new Set<CapabilityKey>([
-  'adult_text',
-  'adult_image',
-  'adult_voice',
-  'adult_avatar',
-  'adult_video',
-])
-
-const ARTIFACT_CAPABILITIES = new Set<CapabilityKey>(
-  CAPABILITY_CATALOG.filter((capability) => capability.artifactRequired).map((capability) => capability.key),
-)
-
-const ROUTE_IMPLEMENTED_CAPABILITIES = new Set<CapabilityKey>([
-  ...TEXT_ROUTER_CAPABILITIES,
-  ...MEDIA_WORKER_CAPABILITIES,
-  'long_form_video',
-])
-
-const QUEUE_CAPABILITIES = new Set<CapabilityKey>([
-  ...MEDIA_WORKER_CAPABILITIES,
-  'long_form_video',
-])
-
-const ARTIFACT_PATH_CAPABILITIES = new Set<CapabilityKey>([
-  'image_generation',
-  'video_generation',
-  'music_generation',
-  'long_form_video',
-])
+export interface RuntimeTruthMetrics {
+  atomicCapabilityCount: number
+  compositeCapabilityCount: number
+  callableCapabilityCount: number
+  workflowTemplateCount: number
+  discoveredModelCount: number
+  liveDiscoveredModelCount: number
+  compatibleModelCount: number
+  executableModelCount: number
+  discoveredRouteCount: number
+  compatibleRouteCount: number
+  executableRouteCount: number
+  liveProvenRouteCount: number
+  liveProvenAtomicCapabilityCount: number
+  liveProvenCompositeCapabilityCount: number
+  deprecatedModelCount: number
+  accountInaccessibleModelCount: number
+  contractUnknownRouteCount: number
+}
 
 function toIso(value: string | Date | null | undefined): string | null {
   if (!value) return null
   return value instanceof Date ? value.toISOString() : value
 }
 
-function isRuntimeProvider(provider: ProviderKey): provider is RuntimeExecutionProvider {
-  return (RUNTIME_EXECUTION_PROVIDERS as readonly string[]).includes(provider)
-}
-
-function isModelSourceCompatible(model: ModelRecord): boolean {
-  return model.status !== 'blocked'
-    && model.policyRestrictedByApp !== true
-    && model.endpointShapeKnown !== false
-    && model.requestShapeKnown !== false
-    && model.responseShapeKnown !== false
-    && model.providerClientExists !== false
-    && model.workerExecutorExists !== false
-    && (!model.supportsArtifacts || model.artifactPersistenceExists !== false)
-}
-
 function modelIds(models: readonly ModelRecord[]): string[] {
   return [...new Set(models.map((model) => `${model.provider}/${model.modelId}`))]
 }
 
-function uniqueProviders(models: readonly ModelRecord[]): ProviderKey[] {
-  return [...new Set(models.map((model) => model.provider))]
+function runtimeModels(input: RuntimeTruthInput): readonly ModelRecord[] {
+  return input.models ?? MODEL_CATALOGUE
 }
 
-function defaultCapabilityRuntime(capability: CapabilityKey): CapabilityRuntimeStateInput {
-  return {
-    configured: undefined,
-    infrastructureReady: false,
-    policyAllowed: !ADULT_CAPABILITIES.has(capability),
-    liveProven: false,
-    lastProofAt: null,
-    routeImplemented: undefined,
-    queuePathImplemented: undefined,
-    artifactPathImplemented: undefined,
-  }
+function catalogueModelsForCapability(capability: CapabilityKey, models: readonly ModelRecord[]): ModelRecord[] {
+  return models.filter((model) => model.capabilities.includes(capability))
 }
 
-function providerStateForRouter(providers: ProviderRuntimeTruth[]): Partial<Record<ProviderKey, BrainRouterProviderState>> {
-  return Object.fromEntries(providers.map((provider) => [
-    provider.provider,
-    {
-      disabled: !provider.enabled,
-      runtimeRestricted: !provider.runtimeExecutionProvider || !provider.runtimeEnabled || provider.codingOnly,
-      configured: provider.configured,
-      infrastructureReady: true,
-      policyAllowed: provider.runtimeExecutionProvider && !provider.codingOnly,
-    },
-  ])) as Partial<Record<ProviderKey, BrainRouterProviderState>>
+function operationalState(input: { liveProven: boolean; executableNow: boolean; compatibleRoutes: number; configured: boolean; infrastructureReady: boolean; requestShapeKnown: boolean; responseShapeKnown: boolean }): CapabilityOperationalState {
+  if (input.liveProven) return 'live_proven'
+  if (input.executableNow) return 'executable'
+  if (input.compatibleRoutes > 0 && input.configured && !input.infrastructureReady) return 'provider_temporarily_unavailable'
+  if (input.compatibleRoutes > 0 && !input.configured) return 'setup_required'
+  if (!input.requestShapeKnown || !input.responseShapeKnown) return 'contract_unknown'
+  if (input.compatibleRoutes > 0) return 'compatible_route_available'
+  return 'defined'
 }
 
 function classifyCapability(truth: Omit<CapabilityRuntimeTruth, 'classification'>): CapabilityRuntimeClassification {
-  if (!truth.catalogueKnown && truth.blockedReasons.includes('capability_not_registered')) return 'MISSING'
   if (!truth.policyAllowed) return 'POLICY_RESTRICTED'
   if (truth.liveProven) return 'LIVE_PROVEN'
+  if (truth.executableNow && truth.locallyProven) return 'LOCALLY_PROVEN'
   if (truth.executableNow) return 'EXECUTABLE_NOT_LIVE_PROVEN'
-  if (truth.implementationReady && !truth.configured) return 'IMPLEMENTED_NOT_CONFIGURED'
-  if (truth.implementationReady && truth.configured && !truth.infrastructureReady) return 'BLOCKED'
-  if (truth.clientImplemented || truth.executorRegistered || truth.routeImplemented) return 'PARTIAL'
-  if (truth.catalogueKnown) return 'CATALOGUE_ONLY'
-  return 'MISSING'
+  if (truth.executorRegistered && truth.configured && !truth.infrastructureReady) return 'BLOCKED'
+  if (truth.executorRegistered) return 'EXECUTOR_PRESENT'
+  if (truth.adapterPresent) return 'ADAPTER_PRESENT'
+  if (truth.clientImplemented) return 'CLIENT_PRESENT'
+  if (truth.discoveredModelCount > 0) return 'CATALOGUE_ONLY'
+  return 'NOT_IMPLEMENTED'
 }
 
 export function getProviderRuntimeTruth(input: RuntimeTruthInput = {}): ProviderRuntimeTruth[] {
-  return PROVIDER_KEYS.map((provider) => {
+  const models = runtimeModels(input)
+  return APPROVED_PROVIDER_DEFINITIONS.map((definition) => {
+    const provider = definition.key
     const state = input.providers?.[provider]
-    const providerModels = MODEL_CATALOGUE.filter((model) => model.provider === provider)
-    const runtimeExecutionProvider = isRuntimeProvider(provider)
-    const codingOnly = provider === 'mimo'
-    const enabled = codingOnly ? false : state?.enabled === true
-    const runtimeEnabled = runtimeExecutionProvider && !codingOnly && state?.runtimeEnabled !== false && enabled
+    const providerModels = models.filter((model) => model.provider === provider)
+    const runtimeExecutionProvider = definition.backendExecutionAllowed
+    const codingOnly = definition.codingOnly
+    const enabled = runtimeExecutionProvider && state?.enabled === true
+    const runtimeEnabled = enabled && state?.runtimeEnabled !== false
     const credentialConfigured = state?.configured === true
     const configured = runtimeEnabled && credentialConfigured
+    const registrations = EXECUTOR_REGISTRATIONS.filter((entry) => entry.provider === provider)
+    const registeredExecutorCapabilities = [...new Set(registrations.map((entry) => entry.capability))]
     const supportedCapabilities = [...new Set(providerModels.flatMap((model) => model.capabilities))]
-    const eligibleModelCount = providerModels.filter((model) => runtimeExecutionProvider && !codingOnly && isModelSourceCompatible(model)).length
+    const eligibleModelCount = providerModels.filter((model) => model.capabilities.some((capability) => isModelRouteCompatible(model, capability))).length
     const blockers: string[] = []
     const policyRestrictions: string[] = []
 
@@ -292,6 +308,10 @@ export function getProviderRuntimeTruth(input: RuntimeTruthInput = {}): Provider
 
     return {
       provider,
+      displayName: definition.displayName,
+      runtimeRole: definition.runtimeRole,
+      credentialEnvironmentKey: definition.credentialEnvKey,
+      discoveryPolicy: definition.discoveryPolicy,
       known: true,
       runtimeExecutionProvider,
       codingOnly,
@@ -307,9 +327,13 @@ export function getProviderRuntimeTruth(input: RuntimeTruthInput = {}): Provider
       fallbackModel: state?.fallbackModel ?? '',
       credentialUsagePolicy: codingOnly ? 'coding_tools_only' : state?.credentialUsagePolicy ?? 'backend_runtime_allowed',
       supportedCapabilities,
+      registeredExecutorCapabilities,
       discoveredModelCount: providerModels.filter((model) => model.discoveredModel || model.docsKnown || model.liveDiscovered).length,
       eligibleModelCount,
-      liveProvenCapabilities: [],
+      liveProvenCapabilities: CAPABILITY_KEYS.filter((capability) =>
+        input.capabilities?.[capability]?.liveProven === true
+        && registrations.some((entry) => entry.capability === capability),
+      ),
       blockers,
       policyRestrictions,
     }
@@ -317,101 +341,102 @@ export function getProviderRuntimeTruth(input: RuntimeTruthInput = {}): Provider
 }
 
 export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): CapabilityRuntimeTruth[] {
+  const models = runtimeModels(input)
   const providers = getProviderRuntimeTruth(input)
   const providerMap = new Map(providers.map((provider) => [provider.provider, provider]))
-  const routerStates = providerStateForRouter(providers)
 
   return CAPABILITY_KEYS.map((capability) => {
-    const runtime = { ...defaultCapabilityRuntime(capability), ...input.capabilities?.[capability] }
-    const capabilityDef = CAPABILITY_CATALOG.find((entry) => entry.key === capability)
-    const candidates = MODEL_CATALOGUE.filter((model) => model.capabilities.includes(capability))
-    const sourceCompatible = candidates.filter((model) => isRuntimeProvider(model.provider) && isModelSourceCompatible(model))
-    const eligibleByImplementation = sourceCompatible.filter((model) => {
-      if (TEXT_ROUTER_CAPABILITIES.has(capability)) return model.provider === 'groq' || model.provider === 'deepinfra'
-      if (capability === 'image_generation') return model.provider === 'together'
-      if (capability === 'video_generation') return model.provider === 'genx'
-      if (capability === 'music_generation') return model.provider === 'genx'
-      return false
+    const definition = CAPABILITY_BY_KEY[capability]
+    const runtime = input.capabilities?.[capability] ?? {}
+    const catalogueModels = catalogueModelsForCapability(capability, models)
+    const registrations = getExecutorRegistrations(capability)
+    const executableModels = catalogueModels.flatMap((model) => {
+      const registration = registrations.find((entry) => entry.provider === model.provider)
+      return registration && isModelRouteCompatible(model, capability) ? [{ model, registration }] : []
     })
-
-    const catalogueKnown = candidates.length > 0
-    const clientImplemented = TEXT_ROUTER_CAPABILITIES.has(capability)
-      || MEDIA_WORKER_CAPABILITIES.has(capability)
-      || eligibleByImplementation.some((model) => model.providerClientExists === true || model.executable === true)
-    const executorRegistered = TEXT_ROUTER_CAPABILITIES.has(capability)
-      || MEDIA_WORKER_CAPABILITIES.has(capability)
-    const routeImplemented = runtime.routeImplemented ?? ROUTE_IMPLEMENTED_CAPABILITIES.has(capability)
-    const queueRequired = QUEUE_CAPABILITIES.has(capability)
-    const queuePathImplemented = runtime.queuePathImplemented ?? (!queueRequired || MEDIA_WORKER_CAPABILITIES.has(capability) || capability === 'long_form_video')
-    const artifactRequired = capabilityDef?.artifactRequired === true || ARTIFACT_CAPABILITIES.has(capability)
-    const artifactPathImplemented = runtime.artifactPathImplemented ?? (!artifactRequired || ARTIFACT_PATH_CAPABILITIES.has(capability))
-    const eligibleProviders = uniqueProviders(eligibleByImplementation)
-    const configured = runtime.configured ?? eligibleProviders.some((provider) => providerMap.get(provider)?.configured === true)
-    const policyAllowed = runtime.policyAllowed ?? !ADULT_CAPABILITIES.has(capability)
+    const eligibleProviders = [...new Set(executableModels.map(({ model }) => model.provider))]
+    const registeredProviders = [...new Set(registrations.map((registration) => registration.provider))]
+    const configured = runtime.configured ?? registeredProviders.some((provider) => providerMap.get(provider)?.configured === true)
     const infrastructureReady = runtime.infrastructureReady === true
+    const policyAllowed = runtime.policyAllowed ?? !definition.adult
+    const clientImplemented = registrations.length > 0
+    const adapterPresent = registrations.length > 0
+    const executorRegistered = registrations.length > 0
+    const requestShapeKnown = registrations.length > 0
+    const responseShapeKnown = registrations.length > 0
+    const routeImplemented = runtime.routeImplemented ?? registrations.length > 0
+    const queuePathImplemented = runtime.queuePathImplemented ?? (registrations.length > 0 && definition.requiresQueueExecution)
+    const artifactPathImplemented = runtime.artifactPathImplemented
+      ?? (registrations.length > 0 && (!definition.artifactRequired || registrations.every((entry) => entry.artifactOutput !== null)))
     const implementationReady = clientImplemented
+      && adapterPresent
       && executorRegistered
+      && requestShapeKnown
+      && responseShapeKnown
       && routeImplemented
-      && queuePathImplemented
-      && artifactPathImplemented
-      && eligibleByImplementation.length > 0
-    const executableNow = implementationReady && configured && infrastructureReady && policyAllowed && eligibleProviders.length > 0
-    const liveProven = runtime.liveProven === true
+      && (!definition.requiresQueueExecution || queuePathImplemented)
+      && (!definition.artifactRequired || artifactPathImplemented)
+    const executableNow = implementationReady && executableModels.length > 0 && configured && infrastructureReady && policyAllowed
+    const locallyProven = runtime.locallyProven === true
+    const liveProven = runtime.liveProven === true && executableNow
     const lastProofAt = toIso(runtime.lastProofAt)
-    const routerDecision = routeBrain({
-      capability,
-      routingMode: input.routingMode ?? 'balanced',
-      providerStates: routerStates,
-    })
-    const preferredProvider = routerDecision.selectedProvider
-    const preferredModel = routerDecision.selectedModel
 
-    const eligibleModels = eligibleByImplementation.map((model, index) => ({
+    const eligibleModels = executableModels.map(({ model, registration }, index) => ({
       provider: model.provider,
       modelId: model.modelId,
       displayName: model.displayName,
-      preferred: model.provider === preferredProvider && model.modelId === preferredModel,
+      executorId: registration.id,
+      preferred: index === 0,
       fallback: index > 0,
-      liveProven: liveProven && model.provider === preferredProvider && model.modelId === preferredModel,
+      liveProven: liveProven && index === 0,
     }))
 
     const blockedReasons: string[] = []
-    if (!capabilityDef) blockedReasons.push('capability_not_registered')
-    if (!catalogueKnown) blockedReasons.push('no_compatible_discovered_model')
+    if (catalogueModels.length === 0) blockedReasons.push('no_catalogued_model_claim')
     if (!clientImplemented) blockedReasons.push('provider_client_missing')
+    if (!adapterPresent) blockedReasons.push('adapter_missing')
     if (!executorRegistered) blockedReasons.push('executor_missing')
+    if (!requestShapeKnown) blockedReasons.push('request_shape_unknown')
+    if (!responseShapeKnown) blockedReasons.push('response_shape_unknown')
     if (!routeImplemented) blockedReasons.push('route_missing')
-    if (queueRequired && !queuePathImplemented) blockedReasons.push('queue_path_missing')
-    if (artifactRequired && !artifactPathImplemented) blockedReasons.push('artifact_support_missing')
-    if (eligibleByImplementation.length === 0 && catalogueKnown) blockedReasons.push('no_executable_provider_model_path')
+    if (definition.requiresQueueExecution && !queuePathImplemented) blockedReasons.push('queue_path_missing')
+    if (definition.artifactRequired && !artifactPathImplemented) blockedReasons.push('artifact_support_missing')
+    if (registrations.length > 0 && executableModels.length === 0) blockedReasons.push('no_executor_compatible_catalogued_model')
     if (!configured) blockedReasons.push('credentials_missing')
     if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
-    if (!policyAllowed) blockedReasons.push('provider_policy_restriction')
+    if (!policyAllowed) blockedReasons.push('policy_restricted')
     if (executableNow && !liveProven) blockedReasons.push('live_proof_missing')
-    if (PARTIAL_SOURCE_CAPABILITIES.has(capability) && !implementationReady) blockedReasons.push('partial_implementation')
-
-    // Orchestrated capabilities: add component-level missing reasons
-    if (capability === 'long_form_video') {
-      blockedReasons.push('voiceover_missing', 'subtitles_missing', 'music_bed_missing', 'full_multimedia_not_ready')
-    }
 
     const truthBase: Omit<CapabilityRuntimeTruth, 'classification'> = {
       capability,
-      label: capabilityDef?.label ?? capability,
-      description: capabilityDef?.description ?? '',
-      family: capabilityDef?.family ?? 'Unsorted',
-      category: capabilityDef?.category ?? 'system_ops',
-      outputType: capabilityDef?.outputType ?? 'text',
-      artifactRequired,
-      policyRequirement: capabilityDef?.policyRequirement ?? 'standard',
-      schemaKey: capabilityDef?.schemaKey ?? capability,
-      studioMode: capabilityDef?.studioMode ?? capability,
-      dashboardType: capabilityDef?.dashboardType ?? capability,
-      catalogueKnown,
-      discoveredModels: modelIds(candidates),
-      discoveredModelCount: candidates.length,
+      label: definition.label,
+      description: definition.description,
+      family: definition.family,
+      category: definition.category,
+      outputType: definition.outputType,
+      artifactRequired: definition.artifactRequired,
+      artifactType: definition.artifactType,
+      orchestrated: definition.orchestrated,
+      governed: definition.governed,
+      adult: definition.adult,
+      requiresSourceArtifact: definition.requiresSourceArtifact,
+      requiresQueueExecution: definition.requiresQueueExecution,
+      inputContractReference: definition.inputContractReference,
+      outputContractReference: definition.outputContractReference,
+      policyRequirement: definition.policyRequirement,
+      schemaKey: definition.schemaKey,
+      studioMode: definition.studioMode,
+      dashboardType: definition.dashboardType,
+      kind: definition.kind,
+      catalogueKnown: true,
+      discoveredModels: modelIds(catalogueModels),
+      discoveredModelCount: catalogueModels.length,
       clientImplemented,
+      adapterPresent,
       executorRegistered,
+      executorRegistrationIds: [...new Set(registrations.map((entry) => entry.id))],
+      requestShapeKnown,
+      responseShapeKnown,
       routeImplemented,
       queuePathImplemented,
       artifactPathImplemented,
@@ -420,95 +445,43 @@ export function getCapabilityRuntimeTruth(input: RuntimeTruthInput = {}): Capabi
       infrastructureReady,
       policyAllowed,
       executableNow,
+      locallyProven,
       liveProven,
       lastProofAt,
       eligibleProviders,
       eligibleModels,
       blockedReasons: [...new Set(blockedReasons)],
       remainingWork: [...new Set(blockedReasons.filter((reason) => reason !== 'live_proof_missing'))],
-    }
-
-    const withClassification: CapabilityRuntimeTruth = {
-      ...truthBase,
-      classification: classifyCapability(truthBase),
-    }
-
-    if (capability === 'music_generation') {
-      const music = getMusicCapabilityStatus({
-        configured: withClassification.configured,
-        infrastructureReady: withClassification.infrastructureReady,
-        policyAllowed: withClassification.policyAllowed,
-        liveProven: withClassification.liveProven,
-        lastProofAt: withClassification.lastProofAt,
-      })
-      return {
-        ...withClassification,
-        catalogueKnown: music.catalogueKnown,
-        clientImplemented: music.clientImplemented,
-        executorRegistered: music.executorRegistered,
-        routeImplemented: music.routeImplemented,
-        queuePathImplemented: music.queuePathImplemented,
-        artifactPathImplemented: music.artifactPathImplemented,
-        implementationReady: music.implementationReady,
-        executableNow: music.executableNow,
-        blockedReasons: music.blockedReasons.length > 0 ? music.blockedReasons : withClassification.blockedReasons,
-        remainingWork: music.blockedReasons,
-        classification: classifyCapability({
-          ...withClassification,
-          catalogueKnown: music.catalogueKnown,
-          clientImplemented: music.clientImplemented,
-          executorRegistered: music.executorRegistered,
-          routeImplemented: music.routeImplemented,
-          queuePathImplemented: music.queuePathImplemented,
-          artifactPathImplemented: music.artifactPathImplemented,
-          implementationReady: music.implementationReady,
-          executableNow: music.executableNow,
-          blockedReasons: music.blockedReasons,
-          remainingWork: music.blockedReasons,
-        }),
-      }
+      operationalState: operationalState({ liveProven, executableNow, compatibleRoutes: executableModels.length, configured, infrastructureReady, requestShapeKnown, responseShapeKnown }),
     }
 
     if (capability === 'long_form_video') {
-      const longFormTruth: CapabilityRuntimeTruth = {
-        ...withClassification,
-        plannerReady: true,
-        durableParentReady: true,
-        durablePlanReady: true,
-        sceneLinkageReady: true,
-        sceneSubmissionReady: true,
-        sceneExecutionReady: true,
-        retryResumeReady: true,
-        progressTrackingReady: true,
-        batchStructureReady: true,
-        assemblyHandoffReady: true,
-        videoOnlyAssemblyReady: true,
-        voiceoverReady: false,
-        subtitlesReady: false,
-        musicBedReady: false,
-        fullMultimediaReady: false,
-        liveProven: false,
-        executableNow: false,
-        blockedReasons: [...new Set([
-          ...withClassification.blockedReasons,
-          'voiceover_missing',
-          'subtitles_missing',
-          'music_bed_missing',
-          'full_multimedia_not_ready',
-        ])],
-      }
-      return {
-        ...longFormTruth,
-        classification: classifyCapability(longFormTruth),
-        remainingWork: longFormTruth.blockedReasons.filter((reason) => reason !== 'live_proof_missing'),
-      }
+      const components = input.longFormComponents ?? {}
+      Object.assign(truthBase, {
+        plannerReady: components.plannerReady === true,
+        durableParentReady: components.durableParentReady === true,
+        durablePlanReady: components.durablePlanReady === true,
+        sceneLinkageReady: components.sceneLinkageReady === true,
+        sceneSubmissionReady: components.sceneSubmissionReady === true,
+        sceneExecutionReady: components.sceneExecutionReady === true,
+        retryResumeReady: components.retryResumeReady === true,
+        progressTrackingReady: components.progressTrackingReady === true,
+        batchStructureReady: components.batchStructureReady === true,
+        assemblyHandoffReady: components.assemblyHandoffReady === true,
+        videoOnlyAssemblyReady: components.videoOnlyAssemblyReady === true,
+        voiceoverReady: components.voiceoverReady === true,
+        subtitlesReady: components.subtitlesReady === true,
+        musicBedReady: components.musicBedReady === true,
+        fullMultimediaReady: components.fullMultimediaReady === true,
+      })
     }
 
-    return withClassification
+    return { ...truthBase, classification: classifyCapability(truthBase) }
   })
 }
 
 export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
+  const models = runtimeModels(input)
   const providers = getProviderRuntimeTruth(input)
   const capabilities = getCapabilityRuntimeTruth(input)
   const countsByClassification = Object.fromEntries(
@@ -517,6 +490,102 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
       capabilities.filter((capability) => capability.classification === classification).length,
     ]),
   ) as Record<CapabilityRuntimeClassification, number>
+  const releaseCandidateCapabilities = getReleaseCandidateCapabilityKeys()
+  const releaseCandidateSet = new Set(releaseCandidateCapabilities)
+  const capabilityMap = new Map(capabilities.map((capability) => [capability.capability, capability]))
+  // The base durable workflow is executable with video scenes and FFmpeg.
+  // Voiceover and music remain optional component paths, not prerequisites for
+  // the first video-only long-form execution profile.
+  const longFormDependencies = ['video_generation']
+    .map((capability) => capabilityMap.get(capability as CapabilityKey))
+    .filter((capability): capability is CapabilityRuntimeTruth => Boolean(capability))
+
+  const releaseReadiness: ReleaseReadinessProjection[] = capabilities.map((capability) => {
+    const releaseCandidate = releaseCandidateSet.has(capability.capability)
+    const workflowPresent = DURABLE_WORKFLOW_REGISTRATIONS.some((entry) => entry.capability === capability.capability)
+    const schemaPresent = Boolean(capability.inputContractReference && capability.outputContractReference && capability.schemaKey)
+    const clientPresent = capability.clientImplemented || workflowPresent
+    const executorPresent = capability.executorRegistered
+    const appSlug = getDashboardAppSlug(capability.capability)
+    const workflow = DURABLE_WORKFLOW_REGISTRATIONS.find((entry) => entry.capability === capability.capability)
+    const requiredGrantCapabilities: readonly CapabilityKey[] = workflow
+      ? [capability.capability, ...workflow.requiredCapabilities]
+      : [capability.capability]
+    const appGrantPresent = requiredGrantCapabilities.every((required) => input.appGrants?.[appSlug]?.[required] === true)
+    const infrastructureRequired = [
+      'mariadb',
+      ...(capability.requiresQueueExecution || workflowPresent ? ['redis', 'worker'] : []),
+      ...(capability.artifactRequired ? ['artifact_storage'] : []),
+      ...(workflowPresent ? ['ffmpeg'] : []),
+    ]
+    const workflowReady = workflowPresent
+      && input.longFormComponents?.videoOnlyAssemblyReady === true
+      && longFormDependencies.every((dependency) => dependency.configured && dependency.infrastructureReady)
+    const implementationReady = workflowPresent ? workflowReady : capability.implementationReady
+    const configured = workflowPresent
+      ? longFormDependencies.every((dependency) => dependency.configured)
+      : capability.configured
+    const infrastructureReady = workflowPresent
+      ? input.longFormComponents?.videoOnlyAssemblyReady === true
+      : capability.infrastructureReady
+    const locallyProven = input.localStaticEvidence?.[capability.capability] === true
+    const blockedReasons: string[] = []
+    if (!releaseCandidate) blockedReasons.push('no_callable_executor_or_durable_workflow')
+    if (!clientPresent) blockedReasons.push('client_missing')
+    if (!executorPresent && !workflowPresent) blockedReasons.push('executor_or_workflow_missing')
+    if (!schemaPresent) blockedReasons.push('schema_missing')
+    if (!configured) blockedReasons.push('provider_configuration_missing')
+    if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
+    if (!capability.policyAllowed) blockedReasons.push('policy_restricted')
+    if (releaseCandidate && implementationReady && !capability.liveProven) blockedReasons.push('live_proof_missing')
+
+    return {
+      capability: capability.capability,
+      appSlug,
+      releaseCandidate,
+      catalogued: capability.catalogueKnown,
+      clientPresent,
+      executorPresent,
+      workflowPresent,
+      schemaPresent,
+      appGrantPresent,
+      infrastructureRequired: [...new Set(infrastructureRequired)],
+      locallyProven,
+      liveProven: capability.liveProven,
+      readyForDashboardExecution: releaseCandidate
+        && implementationReady
+        && schemaPresent
+        && configured
+        && infrastructureReady
+        && capability.policyAllowed,
+      blockedReasons: [...new Set(blockedReasons)],
+    }
+  })
+
+  const discoveredRoutes = models.flatMap((model) => model.capabilities.map((capability) => ({ model, capability })))
+  const compatibleRoutes = discoveredRoutes.filter(({ model, capability }) => isModelRouteCompatible(model, capability))
+  const liveRoutes = compatibleRoutes.filter(({ model, capability }) => input.liveProvenRoutes?.has(`${model.provider}/${model.modelId}/${capability}`) === true)
+  const compatibleModels = new Set(compatibleRoutes.map(({ model }) => `${model.provider}/${model.modelId}`))
+  const executableRouteCount = capabilities.reduce((total, capability) => total + (capability.executableNow ? capability.eligibleModels.length : 0), 0)
+  const metrics: RuntimeTruthMetrics = {
+    atomicCapabilityCount: ATOMIC_CAPABILITY_KEYS.length,
+    compositeCapabilityCount: COMPOSITE_CAPABILITY_KEYS.length,
+    callableCapabilityCount: CAPABILITY_KEYS.length,
+    workflowTemplateCount: CAPABILITY_KEYS.filter((key) => CAPABILITY_BY_KEY[key].workflowTemplateId).length,
+    discoveredModelCount: models.length,
+    liveDiscoveredModelCount: models.filter((model) => model.liveDiscovered).length,
+    compatibleModelCount: compatibleModels.size,
+    executableModelCount: new Set(capabilities.filter((capability) => capability.executableNow).flatMap((capability) => capability.eligibleModels.map((model) => `${model.provider}/${model.modelId}`))).size,
+    discoveredRouteCount: discoveredRoutes.length,
+    compatibleRouteCount: compatibleRoutes.length,
+    executableRouteCount,
+    liveProvenRouteCount: liveRoutes.length,
+    liveProvenAtomicCapabilityCount: capabilities.filter((capability) => capability.kind === 'atomic' && capability.liveProven).length,
+    liveProvenCompositeCapabilityCount: capabilities.filter((capability) => capability.kind === 'composite' && capability.liveProven).length,
+    deprecatedModelCount: models.filter((model) => model.status === 'blocked' && /deprecated/i.test(model.blockedReason ?? model.notes)).length,
+    accountInaccessibleModelCount: models.filter((model) => /account|dedicated|access/i.test(model.blockedReason ?? '')).length,
+    contractUnknownRouteCount: discoveredRoutes.length - compatibleRoutes.length,
+  }
 
   return {
     generatedAt: input.generatedAt ?? new Date(0).toISOString(),
@@ -528,5 +597,8 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
     providers,
     capabilities,
     countsByClassification,
+    releaseReadiness,
+    releaseCandidateCapabilities,
+    metrics,
   }
 }

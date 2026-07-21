@@ -2,6 +2,7 @@ import {
   STATIC_DISCOVERY_TIMESTAMP,
   createDiscoveredModel,
   inferCapabilitiesFromModelId,
+  getProviderDefinition,
   type CapabilityKey,
   type ProviderDiscoveredModel,
   type ProviderDiscoveryMode,
@@ -23,16 +24,17 @@ export function discoveryTimestamp(options: DiscoveryAdapterOptions): string {
 }
 
 export function skippedResult(provider: ProviderKey, endpointSource: string, models: ProviderDiscoveredModel[], notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
     apiKeyEnvName: provider === 'mimo' ? null : `${provider.toUpperCase()}_API_KEY`,
-    apiKeyRequiredForLiveDiscovery: provider !== 'deepinfra' && provider !== 'mimo',
+    apiKeyRequiredForLiveDiscovery: provider !== 'mimo',
     apiKeyPresent: false,
-    modelsEndpointRequiresAuth: provider !== 'deepinfra' && provider !== 'mimo',
+    modelsEndpointRequiresAuth: provider !== 'mimo',
     modelsEndpointScope: provider === 'mimo' ? 'docs_only_policy_restricted' : 'docs_fallback',
     mode: 'safe_static',
     source: 'docs_fallback',
@@ -53,9 +55,9 @@ export function skippedResult(provider: ProviderKey, endpointSource: string, mod
     staticFallbackCount: models.length,
     docsFallbackCount: models.length,
     effectiveCatalogueCount: models.length,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: STATIC_DISCOVERY_TIMESTAMP,
     notes,
@@ -63,9 +65,10 @@ export function skippedResult(provider: ProviderKey, endpointSource: string, mod
 }
 
 export function failedLiveResult(provider: ProviderKey, endpointSource: string, error: string, notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
@@ -88,12 +91,28 @@ export function failedLiveResult(provider: ProviderKey, endpointSource: string, 
     staticFallbackCount: 0,
     docsFallbackCount: 0,
     effectiveCatalogueCount: 0,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: new Date().toISOString(),
     notes,
+  }
+}
+
+const TOGETHER_LEGACY_MODELS_ENDPOINT = 'https://api.together.ai/models'
+const TOGETHER_CANONICAL_MODELS_ENDPOINT = 'https://api.together.ai/v1/models'
+
+async function fetchModelListPayload(url: string, headers: Record<string, string>): Promise<unknown> {
+  const response = await fetch(url, { headers })
+  if (!response.ok) {
+    throw new Error(`model list endpoint returned ${response.status}`)
+  }
+  try {
+    return await response.json() as unknown
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'response was not valid JSON'
+    throw new Error(`model list endpoint returned non-JSON content: ${reason}`)
   }
 }
 
@@ -102,13 +121,15 @@ export async function fetchModelList(url: string, apiKey?: string): Promise<unkn
     Accept: 'application/json',
   }
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-  const response = await fetch(url, {
-    headers,
-  })
-  if (!response.ok) {
-    throw new Error(`model list endpoint returned ${response.status}`)
+
+  let payload: unknown
+  try {
+    payload = await fetchModelListPayload(url, headers)
+  } catch (error) {
+    if (url !== TOGETHER_LEGACY_MODELS_ENDPOINT) throw error
+    payload = await fetchModelListPayload(TOGETHER_CANONICAL_MODELS_ENDPOINT, headers)
   }
-  const payload = await response.json() as unknown
+
   if (Array.isArray(payload)) return payload
   if (payload && typeof payload === 'object') {
     const record = payload as Record<string, unknown>
@@ -224,9 +245,10 @@ export function modelFromProviderRecord(input: {
 }
 
 export function liveResult(provider: ProviderKey, endpointSource: string, mode: ProviderDiscoveryMode, models: ProviderDiscoveredModel[], notes: string[]): ProviderDiscoveryResult {
+  const definition = getProviderDefinition(provider)
   return {
     provider,
-    providerRole: provider === 'mimo' ? 'coding_agent_only' : 'runtime_execution_provider',
+    providerRole: definition.runtimeRole,
     docsCapabilityKnown: true,
     liveDiscoverySupported: provider !== 'mimo',
     docsFallbackSupported: true,
@@ -249,9 +271,9 @@ export function liveResult(provider: ProviderKey, endpointSource: string, mode: 
     staticFallbackCount: 0,
     docsFallbackCount: 0,
     effectiveCatalogueCount: models.length,
-    runtimeExecutionAllowed: provider !== 'mimo',
-    policyRestrictedByApp: provider === 'mimo',
-    policyExecutionDisabled: provider === 'mimo',
+    runtimeExecutionAllowed: definition.backendExecutionAllowed,
+    policyRestrictedByApp: definition.codingOnly,
+    policyExecutionDisabled: !definition.backendExecutionAllowed,
     policyBlockedReason: provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : null,
     discoveredAt: models[0]?.lastDiscoveredAt ?? new Date().toISOString(),
     notes,

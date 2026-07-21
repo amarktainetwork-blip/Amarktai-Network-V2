@@ -18,7 +18,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('@amarktai/db', () => ({ prisma: prismaMock }))
 
 const ROOT = process.cwd()
-const FINAL_PROVIDERS = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+const FINAL_PROVIDERS = ['genx', 'together', 'mimo', 'deepinfra']
 
 describe('artifact URL alignment and file access contracts', () => {
   let storageRoot
@@ -161,7 +161,7 @@ describe('artifact URL alignment and file access contracts', () => {
     expect(routeText).toContain('reply.status(409)')
     expect(routeText).toContain('Artifact is not ready')
     expect(routeText).toContain('Artifact file not found')
-    expect(routeText).toContain("header('Cache-Control', 'private, max-age=3600')")
+    expect(routeText).toContain("streamArtifact(request.headers.range, query.download === '1', id, reply, 'private, max-age=3600')")
     expect(routeText).not.toContain('public, max-age=86400')
     expect(routeText).not.toContain("app.get('/api/v1/artifacts/*")
   })
@@ -197,9 +197,32 @@ describe('artifact URL alignment and file access contracts', () => {
 
     await handler({ params: { id: 'artifact-id' }, headers: { authorization: 'Bearer owner-key' } }, reply)
 
-    expect(reply.status).not.toHaveBeenCalled()
+    expect(reply.status).toHaveBeenCalledWith(200)
     expect(reply.header).toHaveBeenCalledWith('Content-Type', 'image/png')
-    expect(reply.send).toHaveBeenCalledWith(Buffer.from('shared artifact bytes'))
+    expect(await streamToBuffer(reply.payload)).toEqual(Buffer.from('shared artifact bytes'))
+  })
+
+  it('streams byte ranges with media headers and rejects unsatisfiable ranges', async () => {
+    const bytes = Buffer.from('0123456789abcdef')
+    const artifact = makeArtifact({ appSlug: 'owner-app', type: 'video', storagePath: 'artifacts/owner-app/video/range.mp4', mimeType: 'video/mp4', fileSizeBytes: bytes.length })
+    const filePath = path.join(storageRoot, artifact.storagePath)
+    await fsp.mkdir(path.dirname(filePath), { recursive: true })
+    await fsp.writeFile(filePath, bytes)
+    prismaMock.artifact.findUnique.mockResolvedValue(artifact)
+    prismaMock.appApiKey.findUnique.mockResolvedValue({ active: true, appConnection: { id: 'conn-1', appSlug: 'owner-app', status: 'active' } })
+    const handler = await makeArtifactRouteHandler()
+
+    const partial = makeReply()
+    await handler({ params: { id: 'artifact-id' }, query: {}, headers: { authorization: 'Bearer owner-key', range: 'bytes=4-9' } }, partial)
+    expect(partial.status).toHaveBeenCalledWith(206)
+    expect(partial.header).toHaveBeenCalledWith('Content-Range', 'bytes 4-9/16')
+    expect(partial.header).toHaveBeenCalledWith('Accept-Ranges', 'bytes')
+    expect(await streamToBuffer(partial.payload)).toEqual(Buffer.from('456789'))
+
+    const invalid = makeReply()
+    await handler({ params: { id: 'artifact-id' }, query: {}, headers: { authorization: 'Bearer owner-key', range: 'bytes=99-100' } }, invalid)
+    expect(invalid.status).toHaveBeenCalledWith(416)
+    expect(invalid.header).toHaveBeenCalledWith('Content-Range', 'bytes */16')
   })
 
   it('artifact route hides artifacts from wrong-app API keys', async () => {
@@ -254,7 +277,7 @@ describe('artifact URL alignment and file access contracts', () => {
     ].map((file) => fs.readFileSync(path.join(ROOT, file), 'utf8').toLowerCase()).join('\n')
 
     expect(touchedRuntime).not.toContain('genxsubmit')
-    expect(touchedRuntime).not.toContain('groqchat')
+    expect(touchedRuntime).not.toContain('deepinfrachat')
     expect(touchedRuntime).not.toContain('togethergenerate')
     expect(touchedRuntime).not.toContain('simulation')
   })
@@ -324,4 +347,10 @@ function makeArtifact(overrides = {}) {
     updatedAt: new Date(),
     ...overrides,
   }
+}
+
+async function streamToBuffer(stream) {
+  const chunks = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+  return Buffer.concat(chunks)
 }

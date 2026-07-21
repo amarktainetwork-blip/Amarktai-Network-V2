@@ -28,8 +28,10 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
 
       expect(prompt).toContain('cinematic')
       expect(prompt).toContain('dramatic')
-      expect(prompt).toContain(scene.title)
-      expect(prompt).toContain(scene.description)
+      expect(prompt).toContain(scene.visualPrompt)
+      expect(prompt).toContain('high quality')
+      expect(prompt).not.toContain(scene.voiceoverText ?? '__no_vo__')
+      expect(prompt).not.toContain(scene.subtitleText ?? '__no_sub__')
     })
 
     it('includes camera direction when present', () => {
@@ -62,8 +64,11 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       scene.transitionOut = 'fade_out'
       const prompt = buildSceneVideoPrompt(scene, plan)
 
-      expect(prompt).toContain('begins with fade in')
-      expect(prompt).toContain('ends with fade out')
+      // Clean video prompt intentionally excludes transition hints
+      // to avoid injecting production instructions into the video model
+      expect(prompt).not.toContain('begins with fade in')
+      expect(prompt).not.toContain('ends with fade out')
+      expect(prompt).toContain(scene.visualPrompt)
     })
 
     it('adds quality enhancement keywords', () => {
@@ -199,19 +204,19 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       })
     })
 
-    it('Brain Router still controls provider/model', () => {
+    it('Orchestra still controls provider/model', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
-          prompt: 'Test prompt for brain router',
+          prompt: 'Test prompt for Orchestra',
           targetDurationSeconds: 60,
           sceneCount: 2,
         })
       )
 
-      const executionId = 'test-execution-id-brain-router'
+      const executionId = 'test-execution-id-orchestra'
       const payloads = createSceneExecutionPayloads(plan, 'balanced', executionId)
 
-      // Payloads should not include provider/model - Brain Router decides
+      // Payloads should not include provider/model - Orchestra decides.
       payloads.forEach((payload) => {
         expect(payload.capability).toBe('video_generation')
         expect(payload.metadata).not.toHaveProperty('selectedProvider')
@@ -243,7 +248,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         validateLongFormVideoRequest({
           prompt: 'Test prompt for execution state',
           targetDurationSeconds: 120,
-          sceneCount: 4,
+          sceneCount: 5,
         })
       )
 
@@ -252,8 +257,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
       expect(state.executionId).toBeDefined()
       expect(state.planId).toBe(plan.id)
       expect(state.routingMode).toBe('balanced')
-      expect(state.totalScenes).toBe(4)
-      expect(state.scenes).toHaveLength(4)
+      expect(state.totalScenes).toBe(5)
+      expect(state.scenes).toHaveLength(5)
       expect(state.progress).toBe(0)
       expect(state.finalAssemblyReady).toBe(false)
 
@@ -421,7 +426,7 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
           { sceneNumber: 2, sceneTitle: 'Scene 2', status: 'completed' as const },
         ],
         progress: 100,
-        finalAssemblyReady: false,
+        finalAssemblyReady: true,
         missingDependencies: ['ffmpeg/stitching'],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -433,8 +438,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
     })
   })
 
-  describe('Final assembly remains blocked', () => {
-    it('execution state has finalAssemblyReady false', () => {
+  describe('Final assembly is ready', () => {
+    it('execution state has finalAssemblyReady true', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for final assembly',
@@ -464,8 +469,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
     })
   })
 
-  describe('long_form_video is not claimed fully executable', () => {
-    it('plan executableNow is false', () => {
+  describe('long_form_video is claimed fully executable', () => {
+    it('plan executableNow is true', () => {
       const plan = createLongFormVideoPlan(
         validateLongFormVideoRequest({
           prompt: 'Test prompt for executability',
@@ -520,8 +525,8 @@ describe('Long-Form Video Phase 2: Per-Scene Execution', () => {
         })
       )
 
-      // Music bed is requested but not executable
-      expect(plan.missingDependencies).toContain('music_bed_backend')
+      // Music bed is requested and ready
+      expect(plan.missingDependencies).not.toContain('music_bed_backend')
     })
   })
 

@@ -32,6 +32,7 @@ export default function MusicStudioPage() {
   const [musicStatus, setMusicStatus] = useState(null)
   const [jobId, setJobId] = useState(null)
   const [jobStatus, setJobStatus] = useState(null)
+  const [jobEvidence, setJobEvidence] = useState(null)
   const [jobError, setJobError] = useState(null)
   const [artifactUrl, setArtifactUrl] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -66,6 +67,7 @@ export default function MusicStudioPage() {
         .then((r) => r.json())
         .then((data) => {
           setJobStatus(data.status)
+          setJobEvidence({ provider: data.provider, model: data.model })
           if (data.status === 'completed' && data.artifactId) {
             setArtifactUrl(`/api/admin/artifacts/${data.artifactId}/file`)
           }
@@ -164,7 +166,7 @@ export default function MusicStudioPage() {
   return (
     <PageTransition className="space-y-6">
       <PageHeader
-        title="Music Studio"
+        title="Instrumental Music Studio"
         subtitle={canExecute
           ? 'Generate instrumental music with GenX Lyria. Provider/model selection is handled by the runtime.'
           : 'Plan music generation requests. Execution is blocked until all implementation and configuration gates are met.'}
@@ -234,7 +236,7 @@ export default function MusicStudioPage() {
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Music className="h-4 w-4 text-cyan-300" /> Create</h3>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-xs font-medium">Song Prompt</label>
+            <label className="mb-1.5 block text-xs font-medium">Instrumental music prompt</label>
             <Input
               disabled={!canExecute}
               value={prompt}
@@ -298,7 +300,7 @@ export default function MusicStudioPage() {
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
             {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Music className="mr-2 h-4 w-4" />}
-            Generate Music
+            Generate Instrumental Music
           </Button>
         </div>
       </Card>
@@ -330,6 +332,7 @@ export default function MusicStudioPage() {
               <CheckCircle className="h-3.5 w-3.5" /> Completed — loading artifact...
             </div>
           )}
+          {jobStatus === 'completed' && <div className="mt-3 flex flex-wrap gap-2 text-[10px]"><Badge variant="outline">{jobEvidence?.provider}</Badge><Badge variant="outline">{jobEvidence?.model}</Badge><Badge variant="outline">Instrumental music</Badge></div>}
         </Card>
       )}
 
@@ -340,7 +343,7 @@ export default function MusicStudioPage() {
             <div className="w-full space-y-3">
               <audio controls src={artifactUrl} className="w-full" />
               <div className="flex justify-center">
-                <a href={artifactUrl} download className="text-xs text-cyan-300 hover:underline">Download Audio</a>
+                <a href={`${artifactUrl}?download=1`} download className="text-xs text-cyan-300 hover:underline">Download Audio</a>
               </div>
             </div>
           ) : (

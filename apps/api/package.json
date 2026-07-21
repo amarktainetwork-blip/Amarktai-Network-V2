@@ -14,6 +14,7 @@
     "@amarktai/core": "*",
     "@amarktai/db": "*",
     "@amarktai/artifacts": "*",
+    "@amarktai/providers": "*",
     "fastify": "^5.3.3",
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/cors": "^11.0.1",

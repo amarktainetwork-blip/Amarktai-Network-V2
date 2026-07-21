@@ -21,7 +21,7 @@ const TIERS = [
       'Basic maintenance updates',
       '5,000 free tokens per month',
       'Standard support',
-      'All capability modules',
+      'Release-candidate capability modules',
       'Artifact storage',
     ],
   },
@@ -36,7 +36,7 @@ const TIERS = [
       'Basic maintenance updates',
       '10,000 free tokens per month',
       'Priority support',
-      'All capability modules',
+      'Release-candidate capability modules',
       'Artifact storage',
       'Advanced routing',
     ],
@@ -52,7 +52,7 @@ const TIERS = [
       'Basic maintenance updates',
       '15,000 free tokens per month',
       'Dedicated support',
-      'All capability modules',
+      'Release-candidate capability modules',
       'Artifact storage',
       'Advanced routing',
       'Custom integrations',
@@ -88,7 +88,7 @@ export default function PricingPage() {
             Scale your AI. <span className="text-gradient">Pay for what you use.</span>
           </h1>
           <p className="animate-fade-up mt-6 max-w-2xl text-lg text-muted-foreground" style={{ animationDelay: '0.18s' }}>
-            Choose a plan that matches your product footprint. Backend execution, usage metering, and billing controls require live integration before production rollout.
+            Choose a plan that matches your product footprint. Execution remains governed by app grants, configured provider credentials, runtime health, and deployed billing policy.
           </p>
         </div>
       </section>
@@ -196,7 +196,7 @@ export default function PricingPage() {
               <div className="pointer-events-none absolute inset-0 aurora opacity-70" />
               <div className="relative">
                 <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Ready to get started?</h2>
-                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Choose a plan and prepare your app contracts before backend execution is enabled.</p>
+                <p className="mx-auto mt-4 max-w-xl text-muted-foreground">Choose a plan and request scoped app credentials for the release-candidate capability set.</p>
                 <Link href="/contact">
                   <Button size="lg" className="mt-8 h-12 bg-gradient-to-r from-cyan-400 to-violet-500 px-8 text-black glow-cyan">
                     Contact Sales <ArrowRight className="ml-2 h-4 w-4" />

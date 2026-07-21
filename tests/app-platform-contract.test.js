@@ -69,6 +69,16 @@ describe('app platform contract', () => {
     expect(content).toContain('requireAdmin')
   })
 
+  it('admin app connections persist explicit release-candidate grants', () => {
+    const routePath = path.join(ROOT, 'apps/api/src/routes/admin-app-connections.ts')
+    const content = fs.readFileSync(routePath, 'utf8')
+    expect(content).toContain('CAPABILITY_KEYS')
+    expect(content).toContain('appCapabilityGrant.createMany')
+    expect(content).toContain('appCapabilityGrant.upsert')
+    expect(content).toContain('passthroughModelAllowed: false')
+    expect(content).toContain('adultPermission: false')
+  })
+
   it('admin app connections route has key lifecycle', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/admin-app-connections.ts')
     const content = fs.readFileSync(routePath, 'utf8')
@@ -106,11 +116,11 @@ describe('app platform contract', () => {
     expect(content).toContain('AppApiKey')
   })
 
-  it('job route checks capability allowlist', () => {
+  it('job route resolves canonical AppCapabilityGrant authority', () => {
     const routePath = path.join(ROOT, 'apps/api/src/routes/jobs.ts')
     const content = fs.readFileSync(routePath, 'utf8')
-    expect(content).toContain('allowedCapabilities')
-    expect(content).toContain('not allowed for this app')
+    expect(content).toContain('resolveAppCapabilityGrantSnapshot')
+    expect(content).toContain('no enabled AppCapabilityGrant')
   })
 
   it('job route checks daily budget', () => {
@@ -175,23 +185,31 @@ describe('app platform contract', () => {
 
   // ── Provider Safety ─────────────────────────────────────────────────────
 
-  it('provider list remains exactly 5', () => {
-    const providers = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
-    expect(providers).toHaveLength(5)
+  it('provider list remains Exactly 4', async () => {
+    const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
+    expect(PROVIDER_KEYS).toHaveLength(4)
   })
 
-  it('MiMo remains coding_tools_only', () => {
-    const truthPath = path.join(ROOT, 'packages/core/src/runtime-truth.ts')
-    const content = fs.readFileSync(truthPath, 'utf8')
-    expect(content).toContain("CODING_ONLY_PROVIDERS = ['mimo']")
-    expect(content).toContain('coding_tools_only_not_backend_runtime')
+  it('MiMo remains coding_tools_only', async () => {
+    const { APPROVED_PROVIDER_DEFINITIONS, CODING_ONLY_PROVIDERS } = await import('../packages/core/src/index.ts')
+    expect([...CODING_ONLY_PROVIDERS]).toEqual(['mimo'])
+    expect(APPROVED_PROVIDER_DEFINITIONS.find(provider => provider.key === 'mimo')).toMatchObject({ codingOnly: true, backendExecutionAllowed: false })
   })
 
-  it('adult generation remains on hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('adult generation remains policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
+  })
+
+  it('dashboard proxies list and mutate app capability grants', () => {
+    const listProxy = path.join(ROOT, 'app/api/admin/app-grants/[appSlug]/route.js')
+    const grantProxy = path.join(ROOT, 'app/api/admin/app-grants/[appSlug]/[capability]/route.js')
+    expect(fs.existsSync(listProxy)).toBe(true)
+    expect(fs.existsSync(grantProxy)).toBe(true)
+    expect(fs.readFileSync(listProxy, 'utf8')).toContain('Authorization')
+    const content = fs.readFileSync(grantProxy, 'utf8')
+    expect(content).toContain("method === 'PUT'")
+    expect(content).toContain("proxy(request, params, 'DELETE')")
   })
 
   it('no provider/model selectors are exposed', () => {

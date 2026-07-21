@@ -4,8 +4,8 @@ import {
   LongFormVideoPlanSchema,
   validateLongFormVideoRequest,
   createLongFormVideoPlan,
-  LONG_FORM_VIDEO_STATUS,
-  routeBrain,
+  getExecutorRegistrations,
+  getRuntimeTruth,
   PROVIDER_KEYS,
   hasBlockedOverrides
 } from '@amarktai/core'
@@ -25,13 +25,6 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(typeof validateLongFormVideoRequest).toBe('function')
     })
 
-    it('exports LONG_FORM_VIDEO_STATUS', () => {
-      expect(LONG_FORM_VIDEO_STATUS).toBeDefined()
-      expect(LONG_FORM_VIDEO_STATUS.orchestrationFoundationReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.schemaReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.plannerReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
-    })
   })
 
   describe('Request validation', () => {
@@ -107,7 +100,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'A documentary about space',
         targetDurationSeconds: 120,
-        sceneCount: 4
+        sceneCount: 5
       })
       const plan = createLongFormVideoPlan(request)
       
@@ -115,7 +108,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(plan.prompt).toBe(request.prompt)
       expect(plan.totalDurationSeconds).toBe(120)
       expect(plan.storyboard).toBeDefined()
-      expect(plan.storyboard.scenes).toHaveLength(4)
+      expect(plan.storyboard.scenes).toHaveLength(5)
       expect(plan.renderSteps).toBeDefined()
       expect(plan.artifactPlan).toBeDefined()
       expect(plan.missingDependencies).toBeDefined()
@@ -128,7 +121,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for duration splitting',
         targetDurationSeconds: 120,
-        sceneCount: 4
+        sceneCount: 5
       })
       const plan = createLongFormVideoPlan(request)
       
@@ -138,9 +131,9 @@ describe('Long-Form Video Orchestration Foundation', () => {
       )
       expect(totalSceneDuration).toBe(120)
       
-      // Each scene should have 30 seconds
+      // Each scene should have 24 seconds (120 / 5)
       plan.storyboard.scenes.forEach(scene => {
-        expect(scene.durationSeconds).toBe(30)
+        expect(scene.durationSeconds).toBe(24)
       })
     })
 
@@ -211,7 +204,7 @@ describe('Long-Form Video Orchestration Foundation', () => {
       expect(plan.missingDependencies).toContain('ffmpeg/stitching')
     })
 
-    it('lists voiceover missing when enabled', () => {
+    it('lists voiceover as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for voiceover missing validation',
         targetDurationSeconds: 60,
@@ -220,14 +213,14 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('voiceover_backend')
+      expect(plan.missingDependencies).not.toContain('voiceover_backend')
       
       const voiceoverStep = plan.renderSteps.find(s => s.type === 'voiceover_generation')
       expect(voiceoverStep).toBeDefined()
-      expect(voiceoverStep.status).toBe('blocked')
+      expect(voiceoverStep.status).toBe('ready')
     })
 
-    it('lists subtitles missing when enabled', () => {
+    it('lists subtitles as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for subtitles missing validation',
         targetDurationSeconds: 60,
@@ -236,14 +229,14 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('subtitle_backend')
+      expect(plan.missingDependencies).not.toContain('subtitle_backend')
       
       const subtitleStep = plan.renderSteps.find(s => s.type === 'subtitle_generation')
       expect(subtitleStep).toBeDefined()
-      expect(subtitleStep.status).toBe('blocked')
+      expect(subtitleStep.status).toBe('ready')
     })
 
-    it('lists music bed missing when enabled', () => {
+    it('lists music bed as ready when enabled', () => {
       const request = validateLongFormVideoRequest({
         prompt: 'Test prompt for music bed missing validation',
         targetDurationSeconds: 60,
@@ -252,11 +245,11 @@ describe('Long-Form Video Orchestration Foundation', () => {
       })
       const plan = createLongFormVideoPlan(request)
       
-      expect(plan.missingDependencies).toContain('music_bed_backend')
+      expect(plan.missingDependencies).not.toContain('music_bed_backend')
       
       const musicStep = plan.renderSteps.find(s => s.type === 'music_bed_generation')
       expect(musicStep).toBeDefined()
-      expect(musicStep.status).toBe('blocked')
+      expect(musicStep.status).toBe('ready')
     })
 
     it('does not list voiceover/subtitles/music when disabled', () => {
@@ -278,29 +271,16 @@ describe('Long-Form Video Orchestration Foundation', () => {
 
   describe('Capability status', () => {
     it('long_form_video remains not fully executable', () => {
-      const decision = routeBrain({
-        capability: 'long_form_video',
-        routingMode: 'balanced'
-      })
-      expect(decision.executionAllowed).toBe(false)
+      const truth = getRuntimeTruth().capabilities.find(item => item.capability === 'long_form_video')
+      expect(truth.executableNow).toBe(false)
     })
 
-    it('Brain Router still blocks final long_form_video execution', () => {
-      const decision = routeBrain({
-        capability: 'long_form_video',
-        routingMode: 'premium'
-      })
-      expect(decision.executionAllowed).toBe(false)
-      expect(decision.selectedProvider).toBeNull()
+    it('final long_form_video has no direct provider executor', () => {
+      expect(getExecutorRegistrations('long_form_video')).toEqual([])
     })
 
-    it('video_generation remains executable for short clips', () => {
-      const decision = routeBrain({
-        capability: 'video_generation',
-        routingMode: 'balanced'
-      })
-      expect(decision.executionAllowed).toBe(true)
-      expect(decision.selectedProvider).toBe('genx')
+    it('video_generation retains the GenX short-clip executor', () => {
+      expect(getExecutorRegistrations('video_generation').map(entry => entry.provider)).toEqual(['genx'])
     })
   })
 
@@ -319,8 +299,8 @@ describe('Long-Form Video Orchestration Foundation', () => {
 
   describe('Provider list integrity', () => {
     it('no new providers added', () => {
-      expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
-      expect(PROVIDER_KEYS).toHaveLength(5)
+      expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
+      expect(PROVIDER_KEYS).toHaveLength(4)
     })
 
     it('no banned providers', () => {
@@ -334,35 +314,32 @@ describe('Long-Form Video Orchestration Foundation', () => {
   describe('Adult generation remains on hold', () => {
     it('adult capabilities remain blocked', () => {
       const adultCaps = ['adult_text', 'adult_image', 'adult_voice', 'adult_avatar', 'adult_video']
+      const truth = getRuntimeTruth()
       adultCaps.forEach(cap => {
-        const decision = routeBrain({ capability: cap, routingMode: 'balanced' })
-        expect(decision.executionAllowed).toBe(false)
+        expect(truth.capabilities.find(item => item.capability === cap)?.classification).toBe('POLICY_RESTRICTED')
       })
     })
   })
 
   describe('Phase 1 foundation verification', () => {
-    it('orchestration foundation is ready', () => {
-      expect(LONG_FORM_VIDEO_STATUS.orchestrationFoundationReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.schemaReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.plannerReady).toBe(true)
-      expect(LONG_FORM_VIDEO_STATUS.sceneSplitterReady).toBe(true)
+    it('binds foundation claims to the callable schema and planner', () => {
+      expect(LongFormVideoRequestSchema).toBeDefined()
+      expect(LongFormVideoPlanSchema).toBeDefined()
+      expect(typeof createLongFormVideoPlan).toBe('function')
     })
 
-    it('per-scene video generation is possible', () => {
-      expect(LONG_FORM_VIDEO_STATUS.perSceneVideoGenerationPossible).toBe(true)
+    it('keeps per-scene execution support tied to a real executor registration', () => {
+      expect(getExecutorRegistrations('video_generation')).toEqual(expect.arrayContaining([
+        expect.objectContaining({ provider: 'genx', handlerName: 'executeGenxVideo' }),
+      ]))
     })
 
-    it('final assembly is not ready', () => {
-      expect(LONG_FORM_VIDEO_STATUS.finalAssemblyReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.sceneStitchingReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.voiceoverReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.subtitlesReady).toBe(false)
-      expect(LONG_FORM_VIDEO_STATUS.musicBedReady).toBe(false)
-    })
-
-    it('final long-form video is not executable', () => {
-      expect(LONG_FORM_VIDEO_STATUS.executableNow).toBe(false)
+    it('does not invent API component evidence in core-only runtime truth', () => {
+      const longForm = getRuntimeTruth().capabilities.find(item => item.capability === 'long_form_video')
+      expect(longForm.plannerReady).toBe(false)
+      expect(longForm.videoOnlyAssemblyReady).toBe(false)
+      expect(longForm.fullMultimediaReady).toBe(false)
+      expect(longForm.executableNow).toBe(false)
     })
   })
 })

@@ -1,0 +1,29 @@
+{
+  "prompt": "HarbourLight Home Energy - a 30-second coastal home-energy advert for South African homeowners seeking clearer solar and battery planning.",
+  "targetDurationSeconds": 30,
+  "sceneCount": 3,
+  "aspectRatio": "16:9",
+  "style": "sunlit documentary commercial",
+  "tone": "calm, practical, optimistic",
+  "routingMode": "balanced",
+  "planningMode": "explicit",
+  "count": 1,
+  "voiceoverEnabled": true,
+  "subtitlesEnabled": true,
+  "musicBedEnabled": true,
+  "campaignTitle": "HarbourLight Home Energy",
+  "brandName": "HarbourLight",
+  "brandWebsite": "harbourlight.example",
+  "objective": "Generate solar assessment bookings.",
+  "audience": "South African coastal homeowners managing power interruptions and energy costs.",
+  "callToAction": "Book a home energy assessment at harbourlight.example.",
+  "legalQualifier": "Savings and system performance vary by property, usage and installation conditions.",
+  "musicBrief": "Original light acoustic and marimba-inspired instrumental bed with a calm opening and optimistic close. No vocals and no imitation of an existing work.",
+  "voiceProfile": { "language": "en-ZA", "accent": "South African", "tone": "calm, practical and reassuring", "purpose": "commercial narration", "speed": 1, "outputFormat": "wav" },
+  "scenes": [
+    { "sceneNumber": 1, "durationSeconds": 9, "title": "Morning Power", "objective": "Establish the household energy challenge.", "visualPrompt": "A sunlit coastal South African home at breakfast as a family calmly notices a power interruption. Natural documentary realism, warm interiors, consistent household, text-free frame.", "negativePrompt": "No disaster imagery, generated text, logos, unsafe wiring or exaggerated reactions.", "cameraDirection": "Exterior dawn shot, kitchen medium shot, subtle close-up on switched-off appliance.", "voiceoverText": "Your home should feel ready for the day, even when the grid is not.", "subtitleText": "Your home should feel ready for the day, even when the grid is not.", "overlays": [{ "id": "hl_s1", "sceneNumber": 1, "startSeconds": 4, "endSeconds": 9, "type": "text", "text": "Plan energy around your home", "position": "bottom_center", "emphasis": "bold", "legal": false }] },
+    { "sceneNumber": 2, "durationSeconds": 12, "title": "Designed for Your Home", "objective": "Show a careful assessment and installation plan.", "visualPrompt": "The same homeowner walks with a qualified energy assessor around the property, reviewing roof orientation, household use and a tidy battery location. Credible equipment and safe professional behaviour, text-free frame.", "negativePrompt": "No unsafe roof work, generated labels, fake certification marks or character changes.", "cameraDirection": "Measured tracking shot, roofline cutaway, tablet planning close-up without readable UI.", "voiceoverText": "HarbourLight designs a solar and battery plan around your roof, your usage and your priorities.", "subtitleText": "HarbourLight designs a solar and battery plan around your roof, your usage and your priorities.", "overlays": [{ "id": "hl_s2", "sceneNumber": 2, "startSeconds": 3, "endSeconds": 12, "type": "benefit", "text": "A practical home energy assessment", "position": "top_right", "emphasis": "bold", "legal": false }] },
+    { "sceneNumber": 3, "durationSeconds": 9, "title": "A Brighter Evening", "objective": "Show a calm outcome and assessment CTA.", "visualPrompt": "The same family enjoys a calm coastal evening in their well-lit home while a discreet solar and battery installation operates. Stable premium closing composition with negative space, text-free generated footage.", "negativePrompt": "No guaranteed savings, utility logos, generated text, fireworks or unrealistic power effects.", "cameraDirection": "Golden-hour exterior, warm interior family shot, stable closing frame.", "voiceoverText": "Make your next energy decision with a plan you understand. Book a HarbourLight home assessment today.", "subtitleText": "Make your next energy decision with a plan you understand. Book a HarbourLight home assessment today.", "overlays": [{ "id": "hl_s3_cta", "sceneNumber": 3, "startSeconds": 3, "endSeconds": 9, "type": "cta", "text": "harbourlight.example - Book an assessment", "position": "bottom_center", "emphasis": "bold", "legal": false }, { "id": "hl_s3_legal", "sceneNumber": 3, "startSeconds": 0, "endSeconds": 9, "type": "legal", "text": "Savings and performance vary by property and usage.", "position": "bottom_right", "emphasis": "normal", "legal": true }]
+    }
+  ]
+}

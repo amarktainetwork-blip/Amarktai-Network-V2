@@ -1,140 +1,80 @@
-## 🎬 Long-Form Video Phase 1: Orchestration Foundation
+## Batch A release candidate
 
-This PR adds the **orchestration foundation** for long-form video generation. It does NOT implement final video rendering.
+Exact head: `d000dbec3a165dc368a009d2489235dfd3c3a4d4`
 
-### ✅ What Was Added
+Provider policy is final:
+- Runtime: GenX, Together, DeepInfra
+- Coding only: Xiaomi MiMo
+- Removed permanently: Groq
 
-#### 1. Schema & Types (`packages/core/src/long-form-video.ts`)
-- `LongFormVideoRequestSchema` - Request validation
-- `LongFormVideoPlanSchema` - Plan structure
-- `LongFormSceneSchema` - Individual scene definition
-- `LongFormRenderStepSchema` - Render pipeline steps
-- `LongFormVideoArtifactPlanSchema` - Artifact tracking
-- Status enums and validation helpers
-- `LONG_FORM_VIDEO_STATUS` capability status
+The canonical catalogue remains 68 capabilities. Adult remnants remain untouched during this batch and will only be removed in final cleanup after all standard replacements are complete.
 
-#### 2. Deterministic Planner (`packages/core/src/long-form-planner.ts`)
-- `createLongFormVideoPlan(request)` - Creates plan without AI
-- Splits target duration across scenes
-- Generates scene prompts and visual directions
-- Creates render steps with dependencies
-- Identifies missing dependencies
-- Marks executability status
+## Batch A completed in code
 
-#### 3. Admin API Route (`apps/api/src/routes/admin-long-form-video.ts`)
-- `POST /api/admin/long-form-video/plan` - Create plan (no execution)
-- `GET /api/admin/long-form-video/status` - Get capability status
-- Admin-protected endpoints
-- Returns plan with missing dependencies and next steps
+### Step 1 — production activation correction
+- exact-SHA deployment and rollback protection;
+- MariaDB and artifact backups;
+- isolated npm and Playwright caches;
+- rollback-image pinning and safe unused-image cleanup;
+- 16 GiB pre-build free-space gate;
+- clean Nginx validation and HTTP/2 repair;
+- duplicate disposable release-fixture build removed from the VPS deployment path;
+- authoritative real-service fixture remains mandatory in GitHub CI.
 
-#### 4. Dashboard Update (`app/dashboard/video/page.js`)
-- Long-form video card shows "Phase 1 Ready"
-- Displays orchestration foundation status
-- Lists missing dependencies
-- Shows admin API endpoint
+### Step 2 — premium GenX routing and spend controls
+- authenticated balance and account-tier pricing lookup;
+- per-model cost estimation;
+- GenX-only flagship routing;
+- account-accessible route enforcement;
+- known-pricing requirement;
+- maximum-credit ceiling, retained reserve and explicit paid confirmation.
 
-#### 5. Audit Update (`scripts/audit-build-completion-map.mjs`)
-- Detects schema file existence
-- Detects planner file existence
-- Detects admin route existence
-- Reports orchestration foundation ready
-- Still reports final assembly not ready
+### Step 3 — full-song production
+- Full Song Studio dashboard;
+- Lyria 3 Pro full-song routing;
+- original/user-owned lyrics;
+- vocal and instrumental masters;
+- durable jobs, credit preflight, playback and authenticated download.
 
-#### 6. Comprehensive Tests (`tests/long-form-video-orchestration-foundation.test.js`)
-- 33 tests covering all functionality
-- Schema validation tests
-- Plan creation tests
-- Duration splitting tests
-- Scene count tests
-- Render step tests
-- Missing dependency tests
-- Capability status tests
-- Provider/model override blocking tests
+### Step 4 — premium AmarktAI advert benchmark
+- immutable six-scene 30-second plan;
+- 2–4 flagship candidates per scene;
+- premium narration and Lyria music;
+- candidate scoring and winner selection;
+- FFmpeg normalization, mix, subtitles and stream validation;
+- final MP4 saved as a dashboard artifact;
+- guarded paid terminal runner.
 
-### 🚀 What Is Executable Now
+## Production failures found and fixed
 
-- ✅ Schema validation
-- ✅ Plan creation
-- ✅ Scene splitting
-- ✅ Admin API for planning
-- ✅ Per-scene video generation **possible** (using existing `video_generation`)
+- Worker image storage exhaustion: rollback remained active; host prep now protects live/rollback images, removes only unused images/cache and requires 16 GiB free.
+- Compose interpolation: activation exports required build identity before its first read-only Compose command.
+- Image-to-video fallback collision: same-execution fallbacks inherit durable provider authority through atomic compare-and-set; genuine competing claims remain blocked.
+- Long-form assembly authority: assembly inherits and validates the parent `long_form_video` grant in durable metadata and BullMQ payload.
+- Long-form internal dispatch: FFmpeg assembly bypasses provider routing and produces a stream/duration/component-validated final MP4.
+- Production advisory: nested Crawlee `brace-expansion` raised narrowly from 2.1.1 to 2.1.2; exact install and production audit pass.
 
-### 🚧 What Is Still Blocked
+## Exact-head CI
 
-- ❌ Scene execution pipeline (Phase 2)
-- ❌ ffmpeg/stitching (Phase 4)
-- ❌ Voiceover backend (if enabled)
-- ❌ Subtitle backend (if enabled)
-- ❌ Music bed backend (if enabled)
-- ❌ Final artifact assembly (Phase 5)
+Workflow run `29808954331` for `d000dbec3a165dc368a009d2489235dfd3c3a4d4`:
+- locked dependency installation: passed;
+- Prisma validation: passed;
+- backend compilation: passed;
+- complete unit and contract suite: passed;
+- dashboard production build: passed;
+- router/app, direct-provider, music and long-form static proofs: passed;
+- deployment/Compose/shell validation: passed;
+- production dependency audit and patch hygiene: passed;
+- disposable MariaDB migration verification: passed;
+- authoritative real-service API/worker/dashboard/browser fixture: passed (40/40).
 
-### 📊 Missing Dependencies
+## Remaining production gates
+1. Deploy exact SHA `d000dbec3a165dc368a009d2489235dfd3c3a4d4` through the canonical activation wrapper.
+2. Confirm exact API, worker and dashboard identities.
+3. Complete strict live provider/capability proof with zero failures and zero skips.
+4. Verify public HTTPS, administrator login, Studio and artifact preview/download.
+5. Run the zero-generation premium advert plan and review exact GenX cost.
+6. Run paid generation only with an explicit maximum-credit ceiling.
+7. Inspect the advert before making any competitiveness claim.
 
-1. `ffmpeg/stitching` - Scene stitching and final assembly
-2. `voiceover_backend` - TTS for scene narration (if enabled)
-3. `subtitle_backend` - Subtitle generation (if enabled)
-4. `music_bed_backend` - Background music (if enabled)
-5. `final_assembly_pipeline` - Combine all elements
-
-### 🧪 Test Results
-
-- **Tests:** 888 passed, 5 skipped
-- **Build:** Compiled successfully in 23.5s
-- **Audit:** Detects Phase 1 foundation correctly
-
-### 📝 Example Plan Output
-
-```json
-{
-  "id": "uuid",
-  "prompt": "A documentary about space exploration",
-  "totalDurationSeconds": 120,
-  "storyboard": {
-    "scenes": [
-      {
-        "sceneNumber": 1,
-        "title": "Introduction",
-        "visualPrompt": "...",
-        "durationSeconds": 30,
-        "status": "planned"
-      }
-    ]
-  },
-  "renderSteps": [
-    { "type": "scene_generation", "status": "ready" },
-    { "type": "final_assembly", "status": "blocked" }
-  ],
-  "missingDependencies": ["ffmpeg/stitching", "final_assembly_pipeline"],
-  "executableNow": false,
-  "perSceneVideoGenerationPossible": true
-}
-```
-
-### ✅ Confirmations
-
-- ✅ No final long-form rendering claimed complete
-- ✅ No providers added (still exactly 5)
-- ✅ No music wiring started
-- ✅ Adult generation remains on hold
-- ✅ Apps cannot choose provider/model
-- ✅ MiMo remains coding_tools_only
-- ✅ No deployment triggered
-- ✅ No push to main
-
-### 🎯 Next Steps
-
-**Phase 2:** Implement per-scene video generation using existing `video_generation` capability
-**Phase 3:** Implement voiceover/subtitles/music bed (if enabled in request)
-**Phase 4:** Implement scene stitching with ffmpeg
-**Phase 5:** Implement final assembly pipeline
-
-### 📦 Files Changed (8 files, +1071 lines)
-
-- `packages/core/src/long-form-video.ts` (NEW)
-- `packages/core/src/long-form-planner.ts` (NEW)
-- `packages/core/src/index.ts` (updated exports)
-- `apps/api/src/routes/admin-long-form-video.ts` (NEW)
-- `apps/api/src/server.ts` (route registration)
-- `app/dashboard/video/page.js` (UI update)
-- `scripts/audit-build-completion-map.mjs` (audit update)
-- `tests/long-form-video-orchestration-foundation.test.js` (NEW)
+Do not merge or claim production completion until every production gate passes.

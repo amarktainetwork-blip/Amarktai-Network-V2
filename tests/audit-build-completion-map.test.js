@@ -15,7 +15,7 @@ describe('Build Completion Audit', () => {
 
   const auditEnv = {
     ...process.env,
-    GROQ_API_KEY: '',
+    deepinfra_API_KEY: '',
     TOGETHER_API_KEY: '',
     GENX_API_KEY: '',
     DEEPINFRA_API_KEY: '',
@@ -52,22 +52,19 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.providerTruth).toBeDefined()
     expect(auditOutput.providerTruth.approvedProviders).toEqual([
       'genx',
-      'groq',
       'together',
       'mimo',
       'deepinfra'
     ])
-    expect(auditOutput.providerTruth.count).toBe(5)
+    expect(auditOutput.providerTruth.count).toBe(4)
   })
 
-  it('audit detects executable capabilities', () => {
-    expect(auditOutput.executableCapabilities).toBeDefined()
-    expect(Array.isArray(auditOutput.executableCapabilities)).toBe(true)
-    
-    const executableCapIds = auditOutput.executableCapabilities.map(c => c.capability)
-    expect(executableCapIds).toContain('chat')
-    expect(executableCapIds).toContain('image_generation')
-    expect(executableCapIds).toContain('video_generation')
+  it('audit derives executor presence without inventing live execution', () => {
+    const inventory = auditOutput.canonicalRuntimeTruth.capabilityInventory
+    for (const capability of ['chat', 'image_generation', 'video_generation']) {
+      expect(inventory.find(item => item.capability === capability)?.implementationGates.executorRegistered).toBe(true)
+    }
+    expect(auditOutput.executableCapabilities).toEqual([])
   })
 
   it('audit detects music pending', () => {
@@ -97,15 +94,15 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.openSourceWorkflowsMissing.length).toBeGreaterThan(0)
   })
 
-  it('audit detects Brain Router exists', () => {
+  it('audit detects Orchestra exists', () => {
     expect(auditOutput.workerExecutionStatus).toBeDefined()
-    expect(auditOutput.workerExecutionStatus.usesBrainRouter).toBe(true)
+    expect(auditOutput.workerExecutionStatus.usesOrchestra).toBe(true)
   })
 
   it('audit detects worker integration exists', () => {
     expect(auditOutput.workerExecutionStatus).toBeDefined()
     expect(auditOutput.workerExecutionStatus.found).toBe(true)
-    expect(auditOutput.workerExecutionStatus.usesBrainRouter).toBe(true)
+    expect(auditOutput.workerExecutionStatus.usesOrchestra).toBe(true)
   })
 
   it('audit detects app contract exists', () => {
@@ -145,11 +142,11 @@ describe('Build Completion Audit', () => {
     expect(Array.isArray(auditOutput.recommendedNextPRs)).toBe(true)
     expect(auditOutput.recommendedNextPRs.length).toBeGreaterThan(0)
     
-    // Should have music generation as a recommended PR
-    const musicPR = auditOutput.recommendedNextPRs.find(pr => 
-      pr.title.toLowerCase().includes('music')
+    // Next work should activate/prove the existing runtime, not re-add it.
+    const activationPR = auditOutput.recommendedNextPRs.find(pr =>
+      pr.title.toLowerCase().includes('activate') || pr.title.toLowerCase().includes('proof')
     )
-    expect(musicPR).toBeDefined()
+    expect(activationPR).toBeDefined()
     
     // Should have long-form video as a recommended PR
     const longFormPR = auditOutput.recommendedNextPRs.find(pr => 
@@ -173,23 +170,24 @@ describe('Build Completion Audit', () => {
     expect(output).toContain('App ready:')
   })
 
-  it('audit console output shows correct executable capability count', () => {
+  it('audit console output does not claim execution without runtime evidence', () => {
     const output = auditConsoleOutput
-    expect(output).toContain('Total executable: 10')
-    expect(output).toContain('Via text router (Groq/DeepInfra): 8')
-    expect(output).toContain('Via media worker (Together/GenX): 2')
+    expect(output).toContain('Total executable: 0')
+    expect(output).toContain('Via text router (deepinfra/DeepInfra): 0')
+    expect(output).toContain('Via media worker (Together/GenX): 0')
   })
 
-  it('audit console output shows partial_execution for image and video', () => {
+  it('audit console output does not claim image or video execution without runtime gates', () => {
     const output = auditConsoleOutput
-    expect(output).toContain('Partial execution: 2')
-    expect(output).toMatch(/◐ image/)
-    expect(output).toMatch(/◐ video/)
+    expect(output).toContain('Partial execution: 0')
+    expect(output).not.toMatch(/◐ image/)
+    expect(output).not.toMatch(/◐ video/)
+    expect(output).toMatch(/○ image/)
+    expect(output).toMatch(/○ video/)
   })
 
-  it('audit console output shows design_ready_pending_backend for music and research', () => {
+  it('audit console output shows canonical runtime-gated pages as pending', () => {
     const output = auditConsoleOutput
-    expect(output).toContain('Design-ready (pending backend): 2')
     expect(output).toMatch(/○ music/)
     expect(output).toMatch(/○ research/)
   })
@@ -251,32 +249,33 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.dashboardStatus.pageDetails).toBeDefined()
   })
 
-  it('image page is partial_execution with image_generation ready', () => {
-    expect(auditOutput.dashboardStatus.partialExecutionPages).toContain('image')
+  it('image page remains pending when canonical runtime truth is not executable', () => {
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('image')
     const imageDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/image')
     expect(imageDetail).toBeDefined()
-    expect(imageDetail.status).toBe('partial_execution')
-    expect(imageDetail.executionReadyCapabilities).toContain('image_generation')
+    expect(imageDetail.status).toBe('design_ready_pending_backend')
+    expect(imageDetail.executionReadyCapabilities).toEqual([])
+    expect(imageDetail.pendingCapabilities).toContain('image_generation')
     expect(imageDetail.pendingCapabilities).toContain('image_edit')
     expect(imageDetail.pendingCapabilities).toContain('upscale')
     expect(imageDetail.pendingCapabilities).toContain('variations')
   })
 
-  it('video page is partial_execution with video_generation ready', () => {
-    expect(auditOutput.dashboardStatus.partialExecutionPages).toContain('video')
+  it('video page remains pending when canonical runtime truth is not executable', () => {
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('video')
     const videoDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/video')
     expect(videoDetail).toBeDefined()
-    expect(videoDetail.status).toBe('partial_execution')
-    expect(videoDetail.executionReadyCapabilities).toContain('video_generation')
+    expect(videoDetail.status).toBe('design_ready_pending_backend')
+    expect(videoDetail.executionReadyCapabilities).toEqual([])
+    expect(videoDetail.pendingCapabilities).toContain('video_generation')
     expect(videoDetail.pendingCapabilities).toContain('long_form_video')
   })
 
-  it('image/video are not downgraded to design-ready just because they contain disabled future controls', () => {
-    // Image and video should be in partialExecutionPages, not designReadyPages
+  it('image/video presentation follows canonical runtime truth rather than source controls', () => {
     expect(auditOutput.dashboardStatus.designReadyPages).not.toContain('image')
     expect(auditOutput.dashboardStatus.designReadyPages).not.toContain('video')
-    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).not.toContain('image')
-    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).not.toContain('video')
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('image')
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('video')
   })
 
   it('music remains design_ready_pending_backend', () => {
@@ -300,7 +299,7 @@ describe('Build Completion Audit', () => {
   it('dashboardStatus includes partialExecutionPages', () => {
     expect(auditOutput.dashboardStatus.partialExecutionPages).toBeDefined()
     expect(Array.isArray(auditOutput.dashboardStatus.partialExecutionPages)).toBe(true)
-    expect(auditOutput.dashboardStatus.partialExecutionPages.length).toBeGreaterThan(0)
+    expect(auditOutput.dashboardStatus.partialExecutionPages).toEqual([])
   })
 
   it('audit detects redeploy readiness', () => {
@@ -348,12 +347,12 @@ describe('Build Completion Audit', () => {
     expect(auditOutput.musicReadiness.lyricsReady).toBe(false)
     expect(auditOutput.musicReadiness.musicGenerationReady).toBe(false)
     expect(auditOutput.musicReadiness.executionBlocked).toBe(true)
-    expect(auditOutput.musicReadiness.blockedReason).toContain('genx_api_key_not_configured')
+    expect(auditOutput.musicReadiness.blockedReason).toContain('credentials_missing')
     expect(auditOutput.musicReadiness.genxMusicCapabilityKnown).toBe(true)
     expect(auditOutput.musicReadiness.lyriaClipDiscovered).toBe(true)
     expect(auditOutput.musicReadiness.lyriaProDiscovered).toBe(true)
     expect(auditOutput.musicReadiness.musicExecutorReady).toBe(true)
-    expect(auditOutput.musicReadiness.providerCapabilityAudit).toHaveLength(5)
+    expect(auditOutput.musicReadiness.providerCapabilityAudit).toHaveLength(4)
     expect(auditOutput.musicReadiness.providerCapabilityAudit.find(p => p.provider === 'mimo')?.note).toContain('coding_tools_only')
     expect(auditOutput.musicReadiness.providerClient).toBeDefined()
     expect(auditOutput.musicReadiness.modelCatalogueEntries).toBeDefined()

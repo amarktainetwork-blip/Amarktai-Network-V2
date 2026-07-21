@@ -55,27 +55,6 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
       return { provider }
     }
 
-    if (providerKey === 'groq') {
-      const { groqChat } = await import('@amarktai/providers')
-      const result = await groqChat({
-        apiKey,
-        prompt: 'Reply with exactly: AMARKTAI_PROVIDER_TEST_OK',
-        maxTokens: 16,
-        temperature: 0,
-      })
-
-      if (!result.content?.trim()) {
-        throw new Error('Groq returned an empty provider test response')
-      }
-
-      const provider = await updateProviderHealthStatus({
-        providerKey,
-        healthStatus: 'live',
-        healthMessage: `Live test passed through Groq chat (${result.model}).`,
-      })
-      return { provider }
-    }
-
     if (providerKey === 'together') {
       const providerStatus = await getProviderCredentialStatus('together')
       if (!providerStatus.defaultModel?.trim() && !process.env.TOGETHER_IMAGE_MODEL?.trim()) {
@@ -126,12 +105,7 @@ export async function testProviderCredential(providerKeyInput: string): Promise<
       return { provider }
     }
 
-    const provider = await updateProviderHealthStatus({
-      providerKey,
-      healthStatus: 'gated',
-      healthMessage: `${providerKey} live key testing is not implemented yet. Provider was not marked live.`,
-    })
-    return { provider }
+    throw new Error(`No canonical health diagnostic exists for approved provider ${providerKey}`)
   } catch (err) {
     if (err instanceof ProviderConfigError && err.code === 'invalid-provider') {
       throw err
@@ -167,10 +141,14 @@ async function testMimoCredential(): Promise<ProviderLiveTestResult> {
   return { provider }
 }
 
-function providerStatusForError(err: unknown): 'unconfigured' | 'failed' | 'gated' {
+function providerStatusForError(err: unknown): 'unconfigured' | 'failed' | 'gated' | 'insufficient_credit' | 'authentication_failed' | 'rate_limited' | 'policy_restricted' {
   if (err instanceof ProviderConfigError && err.code === 'missing-config') return 'unconfigured'
   if (err instanceof ProviderConfigError && err.code === 'disabled') return 'gated'
-  if (err instanceof ProviderConfigError && err.code === 'runtime-restricted') return 'gated'
+  if (err instanceof ProviderConfigError && err.code === 'runtime-restricted') return 'policy_restricted'
+  const message = safeErrorMessage(err).toLowerCase()
+  if (/insufficient|balance|credit|payment|\b402\b/.test(message)) return 'insufficient_credit'
+  if (/authentication|unauthori[sz]ed|invalid api|invalid key|\b401\b|\b403\b/.test(message)) return 'authentication_failed'
+  if (/rate.?limit|too many requests|\b429\b/.test(message)) return 'rate_limited'
   return 'failed'
 }
 

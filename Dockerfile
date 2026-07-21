@@ -37,6 +37,13 @@ COPY . .
 RUN rm -rf .next packages/*/dist apps/*/dist && \
     find packages apps -name "*.tsbuildinfo" -delete
 
+# Build identity injection
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+
+# Generate build-info.json for health route consumption
+RUN node -e "const p=require('./package.json');process.stdout.write(JSON.stringify({gitSha:'${GIT_SHA}',buildTime:'${BUILD_TIME}',serviceName:'amarktai-runtime',version:p.version||'0.0.0'}))" > build-info.json
+
 # Generate Prisma client with correct binaryTargets for Debian
 RUN npx prisma generate --schema=./prisma/schema.prisma
 
@@ -77,6 +84,9 @@ COPY --from=build /app/packages/db/dist       packages/db/dist
 COPY --from=build /app/packages/providers/dist packages/providers/dist
 COPY --from=build /app/packages/artifacts/dist packages/artifacts/dist
 
+# Copy build identity for health route
+COPY --from=build /app/build-info.json build-info.json
+
 # Copy package.json files for runtime resolution
 COPY packages/core/package.json     packages/core/package.json
 COPY packages/db/package.json       packages/db/package.json
@@ -87,11 +97,15 @@ COPY packages/artifacts/package.json packages/artifacts/package.json
 COPY scripts/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy schema sync script
-COPY scripts/prisma-db-push-safe.mjs scripts/prisma-db-push-safe.mjs
+# Copy controlled operator scripts used by one-shot runtime containers.
+COPY scripts/prisma-migrate-deploy.mjs scripts/prisma-migrate-deploy.mjs
+COPY scripts/release-fixture-queue-control.mjs scripts/release-fixture-queue-control.mjs
+COPY scripts/admin-reset-password.mjs scripts/admin-reset-password.mjs
 
 # ── Stage 4: API ──────────────────────────────────────────────
 FROM production-base AS api
+
+ENV SERVICE_NAME=amarktai-api
 
 # Install ffmpeg for long-form video assembly
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -119,21 +133,30 @@ CMD ["api"]
 # ── Stage 5: Worker (includes Playwright for Crawlee) ─────────
 FROM production-base AS worker
 
-# Install Playwright Chromium and system dependencies
+ENV SERVICE_NAME=amarktai-worker \
+    WORKER_HEALTH_PORT=3002
+
+# Install FFmpeg for durable long-form assembly, then Playwright Chromium.
 # This must happen in the production stage (not build) so the browsers persist
-RUN npx playwright install chromium --with-deps
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* && \
+    npx playwright install chromium --with-deps
 
 COPY --from=build /app/apps/worker/dist apps/worker/dist
 COPY apps/worker/package.json apps/worker/package.json
 
+EXPOSE 3002
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "process.exit(0)"
+  CMD node -e "fetch('http://localhost:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["entrypoint.sh"]
 CMD ["worker"]
 
 # ── Stage 6: Dashboard (Next.js standalone) ───────────────────
 FROM node:22-slim AS dashboard
+
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
@@ -142,7 +165,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    GIT_SHA=${GIT_SHA} \
+    BUILD_TIME=${BUILD_TIME} \
+    SERVICE_NAME=amarktai-dashboard \
+    APP_VERSION=1.0.0
 
 # Copy Next.js standalone build
 COPY --from=build /app/.next/standalone ./
@@ -152,6 +179,6 @@ COPY --from=build /app/public ./public
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://localhost:3000/api/build-identity').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]

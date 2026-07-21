@@ -10,7 +10,7 @@
  * - Provider/model override still blocked
  * - DeepInfra disabled is skipped by routing/fallback
  * - MiMo coding_tools_only is skipped by runtime routing
- * - Provider list exactly genx, groq, together, mimo, deepinfra
+ * - Provider list exactly genx, deepinfra, together, mimo, deepinfra
  * - No new providers added
  * - Adult generation remains on hold
  */
@@ -24,6 +24,9 @@ import { createHash } from 'node:crypto'
 
 const prismaMock = vi.hoisted(() => ({
   appApiKey: {
+    findUnique: vi.fn(),
+  },
+  appCapabilityGrant: {
     findUnique: vi.fn(),
   },
   appConnection: {
@@ -49,7 +52,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock('@amarktai/db', () => ({
   prisma: prismaMock,
   ProviderConfigError: class ProviderConfigError extends Error {
-    constructor(message, providerKey = 'groq', code = 'missing-config') {
+    constructor(message, providerKey = 'deepinfra', code = 'missing-config') {
       super(message)
       this.providerKey = providerKey
       this.code = code
@@ -77,7 +80,9 @@ import {
   PROVIDER_HEALTH_STATUSES,
   CREDENTIAL_USAGE_POLICIES,
   CAPABILITY_CATALOG,
-  routeBrain,
+  APPROVED_PROVIDER_DEFINITIONS,
+  CODING_ONLY_PROVIDERS,
+  getExecutorRegistration,
   hasBlockedOverrides,
   CAPABILITY_KEYS,
 } from '../packages/core/src/index.ts'
@@ -202,6 +207,33 @@ describe('/api/v1/jobs authenticates by hashing bearer token', async () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.appCapabilityGrant.findUnique.mockImplementation(async ({ where }) => {
+      const { appSlug, capability } = where.app_capability_grant_unique
+      return {
+        appSlug,
+        capability,
+        enabled: true,
+        qualityFloor: 'balanced',
+        budgetPolicy: 'balanced',
+        maxCostPerRequest: 0,
+        maxCostPerWorkflow: 0,
+        latencyPreference: 'medium',
+        allowFallback: true,
+        maxFallbackAttempts: 3,
+        liveProofRequired: false,
+        approvalRequired: false,
+        artifactRead: true,
+        artifactWrite: true,
+        memoryRead: false,
+        memoryWrite: false,
+        ragNamespaces: '[]',
+        policyProfile: 'test',
+        adultPermission: false,
+        dataRetentionPolicy: 'default',
+        passthroughModelAllowed: false,
+        providerResidencyConstraints: '[]',
+      }
+    })
     mockQueueAdd.mockResolvedValue({ id: 'bmq-001' })
     prismaMock.appBudgetConfig.findUnique.mockResolvedValue(null)
     prismaMock.usageMeter.aggregate.mockResolvedValue({ _sum: { costUsdCents: 0 } })
@@ -326,7 +358,7 @@ describe('/api/v1/jobs authenticates by hashing bearer token', async () => {
 
 describe('Provider/model override still blocked', () => {
   it('provider field is blocked', () => {
-    expect(hasBlockedOverrides({ capability: 'chat', prompt: 'hi', provider: 'groq' })).toBe('provider')
+    expect(hasBlockedOverrides({ capability: 'chat', prompt: 'hi', provider: 'deepinfra' })).toBe('provider')
   })
 
   it('model field is blocked', () => {
@@ -349,171 +381,70 @@ describe('Provider/model override still blocked', () => {
 // ── DeepInfra Disabled State Tests ───────────────────────────────────────────
 
 describe('DeepInfra disabled state', () => {
-  const originalEnv = process.env
-
-  beforeEach(() => {
-    process.env = { ...originalEnv }
-    process.env.GROQ_API_KEY = 'test-key'
-    process.env.DEEPINFRA_API_KEY = 'test-key'
+  it('DeepInfra remains a registered chat fallback executor', () => {
+    expect(getExecutorRegistration('chat', 'deepinfra')?.id).toBe('deepinfra.chat')
   })
 
-  afterEach(() => {
-    process.env = originalEnv
-  })
-
-  it('disabled DeepInfra is not selected by router', () => {
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        deepinfra: { disabled: true },
-      },
-    })
-
-    const deepinfraCandidate = decision.rejectedCandidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfraCandidate.reason).toContain('disabled')
-    expect(decision.selectedProvider).not.toBe('deepinfra')
-    expect(decision.selectedProvider).toBe('groq')
-  })
-
-  it('disabled DeepInfra candidate has correct reason', () => {
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        deepinfra: { disabled: true },
-      },
-    })
-
-    const deepinfraCandidate = decision.rejectedCandidates.find((c) => c.provider === 'deepinfra')
-    expect(deepinfraCandidate.reason).toContain('disabled')
-  })
-
-  it('disabled DeepInfra is excluded from eligible candidates', () => {
-    delete process.env.GROQ_API_KEY
-    delete process.env.TOGETHER_API_KEY
-
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        groq: { disabled: true },
-        deepinfra: { disabled: true },
-      },
-    })
-
-    expect(decision.selectedProvider).toBeNull()
-    expect(decision.executionAllowed).toBe(false)
-  })
-
-  it('enabled DeepInfra participates normally', () => {
-    delete process.env.GROQ_API_KEY
-    delete process.env.TOGETHER_API_KEY
-
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        groq: { disabled: true },
-        deepinfra: { disabled: false },
-      },
-    })
-
-    expect(decision.selectedProvider).toBe('deepinfra')
-  })
-
-  it('disabled state does not affect other providers', () => {
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        deepinfra: { disabled: true },
-      },
-    })
-
-    expect(decision.executableCandidates.some((c) => c.provider === 'groq')).toBe(true)
-  })
-
-  it('worker executor checks disabled state before DeepInfra fallback', () => {
+  it('worker delegates provider health filtering and fallback selection to Orchestra', () => {
     const executorPath = path.join(ROOT, 'apps/worker/src/providers/provider-executor.ts')
     const content = fs.readFileSync(executorPath, 'utf8')
-    expect(content).toContain('isProviderDisabledInDb')
-    expect(content).toContain("deepinfra")
+    expect(content).toContain('resolveOrchestraDecision')
+    expect(content).toContain('orchestraDecision.fallbackRoutes')
+    expect(content).not.toContain('isProviderDisabledInDb')
   })
 })
 
 // ── MiMo coding_tools_only Tests ─────────────────────────────────────────────
 
 describe('MiMo coding_tools_only', () => {
-  const originalEnv = process.env
-
-  beforeEach(() => {
-    process.env = { ...originalEnv }
-    process.env.MIMO_API_KEY = 'mimo-test-key'
-  })
-
-  afterEach(() => {
-    process.env = originalEnv
-  })
-
-  it('MiMo has empty category support (coding_tools_only)', () => {
-    const decision = routeBrain({ capability: 'code', routingMode: 'balanced' })
-    const mimo = decision.policyRestrictedCandidates.find((c) => c.provider === 'mimo')
-    expect(mimo.reason).toContain('coding_tools_only')
-  })
-
-  it('MiMo is never selected for runtime jobs', () => {
-    const decision = routeBrain({ capability: 'chat', routingMode: 'balanced' })
-    expect(decision.selectedProvider).not.toBe('mimo')
-  })
-
-  it('MiMo runtime_restricted state is respected by router', () => {
-    const decision = routeBrain({
-      capability: 'chat',
-      routingMode: 'balanced',
-      providerStates: {
-        mimo: { runtimeRestricted: true },
-      },
+  it('MiMo is canonical coding-tools-only policy', () => {
+    expect(CODING_ONLY_PROVIDERS).toEqual(['mimo'])
+    expect(APPROVED_PROVIDER_DEFINITIONS.find((provider) => provider.key === 'mimo')).toMatchObject({
+      backendExecutionAllowed: false,
+      codingOnly: true,
     })
+  })
 
-    const mimoCandidate = decision.policyRestrictedCandidates.find((c) => c.provider === 'mimo')
-    expect(mimoCandidate.reason).toContain('coding_tools_only')
-    expect(decision.selectedProvider).not.toBe('mimo')
+  it('MiMo has no backend executor registration', () => {
+    for (const capability of CAPABILITY_KEYS) {
+      expect(getExecutorRegistration(capability, 'mimo')).toBeUndefined()
+    }
   })
 
   it('runtime-selector rejects MiMo', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain("mimo")
-    expect(content).toContain("coding_tool_only")
+    expect(content).toContain("mimo_coding_tool_only")
   })
 
   it('runtime-selector rejects runtime_restricted providers', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain('runtime_restricted')
+    expect(content).toContain('provider_runtime_restricted')
   })
 
   it('runtime-selector rejects disabled providers', () => {
-    const selectorPath = path.join(ROOT, 'apps/api/src/lib/runtime-selector.ts')
-    const content = fs.readFileSync(selectorPath, 'utf8')
+    const orchestraPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
+    const content = fs.readFileSync(orchestraPath, 'utf8')
     expect(content).toContain('provider_health_disabled')
   })
 })
 
-// ── Provider List Exactly 5 ──────────────────────────────────────────────────
+// ── Provider List Exactly 4 ──────────────────────────────────────────────────
 
 describe('Provider list integrity', () => {
-  it('PROVIDER_KEYS is exactly genx, groq, together, mimo, deepinfra', () => {
-    expect(PROVIDER_KEYS).toEqual(['genx', 'groq', 'together', 'mimo', 'deepinfra'])
+  it('PROVIDER_KEYS is exactly genx, deepinfra, together, mimo, deepinfra', () => {
+    expect(PROVIDER_KEYS).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
   })
 
-  it('PROVIDER_KEYS has exactly 5 entries', () => {
-    expect(PROVIDER_KEYS).toHaveLength(5)
+  it('PROVIDER_KEYS has exactly 4 entries', () => {
+    expect(PROVIDER_KEYS).toHaveLength(4)
   })
 
   it('no new providers added', () => {
-    const allowed = ['genx', 'groq', 'together', 'mimo', 'deepinfra']
+    const allowed = ['genx', 'together', 'mimo', 'deepinfra']
     for (const key of PROVIDER_KEYS) {
       expect(allowed).toContain(key)
     }
@@ -575,11 +506,9 @@ describe('Adult generation remains on hold', () => {
     }
   })
 
-  it('dashboard shows adult generation as On Hold', () => {
-    const ccPath = path.join(ROOT, 'app/dashboard/command-center/page.js')
-    const content = fs.readFileSync(ccPath, 'utf8')
-    expect(content).toContain('On Hold')
-    expect(content).toContain('adult_generation')
+  it('canonical truth keeps adult generation policy restricted', async () => {
+    const { getRuntimeTruth } = await import('../packages/core/src/index.ts')
+    expect(getRuntimeTruth().capabilities.filter((item) => item.capability.startsWith('adult_')).every((item) => item.classification === 'POLICY_RESTRICTED')).toBe(true)
   })
 })
 
@@ -599,7 +528,7 @@ describe('Apps cannot choose provider or model', () => {
       method: 'POST',
       url: '/api/v1/jobs',
       headers: { authorization: VALID_BEARER },
-      payload: { capability: 'chat', prompt: 'hello', provider: 'groq' },
+      payload: { capability: 'chat', prompt: 'hello', provider: 'deepinfra' },
     })
 
     expect(res.statusCode).toBe(400)
@@ -632,8 +561,8 @@ describe('Apps cannot choose provider or model', () => {
     await app.close()
   })
 
-  it('router function signature has no provider/model input', () => {
-    const routingPath = path.join(ROOT, 'packages/core/src/brain-router.ts')
+  it('Orchestra request contract has no app-facing provider/model override', () => {
+    const routingPath = path.join(ROOT, 'packages/core/src/orchestra.ts')
     const content = fs.readFileSync(routingPath, 'utf8')
     expect(content).toContain('capability: CapabilityKey')
     expect(content).not.toContain('providerOverride')
