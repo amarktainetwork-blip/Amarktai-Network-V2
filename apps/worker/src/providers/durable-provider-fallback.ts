@@ -46,6 +46,24 @@ function claimConflict(error: unknown): boolean {
   return typeof error === 'string' && error.includes(CLAIM_CONFLICT)
 }
 
+function isInternalLongFormAssembly(payload: WorkerJobData): boolean {
+  return payload.capability === 'long_form_video'
+    && payload.metadata?.longFormAssembly === true
+    && payload.metadata?.internalLocalExecution === true
+}
+
+async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
+  // Local assembly is an internal workflow operation, not a provider route. It
+  // must retain its immutable app grant but must never enter Orchestra or claim
+  // a provider execution. Provider fallback recovery applies only to real
+  // provider-backed capability jobs.
+  if (isInternalLongFormAssembly(payload)) {
+    const { executeLongFormAssembly } = await import('../long-form-assembly.js')
+    return executeLongFormAssembly(payload)
+  }
+  return executeWithProvider(payload)
+}
+
 function chooseRecoveryRoute(metadata: Record<string, unknown>, attempts: RouteAttempt[]): { provider: string; model: string; executorId: string } | null {
   // If the first route already submitted a durable GenX job, retry that exact
   // model so the executor resumes the remote job instead of submitting again.
@@ -82,7 +100,8 @@ function withRecoveryEvidence(result: ProcessorResult, route: { provider: string
 }
 
 /**
- * Execute through Orchestra and recover one very specific durable fallback race.
+ * Execute internal local workflow operations directly; otherwise execute through
+ * Orchestra and recover one very specific durable provider fallback race.
  *
  * A queued job is claimed once by the worker. Provider executors also maintain a
  * job-level providerClaimAt guard. When a primary route returns a failure and
@@ -91,6 +110,7 @@ function withRecoveryEvidence(result: ProcessorResult, route: { provider: string
  * it as a second worker.
  *
  * Recovery is deliberately fail-closed:
+ * - internal local assembly never enters provider routing;
  * - the job must still be processing;
  * - a provider claim must exist;
  * - at least two route attempts must have been durably recorded;
@@ -99,8 +119,8 @@ function withRecoveryEvidence(result: ProcessorResult, route: { provider: string
  * - recovery runs at most once.
  */
 export async function executeWithDurableProviderFallback(payload: WorkerJobData): Promise<ProcessorResult> {
-  const initial = await executeWithProvider(payload)
-  if (initial.success || !claimConflict(initial.error)) return initial
+  const initial = await executeInitial(payload)
+  if (initial.success || !claimConflict(initial.error) || isInternalLongFormAssembly(payload)) return initial
 
   const job = await prisma.job.findUnique({
     where: { id: payload.jobId },
