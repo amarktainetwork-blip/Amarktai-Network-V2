@@ -1,0 +1,35 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "AmarktAI Network Search"
+  privacypolicy_url: false
+  contact_url: false
+  donation_url: false
+
+search:
+  safe_search: 2
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - json
+
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  base_url: false
+  limiter: false
+  public_instance: false
+  secret_key: "overridden-by-SEARXNG_SECRET"
+  image_proxy: false
+  method: "GET"
+
+ui:
+  static_use_hash: true
+
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+  pool_connections: 50
+  pool_maxsize: 10
+  enable_http2: true
