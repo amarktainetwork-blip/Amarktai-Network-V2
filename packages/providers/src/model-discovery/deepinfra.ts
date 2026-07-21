@@ -1,4 +1,4 @@
-import type { CapabilityKey, ProviderDiscoveredModel, ProviderDiscoveryResult } from '@amarktai/core'
+import { hasExecutorRegistration, type CapabilityKey, type ProviderDiscoveredModel, type ProviderDiscoveryResult } from '@amarktai/core'
 import { discoveryTimestamp, failedLiveResult, fetchModelList, modelFromProviderRecord, skippedResult, stringField, numberField, type DiscoveryAdapterOptions } from './common.js'
 
 const DEEPINFRA_ACCOUNT_MODELS_ENDPOINT = 'https://api.deepinfra.com/v1/models'
@@ -56,6 +56,15 @@ const TASK_CAPABILITIES: Record<string, CapabilityKey[]> = {
   'audio-classification': ['audio_classification'],
   'voice-activity-detection': ['voice_activity_detection'],
 }
+
+const ARTIFACT_CAPABILITIES = new Set<CapabilityKey>([
+  'image_generation',
+  'image_edit',
+  'image_to_image',
+  'video_generation',
+  'music_generation',
+  'tts',
+])
 
 function recordValue(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -167,6 +176,9 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
   const task = vision ? 'vision' : reportedTask
   const capabilities = TASK_CAPABILITIES[task] ?? []
   const contractKnown = capabilities.length > 0
+  const executorImplemented = capabilities.some((capability) => hasExecutorRegistration(capability, 'deepinfra'))
+  const requiresArtifactPersistence = capabilities.some((capability) => ARTIFACT_CAPABILITIES.has(capability))
+  const artifactPersistenceExists = !requiresArtifactPersistence || executorImplemented
   const modes = structuredModes(record)
   const parameters = Array.isArray(record.supported_parameters) ? record.supported_parameters : []
   const isReranker = task === 'reranker' || task === 'rerank'
@@ -187,12 +199,12 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
     lastDiscoveredAt: timestamp,
     source: 'live_endpoint',
     discoverySource: 'live_endpoint',
-    providerClientExists: contractKnown,
-    workerExecutorExists: contractKnown,
+    providerClientExists: executorImplemented,
+    workerExecutorExists: executorImplemented,
     endpointShapeKnown: contractKnown,
     requestShapeKnown: contractKnown,
     responseShapeKnown: contractKnown,
-    artifactPersistenceExists: !capabilities.some((capability) => ['image_generation', 'image_edit', 'video_generation', 'music_generation', 'tts'].includes(capability)),
+    artifactPersistenceExists,
     contextWindow: numberField(record, ['max_tokens', 'max_model_len', 'context_window', 'context_length']),
     streamingSupported: ['text-generation', 'text', 'chat'].includes(task) && record.streaming !== false,
     transportProfile: transportForTask(task),
@@ -210,8 +222,10 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       endpointShapeKnown: contractKnown,
       requestShapeKnown: contractKnown,
       responseShapeKnown: contractKnown,
-      providerClientExists: contractKnown,
-      workerExecutorExists: contractKnown,
+      providerClientExists: executorImplemented,
+      workerExecutorExists: executorImplemented,
+      artifactPersistenceExists,
+      executorRegistryMatched: executorImplemented,
       streamingSupported: ['text-generation', 'text', 'chat'].includes(task) && record.streaming !== false,
       accountInventorySource: DEEPINFRA_ACCOUNT_MODELS_ENDPOINT,
       taskMetadataSource: DEEPINFRA_TASK_MODELS_ENDPOINT,
@@ -263,6 +277,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
     const enrichedCount = models.filter((model) => model.rawMetadata?.taskContractEnriched === true).length
     const nativeOnlyCount = models.filter((model) => model.rawMetadata?.nativeCatalogueOnly === true).length
     const visionCount = models.filter((model) => model.rawMetadata?.visionMetadataDetected === true).length
+    const executableCount = models.filter((model) => model.rawMetadata?.executorRegistryMatched === true).length
     return {
       provider: 'deepinfra', providerRole: 'runtime_execution_provider', docsCapabilityKnown: true,
       liveDiscoverySupported: true, docsFallbackSupported: true, apiKeyEnvName: 'DEEPINFRA_API_KEY',
@@ -275,7 +290,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
       returnedModelCount: models.length, staticFallbackCount: 0, docsFallbackCount: 0,
       effectiveCatalogueCount: models.length, runtimeExecutionAllowed: true, policyRestrictedByApp: false,
       policyExecutionDisabled: false, policyBlockedReason: null, discoveredAt: timestamp,
-      notes: [`DeepInfra OpenAI-compatible account inventory was combined with its live native-model catalogue. Enriched ${enrichedCount}/${models.length} contracts, detected ${visionCount} multimodal vision routes, and added ${nativeOnlyCount} callable native-only models; private, deprecated, and unknown-contract entries remain excluded.`],
+      notes: [`DeepInfra OpenAI-compatible account inventory was combined with its live native-model catalogue. Enriched ${enrichedCount}/${models.length} contracts, matched ${executableCount}/${models.length} models to implemented executor registrations, detected ${visionCount} multimodal vision routes, and added ${nativeOnlyCount} callable native-only models; private, deprecated, and unknown-contract entries remain excluded.`],
     }
   } catch (error) {
     return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, error instanceof Error ? error.message : 'DeepInfra discovery failed', [])
