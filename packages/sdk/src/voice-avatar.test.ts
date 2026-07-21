@@ -5,6 +5,17 @@ function ok(body: unknown = { ok: true }) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
+type FetchCall = [input: RequestInfo | URL, init?: RequestInit]
+
+function recordingTransport(body: unknown = { ok: true }) {
+  const calls: FetchCall[] = []
+  const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push([input, init])
+    return ok(body)
+  })
+  return { calls, transport }
+}
+
 const consent: HumanConsentEvidencePayload = {
   version: 1,
   subjectReference: 'subject:adult-1',
@@ -25,7 +36,7 @@ const consent: HumanConsentEvidencePayload = {
 
 describe('AmarktAIClient governed voice and avatar profiles', () => {
   it('uses app-isolated profile CRUD routes with provider-neutral draft bodies', async () => {
-    const transport = vi.fn(async () => ok())
+    const { calls, transport } = recordingTransport()
     const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
 
     await client.voiceProfiles()
@@ -53,7 +64,7 @@ describe('AmarktAIClient governed voice and avatar profiles', () => {
     await client.updateAvatarProfile('avatar / one', { description: 'Updated avatar draft.' })
     await client.archiveAvatarProfile('avatar / one')
 
-    expect(transport.mock.calls.map((call) => call[0])).toEqual([
+    expect(calls.map((call) => call[0])).toEqual([
       'https://example.test/api/v1/voice-profiles',
       'https://example.test/api/v1/voice-profiles/voice%20%2F%20one',
       'https://example.test/api/v1/voice-profiles',
@@ -65,8 +76,8 @@ describe('AmarktAIClient governed voice and avatar profiles', () => {
       'https://example.test/api/v1/avatar-profiles/avatar%20%2F%20one',
       'https://example.test/api/v1/avatar-profiles/avatar%20%2F%20one',
     ])
-    const voiceCreate = JSON.parse(String(transport.mock.calls[2]![1]?.body)) as Record<string, unknown>
-    const avatarCreate = JSON.parse(String(transport.mock.calls[7]![1]?.body)) as Record<string, unknown>
+    const voiceCreate = JSON.parse(String(calls[2]![1]?.body)) as Record<string, unknown>
+    const avatarCreate = JSON.parse(String(calls[7]![1]?.body)) as Record<string, unknown>
     for (const body of [voiceCreate, avatarCreate]) {
       for (const field of ['appSlug', 'status', 'rightsStatus', 'rightsDecision', 'providerBinding', 'provider', 'model', 'route', 'executorId', 'apiKey']) {
         expect(body).not.toHaveProperty(field)
@@ -75,15 +86,15 @@ describe('AmarktAIClient governed voice and avatar profiles', () => {
   })
 
   it('uploads one Blob with native multipart boundaries and no client metadata fields', async () => {
-    const transport = vi.fn(async () => ok({ artifactId: 'artifact-1' }))
+    const { calls, transport } = recordingTransport({ artifactId: 'artifact-1' })
     const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
     const file = new Blob([Buffer.from('RIFF0000WAVEfixture')], { type: 'audio/wav' })
 
     await client.uploadProfileArtifact('voice_source_audio', file, 'sample.wav')
 
     expect(transport).toHaveBeenCalledTimes(1)
-    expect(transport.mock.calls[0]![0]).toBe('https://example.test/api/v1/profile-artifacts/voice_source_audio')
-    const init = transport.mock.calls[0]![1] as RequestInit
+    expect(calls[0]![0]).toBe('https://example.test/api/v1/profile-artifacts/voice_source_audio')
+    const init = calls[0]![1] as RequestInit
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
     const headers = init.headers as Record<string, string>
