@@ -140,8 +140,8 @@ export function detectVoiceAvatarEvidenceMime(buffer: Buffer): string | null {
   if (ascii(buffer, 0, 4) === 'RIFF' && ascii(buffer, 8, 4) === 'WAVE') return 'audio/wav'
   if (ascii(buffer, 0, 4) === 'fLaC') return 'audio/flac'
   if (ascii(buffer, 0, 4) === 'OggS') return 'audio/ogg'
-  if (ascii(buffer, 0, 3) === 'ID3' || (buffer[0] === 0xff && ((buffer[1] ?? 0) & 0xe0) === 0xe0)) return 'audio/mpeg'
   if (buffer[0] === 0xff && (((buffer[1] ?? 0) & 0xf6) === 0xf0)) return 'audio/aac'
+  if (ascii(buffer, 0, 3) === 'ID3' || (buffer[0] === 0xff && ((buffer[1] ?? 0) & 0xe0) === 0xe0)) return 'audio/mpeg'
   if (startsWith(buffer, [0x1a, 0x45, 0xdf, 0xa3])) return 'video/webm'
   if (ascii(buffer, 4, 4) === 'ftyp') {
     const brand = ascii(buffer, 8, 4)
