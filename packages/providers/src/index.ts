@@ -6,12 +6,15 @@
  * No provider-specific routing logic lives here — that belongs in the worker adapters.
  */
 
-// DeepInfra — OpenAI-compatible text fallback/runtime diagnostics
+// DeepInfra — OpenAI-compatible text and multimodal vision
 export {
   deepinfraChat,
+  deepinfraVision,
   resolveDeepInfraChatModel,
   type DeepInfraChatRequest,
   type DeepInfraChatResponse,
+  type DeepInfraVisionImage,
+  type DeepInfraVisionRequest,
 } from './deepinfra-client.js'
 
 // MiMo remains approved as coding-tools-only metadata. Do not export a
@@ -120,6 +123,9 @@ export {
 export {
   openAiChatCompletion,
   openAiStreamingChat,
+  type OpenAiTransportContent,
+  type OpenAiTextContentPart,
+  type OpenAiImageContentPart,
   type OpenAiTransportMessage,
   type OpenAiToolDefinition,
   type OpenAiToolCall,
