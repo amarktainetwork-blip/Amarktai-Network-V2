@@ -10,10 +10,21 @@ const TEXT_CAPABILITIES: CapabilityKey[] = [
   'question_answering', 'classification', 'extraction', 'structured_output', 'tool_use',
 ]
 
+const VISION_CAPABILITIES: CapabilityKey[] = [
+  'image_classification',
+  'visual_question_answering',
+  'document_qa',
+  'ocr',
+  'video_understanding',
+]
+
 const TASK_CAPABILITIES: Record<string, CapabilityKey[]> = {
   'text-generation': TEXT_CAPABILITIES,
   text: TEXT_CAPABILITIES,
   chat: TEXT_CAPABILITIES,
+  vision: VISION_CAPABILITIES,
+  multimodal: VISION_CAPABILITIES,
+  'image-text-to-text': VISION_CAPABILITIES,
   'zero-shot-classification': ['zero_shot_classification'],
   'text-classification': ['classification'],
   'token-classification': ['token_classification'],
@@ -34,7 +45,7 @@ const TASK_CAPABILITIES: Record<string, CapabilityKey[]> = {
   'image-segmentation': ['image_segmentation', 'mask_generation'],
   'depth-estimation': ['depth_estimation'],
   'keypoint-detection': ['keypoint_detection'],
-  'visual-question-answering': ['visual_question_answering'],
+  'visual-question-answering': VISION_CAPABILITIES,
   'document-question-answering': ['document_qa'],
   ocr: ['ocr'],
   'text-to-video': ['video_generation'],
@@ -52,6 +63,11 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {}
 }
 
+function stringValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string')
+  return typeof value === 'string' ? [value] : []
+}
+
 function modelIdFromRecord(record: Record<string, unknown>): string {
   return stringField(record, ['id', 'model_name', 'model', 'name'])
 }
@@ -66,15 +82,31 @@ function normalizeTask(record: Record<string, unknown>, modelId: string): string
   return 'contract-unknown'
 }
 
+function isVisionRecord(record: Record<string, unknown>, modelId: string, task: string): boolean {
+  if (['vision', 'multimodal', 'image-text-to-text', 'visual-question-answering'].includes(task)) return true
+  const metadata = recordValue(record.metadata)
+  const tags = [
+    ...stringValues(record.tags),
+    ...stringValues(metadata.tags),
+    ...stringValues(record.modalities),
+    ...stringValues(record.input_modalities),
+    ...stringValues(metadata.modalities),
+    ...stringValues(metadata.input_modalities),
+  ].join(' ').toLowerCase()
+  if (/\b(vision|multimodal|image[-_ ]text|visual[-_ ]question)\b/.test(tags)) return true
+  const normalizedId = modelId.toLowerCase()
+  return /(?:^|[\/_-])(vision|vl|multimodal)(?:$|[\/_-])/.test(normalizedId)
+}
+
 function transportForTask(task: string): ProviderDiscoveredModel['transportProfile'] {
-  if (['text-generation', 'text', 'chat'].includes(task)) return 'openai_chat_sse'
+  if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'openai_chat_sse'
   if (['text-to-image', 'image-to-image', 'text-to-speech'].includes(task)) return 'native_inference_binary'
   if (task === 'text-to-video') return 'native_inference_async_webhook'
   return 'native_inference_json'
 }
 
 function endpointFamilyForTask(task: string): string {
-  if (['text-generation', 'text', 'chat'].includes(task)) return 'deepinfra_openai_v1/openai_chat'
+  if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'deepinfra_openai_v1/openai_chat'
   if (task === 'embeddings' || task === 'feature-extraction' || task === 'sentence-similarity') return 'deepinfra_openai_v1/embeddings'
   if (task === 'reranker' || task === 'rerank') return 'deepinfra_native_v1/rerank/native_inference'
   return 'deepinfra_native_v1/native_inference'
@@ -130,12 +162,16 @@ function enrichAccountRecord(
 
 function toModel(record: Record<string, unknown>, timestamp: string): ProviderDiscoveredModel {
   const modelId = modelIdFromRecord(record)
-  const task = normalizeTask(record, modelId)
+  const reportedTask = normalizeTask(record, modelId)
+  const vision = isVisionRecord(record, modelId, reportedTask)
+  const task = vision ? 'vision' : reportedTask
   const capabilities = TASK_CAPABILITIES[task] ?? []
   const contractKnown = capabilities.length > 0
   const modes = structuredModes(record)
   const parameters = Array.isArray(record.supported_parameters) ? record.supported_parameters : []
   const isReranker = task === 'reranker' || task === 'rerank'
+  const modalitiesIn = vision ? ['text', 'image'] : undefined
+  const modalitiesOut = vision ? ['text'] : undefined
   return modelFromProviderRecord({
     provider: 'deepinfra',
     modelId,
@@ -143,7 +179,9 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
     rawProviderType: task,
     inferredCapabilities: capabilities,
     category: task,
-    providerCategory: task,
+    providerCategory: reportedTask,
+    modalitiesIn,
+    modalitiesOut,
     endpointSource: DEEPINFRA_DISCOVERY_SOURCE,
     endpointFamily: endpointFamilyForTask(task),
     lastDiscoveredAt: timestamp,
@@ -160,8 +198,11 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
     transportProfile: transportForTask(task),
     rawMetadata: {
       taskType: task,
+      providerReportedTask: reportedTask,
       category: task,
       capabilities,
+      modalitiesIn: modalitiesIn ?? [],
+      modalitiesOut: modalitiesOut ?? (task === 'text-to-image' ? ['image'] : ['json']),
       structuredOutputModes: modes.length ? modes : ['none'],
       supportedParameters: isReranker ? [...new Set([...parameters, 'queries'])] : parameters,
       endpointFamily: endpointFamilyForTask(task),
@@ -176,6 +217,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       taskMetadataSource: DEEPINFRA_TASK_MODELS_ENDPOINT,
       taskContractEnriched: record.task_contract_enriched === true,
       nativeCatalogueOnly: record.native_catalogue_only === true,
+      visionMetadataDetected: vision,
       pricing: record.pricing,
       tags: record.tags,
       deprecated: record.deprecated,
@@ -220,6 +262,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
     if (!models.length) return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, 'authenticated and native model discovery returned zero usable models', [])
     const enrichedCount = models.filter((model) => model.rawMetadata?.taskContractEnriched === true).length
     const nativeOnlyCount = models.filter((model) => model.rawMetadata?.nativeCatalogueOnly === true).length
+    const visionCount = models.filter((model) => model.rawMetadata?.visionMetadataDetected === true).length
     return {
       provider: 'deepinfra', providerRole: 'runtime_execution_provider', docsCapabilityKnown: true,
       liveDiscoverySupported: true, docsFallbackSupported: true, apiKeyEnvName: 'DEEPINFRA_API_KEY',
@@ -232,7 +275,7 @@ export async function discoverDeepInfraProviderModels(options: DiscoveryAdapterO
       returnedModelCount: models.length, staticFallbackCount: 0, docsFallbackCount: 0,
       effectiveCatalogueCount: models.length, runtimeExecutionAllowed: true, policyRestrictedByApp: false,
       policyExecutionDisabled: false, policyBlockedReason: null, discoveredAt: timestamp,
-      notes: [`DeepInfra OpenAI-compatible account inventory was combined with its live native-model catalogue. Enriched ${enrichedCount}/${models.length} contracts and added ${nativeOnlyCount} callable native-only models; private, deprecated, and unknown-contract entries remain excluded.`],
+      notes: [`DeepInfra OpenAI-compatible account inventory was combined with its live native-model catalogue. Enriched ${enrichedCount}/${models.length} contracts, detected ${visionCount} multimodal vision routes, and added ${nativeOnlyCount} callable native-only models; private, deprecated, and unknown-contract entries remain excluded.`],
     }
   } catch (error) {
     return failedLiveResult('deepinfra', DEEPINFRA_DISCOVERY_SOURCE, error instanceof Error ? error.message : 'DeepInfra discovery failed', [])
