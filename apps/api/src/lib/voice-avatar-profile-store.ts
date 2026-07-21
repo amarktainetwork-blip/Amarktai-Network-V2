@@ -153,7 +153,7 @@ export async function archiveAvatarProfile(appSlug: string, avatarProfileId: str
 }
 
 function ensureConsentCurrent(profile: ReusableVoiceProfile | ReusableAvatarProfile, at: Date): void {
-  const consent = 'consentEvidence' in profile
+  const consent = 'voiceProfileId' in profile
     ? profile.consentEvidence
     : profile.source.subjectType === 'human_likeness'
       ? profile.source.consentEvidence
