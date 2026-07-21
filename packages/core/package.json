@@ -49,6 +49,10 @@
     "./voice-avatar-resources": {
       "types": "./dist/voice-avatar-resources.d.ts",
       "import": "./dist/voice-avatar-resources.js"
+    },
+    "./voice-avatar-evidence": {
+      "types": "./dist/voice-avatar-evidence.d.ts",
+      "import": "./dist/voice-avatar-evidence.js"
     }
   },
   "scripts": {
