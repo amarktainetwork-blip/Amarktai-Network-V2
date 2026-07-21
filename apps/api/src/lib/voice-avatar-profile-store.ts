@@ -3,6 +3,7 @@ import { prisma } from '@amarktai/db'
 import {
   ReusableAvatarProfileSchema,
   ReusableVoiceProfileSchema,
+  type ProfileRightsDecision,
   type ReusableAvatarProfile,
   type ReusableVoiceProfile,
 } from '@amarktai/core/voice-avatar-platform'
@@ -161,6 +162,20 @@ function ensureConsentCurrent(profile: ReusableVoiceProfile | ReusableAvatarProf
   if (consent?.expiresAt && new Date(consent.expiresAt).getTime() <= at.getTime()) throw new Error('PROFILE_CONSENT_EXPIRED')
 }
 
+function rightsDecision(input: VoiceAvatarProfileDecision, at: Date): ProfileRightsDecision {
+  return {
+    decision: input.decision,
+    verifierReference: input.verifierReference,
+    decidedAt: at.toISOString(),
+    notes: input.notes,
+  }
+}
+
+function ensureDecisionAllowed(status: string, decision: VoiceAvatarProfileDecision['decision']): void {
+  if (status === 'revoked' && decision !== 'revoked') throw new Error('PROFILE_REVOKED')
+  if (status === 'archived' && decision !== 'revoked') throw new Error('PROFILE_ARCHIVED')
+}
+
 export async function decideVoiceProfile(input: {
   appSlug: string
   voiceProfileId: string
@@ -170,12 +185,15 @@ export async function decideVoiceProfile(input: {
   const current = await getVoiceProfile(input.appSlug, input.voiceProfileId)
   if (!current) throw new Error('VOICE_PROFILE_NOT_FOUND')
   const at = input.at ?? new Date()
+  ensureDecisionAllowed(current.status, input.decision.decision)
+  const durableDecision = rightsDecision(input.decision, at)
   if (input.decision.decision === 'verified') {
     ensureConsentCurrent(current, at)
     return updateVoiceProfile({
       ...current,
       status: 'verified',
       rightsStatus: 'verified',
+      rightsDecision: durableDecision,
       updatedAt: at.toISOString(),
       revokedAt: undefined,
       revocationReason: undefined,
@@ -186,6 +204,7 @@ export async function decideVoiceProfile(input: {
       ...current,
       status: 'draft',
       rightsStatus: 'rejected',
+      rightsDecision: durableDecision,
       updatedAt: at.toISOString(),
       revokedAt: undefined,
       revocationReason: undefined,
@@ -195,6 +214,7 @@ export async function decideVoiceProfile(input: {
     ...current,
     status: 'revoked',
     rightsStatus: 'revoked',
+    rightsDecision: durableDecision,
     updatedAt: at.toISOString(),
     revokedAt: at.toISOString(),
     revocationReason: input.decision.notes || `Revoked by ${input.decision.verifierReference}`,
@@ -210,12 +230,15 @@ export async function decideAvatarProfile(input: {
   const current = await getAvatarProfile(input.appSlug, input.avatarProfileId)
   if (!current) throw new Error('AVATAR_PROFILE_NOT_FOUND')
   const at = input.at ?? new Date()
+  ensureDecisionAllowed(current.status, input.decision.decision)
+  const durableDecision = rightsDecision(input.decision, at)
   if (input.decision.decision === 'verified') {
     ensureConsentCurrent(current, at)
     return updateAvatarProfile({
       ...current,
       status: 'verified',
       rightsStatus: 'verified',
+      rightsDecision: durableDecision,
       updatedAt: at.toISOString(),
       revokedAt: undefined,
       revocationReason: undefined,
@@ -226,6 +249,7 @@ export async function decideAvatarProfile(input: {
       ...current,
       status: 'draft',
       rightsStatus: 'rejected',
+      rightsDecision: durableDecision,
       updatedAt: at.toISOString(),
       revokedAt: undefined,
       revocationReason: undefined,
@@ -235,6 +259,7 @@ export async function decideAvatarProfile(input: {
     ...current,
     status: 'revoked',
     rightsStatus: 'revoked',
+    rightsDecision: durableDecision,
     updatedAt: at.toISOString(),
     revokedAt: at.toISOString(),
     revocationReason: input.decision.notes || `Revoked by ${input.decision.verifierReference}`,
