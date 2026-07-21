@@ -1,9 +1,9 @@
 /**
- * @amarktai/providers — Live AI provider REST clients.
+ * @amarktai/providers — Live AI provider REST clients and governed execution transports.
  *
- * Each client handles HTTP communication with its respective provider API.
- * All API key resolution goes through @amarktai/core config (single source of truth).
- * No provider-specific routing logic lives here — that belongs in the worker adapters.
+ * Each client handles communication with its external service. Provider/model
+ * routing remains in Orchestra and worker adapters; app payloads never select
+ * providers, models, endpoints, or credentials.
  */
 
 // DeepInfra — OpenAI-compatible text and multimodal vision
@@ -169,6 +169,20 @@ export {
   type DeepInfraVideoRequest,
   type DeepInfraVideoResult,
 } from './deepinfra-video-client.js'
+
+// Governed research infrastructure — internal Network execution only.
+export {
+  searxngSearch,
+  type SearxngSearchEvidence,
+  type SearxngSearchResponse,
+} from './searxng-client.js'
+export {
+  assertPublicResearchUrl,
+  controlledBrowsePage,
+  getRobotsEvidence,
+  type ControlledBrowserPolicy,
+  type ControlledPageResult,
+} from './controlled-browser.js'
 
 // Provider model discovery — model-list/catalogue only, no generation calls.
 export {
