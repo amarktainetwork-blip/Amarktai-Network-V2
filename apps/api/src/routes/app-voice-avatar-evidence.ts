@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { FastifyInstance, FastifyReply } from 'fastify'
+import multipart from '@fastify/multipart'
 import {
   VOICE_AVATAR_EVIDENCE_CONFIG,
   VoiceAvatarEvidencePurposeSchema,
@@ -34,6 +35,19 @@ function uploadError(reply: FastifyReply, error: unknown) {
 }
 
 export async function appVoiceAvatarEvidenceRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(multipart, {
+    throwFileSizeLimit: true,
+    attachFieldsToBody: false,
+    limits: {
+      fileSize: 150 * 1024 * 1024,
+      files: 1,
+      fields: 0,
+      parts: 1,
+      fieldNameSize: 100,
+      headerPairs: 200,
+    },
+  })
+
   app.post('/api/v1/profile-artifacts/:purpose', async (request, reply) => {
     const auth = await authenticateAppKey(request.headers.authorization)
     if (!auth.ok) {
