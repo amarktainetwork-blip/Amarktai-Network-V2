@@ -37,12 +37,22 @@ export type VoiceAvatarUseScope = (typeof VOICE_AVATAR_USE_SCOPES)[number]
 export const VOICE_PROFILE_STATUSES = ['draft', 'verified', 'revoked', 'archived'] as const
 export const AVATAR_PROFILE_STATUSES = ['draft', 'verified', 'revoked', 'archived'] as const
 export const RIGHTS_VERIFICATION_STATUSES = ['pending', 'verified', 'rejected', 'revoked', 'expired'] as const
+export const RIGHTS_DECISIONS = ['verified', 'rejected', 'revoked'] as const
 
 const IsoDateTimeSchema = z.string().datetime({ offset: true })
 const ArtifactIdSchema = z.string().uuid()
 const ProfileIdSchema = z.string().uuid()
 const NonEmptyStringArraySchema = z.array(z.string().trim().min(1)).min(1).max(100)
 const UseScopeArraySchema = z.array(z.enum(VOICE_AVATAR_USE_SCOPES)).min(1).max(VOICE_AVATAR_USE_SCOPES.length)
+
+export const ProfileRightsDecisionSchema = z.object({
+  decision: z.enum(RIGHTS_DECISIONS),
+  verifierReference: z.string().trim().min(1).max(300),
+  decidedAt: IsoDateTimeSchema,
+  notes: z.string().max(5_000).default(''),
+}).strict()
+
+export type ProfileRightsDecision = z.infer<typeof ProfileRightsDecisionSchema>
 
 export const HumanConsentEvidenceSchema = z.object({
   version: z.literal(1),
@@ -106,6 +116,7 @@ export const ReusableVoiceProfileSchema = z.object({
   styleTags: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
   permittedUses: UseScopeArraySchema,
   rightsStatus: z.enum(RIGHTS_VERIFICATION_STATUSES),
+  rightsDecision: ProfileRightsDecisionSchema.optional(),
   consentEvidence: HumanConsentEvidenceSchema.optional(),
   previewArtifactId: ArtifactIdSchema.optional(),
   providerBinding: z.object({
@@ -126,8 +137,15 @@ export const ReusableVoiceProfileSchema = z.object({
   if (value.status === 'verified' && value.rightsStatus !== 'verified') {
     context.addIssue({ code: 'custom', path: ['rightsStatus'], message: 'Verified voice profiles require verified rights status' })
   }
-  if (value.status === 'revoked' && !value.revokedAt) {
-    context.addIssue({ code: 'custom', path: ['revokedAt'], message: 'Revoked voice profiles require revokedAt' })
+  if (value.rightsStatus === 'verified' && value.rightsDecision?.decision !== 'verified') {
+    context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Verified voice rights require a durable verified decision' })
+  }
+  if (value.rightsStatus === 'rejected' && value.rightsDecision?.decision !== 'rejected') {
+    context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Rejected voice rights require a durable rejected decision' })
+  }
+  if (value.status === 'revoked' || value.rightsStatus === 'revoked') {
+    if (!value.revokedAt) context.addIssue({ code: 'custom', path: ['revokedAt'], message: 'Revoked voice profiles require revokedAt' })
+    if (value.rightsDecision?.decision !== 'revoked') context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Revoked voice profiles require a durable revoked decision' })
   }
   if (value.providerBinding && value.status === 'draft') {
     context.addIssue({ code: 'custom', path: ['providerBinding'], message: 'Draft voice profiles cannot expose a provider binding' })
@@ -159,6 +177,7 @@ export const ReusableAvatarProfileSchema = z.object({
   source: AvatarSourceSchema,
   permittedUses: UseScopeArraySchema,
   rightsStatus: z.enum(RIGHTS_VERIFICATION_STATUSES),
+  rightsDecision: ProfileRightsDecisionSchema.optional(),
   defaultVoiceProfileId: ProfileIdSchema.optional(),
   styleTags: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
   previewArtifactId: ArtifactIdSchema.optional(),
@@ -176,8 +195,15 @@ export const ReusableAvatarProfileSchema = z.object({
   if (value.status === 'verified' && value.rightsStatus !== 'verified') {
     context.addIssue({ code: 'custom', path: ['rightsStatus'], message: 'Verified avatar profiles require verified rights status' })
   }
-  if (value.status === 'revoked' && !value.revokedAt) {
-    context.addIssue({ code: 'custom', path: ['revokedAt'], message: 'Revoked avatar profiles require revokedAt' })
+  if (value.rightsStatus === 'verified' && value.rightsDecision?.decision !== 'verified') {
+    context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Verified avatar rights require a durable verified decision' })
+  }
+  if (value.rightsStatus === 'rejected' && value.rightsDecision?.decision !== 'rejected') {
+    context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Rejected avatar rights require a durable rejected decision' })
+  }
+  if (value.status === 'revoked' || value.rightsStatus === 'revoked') {
+    if (!value.revokedAt) context.addIssue({ code: 'custom', path: ['revokedAt'], message: 'Revoked avatar profiles require revokedAt' })
+    if (value.rightsDecision?.decision !== 'revoked') context.addIssue({ code: 'custom', path: ['rightsDecision'], message: 'Revoked avatar profiles require a durable revoked decision' })
   }
   if (value.providerBinding && value.status === 'draft') {
     context.addIssue({ code: 'custom', path: ['providerBinding'], message: 'Draft avatar profiles cannot expose a provider binding' })
