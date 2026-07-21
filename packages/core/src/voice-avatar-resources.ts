@@ -63,16 +63,20 @@ export const AvatarProfileUpdateRequestSchema = z.object({
   previewArtifactId: ArtifactIdSchema.nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one avatar profile field is required')
 
-export const VoiceAvatarProfileDecisionSchema = z.object({
+export const VoiceAvatarProfileDecisionRequestSchema = z.object({
   decision: z.enum(['verified', 'rejected', 'revoked']),
-  verifierReference: z.string().trim().min(1).max(300),
   notes: z.string().max(5_000).default(''),
+}).strict()
+
+export const VoiceAvatarProfileDecisionSchema = VoiceAvatarProfileDecisionRequestSchema.extend({
+  verifierReference: z.string().trim().min(1).max(300),
 }).strict()
 
 export type VoiceProfileCreateRequest = z.infer<typeof VoiceProfileCreateRequestSchema>
 export type VoiceProfileUpdateRequest = z.infer<typeof VoiceProfileUpdateRequestSchema>
 export type AvatarProfileCreateRequest = z.infer<typeof AvatarProfileCreateRequestSchema>
 export type AvatarProfileUpdateRequest = z.infer<typeof AvatarProfileUpdateRequestSchema>
+export type VoiceAvatarProfileDecisionRequest = z.infer<typeof VoiceAvatarProfileDecisionRequestSchema>
 export type VoiceAvatarProfileDecision = z.infer<typeof VoiceAvatarProfileDecisionSchema>
 
 export function voiceProfileArtifactReferences(profile: Pick<ReusableVoiceProfile, 'source' | 'consentEvidence' | 'previewArtifactId'>): Array<{
