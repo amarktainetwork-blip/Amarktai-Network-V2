@@ -37,6 +37,15 @@ async function createFixtureApp(apiRequest, invariant, adminToken, appSlug, appN
   return key.body.key
 }
 
+async function expandCapabilities(apiRequest, invariant, adminToken, appSlug, capabilities) {
+  const result = await apiRequest(`/api/admin/app-connections/${encodeURIComponent(appSlug)}`, adminToken, {
+    method: 'PUT',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ allowedCapabilities: capabilities }),
+  })
+  invariant(result.response.ok, result.body.message || `Research fixture capability expansion returned ${result.response.status}`)
+}
+
 async function configureGrant(apiRequest, invariant, adminToken, appSlug, capability) {
   const result = await apiRequest(`/api/admin/app-grants/${encodeURIComponent(appSlug)}/${encodeURIComponent(capability)}`, adminToken, {
     method: 'PUT',
@@ -90,10 +99,10 @@ export async function proveResearchReleaseFixture({ apiRequest, invariant, delay
   const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const primarySlug = `research-fixture-${suffix}`
   const secondarySlug = `research-isolation-${suffix}`
-  const capabilities = ['research', 'question_answering']
+  const fullCapabilities = ['research', 'question_answering']
 
-  const primaryKey = await createFixtureApp(apiRequest, invariant, adminToken, primarySlug, 'Research Release Fixture', capabilities)
-  const secondaryKey = await createFixtureApp(apiRequest, invariant, adminToken, secondarySlug, 'Research Isolation Fixture', capabilities)
+  const primaryKey = await createFixtureApp(apiRequest, invariant, adminToken, primarySlug, 'Research Release Fixture', ['research'])
+  const secondaryKey = await createFixtureApp(apiRequest, invariant, adminToken, secondarySlug, 'Research Isolation Fixture', fullCapabilities)
   await configureGrant(apiRequest, invariant, adminToken, primarySlug, 'research')
 
   const missingAnswerGrant = await apiRequest('/api/v1/research/executions', primaryKey, {
@@ -108,6 +117,8 @@ export async function proveResearchReleaseFixture({ apiRequest, invariant, delay
     'Research did not reject cited-answer execution without question_answering authority',
   )
 
+  await expandCapabilities(apiRequest, invariant, adminToken, primarySlug, fullCapabilities)
+  await configureGrant(apiRequest, invariant, adminToken, primarySlug, 'research')
   await configureGrant(apiRequest, invariant, adminToken, primarySlug, 'question_answering')
 
   const override = await apiRequest('/api/v1/research/executions', primaryKey, {
