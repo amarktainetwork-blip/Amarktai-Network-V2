@@ -133,10 +133,11 @@ function normalizeDomainInput(domain: string): string {
   return domain.trim().toLowerCase().replace(/^\.+|\.+$/g, '')
 }
 
-function ipv4Parts(hostname: string): number[] | null {
+function ipv4Parts(hostname: string): [number, number, number, number] | null {
   if (isIP(hostname) !== 4) return null
   const parts = hostname.split('.').map(Number)
-  return parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255) ? parts : null
+  if (parts.length !== 4 || !parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) return null
+  return [parts[0]!, parts[1]!, parts[2]!, parts[3]!]
 }
 
 export function isForbiddenResearchHostname(hostname: string): boolean {
