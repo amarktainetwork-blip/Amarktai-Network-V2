@@ -2,6 +2,8 @@ import type { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import { advanceLongFormWorkflow } from './long-form-workflow.js'
 import { refreshSocialAdAssemblyParent } from './social-ad-assembly-workflow.js'
+import { ensureSocialAdCopyGrantSnapshot } from './social-ad-copy-grant.js'
+import { advanceSocialAdCopyWorkflow } from './social-ad-copy-workflow.js'
 import { ensureSocialAdQualityGrantSnapshot } from './social-ad-quality-grant.js'
 import { advanceSocialAdQualityWorkflow } from './social-ad-quality-workflow.js'
 import { refreshSocialAdParentState } from './social-ad-workflow.js'
@@ -46,10 +48,28 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
   }
   if (kind === 'social_ad_video') {
     if (['assembly_queued', 'assembly_processing', 'assembly_queue_failed'].includes(parent.workflowPhase)) {
-      await refreshSocialAdAssemblyParent(parent.id)
+      const assembly = await refreshSocialAdAssemblyParent(parent.id)
+      if (assembly?.phase === 'social_copy_pending') {
+        await ensureSocialAdCopyGrantSnapshot(parent.id)
+        await advanceSocialAdCopyWorkflow(parent.id, queue)
+      }
       return { kind, advanced: true }
     }
-    if (['social_copy_pending', 'completed', 'assembly_failed', 'revision_required', 'human_approval_pending', 'assembly_pending'].includes(parent.workflowPhase)) {
+    if (['social_copy_pending', 'social_copy_generation', 'copy_jobs_queued'].includes(parent.workflowPhase)) {
+      await ensureSocialAdCopyGrantSnapshot(parent.id)
+      await advanceSocialAdCopyWorkflow(parent.id, queue)
+      return { kind, advanced: true }
+    }
+    if ([
+      'completed',
+      'assembly_failed',
+      'revision_required',
+      'human_approval_pending',
+      'assembly_pending',
+      'copy_quality_failed',
+      'final_approval_pending',
+      'final_revision_required',
+    ].includes(parent.workflowPhase)) {
       return { kind, advanced: false }
     }
     const generation = await refreshSocialAdParentState(parent.id)
