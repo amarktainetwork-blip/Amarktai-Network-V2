@@ -225,6 +225,12 @@ async function resolveProfileVoice(input: {
   if (binding.selectedModel && binding.selectedModel !== input.selectedModel) {
     throw new Error(`Voice profile '${voiceProfileId}' is not bound to model '${input.selectedModel}'`)
   }
+  if (input.provider === 'genx') {
+    const registered = await prisma.voiceLibrary.findUnique({ where: { voiceId: binding.providerVoiceId } })
+    if (!registered || registered.provider !== 'genx' || !registered.enabled || !voiceSupportsModel(registered, input.selectedModel)) {
+      throw new Error(`Voice profile '${voiceProfileId}' is not registered for the current GenX transport and model`)
+    }
+  }
   return resolved({
     provider: input.provider,
     model: input.selectedModel,
