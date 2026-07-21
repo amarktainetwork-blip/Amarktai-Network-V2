@@ -35,6 +35,29 @@ describe('AmarktAIClient', () => {
     expect(transport.mock.calls[4]![1]?.method).toBe('DELETE')
   })
 
+  it('uses app-scoped memory endpoints without route authority', async () => {
+    const transport = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ entries: [] }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
+
+    await client.searchMemory({ query: 'customer preference', limit: 5, types: ['context', 'learned'] })
+    await client.writeMemory({ content: 'Customer prefers concise weekly reports.', key: 'report-style', memoryType: 'context', importance: 0.8, ttlSeconds: 3600 })
+    await client.deleteMemory(42)
+
+    expect(transport.mock.calls.map((call) => call[0])).toEqual([
+      'https://example.test/api/v1/memory/search?q=customer+preference&limit=5&types=context%2Clearned',
+      'https://example.test/api/v1/memory',
+      'https://example.test/api/v1/memory/42',
+    ])
+    expect(transport.mock.calls[0]![1]?.method).toBeUndefined()
+    expect(transport.mock.calls[1]![1]?.method).toBe('POST')
+    expect(transport.mock.calls[2]![1]?.method).toBe('DELETE')
+    const write = JSON.parse(String(transport.mock.calls[1]![1]?.body)) as Record<string, unknown>
+    expect(write).toMatchObject({ key: 'report-style', memoryType: 'context', importance: 0.8, ttlSeconds: 3600 })
+    expect(write).not.toHaveProperty('provider')
+    expect(write).not.toHaveProperty('model')
+    expect(write).not.toHaveProperty('appSlug')
+  })
+
   it('plans, starts, polls, approves and resumes provider-neutral social-ad execution', async () => {
     const transport = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ executionAuthority: 'orchestra' }), { status: 200, headers: { 'content-type': 'application/json' } }))
     const client = new AmarktAIClient({ apiKey: 'app-key', baseUrl: 'https://example.test', fetch: transport as typeof fetch })
