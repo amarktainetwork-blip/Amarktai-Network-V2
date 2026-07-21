@@ -8,6 +8,7 @@ export type ExecutorId =
   | 'deepinfra.streaming-chat'
   | 'deepinfra.text-transform'
   | 'deepinfra.task-inference'
+  | 'deepinfra.vision'
   | 'deepinfra.embeddings'
   | 'deepinfra.reranking'
   | 'together.chat'
@@ -80,6 +81,14 @@ const GENERAL_TEXT_CAPABILITIES: readonly CapabilityKey[] = [
   'classification', 'extraction', 'structured_output', 'tool_use',
 ]
 
+const VISION_CAPABILITIES: readonly CapabilityKey[] = [
+  'image_classification',
+  'visual_question_answering',
+  'document_qa',
+  'ocr',
+  'video_understanding',
+]
+
 // Only tasks with a real request builder and validated response normalizer are
 // registered. Other discovered specialist tasks remain visible with the exact
 // provider task metadata, but do not falsely acquire a callable executor.
@@ -93,6 +102,15 @@ const OPENAI_CHAT_PROFILE: ExecutorCompatibilityProfile = {
   transportProfiles: ['openai_chat_sse'],
   endpointFamilies: ['openai_chat'],
   requiredInputModalities: ['text'],
+  outputModality: 'text',
+}
+
+const OPENAI_VISION_PROFILE: ExecutorCompatibilityProfile = {
+  taskTypes: ['vision', 'visual-question-answering', 'image-text-to-text', 'multimodal'],
+  categories: ['vision', 'visual-question-answering', 'image-text-to-text', 'multimodal'],
+  transportProfiles: ['openai_chat_sse'],
+  endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'],
+  requiredInputModalities: ['text', 'image'],
   outputModality: 'text',
 }
 
@@ -144,6 +162,7 @@ function profile(
 }
 
 const DEEPINFRA_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'] }
+const DEEPINFRA_VISION = { ...OPENAI_VISION_PROFILE }
 const TOGETHER_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'together_openai_v1'] }
 const GENX_TEXT = { ...OPENAI_CHAT_PROFILE, transportProfiles: ['openai_chat_sse', 'anthropic_messages_sse'], endpointFamilies: ['openai_chat', 'anthropic_messages'] }
 const EMBEDDINGS = profile(
@@ -168,6 +187,9 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   registration('deepinfra.streaming-chat', 'deepinfra', 'streaming_chat', 'executeAuthenticatedStreamingChat', DEEPINFRA_TEXT, 'stream'),
   ...GENERAL_TEXT_CAPABILITIES.filter((capability) => capability !== 'chat').map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT),
+  ),
+  ...VISION_CAPABILITIES.map((capability) =>
+    registration('deepinfra.vision', 'deepinfra', capability, 'executeDeepInfraVisionCapability', DEEPINFRA_VISION),
   ),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
