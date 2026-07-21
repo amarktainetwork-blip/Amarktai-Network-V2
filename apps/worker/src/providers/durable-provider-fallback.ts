@@ -49,17 +49,30 @@ function claimConflict(error: unknown): boolean {
 function isInternalLongFormAssembly(payload: WorkerJobData): boolean {
   return payload.capability === 'long_form_video'
     && payload.metadata?.longFormAssembly === true
-    && payload.metadata?.internalLocalExecution === true
+    && payload.metadata.internalLocalExecution === true
+}
+
+function isInternalSocialAdAssembly(payload: WorkerJobData): boolean {
+  return payload.capability === 'social_content_generation'
+    && payload.metadata?.socialAdAssembly === true
+    && payload.metadata.internalLocalExecution === true
+}
+
+function isInternalLocalExecution(payload: WorkerJobData): boolean {
+  return isInternalLongFormAssembly(payload) || isInternalSocialAdAssembly(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
   // Local assembly is an internal workflow operation, not a provider route. It
-  // must retain its immutable app grant but must never enter Orchestra or claim
-  // a provider execution. Provider fallback recovery applies only to real
-  // provider-backed capability jobs.
+  // retains immutable app authority but never enters Orchestra or claims a
+  // provider execution. Provider fallback applies only to provider-backed jobs.
   if (isInternalLongFormAssembly(payload)) {
     const { executeLongFormAssembly } = await import('../long-form-assembly.js')
     return executeLongFormAssembly(payload)
+  }
+  if (isInternalSocialAdAssembly(payload)) {
+    const { executeSocialAdAssembly } = await import('../social-ad-assembly.js')
+    return executeSocialAdAssembly(payload)
   }
   return executeWithProvider(payload)
 }
@@ -103,24 +116,18 @@ function withRecoveryEvidence(result: ProcessorResult, route: { provider: string
  * Execute internal local workflow operations directly; otherwise execute through
  * Orchestra and recover one very specific durable provider fallback race.
  *
- * A queued job is claimed once by the worker. Provider executors also maintain a
- * job-level providerClaimAt guard. When a primary route returns a failure and
- * Orchestra tries a fallback route in the same invocation, that fallback must be
- * allowed to inherit the already-owned claim. Older runtime code instead treated
- * it as a second worker.
- *
  * Recovery is deliberately fail-closed:
  * - internal local assembly never enters provider routing;
  * - the job must still be processing;
  * - a provider claim must exist;
- * - at least two route attempts must have been durably recorded;
+ * - at least two route attempts must be durably recorded;
  * - the final attempt must be the exact claim-conflict error;
  * - clearing the claim is an atomic compare-and-set on the original timestamp;
  * - recovery runs at most once.
  */
 export async function executeWithDurableProviderFallback(payload: WorkerJobData): Promise<ProcessorResult> {
   const initial = await executeInitial(payload)
-  if (initial.success || !claimConflict(initial.error) || isInternalLongFormAssembly(payload)) return initial
+  if (initial.success || !claimConflict(initial.error) || isInternalLocalExecution(payload)) return initial
 
   const job = await prisma.job.findUnique({
     where: { id: payload.jobId },
