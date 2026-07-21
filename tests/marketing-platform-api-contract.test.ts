@@ -36,7 +36,7 @@ describe('marketing platform API contract', () => {
     expect(socialAdRoutes).toContain('parentJobId: parent.id')
     expect(socialAdRoutes).toContain('resolveAppCapabilityGrantSnapshot')
     expect(socialAdRoutes).toContain('appGrantSnapshot: childGrant.grant')
-    expect(socialAdRoutes).toContain("await q.add('process', payload")
+    expect(socialAdRoutes).toContain("await getQueue().add('process', payload")
     expect(socialAdRoutes).toContain('validateDirectProviderRequest')
   })
 
