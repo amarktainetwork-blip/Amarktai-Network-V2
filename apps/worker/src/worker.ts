@@ -15,7 +15,7 @@ import { Queue, Worker } from 'bullmq'
 import { getRedisUrl, getStorageRoot, QUEUE_NAMES, WORKER_CONCURRENCY } from '@amarktai/core'
 import { assertDatabaseSchemaCurrent, getDatabaseSchemaStatus, prisma } from '@amarktai/db'
 import { createJobProcessor, type WorkerJobData } from './processors/job-processor.js'
-import { advanceLongFormWorkflow } from './long-form-workflow.js'
+import { advanceParentWorkflow } from './parent-workflow.js'
 import { recoverStaleProcessingJobs } from './recovery.js'
 import { executeWithDurableProviderFallback } from './providers/durable-provider-fallback.js'
 import { assertFixtureAdapterConfiguration } from './providers/release-fixture-executor.js'
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   if (recovered.length) console.log(`[worker] Recovered ${recovered.length} stale processing jobs`)
   const processJob = createJobProcessor({
     executeCapability: executeWithDurableProviderFallback,
-    advanceLongFormWorkflow: (parentJobId) => advanceLongFormWorkflow(parentJobId, queue),
+    advanceLongFormWorkflow: (parentJobId) => advanceParentWorkflow(parentJobId, queue),
   })
   const worker = new Worker(
     QUEUE_NAMES.JOBS,
