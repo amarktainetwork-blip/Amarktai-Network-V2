@@ -60,6 +60,7 @@ export function createGovernedTtsHandler(
     try {
       const { request, resolution } = await resolveGovernedVoice({ payload, provider, selectedModel })
       const evidence = publicGovernedVoiceEvidence(resolution)
+      if (!evidence.providerVoiceReferenceHash) throw new Error('Governed TTS voice evidence hash is missing')
       await persistVoiceResolution(payload.jobId, evidence)
 
       const input: Record<string, unknown> = {
