@@ -405,6 +405,7 @@ export function createFixtureVoiceConversionProviderAdapter(): VoiceConversionPr
     supportsVoiceConversion: true,
 
     async submitConversion(request) {
+      // Fixture-only: returns non-live provider reference
       return {
         providerJobRef: `fixture_conversion_${Date.now()}`,
         status: 'submitted',
@@ -413,6 +414,7 @@ export function createFixtureVoiceConversionProviderAdapter(): VoiceConversionPr
     },
 
     async pollConversion(_providerJobRef) {
+      // Fixture-only: deterministic test output, never live provider proof
       return {
         status: 'completed',
         progress: 100,

@@ -485,7 +485,7 @@ export function createFixtureVoiceCloneProviderAdapter(): VoiceCloneProviderAdap
     supportsVoiceClone: true,
 
     async submitClone(request) {
-      // Simulate provider submission
+      // Fixture-only: returns non-live provider reference
       return {
         providerJobRef: `fixture_job_${Date.now()}`,
         status: 'submitted',
@@ -494,7 +494,7 @@ export function createFixtureVoiceCloneProviderAdapter(): VoiceCloneProviderAdap
     },
 
     async pollClone(_providerJobRef) {
-      // Simulate immediate completion for testing
+      // Fixture-only: deterministic test output, never live provider proof
       return {
         status: 'completed',
         progress: 100,

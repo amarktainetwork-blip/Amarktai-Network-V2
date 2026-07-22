@@ -274,7 +274,6 @@ export function createAudioToAudioDomainService(
       // Check if this is an internal FFmpeg operation
       const internalOperations: AudioToAudioOperation[] = ['trim', 'resample', 'channel_convert', 'loudness_normalize', 'normalize']
       if (internalOperations.includes(request.operation)) {
-        // Internal FFmpeg execution (simplified - real implementation would use FFmpeg)
         return executeInternalFfmpegOperation(appSlug, request, sourceAudioBuffer, sourceMimeType, sourceValidation)
       }
 
@@ -375,52 +374,21 @@ export function createAudioToAudioDomainService(
 function executeInternalFfmpegOperation(
   _appSlug: string,
   request: AudioToAudioRequest,
-  sourceBuffer: Buffer,
+  _sourceBuffer: Buffer,
   _sourceMimeType: string,
   sourceValidation: SourceAudioValidationResult,
 ): AudioToAudioResult {
   const now = new Date().toISOString()
 
-  // Simulate FFmpeg operations (simplified)
-  // Real implementation would use actual FFmpeg commands
-  let outputBuffer: Buffer
-  let outputMimeType = request.outputFormat === 'wav' ? 'audio/wav' :
+  // Real FFmpeg execution is handled by the worker handler (voice-audio-handlers.ts).
+  // This domain service validates and classifies the operation.
+  // The worker executes the actual FFmpeg command and returns real output.
+  const outputMimeType = request.outputFormat === 'wav' ? 'audio/wav' :
     request.outputFormat === 'mp3' ? 'audio/mpeg' :
     request.outputFormat === 'flac' ? 'audio/flac' : 'audio/ogg'
 
-  switch (request.operation) {
-    case 'trim': {
-      // Simulate trim operation
-      const startTime = (request.parameters.startTime as number) ?? 0
-      const endTime = (request.parameters.endTime as number) ?? sourceBuffer.length
-      outputBuffer = sourceBuffer.subarray(
-        Math.min(startTime, sourceBuffer.length),
-        Math.min(endTime, sourceBuffer.length),
-      )
-      break
-    }
-    case 'resample': {
-      // Simulate resample (just pass through for now)
-      outputBuffer = sourceBuffer
-      break
-    }
-    case 'channel_convert': {
-      // Simulate channel conversion (just pass through for now)
-      outputBuffer = sourceBuffer
-      break
-    }
-    case 'loudness_normalize':
-    case 'normalize': {
-      // Simulate normalization (just pass through for now)
-      outputBuffer = sourceBuffer
-      break
-    }
-    default:
-      outputBuffer = sourceBuffer
-  }
-
   return {
-    status: 'completed',
+    status: 'accepted',
     audioToAudioId: crypto.randomUUID(),
     sourceAudioArtifactId: request.sourceAudioArtifactId,
     operation: request.operation,
@@ -432,12 +400,11 @@ function executeInternalFfmpegOperation(
       parameters: request.parameters,
       outputValidation: {
         mimeType: outputMimeType,
-        fileSizeBytes: outputBuffer.length,
-        durationSeconds: sourceValidation.metadata?.durationSeconds,
+        status: 'queued_for_worker_execution',
+        sourceDurationSeconds: sourceValidation.metadata?.durationSeconds,
       },
     },
     createdAt: now,
-    completedAt: now,
   }
 }
 

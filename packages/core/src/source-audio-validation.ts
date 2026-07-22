@@ -276,7 +276,10 @@ function extractAudioMetadataFromBytes(buffer: Buffer, mimeType: string): Source
     channelCount = flacInfo.channels
   } else if (mimeType === 'audio/ogg') {
     container = 'ogg'
-    durationSeconds = estimateDurationFromSize(buffer, 112000)
+    const oggInfo = extractOggInfo(buffer)
+    durationSeconds = oggInfo.duration
+    sampleRateHz = oggInfo.sampleRate
+    channelCount = oggInfo.channels
   } else if (mimeType === 'audio/mpeg') {
     container = 'mp3'
     const mp3Info = extractMp3Info(buffer)
@@ -285,7 +288,10 @@ function extractAudioMetadataFromBytes(buffer: Buffer, mimeType: string): Source
     bitRate = mp3Info.bitRate
   } else if (mimeType === 'audio/aac') {
     container = 'aac'
-    durationSeconds = estimateDurationFromSize(buffer, 128000)
+    const aacInfo = extractAacInfo(buffer)
+    durationSeconds = aacInfo.duration
+    sampleRateHz = aacInfo.sampleRate
+    channelCount = aacInfo.channels
   }
 
   return {
@@ -379,18 +385,81 @@ function extractMp3Info(buffer: Buffer): { duration: number; sampleRate: number;
   return { duration: 0, sampleRate: 0, bitRate: 0 }
 }
 
-function estimateDurationFromSize(buffer: Buffer, bitRate: number): number {
-  return bitRate > 0 ? (buffer.length * 8) / bitRate : 0
+function extractOggInfo(buffer: Buffer): { duration: number; sampleRate: number; channels: number } {
+  // OGG Vorbis: Look for OggS capture pattern and Vorbis identification header
+  if (buffer.length < 58) return { duration: 0, sampleRate: 0, channels: 0 }
+
+  // Find OggS page
+  let offset = 0
+  while (offset + 28 <= buffer.length) {
+    if (buffer.subarray(offset, offset + 4).toString('ascii') === 'OggS') {
+      // OGG page header: segment table at offset 27
+      const numSegments = buffer[offset + 26]!
+      const segTableOffset = offset + 27
+      const dataStart = segTableOffset + numSegments
+
+      // Check for Vorbis identification header (0x01 + "vorbis")
+      if (dataStart + 30 <= buffer.length &&
+          buffer[dataStart] === 0x01 &&
+          buffer.subarray(dataStart + 1, dataStart + 7).toString('ascii') === 'vorbis') {
+        const channels = buffer[dataStart + 11]!
+        const sampleRate = buffer.readUIntLE(dataStart + 12, 4)
+
+        // Estimate duration from file size and typical Vorbis bitrate
+        // For better accuracy, we'd need to parse all pages
+        const nominalBitrate = buffer.readUIntLE(dataStart + 20, 4)
+        const effectiveBitrate = nominalBitrate > 0 ? nominalBitrate : 128000
+        const duration = effectiveBitrate > 0 ? (buffer.length * 8) / effectiveBitrate : 0
+
+        return { duration, sampleRate, channels }
+      }
+    }
+    offset++
+  }
+
+  return { duration: 0, sampleRate: 0, channels: 0 }
+}
+
+function extractAacInfo(buffer: Buffer): { duration: number; sampleRate: number; channels: number } {
+  // ADTS (Audio Data Transport Stream) - common AAC container
+  if (buffer.length < 7) return { duration: 0, sampleRate: 0, channels: 0 }
+
+  // Skip ID3v2 header if present
+  let offset = 0
+  if (buffer.length >= 10 && buffer.subarray(0, 3).toString('ascii') === 'ID3') {
+    offset = 10 + ((buffer[6]! & 0x7f) << 21) + ((buffer[7]! & 0x7f) << 14) + ((buffer[8]! & 0x7f) << 7) + (buffer[9]! & 0x7f)
+  }
+
+  // Find ADTS sync word (0xFFF)
+  for (; offset + 7 <= buffer.length; offset++) {
+    if (buffer[offset] === 0xff && (buffer[offset + 1]! & 0xf0) === 0xf0) {
+      const sampleRateIndex = (buffer[offset + 2]! >> 2) & 0x0f
+      const channelConfig = ((buffer[offset + 2]! & 0x01) << 2) | ((buffer[offset + 3]! >> 6) & 0x03)
+
+      const sampleRateTable = [96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350]
+      const sampleRate = sampleRateTable[sampleRateIndex] ?? 0
+      const channels = channelConfig === 7 ? 8 : channelConfig
+
+      if (sampleRate > 0) {
+        // Estimate frame count from file size
+        // ADTS frame is typically ~1024 samples
+        const avgFrameSize = 500 // approximate bytes per ADTS frame
+        const estimatedFrames = Math.max(1, Math.floor((buffer.length - offset) / avgFrameSize))
+        const duration = (estimatedFrames * 1024) / sampleRate
+
+        return { duration, sampleRate, channels }
+      }
+    }
+  }
+
+  return { duration: 0, sampleRate: 0, channels: 0 }
 }
 
 // ── Checksum Utilities ────────────────────────────────────────────────────────
 
 export function computeAudioChecksum(buffer: Buffer): string {
-  // Simple checksum using buffer length and first/last bytes
-  // Real implementation would use crypto.createHash('sha256')
-  const first = buffer.length > 0 ? buffer[0] : 0
-  const last = buffer.length > 0 ? buffer[buffer.length - 1] : 0
-  return `sha256_${buffer.length}_${first}_${last}`
+  const { createHash } = require('node:crypto')
+  return createHash('sha256').update(buffer).digest('hex')
 }
 
 export function verifyAudioChecksum(buffer: Buffer, expectedChecksum: string): boolean {

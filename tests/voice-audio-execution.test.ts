@@ -620,7 +620,7 @@ describe('audio-to-audio', () => {
       sourceMimeType: 'audio/wav',
     })
 
-    expect(result.status).toBe('completed')
+    expect(result.status).toBe('accepted')
     expect(result.evidence.evidenceSource).toBe('internal_ffmpeg')
     expect(result.evidence.liveProviderProof).toBe(false)
     expect(result.operation).toBe('normalize')
@@ -643,7 +643,7 @@ describe('audio-to-audio', () => {
       sourceMimeType: 'audio/wav',
     })
 
-    expect(result.status).toBe('completed')
+    expect(result.status).toBe('accepted')
     expect(result.evidence.evidenceSource).toBe('internal_ffmpeg')
     expect(result.operation).toBe('trim')
   })
