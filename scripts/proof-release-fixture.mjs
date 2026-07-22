@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { proveRagReleaseFixture } from './lib/proof-rag-release-fixture.mjs'
 import { proveResearchReleaseFixture } from './lib/proof-research-release-fixture.mjs'
 import { proveVoiceAvatarProfileReleaseFixture } from './lib/proof-voice-avatar-profile-release-fixture.mjs'
+import { proveVoiceAudioReleaseFixture } from './lib/proof-voice-audio-release-fixture.mjs'
 import { proveSocialAdReleaseFixture } from './lib/proof-social-ad-release-fixture.mjs'
 import { proveSpecialistWorkflowReleaseFixture } from './lib/proof-specialist-workflow-release-fixture.mjs'
 
@@ -286,6 +287,7 @@ try {
   await proveRagReleaseFixture({ apiRequest, invariant, delay, run, docker, compose, adminToken: catalogueToken })
   await proveResearchReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveVoiceAvatarProfileReleaseFixture({ apiRequest, invariant, adminToken: catalogueToken })
+  await proveVoiceAudioReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveSocialAdReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveSpecialistWorkflowReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken, queueControl })
   run(tsx, [
@@ -318,6 +320,7 @@ console.log('FIXTURE_PROOF=PASS')
 console.log('RAG_RELEASE_FIXTURE=PASS')
 console.log('RESEARCH_RELEASE_FIXTURE=PASS')
 console.log('VOICE_AVATAR_PROFILE_RELEASE_FIXTURE=PASS')
+console.log('VOICE_AUDIO_RELEASE_FIXTURE=PASS')
 console.log('SOCIAL_AD_PRODUCT_BREAKOUT_RELEASE_FIXTURE=PASS')
 console.log('SPECIALIST_VISION_RELEASE_FIXTURE=PASS')
 console.log('BRAND_SCRAPE_RELEASE_FIXTURE=PASS')
