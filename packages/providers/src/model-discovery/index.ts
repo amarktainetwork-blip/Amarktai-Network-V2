@@ -1,5 +1,5 @@
-import { getRuntimeModelPolicyBlocker, type ProviderDiscoveryResult, type ProviderKey } from '@amarktai/core/model-family-policy'
-import type { ProviderDiscoveryResult as DiscoveryResult, ProviderKey as DiscoveryProviderKey } from '@amarktai/core'
+import { getRuntimeModelPolicyBlocker } from '@amarktai/core/model-family-policy'
+import type { ProviderDiscoveryResult, ProviderKey } from '@amarktai/core'
 import { discoverDeepInfraProviderModels } from './deepinfra.js'
 import { discoverGenXProviderModels } from './genx.js'
 import { discoverMimoProviderModels } from './mimo.js'
@@ -8,12 +8,12 @@ import type { DiscoveryAdapterOptions } from './common.js'
 
 export interface ProviderModelDiscoveryRunOptions {
   live?: boolean
-  apiKeys?: Partial<Record<DiscoveryProviderKey, string>>
+  apiKeys?: Partial<Record<ProviderKey, string>>
   genxBaseUrl?: string
   now?: string
 }
 
-function applyRuntimeModelFamilyPolicy(result: DiscoveryResult): DiscoveryResult {
+function applyRuntimeModelFamilyPolicy(result: ProviderDiscoveryResult): ProviderDiscoveryResult {
   const excluded = result.models
     .map((model) => ({ model, blocker: getRuntimeModelPolicyBlocker(model.modelId) }))
     .filter((entry): entry is { model: typeof result.models[number]; blocker: NonNullable<ReturnType<typeof getRuntimeModelPolicyBlocker>> } => entry.blocker !== null)
@@ -34,7 +34,7 @@ function applyRuntimeModelFamilyPolicy(result: DiscoveryResult): DiscoveryResult
   }
 }
 
-export async function runProviderModelDiscovery(options: ProviderModelDiscoveryRunOptions = {}): Promise<DiscoveryResult[]> {
+export async function runProviderModelDiscovery(options: ProviderModelDiscoveryRunOptions = {}): Promise<ProviderDiscoveryResult[]> {
   const live = options.live === true
   const results = await Promise.all([
     discoverGenXProviderModels({ live, apiKey: options.apiKeys?.genx, baseUrl: options.genxBaseUrl, now: options.now }),
