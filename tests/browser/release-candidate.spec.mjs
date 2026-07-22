@@ -224,8 +224,21 @@ test('product-breakout workspace executes candidates, approvals and the authoris
   await expect(page.getByText('completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
 })
 
+test('specialist vision workspace renders authorised artifacts and exact production blockers', async () => {
+  await page.goto(`${baseURL}/dashboard/specialist-vision`)
+  await expect(page.getByRole('heading', { name: 'Specialist Vision' })).toBeVisible()
+  const task = page.locator('select').first()
+  await expect(task.locator('option')).toHaveCount(6)
+  await expect(page.getByText('Truthfully blocked', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Local fixture proof is not live-provider proof|production-compatible executor/i)).toBeVisible()
+  await expect(page.getByText('Authorised source artifact')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Submit' })).toBeDisabled()
+  await task.selectOption('video_classification')
+  await expect(page.locator('select').nth(1).locator('option')).not.toHaveCount(0)
+})
+
 test('dashboards expose no provider/model override controls and navigation has no console errors', async () => {
-  for (const route of ['chat', 'image', 'video', 'music', 'voice', 'capability-lab', 'social-ad']) {
+  for (const route of ['chat', 'image', 'video', 'music', 'voice', 'capability-lab', 'specialist-vision', 'social-ad']) {
     await page.goto(`${baseURL}/dashboard/${route}`)
     await expect(page.locator('input[name="provider"],select[name="provider"],input[name="model"],select[name="model"]')).toHaveCount(0)
     await expect(page.getByLabel('Provider', { exact: true })).toHaveCount(0)

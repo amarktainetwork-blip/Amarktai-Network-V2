@@ -9,7 +9,7 @@ const containsAll = (text: string, values: string[]) => values.forEach((value) =
 describe('production activation closure', () => {
   it('requires the latest guarded production schema migration', () => {
     const guard = source('packages/db/src/schema-guard.ts')
-    expect(guard).toContain("REQUIRED_SCHEMA_MIGRATION = '20260720_split_genx_video_contracts'")
+    expect(guard).toContain("REQUIRED_SCHEMA_MIGRATION = '20260722_specialist_workflow_closure'")
     expect(guard).not.toContain("REQUIRED_SCHEMA_MIGRATION = '20260714_release_candidate'")
   })
 

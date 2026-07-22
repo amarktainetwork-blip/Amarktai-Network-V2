@@ -1942,3 +1942,29 @@ model Job {
   @@index([createdAt])
   @@map("jobs")
 }
+
+/// Page-preserving chunk evidence for durable document ingestion.
+model DocumentIngestChunk {
+  id                 String   @id @default(cuid())
+  appSlug            String   @map("app_slug")
+  documentId         String   @map("document_id")
+  artifactId         String   @map("artifact_id")
+  checksum           String
+  page               Int
+  section            String?  @db.Text
+  text               String   @db.LongText
+  coordinatesJson    String   @default("null") @map("coordinates_json") @db.Text
+  chunkIndex         Int      @map("chunk_index")
+  chunkHash          String   @map("chunk_hash")
+  citationId         String   @map("citation_id")
+  embeddingReference String   @map("embedding_reference")
+  parserEvidence     String   @map("parser_evidence") @db.Text
+  ocrEvidence        String?  @map("ocr_evidence") @db.Text
+  ingestedAt         DateTime @default(now()) @map("ingested_at")
+
+  @@unique([appSlug, documentId, checksum, chunkIndex], name: "document_chunk_version_unique")
+  @@index([appSlug, documentId])
+  @@index([artifactId])
+  @@index([citationId])
+  @@map("document_ingest_chunks")
+}

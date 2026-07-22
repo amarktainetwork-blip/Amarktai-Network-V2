@@ -49,7 +49,6 @@ interface RobotsCacheEntry {
 
 const ROBOTS_MAX_BYTES = 512_000
 const robotsCache = new Map<string, RobotsCacheEntry>()
-const dnsCache = new Map<string, { expiresAt: number; addresses: string[] }>()
 
 function policyForRequest(request: ResearchRequest): ControlledBrowserPolicy {
   return {
@@ -62,15 +61,15 @@ function policyForRequest(request: ResearchRequest): ControlledBrowserPolicy {
 }
 
 async function publicAddresses(hostname: string): Promise<string[]> {
-  const cached = dnsCache.get(hostname)
-  if (cached && cached.expiresAt > Date.now()) return cached.addresses
+  // Resolve for every guarded request. Reusing a positive DNS result would leave
+  // a window in which a hostname could be rebound to an internal address after
+  // the first public lookup while Playwright performs the actual connection.
   const records = await lookup(hostname, { all: true, verbatim: true })
   const addresses = [...new Set(records.map((record) => record.address))]
   if (addresses.length === 0) throw new Error(`Research hostname did not resolve: ${hostname}`)
   if (addresses.some((address) => isForbiddenResearchHostname(address))) {
     throw new Error(`Research hostname resolves to a forbidden network: ${hostname}`)
   }
-  dnsCache.set(hostname, { addresses, expiresAt: Date.now() + 60_000 })
   return addresses
 }
 

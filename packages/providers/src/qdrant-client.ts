@@ -107,6 +107,24 @@ export async function upsertPoints(
   }
 }
 
+export async function deletePointsByFilter(
+  filter: Record<string, unknown>,
+  collection: string = QDRANT_COLLECTION,
+): Promise<QdrantUpsertResult> {
+  if (!filter || typeof filter !== 'object' || Array.isArray(filter)) throw new Error('Qdrant deletion requires an explicit filter')
+  const response = await qdrantFetch(`/collections/${collection}/points/delete?wait=true`, {
+    method: 'POST',
+    body: JSON.stringify({ filter }),
+  })
+  if (response.status === 404) return { operationId: 0, status: 'collection_missing' }
+  if (!response.ok) {
+    const errBody = await response.text()
+    throw new Error(`Qdrant filtered delete error ${response.status}: ${errBody}`)
+  }
+  const data = await response.json() as Record<string, unknown>
+  return { operationId: (data.result as Record<string, number>)?.operation_id ?? 0, status: (data.status as string) ?? 'ok' }
+}
+
 export async function searchVectors(
   vector: number[],
   limit: number = 5,

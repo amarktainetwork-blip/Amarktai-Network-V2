@@ -16,6 +16,7 @@ import { MODEL_CATALOGUE } from '../packages/core/src/model-catalog.ts'
 import { APPROVED_PROVIDER_DEFINITIONS } from '../packages/core/src/providers.ts'
 import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
 import { buildLongFormComponentRuntimeState } from '../apps/api/src/lib/admin-runtime-truth.ts'
+import { DURABLE_WORKFLOW_REGISTRATIONS } from '../packages/core/src/long-form-execution.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -137,7 +138,12 @@ async function checkDashboardPages() {
           reason = 'Music UI uses the real route/status flow, but execution remains configuration/infrastructure gated.'
         } else if (hasExecution) {
           // Page has real execution paths
-          if (page === 'image') {
+          if (page === 'specialist-vision') {
+            executionReadyCapabilities = []
+            pendingCapabilities = ['depth_estimation', 'keypoint_detection', 'mask_generation', 'zero_shot_object_detection', 'visual_document_retrieval', 'video_classification']
+            status = 'truthfully-blocked'
+            reason = 'The artifact-backed workspace is wired, but production execution stays disabled until Orchestra discovers a compatible real executor; local fixture evidence is not live-provider proof.'
+          } else if (page === 'image') {
             executionReadyCapabilities = ['image_generation']
             pendingCapabilities = ['image_edit', 'upscale', 'variations', 'premium_image_routing']
             status = 'partial_execution'
@@ -166,8 +172,8 @@ async function checkDashboardPages() {
               pendingCapabilities = ['music_generation']
             } else if (page === 'research') {
               status = 'design-ready'
-              pendingCapabilities = ['brand_scrape']
-              reason = 'RAG and research are registered durable workflows; this legacy page remains design-only and brand_scrape is not implemented.'
+              pendingCapabilities = []
+              reason = 'RAG, research and brand_scrape are registered durable workflows; this legacy page remains design-only.'
             } else if (page === 'long-form') {
               pendingCapabilities = ['long_form_video']
             }
@@ -700,7 +706,7 @@ async function runAudit() {
     appApiKeyAuth: appContract.hasApiKeyHashing,
     blockedOverrides: appContract.hasBlockedOverrides,
     routingModeSupport: appContract.acceptsRoutingMode,
-    brandScrapeWorkflow: openSourceInstalled.includes('crawlee') && openSourceInstalled.includes('playwright'),
+    brandScrapeWorkflow: DURABLE_WORKFLOW_REGISTRATIONS.some((workflow) => workflow.capability === 'brand_scrape'),
     missingParts: []
   }
   
@@ -830,12 +836,6 @@ async function runAudit() {
       priority: 2,
       title: 'ops: collect deployed long-form multimedia evidence',
       description: 'After deployment is separately authorised, prove provider-backed scenes, TTS, music, subtitles, and final assembly on the VPS without changing the locally closed workflow',
-      effort: 'medium'
-    },
-    {
-      priority: 3,
-      title: 'feat: wire brand scrape workflow',
-      description: 'Connect crawlee/playwright to brand_scrape capability for Marketing App',
       effort: 'medium'
     },
     {

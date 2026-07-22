@@ -229,8 +229,8 @@ export async function proveSocialAdReleaseFixture({ apiRequest, invariant, delay
     invariant(workflow?.implementationStatus === 'IMPLEMENTED_DURABLE' && workflow.fixtureProof, `Canonical durable workflow evidence omitted ${capability}`)
   }
   for (const capability of ['brand_scrape', 'document_ingest', 'campaign_generation']) {
-    const blocked = truth.body.truth?.durableWorkflowBlockers?.find((item) => item.capability === capability)
-    invariant(blocked?.implementationStatus === 'NOT_IMPLEMENTED' && blocked.blocker, `Canonical workflow blocker omitted ${capability}`)
+    const workflow = truth.body.truth?.durableWorkflows?.find((item) => item.capability === capability)
+    invariant(workflow?.implementationStatus === 'IMPLEMENTED_DURABLE' && workflow.fixtureProof, `Canonical durable workflow evidence omitted ${capability}`)
   }
 
   console.log(`SOCIAL_AD_FIXTURE_APP=${appSlug}`)

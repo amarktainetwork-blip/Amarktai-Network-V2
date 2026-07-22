@@ -9,6 +9,7 @@ import { proveRagReleaseFixture } from './lib/proof-rag-release-fixture.mjs'
 import { proveResearchReleaseFixture } from './lib/proof-research-release-fixture.mjs'
 import { proveVoiceAvatarProfileReleaseFixture } from './lib/proof-voice-avatar-profile-release-fixture.mjs'
 import { proveSocialAdReleaseFixture } from './lib/proof-social-ad-release-fixture.mjs'
+import { proveSpecialistWorkflowReleaseFixture } from './lib/proof-specialist-workflow-release-fixture.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
@@ -286,6 +287,7 @@ try {
   await proveResearchReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveVoiceAvatarProfileReleaseFixture({ apiRequest, invariant, adminToken: catalogueToken })
   await proveSocialAdReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
+  await proveSpecialistWorkflowReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken, queueControl })
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
@@ -317,4 +319,8 @@ console.log('RAG_RELEASE_FIXTURE=PASS')
 console.log('RESEARCH_RELEASE_FIXTURE=PASS')
 console.log('VOICE_AVATAR_PROFILE_RELEASE_FIXTURE=PASS')
 console.log('SOCIAL_AD_PRODUCT_BREAKOUT_RELEASE_FIXTURE=PASS')
+console.log('SPECIALIST_VISION_RELEASE_FIXTURE=PASS')
+console.log('BRAND_SCRAPE_RELEASE_FIXTURE=PASS')
+console.log('DOCUMENT_INGEST_RELEASE_FIXTURE=PASS')
+console.log('CAMPAIGN_GENERATION_RELEASE_FIXTURE=PASS')
 console.log('BROWSER_E2E=PASS')

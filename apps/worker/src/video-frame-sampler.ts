@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 
 const execFileAsync = promisify(execFile)
 const MAX_VIDEO_BYTES = 750 * 1024 * 1024
@@ -18,6 +19,17 @@ export interface VideoFrameSampleResult {
   durationSeconds: number
   sampleCount: number
   frames: SampledVideoFrame[]
+}
+
+export interface InspectedVideoStream {
+  detectedContainer: string
+  codec: string
+  width: number
+  height: number
+  durationSeconds: number
+  frameRate: number
+  byteLength: number
+  checksum: string
 }
 
 export function deriveVideoSampleTimestamps(durationSeconds: number, sampleCount: number): number[] {
@@ -47,6 +59,26 @@ async function probeDuration(path: string): Promise<number> {
   const duration = Number(String(stdout).trim())
   if (!Number.isFinite(duration) || duration <= 0) throw new Error('FFprobe did not return a positive video duration')
   return duration
+}
+
+export async function inspectVideoArtifactBytes(videoBuffer: Buffer, mimeType: string): Promise<InspectedVideoStream> {
+  if (!videoBuffer.length) throw new Error('Video inspection requires nonempty bytes')
+  if (videoBuffer.length > MAX_VIDEO_BYTES) throw new Error('Video exceeds the 750MB inspection limit')
+  const directory = await mkdtemp(join(tmpdir(), 'amarktai-video-inspection-'))
+  const sourcePath = join(directory, `source${extensionForMime(mimeType)}`)
+  try {
+    await writeFile(sourcePath, videoBuffer)
+    const { stdout } = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=codec_type,codec_name,width,height,r_frame_rate', '-of', 'json', sourcePath], { timeout: 30_000, maxBuffer: 1024 * 1024, windowsHide: true })
+    const parsed = JSON.parse(String(stdout)) as { format?: { format_name?: string; duration?: string }; streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; r_frame_rate?: string }> }
+    const stream = parsed.streams?.find((item) => item.codec_type === 'video')
+    const durationSeconds = Number(parsed.format?.duration)
+    const [numerator = Number.NaN, denominator = Number.NaN] = String(stream?.r_frame_rate ?? '').split('/').map(Number)
+    const frameRate = denominator ? numerator / denominator : numerator
+    if (!stream?.codec_name || !stream.width || !stream.height || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(frameRate) || frameRate <= 0) throw new Error('FFprobe did not return a valid decodable video stream')
+    return { detectedContainer: String(parsed.format?.format_name ?? ''), codec: stream.codec_name, width: stream.width, height: stream.height, durationSeconds, frameRate, byteLength: videoBuffer.length, checksum: createHash('sha256').update(videoBuffer).digest('hex') }
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 export async function sampleVideoFrames(input: {

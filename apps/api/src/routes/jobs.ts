@@ -19,6 +19,8 @@ import {
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
   TOKEN_COST_MULTIPLIER,
+  SPECIALIST_VISION_CAPABILITIES,
+  durableIdempotencyTrace,
   isValidRoutingMode,
   type JobPayload,
   type CreateJobResponse,
@@ -172,6 +174,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
     const validatedInput = capabilityRequest.data ?? input
 
+    const specialistVision = (SPECIALIST_VISION_CAPABILITIES as readonly string[]).includes(capability)
+    if (specialistVision) {
+      const sourceArtifactId = ['sourceImageArtifactId', 'sourceVideoArtifactId', 'sourceDocumentArtifactId']
+        .map((field) => validatedInput[field])
+        .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      if (sourceArtifactId) {
+        const sourceArtifact = await prisma.artifact.findFirst({ where: { id: sourceArtifactId, appSlug: auth.app!.slug, status: 'completed' } })
+        if (!sourceArtifact) return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
+      }
+    }
+
     // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
     // allowlist is migration input only and is never consulted by the worker.
     const allowedCaps = auth.allowedCapabilities ?? []
@@ -187,6 +200,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         error: true,
         message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
       })
+    }
+    if (specialistVision && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
+      return reply.status(403).send({ error: true, code: 'SPECIALIST_ARTIFACT_GRANT_REQUIRED', message: 'Specialist vision requires artifact read and write grants.' })
     }
     if (route) {
       const routeKey = `${route.provider}/${route.model}`
@@ -238,7 +254,22 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // 7. Create Job record in MySQL
-    const traceId = `trace_${randomUUID()}`
+    const idempotencyKey = specialistVision && typeof validatedInput.idempotencyKey === 'string' ? validatedInput.idempotencyKey : null
+    const traceId = idempotencyKey
+      ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey)
+      : `trace_${randomUUID()}`
+    if (idempotencyKey) {
+      const existing = await prisma.job.findFirst({ where: { appSlug: auth.app!.slug, capability, traceId }, orderBy: { createdAt: 'desc' } })
+      if (existing) {
+        return reply.status(200).send({
+          jobId: existing.id,
+          status: existing.status,
+          capability,
+          createdAt: existing.createdAt.toISOString(),
+          deduplicated: true,
+        })
+      }
+    }
     const job = await prisma.job.create({
       data: {
         appSlug: auth.app!.slug,

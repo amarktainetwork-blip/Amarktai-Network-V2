@@ -226,6 +226,37 @@ export {
   type JsonSchemaValidationResult,
 } from './direct-provider-contracts.js'
 
+export {
+  SPECIALIST_VISION_CAPABILITIES,
+  SPECIALIST_VISION_REQUEST_SCHEMAS,
+  SPECIALIST_VISION_RESULT_SCHEMAS,
+  DepthEstimationRequestSchema,
+  KeypointDetectionRequestSchema,
+  MaskGenerationRequestSchema,
+  ZeroShotObjectDetectionRequestSchema,
+  VisualDocumentRetrievalRequestSchema,
+  VideoClassificationRequestSchema,
+  inspectImageArtifact,
+  inspectDocumentArtifact,
+  checksumArtifactBytes,
+  validateSpecialistVisionResult,
+  type SpecialistVisionCapability,
+  type InspectedSourceArtifact,
+} from './specialist-vision.js'
+
+export {
+  BrandScrapeRequestSchema,
+  BrandProfileProposalSchema,
+  DocumentIngestRequestSchema,
+  CampaignGenerationRequestSchema,
+  CampaignPlanSchema,
+  WorkflowApprovalSchema,
+  chunkDocumentPages,
+  durableIdempotencyTrace,
+  type DocumentPageText,
+  type DocumentChunk,
+} from './durable-workflows.js'
+
 // Orchestra routing engine
 export {
   ORCHESTRA_ROUTING_MODES,

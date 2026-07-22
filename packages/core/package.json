@@ -42,6 +42,14 @@
       "types": "./dist/research-platform.d.ts",
       "import": "./dist/research-platform.js"
     },
+    "./specialist-vision": {
+      "types": "./dist/specialist-vision.d.ts",
+      "import": "./dist/specialist-vision.js"
+    },
+    "./durable-workflows": {
+      "types": "./dist/durable-workflows.d.ts",
+      "import": "./dist/durable-workflows.js"
+    },
     "./voice-avatar-platform": {
       "types": "./dist/voice-avatar-platform.d.ts",
       "import": "./dist/voice-avatar-platform.js"

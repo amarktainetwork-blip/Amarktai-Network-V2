@@ -294,8 +294,9 @@ describe('Build Completion Audit', () => {
     expect(researchDetail).toBeDefined()
     expect(researchDetail.status).toBe('design-ready')
     expect(researchDetail.executionReadyCapabilities).toEqual([])
-    expect(researchDetail.pendingCapabilities).toEqual(['brand_scrape'])
-    expect(researchDetail.reason).toContain('registered durable workflows')
+    expect(researchDetail.pendingCapabilities).toEqual([])
+    expect(researchDetail.reason).toContain('brand_scrape are registered durable workflows')
+    expect(auditOutput.canonicalRuntimeTruth.durableWorkflowBlockers).toEqual([])
   })
 
   it('dashboardStatus includes partialExecutionPages', () => {

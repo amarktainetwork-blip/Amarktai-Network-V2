@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { CapabilityKey } from './capabilities.js'
 import type { ProviderKey } from './providers.js'
+import { SPECIALIST_VISION_CAPABILITIES, SPECIALIST_VISION_REQUEST_SCHEMAS, type SpecialistVisionCapability } from './specialist-vision.js'
 
 export const DIRECT_PROVIDER_CAPABILITIES = [
   'chat',
@@ -253,6 +254,14 @@ export function validateDirectProviderRequest(
   prompt: string,
   input: Record<string, unknown>,
 ): DirectProviderRequestValidation {
+  if ((SPECIALIST_VISION_CAPABILITIES as readonly string[]).includes(capability)) {
+    const parsed = SPECIALIST_VISION_REQUEST_SCHEMAS[capability as SpecialistVisionCapability].safeParse(input)
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }))
+      return { success: false, error: `Invalid ${capability} request: ${issues.map((issue) => `${issue.path || 'input'} ${issue.message}`).join('; ')}`, issues }
+    }
+    return { success: true, data: parsed.data as Record<string, unknown> }
+  }
   if (!isDirectProviderCapability(capability)) return { success: true, data: input }
 
   const request = { ...input }

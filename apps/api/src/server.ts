@@ -42,6 +42,8 @@ import { appMarketingCampaignRoutes } from './routes/app-marketing-campaigns.js'
 import { appMemoryRoutes } from './routes/app-memory.js'
 import { appRagRoutes } from './routes/app-rag.js'
 import { appResearchRoutes } from './routes/app-research.js'
+import { appDurableWorkflowRoutes } from './routes/app-durable-workflows.js'
+import { appSourceArtifactRoutes } from './routes/app-source-artifacts.js'
 import { appVoiceAvatarProfileRoutes } from './routes/app-voice-avatar-profiles.js'
 import { appVoiceAvatarEvidenceRoutes } from './routes/app-voice-avatar-evidence.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
@@ -120,6 +122,8 @@ async function main(): Promise<void> {
   await app.register(appMemoryRoutes)
   await app.register(appRagRoutes)
   await app.register(appResearchRoutes)
+  await app.register(appSourceArtifactRoutes)
+  await app.register(appDurableWorkflowRoutes)
   await app.register(appVoiceAvatarProfileRoutes)
   await app.register(appVoiceAvatarEvidenceRoutes)
   await app.register(adminVoiceRoutes)

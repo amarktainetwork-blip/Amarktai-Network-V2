@@ -98,6 +98,7 @@ export {
 export {
   ensureCollection,
   upsertPoints,
+  deletePointsByFilter,
   searchVectors,
   getCollectionInfo,
   type QdrantPoint,

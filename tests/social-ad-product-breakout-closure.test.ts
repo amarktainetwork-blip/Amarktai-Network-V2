@@ -20,9 +20,7 @@ describe('product-breakout platform closure', () => {
   it('recognises only fixture-backed durable workflows in canonical truth', () => {
     const capabilities = DURABLE_WORKFLOW_REGISTRATIONS.map((item) => item.capability)
     expect(capabilities).toEqual(expect.arrayContaining(['long_form_video', 'rag_ingest', 'rag_search', 'research', 'social_content_generation']))
-    expect(capabilities).not.toContain('brand_scrape')
-    expect(capabilities).not.toContain('document_ingest')
-    expect(capabilities).not.toContain('campaign_generation')
+    expect(capabilities).toEqual(expect.arrayContaining(['brand_scrape', 'document_ingest', 'campaign_generation']))
     for (const workflow of DURABLE_WORKFLOW_REGISTRATIONS) {
       expect(workflow.fixtureProof).toBeTruthy()
       expect(workflow.infrastructure).toContain('mariadb')

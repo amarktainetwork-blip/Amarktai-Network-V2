@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const production = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8')
-const fixture = readFileSync(new URL('../docker-compose.release-fixture.yml', import.meta.url), 'utf8')
-const settings = readFileSync(new URL('../searxng/settings.yml', import.meta.url), 'utf8')
-const envExample = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
+const normalizedFile = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replaceAll('\r\n', '\n')
+const production = normalizedFile('../docker-compose.yml')
+const fixture = normalizedFile('../docker-compose.release-fixture.yml')
+const settings = normalizedFile('../searxng/settings.yml')
+const envExample = normalizedFile('../.env.example')
 
 const pinnedImage = 'docker.io/searxng/searxng:2026.7.17-81c9c2386'
 

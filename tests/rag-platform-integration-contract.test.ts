@@ -50,7 +50,7 @@ describe('durable RAG integration contract', () => {
   })
 
   it('dispatches durable RAG and research parents after every child completion', () => {
-    expect(parentWorkflow).toContain("ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'unknown'")
+    expect(parentWorkflow).toContain("ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'durable_closure' | 'unknown'")
     expect(parentWorkflow).toContain("if (kind === 'rag')")
     expect(parentWorkflow).toContain('await advanceRagWorkflow(parent.id, queue)')
     expect(parentWorkflow).toContain("if (kind === 'research')")

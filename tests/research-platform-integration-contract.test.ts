@@ -69,7 +69,7 @@ describe('durable governed research integration contract', () => {
     expect(sdk).toContain('export interface ResearchExecutionPayload')
     expect(sdk).toContain('executeResearch(payload: ResearchExecutionPayload)')
     expect(sdk).toContain('researchExecution(executionId: string)')
-    const sdkContract = sdk.match(/export interface ResearchExecutionPayload[\s\S]+?(?=export type VoiceAvatarUseScope)/)?.[0] ?? ''
+    const sdkContract = sdk.match(/export interface ResearchExecutionPayload[\s\S]+?\r?\n}/)?.[0] ?? ''
     expect(sdkContract).toContain('includeSnapshots?: boolean')
     expect(sdkContract).not.toMatch(/appSlug|provider|model|route|executorId|endpoint|apiKey|ragNamespace/)
     expect(openapi).toContain('version: 1.7.0')
@@ -77,7 +77,7 @@ describe('durable governed research integration contract', () => {
     expect(openapi).toContain('additionalProperties: false')
     expect(openapi).toContain('/api/v1/research/executions:')
     expect(openapi).toContain('/api/v1/research/executions/{id}:')
-    const openapiContract = openapi.match(/ResearchExecution:[\s\S]+?paths:/)?.[0] ?? ''
+    const openapiContract = openapi.match(/ResearchExecution:[\s\S]+?(?=    SpecialistVisionResult:)/)?.[0] ?? ''
     expect(openapiContract).not.toMatch(/appSlug|provider:|model:|route:|executorId|endpoint:|apiKey|ragNamespace/)
   })
 })

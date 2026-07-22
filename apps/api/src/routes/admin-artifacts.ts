@@ -1,5 +1,39 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { prisma } from '@amarktai/db'
+import { saveArtifact } from '@amarktai/artifacts'
+import { createHash, randomUUID } from 'node:crypto'
+import { z } from 'zod'
+import {
+  SPECIALIST_VISION_CAPABILITIES,
+  getDashboardAppSlug,
+  inspectDocumentArtifact,
+  inspectImageArtifact,
+  type CapabilityKey,
+} from '@amarktai/core'
+
+const AdminSourceArtifactUploadSchema = z.object({
+  capability: z.enum(SPECIALIST_VISION_CAPABILITIES),
+  title: z.string().trim().min(1).max(500),
+  dataBase64: z.string().min(1).max(70_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Expected canonical base64 data.'),
+  declaredMimeType: z.string().trim().min(1).max(200).optional(),
+}).strict()
+
+function inspectVideo(bytes: Buffer) {
+  if (!bytes.length) throw new Error('Source video is empty.')
+  if (bytes.length > 50 * 1024 * 1024) throw new Error('Source video exceeds the maximum file size.')
+  if (!bytes.subarray(0, 64).toString('latin1').includes('ftyp')) throw new Error('Source video is not a supported MP4 container.')
+  return {
+    kind: 'video' as const,
+    detectedMimeType: 'video/mp4',
+    checksum: createHash('sha256').update(bytes).digest('hex'),
+    byteLength: bytes.length,
+    width: null,
+    height: null,
+    durationSeconds: null,
+    frameRate: null,
+    pageCount: null,
+  }
+}
 
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
@@ -21,6 +55,48 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
 }
 
 export async function adminArtifactRoutes(app: FastifyInstance): Promise<void> {
+  app.post('/api/admin/artifacts/source', { bodyLimit: 70_000_000 }, async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const parsed = AdminSourceArtifactUploadSchema.safeParse(request.body)
+    if (!parsed.success) return reply.status(400).send({ error: true, message: 'Source artifact upload validation failed.', issues: parsed.error.issues })
+    const bytes = Buffer.from(parsed.data.dataBase64, 'base64')
+    if (!bytes.length) return reply.status(400).send({ error: true, message: 'Source artifact is empty.' })
+    const kind = parsed.data.capability === 'video_classification'
+      ? 'video'
+      : parsed.data.capability === 'visual_document_retrieval'
+        ? 'document'
+        : 'image'
+    try {
+      const inspection = kind === 'image'
+        ? inspectImageArtifact(bytes)
+        : kind === 'document'
+          ? inspectDocumentArtifact(bytes)
+          : inspectVideo(bytes)
+      if (parsed.data.declaredMimeType && parsed.data.declaredMimeType !== inspection.detectedMimeType) {
+        return reply.status(415).send({ error: true, message: 'Declared MIME type does not match inspected bytes.' })
+      }
+      const artifact = await saveArtifact({
+        input: {
+          appSlug: getDashboardAppSlug(parsed.data.capability as CapabilityKey),
+          type: kind,
+          subType: 'authorised_source',
+          title: parsed.data.title,
+          description: 'Admin-uploaded source media for governed Specialist Vision execution.',
+          provider: 'user_upload',
+          model: 'source-inspection-v1',
+          traceId: `trace_source_${randomUUID()}`,
+          mimeType: inspection.detectedMimeType,
+          metadata: { sourceArtifact: true, inspection, capability: parsed.data.capability, uploadedAt: new Date().toISOString() },
+        },
+        data: bytes,
+        explicitMimeType: inspection.detectedMimeType,
+      })
+      return reply.status(201).send({ artifactId: artifact.id, kind, mimeType: artifact.mimeType, fileSizeBytes: artifact.fileSizeBytes, inspection })
+    } catch (error) {
+      return reply.status(415).send({ error: true, message: error instanceof Error ? error.message : 'Source artifact inspection failed.' })
+    }
+  })
+
   app.get('/api/admin/artifacts', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
 

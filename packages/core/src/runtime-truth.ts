@@ -627,11 +627,13 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
       requiredCapabilities: [...workflow.requiredCapabilities],
       fixtureProof: workflow.fixtureProof,
     })),
-    durableWorkflowBlockers: (['brand_scrape', 'document_ingest', 'campaign_generation'] as const).map((capability) => ({
-      capability,
-      implementationStatus: 'NOT_IMPLEMENTED' as const,
-      blocker: 'No authoritative durable API/worker/persistence/recovery/fixture registration exists.',
-    })),
+    durableWorkflowBlockers: (['brand_scrape', 'document_ingest', 'campaign_generation'] as const)
+      .filter((capability) => !DURABLE_WORKFLOW_REGISTRATIONS.some((workflow) => workflow.capability === capability))
+      .map((capability) => ({
+        capability,
+        implementationStatus: 'NOT_IMPLEMENTED' as const,
+        blocker: 'No authoritative durable API/worker/persistence/recovery/fixture registration exists.',
+      })),
     metrics,
   }
 }

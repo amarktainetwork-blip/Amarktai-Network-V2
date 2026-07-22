@@ -64,10 +64,17 @@ function isInternalResearchEvidence(payload: WorkerJobData): boolean {
     && payload.metadata.internalLocalExecution === true
 }
 
+function isInternalDocumentExtraction(payload: WorkerJobData): boolean {
+  return payload.capability === 'document_ingest'
+    && payload.metadata?.documentExtraction === true
+    && payload.metadata.internalLocalExecution === true
+}
+
 function isInternalLocalExecution(payload: WorkerJobData): boolean {
   return isInternalLongFormAssembly(payload)
     || isInternalSocialAdAssembly(payload)
     || isInternalResearchEvidence(payload)
+    || isInternalDocumentExtraction(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -85,6 +92,10 @@ async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> 
   if (isInternalResearchEvidence(payload)) {
     const { executeResearchEvidence } = await import('../research-evidence-executor.js')
     return executeResearchEvidence(payload)
+  }
+  if (isInternalDocumentExtraction(payload)) {
+    const { executeDocumentExtraction } = await import('../document-extraction-executor.js')
+    return executeDocumentExtraction(payload)
   }
   return executeWithProvider(payload)
 }

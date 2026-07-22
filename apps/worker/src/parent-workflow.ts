@@ -9,6 +9,7 @@ import { advanceSocialAdCopyWorkflow } from './social-ad-copy-workflow.js'
 import { ensureSocialAdQualityGrantSnapshot } from './social-ad-quality-grant.js'
 import { advanceSocialAdQualityWorkflow } from './social-ad-quality-workflow.js'
 import { refreshSocialAdParentState } from './social-ad-workflow.js'
+import { advanceDurableClosureWorkflow, isDurableClosureWorkflow } from './durable-workflow.js'
 
 function safeJson(value: unknown): Record<string, unknown> {
   if (typeof value !== 'string' || !value.trim()) return {}
@@ -22,7 +23,7 @@ function safeJson(value: unknown): Record<string, unknown> {
   }
 }
 
-export type ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'unknown'
+export type ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'durable_closure' | 'unknown'
 
 const parentAdvanceTails = new Map<string, Promise<void>>()
 
@@ -56,6 +57,7 @@ export function classifyParentWorkflow(parent: {
   }
   if (classifyRagWorkflow(parent)) return 'rag'
   if (parent.capability === 'research' && metadata.researchWorkflow === true) return 'research'
+  if (isDurableClosureWorkflow(parent)) return 'durable_closure'
   return 'unknown'
 }
 
@@ -87,6 +89,10 @@ async function advanceParentWorkflowUnlocked(parentJobId: string, queue: Queue):
   }
   if (kind === 'research') {
     await advanceResearchWorkflow(parent.id, queue)
+    return { kind, advanced: true }
+  }
+  if (kind === 'durable_closure') {
+    await advanceDurableClosureWorkflow(parent.id, queue)
     return { kind, advanced: true }
   }
   if (kind === 'social_ad_video') {

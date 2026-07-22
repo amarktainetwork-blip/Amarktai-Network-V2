@@ -368,6 +368,70 @@ components:
         answer: { type: boolean, default: true }
         includeSnapshots: { type: boolean, default: true }
         metadata: { type: object }
+    SpecialistVisionResult:
+      type: object
+      description: Validated provider-neutral result with downloadable artifact IDs, provenance, usage, output validation, citations or temporal sampling evidence as applicable.
+      additionalProperties: true
+    BrandScrapeRequest:
+      type: object
+      additionalProperties: false
+      required: [url, permittedContentCategories, maxCredits, idempotencyKey]
+      properties:
+        url: { type: string, format: uri, description: HTTPS public target only; localhost, private, link-local and metadata ranges are rejected across redirects and DNS resolution. }
+        crawlDepth: { type: integer, minimum: 0, maximum: 3, default: 1 }
+        permittedContentCategories: { type: array, minItems: 1, items: { enum: [brand, products, services, legal, contact, about, assets] } }
+        campaignId: { type: string }
+        maxPages: { type: integer, minimum: 1, maximum: 20 }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    DocumentIngestRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceArtifactId, documentId, namespace, maxCredits, idempotencyKey]
+      properties:
+        sourceArtifactId: { type: string, format: uuid }
+        documentId: { type: string }
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        title: { type: string }
+        chunkSize: { type: integer, minimum: 200, maximum: 4000 }
+        chunkOverlap: { type: integer, minimum: 0, maximum: 800 }
+        ocrMode: { enum: [automatic, never, always] }
+        maxPages: { type: integer, minimum: 1, maximum: 2000 }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    CampaignGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [campaignId, brandProfileId, offeringId, objective, audienceIds, channels, startDate, endDate, budgetCredits, approvalRequired, idempotencyKey]
+      properties:
+        campaignId: { type: string }
+        brandProfileId: { type: string }
+        offeringId: { type: string }
+        objective: { type: string }
+        audienceIds: { type: array, minItems: 1, items: { type: string } }
+        channels: { type: array, minItems: 1, items: { enum: [facebook, instagram, linkedin, x, tiktok, youtube, email, website, blog, paid_search, display] } }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        researchExecutionIds: { type: array, items: { type: string } }
+        ragNamespace: { $ref: '#/components/schemas/Namespace' }
+        budgetCredits: { type: number, exclusiveMinimum: 0 }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        approvalRequired: { const: true }
+        createChildSocialWorkflows: { type: boolean, default: false }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    DurableWorkflowStatus:
+      type: object
+      properties:
+        executionId: { type: string }
+        parentJobId: { type: string }
+        capability: { type: string }
+        status: { enum: [queued, processing, completed, failed, cancelled] }
+        phase: { type: string }
+        progress: { type: integer }
+        artifactId: { type: [string, 'null'] }
+        result: { type: [object, 'null'] }
+        approval: { type: [object, 'null'] }
+        evidence: { type: array, items: { type: object } }
 paths:
   /api/v1/capabilities:
     get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } }
@@ -378,6 +442,7 @@ paths:
   /api/v1/jobs:
     post:
       summary: Submit a durable capability job; Orchestra owns provider and model selection
+      description: depth_estimation, keypoint_detection, mask_generation, zero_shot_object_detection, visual_document_retrieval and video_classification accept authorised artifact IDs and capability-specific provider-neutral inputs. Their results include validated structured evidence and downloadable artifacts. Provider, model, executor, endpoint and API-key overrides are rejected.
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Execute' } } } }
       responses: { '201': { description: Queued }, '403': { description: Capability not approved } }
   /api/v1/jobs/{id}:
@@ -631,3 +696,56 @@ paths:
         - { in: query, name: download, schema: { type: string, enum: ['1'] } }
         - { in: header, name: Range, schema: { type: string } }
       responses: { '200': { description: Artifact bytes }, '206': { description: Partial artifact bytes } }
+  /api/v1/source-artifacts:
+    post:
+      summary: Upload and inspect an app-owned image, video or document artifact
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [title, kind, dataBase64], properties: { title: { type: string }, kind: { enum: [image, video, document] }, dataBase64: { type: string, format: byte }, declaredMimeType: { type: string } } } } } }
+      responses: { '201': { description: Inspected source artifact }, '415': { description: Unsupported bytes or declared/detected MIME mismatch } }
+  /api/v1/brand-scrape/executions:
+    post:
+      summary: Start a durable SSRF-protected brand crawl and Brand Profile proposal
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandScrapeRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/brand-scrape/executions/{id}:
+    get:
+      summary: Read crawl, extraction, citation and approval evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/brand-scrape/executions/{id}/approval:
+    post:
+      summary: Approve or reject a proposal without silently replacing a verified Brand Profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Human decision persisted } }
+  /api/v1/document-ingest/executions:
+    post:
+      summary: Start page-preserving extraction, conditional OCR, embeddings and app-isolated Qdrant ingestion
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DocumentIngestRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/document-ingest/executions/{id}:
+    get:
+      summary: Read extraction, OCR, chunk, embedding and Qdrant evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/campaign-generation/executions:
+    post:
+      summary: Start verified-brand structured campaign plan generation
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CampaignGenerationRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/campaign-generation/executions/{id}:
+    get:
+      summary: Read structured plan, citations and approval state
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/campaign-generation/executions/{id}/approval:
+    post:
+      summary: Activate an approved plan and deduplicate optional child workflow creation
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Human decision persisted } }
+  /api/v1/brand-scrape/executions/{id}/cancel:
+    post: { summary: Cancel a non-terminal brand scrape and its queued children, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }
+  /api/v1/document-ingest/executions/{id}/cancel:
+    post: { summary: Cancel non-terminal extraction, OCR or embedding work, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }
+  /api/v1/campaign-generation/executions/{id}/cancel:
+    post: { summary: Cancel a non-terminal campaign plan before activation, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }
