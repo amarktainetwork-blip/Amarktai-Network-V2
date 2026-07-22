@@ -4,6 +4,16 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./voice-audio": {
+      "types": "./dist/voice-audio.d.ts",
+      "import": "./dist/voice-audio.js"
+    }
+  },
   "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run" },
   "devDependencies": { "typescript": "^5", "vitest": "^4.1.1" }
 }
