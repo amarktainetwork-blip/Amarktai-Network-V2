@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 describe('DeepInfra discovery executable truth', () => {
-  it('keeps discovered TTS visible but non-executable without a registered client/worker', async () => {
+  it('marks discovered TTS executable only when the exact speech client and worker are registered', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
       if (url.endsWith('/v1/models')) {
@@ -41,17 +41,20 @@ describe('DeepInfra discovery executable truth', () => {
     expect(model?.endpointShapeKnown).toBe(true)
     expect(model?.requestShapeKnown).toBe(true)
     expect(model?.responseShapeKnown).toBe(true)
-    expect(model?.providerClientExists).toBe(false)
-    expect(model?.workerExecutorExists).toBe(false)
-    expect(model?.artifactPersistenceExists).toBe(false)
+    expect(model?.providerClientExists).toBe(true)
+    expect(model?.workerExecutorExists).toBe(true)
+    expect(model?.artifactPersistenceExists).toBe(true)
+    expect(model?.transportProfile).toBe('openai_audio_speech_binary')
+    expect(model?.endpointFamily).toContain('audio_speech')
     expect(model?.rawMetadata).toMatchObject({
-      providerClientExists: false,
-      workerExecutorExists: false,
-      artifactPersistenceExists: false,
-      executorRegistryMatched: false,
+      providerClientExists: true,
+      workerExecutorExists: true,
+      artifactPersistenceExists: true,
+      executorRegistryMatched: true,
+      transportProfile: 'openai_audio_speech_binary',
     })
-    expect(hasExecutorRegistration('tts', 'deepinfra')).toBe(false)
-    expect(getExecutorRegistration('tts', 'deepinfra')).toBeUndefined()
+    expect(hasExecutorRegistration('tts', 'deepinfra')).toBe(true)
+    expect(getExecutorRegistration('tts', 'deepinfra')?.id).toBe('deepinfra.task-inference')
   })
 
   it('marks a discovered registered text model executable from canonical registry truth', async () => {
