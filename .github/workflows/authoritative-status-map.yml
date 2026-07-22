@@ -1,6 +1,8 @@
 name: authoritative-status-map
 
 on:
+  pull_request:
+    branches: [main, feat/production-activation-music-longform]
   push:
     branches: [feat/batch-b-platform-closure]
 
@@ -8,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: authoritative-status-map-${{ github.ref_name }}
+  group: authoritative-status-map-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -16,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      VALIDATED_SHA: ${{ github.sha }}
+      VALIDATED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Verify exact head checkout
@@ -41,10 +43,42 @@ jobs:
       - name: Generate canonical 68-capability map
         run: npx tsx scripts/generate-authoritative-status-map.mjs --output=authoritative-status-map.json
 
-      - name: Validate generated map
+      - name: Capture current public DeepInfra standard-model catalogue
         shell: bash
         run: |
-          node -e "const fs=require('fs'); const map=JSON.parse(fs.readFileSync('authoritative-status-map.json','utf8')); if(map.counts.catalogue!==68) throw new Error('Expected 68 capabilities'); if(map.capabilities.length!==68) throw new Error('Expected 68 capability rows'); console.log(JSON.stringify(map.counts));"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          const response = await fetch('https://api.deepinfra.com/models/list', { headers: { Accept: 'application/json' } })
+          if (!response.ok) throw new Error(`DeepInfra model list failed: ${response.status}`)
+          const rows = await response.json()
+          const relevantTypes = new Set([
+            'image-to-image', 'image-classification', 'zero-shot-image-classification',
+            'object-detection', 'zero-shot-object-detection', 'image-segmentation',
+            'depth-estimation', 'keypoint-detection', 'video-classification',
+            'audio-classification', 'voice-activity-detection', 'text-to-speech',
+          ])
+          const models = rows
+            .filter((row) => relevantTypes.has(String(row.reported_type || row.type || '').toLowerCase().replaceAll('_', '-')))
+            .map((row) => ({
+              modelId: row.model_name,
+              type: row.type,
+              reportedType: row.reported_type,
+              deprecated: row.deprecated ?? null,
+              replacedBy: row.replaced_by ?? null,
+              private: Number(row.private || 0),
+              tags: Array.isArray(row.tags) ? row.tags : [],
+              pricing: row.pricing ?? null,
+            }))
+            .filter((row) => row.modelId && row.private === 0 && !row.deprecated)
+            .sort((a, b) => `${a.reportedType}:${a.modelId}`.localeCompare(`${b.reportedType}:${b.modelId}`))
+          fs.writeFileSync('deepinfra-standard-models.json', `${JSON.stringify({ capturedAt: new Date().toISOString(), source: 'https://api.deepinfra.com/models/list', count: models.length, models }, null, 2)}\n`)
+          console.log(JSON.stringify({ relevantDeepInfraModels: models.length, types: [...new Set(models.map((row) => row.reportedType || row.type))] }))
+          NODE
+
+      - name: Validate generated truth artifacts
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const map=JSON.parse(fs.readFileSync('authoritative-status-map.json','utf8')); if(map.counts.catalogue!==68) throw new Error('Expected 68 capabilities'); if(map.capabilities.length!==68) throw new Error('Expected 68 capability rows'); const models=JSON.parse(fs.readFileSync('deepinfra-standard-models.json','utf8')); if(!Array.isArray(models.models)) throw new Error('Expected DeepInfra model rows'); console.log(JSON.stringify({capabilities:map.counts, deepinfraModels:models.count}));"
 
       - name: Upload authoritative status map
         uses: actions/upload-artifact@v4
@@ -52,4 +86,6 @@ jobs:
           name: authoritative-status-map-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 14
           if-no-files-found: error
-          path: authoritative-status-map.json
+          path: |
+            authoritative-status-map.json
+            deepinfra-standard-models.json
