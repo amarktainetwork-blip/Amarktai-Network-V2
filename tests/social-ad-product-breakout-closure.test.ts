@@ -12,6 +12,8 @@ const runner = read('scripts/proof-release-fixture.mjs')
 const dashboard = read('app/dashboard/social-ad/page.js')
 const openapi = read('docs/app-api-openapi.yaml')
 const sdk = read('packages/sdk/src/index.ts')
+const prismaSchema = read('prisma/schema.prisma')
+const campaignMetadataMigration = read('prisma/migrations/20260722_expand_campaign_metadata/migration.sql')
 
 describe('product-breakout platform closure', () => {
   it('recognises only fixture-backed durable workflows in canonical truth', () => {
@@ -35,6 +37,8 @@ describe('product-breakout platform closure', () => {
     expect(route).toContain("throw new Error('SOCIAL_AD_PRODUCT_ASSET_NOT_READY')")
     expect(route).toContain("throw new Error('SOCIAL_AD_PRODUCT_ASSET_TYPE_INVALID')")
     expect(route).toContain('SOCIAL_AD_EXECUTION_AUTHORITY_FORBIDDEN')
+    expect(prismaSchema).toMatch(/model Campaign[\s\S]+metadata\s+String\s+@default\("\{\}"\) @db\.LongText/)
+    expect(campaignMetadataMigration).toContain('ALTER TABLE `campaigns` MODIFY `metadata` LONGTEXT NOT NULL')
   })
 
   it('persists measured, model-evaluated and human-review-required evidence', () => {

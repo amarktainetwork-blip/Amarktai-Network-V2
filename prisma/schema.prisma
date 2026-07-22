@@ -1606,7 +1606,7 @@ model Campaign {
   websiteUrl      String   @default("") @map("website_url")
   workflowId      String   @default("") @map("workflow_id")
   /// JSON metadata blob
-  metadata        String   @default("{}")
+  metadata        String   @default("{}") @db.LongText
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
