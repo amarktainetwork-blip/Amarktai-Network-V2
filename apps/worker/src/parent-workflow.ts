@@ -24,6 +24,27 @@ function safeJson(value: unknown): Record<string, unknown> {
 
 export type ParentWorkflowKind = 'long_form_video' | 'social_ad_video' | 'rag' | 'research' | 'unknown'
 
+const parentAdvanceTails = new Map<string, Promise<void>>()
+
+export async function serializeParentWorkflowAdvance<T>(
+  parentJobId: string,
+  advance: () => Promise<T>,
+): Promise<T> {
+  const previous = parentAdvanceTails.get(parentJobId) ?? Promise.resolve()
+  let releaseCurrent!: () => void
+  const current = new Promise<void>((resolve) => { releaseCurrent = resolve })
+  const tail = previous.catch(() => {}).then(() => current)
+  parentAdvanceTails.set(parentJobId, tail)
+
+  await previous.catch(() => {})
+  try {
+    return await advance()
+  } finally {
+    releaseCurrent()
+    if (parentAdvanceTails.get(parentJobId) === tail) parentAdvanceTails.delete(parentJobId)
+  }
+}
+
 export function classifyParentWorkflow(parent: {
   capability: string
   metadataJson: unknown
@@ -39,6 +60,13 @@ export function classifyParentWorkflow(parent: {
 }
 
 export async function advanceParentWorkflow(parentJobId: string, queue: Queue): Promise<{
+  kind: ParentWorkflowKind
+  advanced: boolean
+}> {
+  return serializeParentWorkflowAdvance(parentJobId, () => advanceParentWorkflowUnlocked(parentJobId, queue))
+}
+
+async function advanceParentWorkflowUnlocked(parentJobId: string, queue: Queue): Promise<{
   kind: ParentWorkflowKind
   advanced: boolean
 }> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyParentWorkflow } from '../apps/worker/src/parent-workflow.js'
+import { classifyParentWorkflow, serializeParentWorkflowAdvance } from '../apps/worker/src/parent-workflow.js'
 import { deriveSocialAdCandidateState } from '../apps/worker/src/social-ad-workflow.js'
 
 describe('social-ad candidate parent state', () => {
@@ -64,5 +64,29 @@ describe('parent workflow classification', () => {
     expect(classifyParentWorkflow({ capability: 'long_form_video', metadataJson: '{}' })).toBe('long_form_video')
     expect(classifyParentWorkflow({ capability: 'social_content_generation', metadataJson: JSON.stringify({ socialAdVideo: true }) })).toBe('social_ad_video')
     expect(classifyParentWorkflow({ capability: 'social_content_generation', metadataJson: '{}' })).toBe('unknown')
+  })
+
+  it('serializes concurrent advances for the same durable parent', async () => {
+    const events: string[] = []
+    let releaseFirst!: () => void
+    let markFirstStarted!: () => void
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve })
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve })
+    const first = serializeParentWorkflowAdvance('parent-1', async () => {
+      events.push('first:start')
+      markFirstStarted()
+      await firstGate
+      events.push('first:end')
+    })
+    const second = serializeParentWorkflowAdvance('parent-1', async () => {
+      events.push('second:start')
+      events.push('second:end')
+    })
+
+    await firstStarted
+    expect(events).toEqual(['first:start'])
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(events).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 })
