@@ -137,15 +137,33 @@ async function decideProfile(apiRequest, invariant, adminToken, kind, appSlug, p
   return result.body
 }
 
+async function executeAppJob(apiRequest, invariant, appKey, capability, input) {
+  const submitted = await apiRequest('/api/v1/jobs', appKey, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ capability, prompt: input.text || `${capability} release fixture`, input }),
+  })
+  invariant(submitted.response.status === 201 && submitted.body.jobId, submitted.body.message || `${capability} submission returned ${submitted.response.status}`)
+  for (let attempt = 0; attempt < 160; attempt++) {
+    const polled = await apiRequest(`/api/v1/jobs/${encodeURIComponent(submitted.body.jobId)}`, appKey)
+    invariant(polled.response.ok, polled.body.message || `${capability} polling returned ${polled.response.status}`)
+    if (['completed', 'failed', 'cancelled'].includes(polled.body.status)) return polled.body
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`${capability} fixture job did not reach a terminal state`)
+}
+
 export async function proveVoiceAvatarProfileReleaseFixture({ apiRequest, invariant, adminToken }) {
   const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
   const primarySlug = `profile-fixture-${suffix}`
   const secondarySlug = `profile-isolation-${suffix}`
-  const fullCapabilities = ['voice_clone', 'avatar_generation']
+  const fullCapabilities = ['tts', 'voice_clone', 'avatar_generation']
 
-  const primaryKey = await createFixtureApp(apiRequest, invariant, adminToken, primarySlug, 'Voice Avatar Profile Fixture', ['voice_clone'])
+  const primaryKey = await createFixtureApp(apiRequest, invariant, adminToken, primarySlug, 'Voice Avatar Profile Fixture', ['tts', 'voice_clone'])
   const secondaryKey = await createFixtureApp(apiRequest, invariant, adminToken, secondarySlug, 'Voice Avatar Isolation Fixture', fullCapabilities)
+  await configureGrant(apiRequest, invariant, adminToken, primarySlug, 'tts')
   await configureGrant(apiRequest, invariant, adminToken, primarySlug, 'voice_clone')
+  await configureGrant(apiRequest, invariant, adminToken, secondarySlug, 'tts')
   await configureGrant(apiRequest, invariant, adminToken, secondarySlug, 'voice_clone')
   await configureGrant(apiRequest, invariant, adminToken, secondarySlug, 'avatar_generation')
 
@@ -229,6 +247,44 @@ export async function proveVoiceAvatarProfileReleaseFixture({ apiRequest, invari
       && String(verifiedVoice.rightsDecision?.verifierReference || '').startsWith('admin:fixture-admin@invalid.example'),
     'Voice profile verification did not preserve server-derived decision evidence',
   )
+
+  const voiceCatalogue = await apiRequest('/api/admin/voices', adminToken)
+  const fixtureCatalogueVoice = voiceCatalogue.body.voices?.find((voice) => voice.voiceId === 'fixture-genx-narrator-v1')
+  invariant(voiceCatalogue.response.ok && fixtureCatalogueVoice?.enabled, 'Fixture-only governed voice catalogue entry was not bootstrapped')
+  const catalogueProfileCreated = await apiRequest('/api/v1/voice-profiles', primaryKey, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      displayName: 'Verified Catalogue Narrator',
+      description: 'App-scoped reusable profile backed by the fixture-only governed catalogue.',
+      source: { sourceType: 'provider_catalogue', catalogueVoiceId: fixtureCatalogueVoice.voiceId },
+      language: 'en',
+      locale: 'en-ZA',
+      styleTags: ['fixture', 'narration'],
+      permittedUses: ['narration'],
+    }),
+  })
+  invariant(catalogueProfileCreated.response.status === 201 && catalogueProfileCreated.body.status === 'draft', 'Catalogue-backed voice profile was not created as a draft')
+  const catalogueProfileId = catalogueProfileCreated.body.voiceProfileId
+  const draftDenied = await executeAppJob(apiRequest, invariant, primaryKey, 'tts', {
+    text: 'Draft profiles must not speak.', voiceProfileId: catalogueProfileId, intendedUse: 'narration', language: 'en', locale: 'en-ZA', speed: 1, outputFormat: 'wav',
+  })
+  invariant(draftDenied.status === 'failed' && /not usable|status is draft/i.test(draftDenied.error || ''), 'Draft voice profile executed TTS')
+  await decideProfile(apiRequest, invariant, adminToken, 'voice', primarySlug, catalogueProfileId, 'verified', 'Fixture catalogue voice rights verified.')
+  const governedTts = await executeAppJob(apiRequest, invariant, primaryKey, 'tts', {
+    text: 'Verified reusable profile fixture proof.', voiceProfileId: catalogueProfileId, intendedUse: 'narration', language: 'en', locale: 'en-ZA', speed: 1, outputFormat: 'wav',
+  })
+  invariant(governedTts.status === 'completed' && governedTts.artifactId, governedTts.error || 'Verified reusable voice profile did not create a durable audio artifact')
+  const crossAppDenied = await executeAppJob(apiRequest, invariant, secondaryKey, 'tts', {
+    text: 'Cross-app profiles must not speak.', voiceProfileId: catalogueProfileId, intendedUse: 'narration', language: 'en', locale: 'en-ZA', speed: 1, outputFormat: 'wav',
+  })
+  invariant(crossAppDenied.status === 'failed' && /not found for the authenticated app/i.test(crossAppDenied.error || ''), 'Cross-app voice profile executed TTS')
+  const archivedCatalogueProfile = await apiRequest(`/api/v1/voice-profiles/${encodeURIComponent(catalogueProfileId)}`, primaryKey, { method: 'DELETE' })
+  invariant(archivedCatalogueProfile.response.ok && archivedCatalogueProfile.body.status === 'archived', 'Catalogue-backed voice profile was not archived')
+  const archivedDenied = await executeAppJob(apiRequest, invariant, primaryKey, 'tts', {
+    text: 'Archived profiles must not speak.', voiceProfileId: catalogueProfileId, intendedUse: 'narration', language: 'en', locale: 'en-ZA', speed: 1, outputFormat: 'wav',
+  })
+  invariant(archivedDenied.status === 'failed' && /not usable|status is archived/i.test(archivedDenied.error || ''), 'Archived voice profile executed TTS')
 
   const editedVoice = await apiRequest(`/api/v1/voice-profiles/${encodeURIComponent(voiceProfileId)}`, primaryKey, {
     method: 'PUT',
@@ -323,6 +379,10 @@ export async function proveVoiceAvatarProfileReleaseFixture({ apiRequest, invari
     body: JSON.stringify({ description: 'Must fail.' }),
   })
   invariant(editRevokedVoice.response.status === 409 && editRevokedVoice.body.code === 'VOICE_PROFILE_REVOKED', 'Revoked voice profile remained app-editable')
+  const revokedDenied = await executeAppJob(apiRequest, invariant, primaryKey, 'tts', {
+    text: 'Revoked profiles must not speak.', voiceProfileId, intendedUse: 'narration', language: 'en', locale: 'en-ZA', speed: 1, outputFormat: 'wav',
+  })
+  invariant(revokedDenied.status === 'failed' && /not usable|status is revoked/i.test(revokedDenied.error || ''), 'Revoked voice profile executed TTS')
 
   console.log(`VOICE_PROFILE_FIXTURE_APP=${primarySlug}`)
   console.log(`VOICE_PROFILE_FIXTURE_ID=${voiceProfileId}`)
@@ -334,4 +394,7 @@ export async function proveVoiceAvatarProfileReleaseFixture({ apiRequest, invari
   console.log('PROFILE_SERVER_DERIVED_VERIFIER=PASS')
   console.log('PROFILE_REVOCATION_GUARD=PASS')
   console.log('PROFILE_APP_ISOLATION=PASS')
+  console.log('GOVERNED_TTS_PROFILE_EXECUTION=PASS')
+  console.log('GOVERNED_TTS_DRAFT_REVOKED_ARCHIVED_DENIAL=PASS')
+  console.log('GOVERNED_TTS_CROSS_APP_DENIAL=PASS')
 }

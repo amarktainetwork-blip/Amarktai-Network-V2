@@ -13,13 +13,24 @@ describe('authoritative governed voice and avatar profile release fixture', () =
   })
 
   it('creates two real apps and explicit immutable capability grants', () => {
-    expect(profileFixture).toContain("fullCapabilities = ['voice_clone', 'avatar_generation']")
-    expect(profileFixture).toContain("'Voice Avatar Profile Fixture', ['voice_clone']")
+    expect(profileFixture).toContain("fullCapabilities = ['tts', 'voice_clone', 'avatar_generation']")
+    expect(profileFixture).toContain("'Voice Avatar Profile Fixture', ['tts', 'voice_clone']")
     expect(profileFixture).toContain("'Voice Avatar Isolation Fixture', fullCapabilities")
     expect(profileFixture).toContain("configureGrant(apiRequest, invariant, adminToken, primarySlug, 'voice_clone')")
     expect(profileFixture).toContain("configureGrant(apiRequest, invariant, adminToken, primarySlug, 'avatar_generation')")
     expect(profileFixture).toContain('artifactWrite: true')
     expect(profileFixture).toContain('passthroughModelAllowed: false')
+  })
+
+  it('executes governed TTS with a verified reusable profile and fails closed for unusable profiles', () => {
+    expect(profileFixture).toContain("voice.voiceId === 'fixture-genx-narrator-v1'")
+    expect(profileFixture).toContain("sourceType: 'provider_catalogue'")
+    expect(profileFixture).toContain("draftDenied.status === 'failed'")
+    expect(profileFixture).toContain("governedTts.status === 'completed' && governedTts.artifactId")
+    expect(profileFixture).toContain("crossAppDenied.status === 'failed'")
+    expect(profileFixture).toContain("archivedDenied.status === 'failed'")
+    expect(profileFixture).toContain("revokedDenied.status === 'failed'")
+    expect(profileFixture).toContain("console.log('GOVERNED_TTS_PROFILE_EXECUTION=PASS')")
   })
 
   it('proves multipart grant denial, byte-signature MIME denial and completed app-owned evidence', () => {

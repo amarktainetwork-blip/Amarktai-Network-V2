@@ -14,6 +14,7 @@ import { governedTtsIngressPlugin } from '../apps/api/src/plugins/governed-tts-i
 
 const serverSource = readFileSync(new URL('../apps/api/src/server.ts', import.meta.url), 'utf8')
 const pluginSource = readFileSync(new URL('../apps/api/src/plugins/governed-tts-ingress.ts', import.meta.url), 'utf8')
+const voiceStudioSource = readFileSync(new URL('../app/dashboard/voice/page.js', import.meta.url), 'utf8')
 const apps: Array<ReturnType<typeof Fastify>> = []
 
 afterEach(async () => {
@@ -67,6 +68,11 @@ describe('governed TTS canonical request', () => {
     expect(result.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '', message: expect.stringContaining('Unrecognized key') }),
     ]))
+  })
+
+  it('keeps the Studio job prompt outside the strict governed TTS input', () => {
+    expect(voiceStudioSource).toContain("mode === 'tts' ? input : { ...input, prompt }")
+    expect(voiceStudioSource).not.toContain('submitJob(mode, { ...input, prompt })')
   })
 
   it('uses deterministic opaque profile artifact identities across API and worker packages', () => {

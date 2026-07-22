@@ -11,6 +11,11 @@ import {
 } from '@amarktai/core'
 import { findCompletedArtifactByTraceId, getArtifactRecord, saveArtifact } from '@amarktai/artifacts'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
+import {
+  publicGovernedVoiceEvidence,
+  resolveGovernedVoice,
+  type PublicGovernedVoiceEvidence,
+} from './governed-voice-resolver.js'
 
 const runFile = promisify(execFile)
 const FIXTURE_SWITCH = 'release-candidate-v1'
@@ -176,6 +181,11 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
   if (!isReleaseFixtureAdapterEnabled()) throw new Error('Release fixture adapter is not enabled')
   const capability = payload.capability as CapabilityKey
   const { provider, model } = fixtureRoute(capability)
+  let governedTtsVoice: PublicGovernedVoiceEvidence | null = null
+  if (capability === 'tts') {
+    const resolvedVoice = await resolveGovernedVoice({ payload, provider: 'genx', selectedModel: model })
+    governedTtsVoice = publicGovernedVoiceEvidence(resolvedVoice.resolution)
+  }
   const grant = payload.appGrantSnapshot
   if (['image_to_video', 'video_to_video', 'stt'].includes(capability) && !grant?.artifactRead) {
     return { success: false, status: 'failed', provider, model, error: `AppCapabilityGrant denies source-artifact read for '${capability}'.` }
@@ -221,6 +231,7 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
         source: 'deterministic local fixture',
         evidenceSource: 'local_fixture',
         liveProviderProof: false,
+        governedTtsVoice,
         sourceArtifactId,
         duration: media.duration,
         width: media.width,
@@ -261,6 +272,7 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
       ...output,
       evidenceSource: 'local_fixture',
       liveProviderProof: false,
+      governedTtsVoice,
       usage: createCanonicalProviderUsage({ provider, model, audioSeconds: media.type === 'audio' || media.type === 'music' ? media.duration : undefined, videoSeconds: media.type === 'video' ? media.duration : undefined, imageCount: media.type === 'image' ? 1 : undefined }),
       outputValidation: { valid: true, contract: 'ffmpeg_generated_release_fixture' },
     },

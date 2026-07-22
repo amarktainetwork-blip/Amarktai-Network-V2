@@ -38,7 +38,10 @@ export default function VoiceStudioPage() {
         ? { text: text.trim(), ...(voice ? { voiceProfileId: voice } : {}), outputFormat, speed: 1, language }
         : { artifactId: sourceArtifactId, language, timestamps: 'both', persistTranscript: true, translateToEnglish: false }
       const prompt = mode === 'tts' ? text.trim() : 'Transcribe the authorised source artifact'
-      const submitted = await useStudioStore.getState().submitJob(mode, { ...input, prompt })
+      const submitted = await useStudioStore.getState().submitJob(
+        mode,
+        mode === 'tts' ? input : { ...input, prompt },
+      )
       if (!submitted.ok) throw new Error(submitted.error)
       let job
       for (let attempt = 0; attempt < 120; attempt++) {

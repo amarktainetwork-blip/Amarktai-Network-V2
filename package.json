@@ -26,6 +26,7 @@
     "proof:deployment-static": "node scripts/proof-deployment-static.mjs",
     "proof:router-app-contract": "tsx scripts/proof-router-app-contract.mjs",
     "proof:long-form-runtime": "node scripts/proof-long-form-runtime.mjs",
+    "proof:long-form-closure": "node scripts/proof-long-form-closure.mjs",
     "proof:long-form-runtime:strict": "node scripts/proof-long-form-runtime.mjs --strict-runtime",
     "proof:live-execution": "node scripts/proof-live-execution.mjs",
     "proof:music-generation": "node scripts/proof-music-generation.mjs",

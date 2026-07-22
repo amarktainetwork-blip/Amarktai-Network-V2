@@ -13,6 +13,8 @@ import type { WorkerJobData } from '../apps/worker/src/processors/job-processor.
 
 const resolverSource = readFileSync(new URL('../apps/worker/src/providers/governed-voice-resolver.ts', import.meta.url), 'utf8')
 const registrationSource = readFileSync(new URL('../apps/worker/src/providers/governed-tts-handler-registration.ts', import.meta.url), 'utf8')
+const fixtureExecutorSource = readFileSync(new URL('../apps/worker/src/providers/release-fixture-executor.ts', import.meta.url), 'utf8')
+const fixtureBootstrapSource = readFileSync(new URL('../apps/api/src/lib/release-fixture-mode.ts', import.meta.url), 'utf8')
 const workerSource = readFileSync(new URL('../apps/worker/src/worker.ts', import.meta.url), 'utf8')
 
 function voice(overrides: Partial<VoiceCatalogueCandidate> = {}): VoiceCatalogueCandidate {
@@ -175,6 +177,16 @@ describe('governed TTS persisted profile and handler contract', () => {
     expect(registrationSource).toContain("EXECUTOR_HANDLERS['genx.tts'] = createGovernedTtsHandler('genx', genxLegacy)")
     expect(registrationSource).not.toContain("EXECUTOR_HANDLERS['deepinfra.tts']")
     expect(workerSource).toContain("import './providers/governed-tts-handler-registration.js'")
+  })
+
+  it('runs deterministic fixture TTS through the governed resolver with a fixture-only catalogue voice', () => {
+    expect(fixtureExecutorSource).toContain("if (capability === 'tts')")
+    expect(fixtureExecutorSource).toContain('await resolveGovernedVoice')
+    expect(fixtureExecutorSource).toContain('publicGovernedVoiceEvidence')
+    expect(fixtureExecutorSource).toContain('governedTtsVoice')
+    expect(fixtureBootstrapSource).toContain("voiceId: 'fixture-genx-narrator-v1'")
+    expect(fixtureBootstrapSource).toContain("evidenceSource: 'local_fixture'")
+    expect(fixtureBootstrapSource).toContain('liveProviderProof: false')
   })
 
   it('persists safe voice evidence before spend and sanitizes provider voice IDs from artifacts', () => {
