@@ -597,6 +597,45 @@ describe('Job processor — injectable execution', () => {
     expect(completedUpdate[0].data.completedAt).toBeInstanceOf(Date)
   })
 
+  it('preserves executor metadata written after the processing claim', async () => {
+    const durable = makeDbJob({
+      metadataJson: JSON.stringify({
+        appGrantSnapshot: { enabled: true },
+        appGrantSnapshotSource: 'persisted_grant',
+      }),
+    })
+    const mockExecute = vi.fn().mockImplementation(async () => {
+      durable.metadataJson = JSON.stringify({
+        ...JSON.parse(durable.metadataJson),
+        directProviderExecutorId: 'fixture.chat',
+        directProviderOutputValidation: { valid: true },
+      })
+      return {
+        success: true,
+        status: 'completed',
+        provider: 'fixture',
+        model: 'fixture-chat',
+        metadata: { evidenceSource: 'local_fixture', liveProviderProof: false },
+      }
+    })
+    const processor = createJobProcessor({ executeCapability: mockExecute })
+    prismaMock.job.findUnique.mockImplementation(async () => durable)
+
+    await processor(makePayload())
+
+    const completedUpdate = prismaMock.job.update.mock.calls.find(
+      (call) => call[0].data.status === 'completed'
+    )
+    const metadata = JSON.parse(completedUpdate[0].data.metadataJson)
+    expect(metadata).toEqual(expect.objectContaining({
+      appGrantSnapshot: { enabled: true },
+      appGrantSnapshotSource: 'persisted_grant',
+      directProviderExecutorId: 'fixture.chat',
+      directProviderOutputValidation: { valid: true },
+      executionEvidence: { evidenceSource: 'local_fixture', liveProviderProof: false },
+    }))
+  })
+
   it('default processor uses the registered executor and reports missing configuration', async () => {
     prismaMock.job.findUnique.mockResolvedValue(makeDbJob())
 
