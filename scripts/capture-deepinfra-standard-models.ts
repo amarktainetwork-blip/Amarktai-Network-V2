@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getRuntimeModelPolicyBlocker } from '../packages/core/src/model-family-policy.js'
+import { getRuntimeModelPolicyBlocker } from '../packages/core/src/model-family-policy.ts'
 
 interface DeepInfraModelRow {
   model_name?: unknown
@@ -14,6 +14,7 @@ interface DeepInfraModelRow {
   pricing?: unknown
 }
 
+const MODEL_LIST_URL = 'https://api.deepinfra.com/models/list'
 const relevantTypes = new Set([
   'image-to-image',
   'image-classification',
@@ -34,15 +35,56 @@ function outputPath(): string {
   return resolve(argument?.slice('--output='.length) || 'deepinfra-standard-models.json')
 }
 
-const response = await fetch('https://api.deepinfra.com/models/list', {
-  headers: { Accept: 'application/json' },
-})
-if (!response.ok) throw new Error(`DeepInfra model list failed: ${response.status}`)
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds))
+}
 
-const payload = await response.json()
-if (!Array.isArray(payload)) throw new Error('DeepInfra model list did not return an array')
+async function fetchModelPayload(): Promise<unknown> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(new Error('DeepInfra model-list timeout')), 30_000)
+    try {
+      const response = await fetch(MODEL_LIST_URL, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'AmarktAI-Network-V2-model-discovery',
+        },
+        signal: controller.signal,
+      })
+      if (response.ok) return await response.json()
+      const body = (await response.text()).slice(0, 500)
+      const retryable = response.status === 408 || response.status === 409 || response.status === 425 || response.status === 429 || response.status >= 500
+      const error = new Error(`DeepInfra model list failed: ${response.status}${body ? ` ${body}` : ''}`)
+      if (!retryable || attempt === 4) throw error
+      lastError = error
+    } catch (error) {
+      lastError = error
+      if (attempt === 4) break
+    } finally {
+      clearTimeout(timeout)
+    }
+    await delay(500 * attempt)
+  }
+  throw lastError instanceof Error ? lastError : new Error('DeepInfra model list failed after retries')
+}
 
-const relevant = (payload as DeepInfraModelRow[])
+function extractRows(payload: unknown): DeepInfraModelRow[] {
+  if (Array.isArray(payload)) return payload as DeepInfraModelRow[]
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('DeepInfra model list returned neither an array nor an object')
+  }
+  const record = payload as Record<string, unknown>
+  for (const key of ['data', 'models', 'results']) {
+    if (Array.isArray(record[key])) return record[key] as DeepInfraModelRow[]
+  }
+  throw new Error(`DeepInfra model list object did not contain an array; keys=${Object.keys(record).join(',')}`)
+}
+
+const payload = await fetchModelPayload()
+const rows = extractRows(payload)
+
+const relevant = rows
   .filter((row) => relevantTypes.has(String(row.reported_type || row.type || '').toLowerCase().replaceAll('_', '-')))
   .map((row) => ({
     modelId: String(row.model_name || '').trim(),
@@ -64,10 +106,13 @@ const models = relevant
   .filter((row) => !excludedIds.has(row.modelId))
   .sort((a, b) => `${a.reportedType}:${a.modelId}`.localeCompare(`${b.reportedType}:${b.modelId}`))
 
+const destination = outputPath()
 const result = {
   capturedAt: new Date().toISOString(),
-  source: 'https://api.deepinfra.com/models/list',
+  source: MODEL_LIST_URL,
   policySource: 'packages/core/src/model-family-policy.ts',
+  sourceRowCount: rows.length,
+  relevantRowCount: relevant.length,
   count: models.length,
   excludedCount: excluded.length,
   excludedReasons: [...new Set(excluded.map((row) => row.blocker))],
@@ -75,9 +120,10 @@ const result = {
   models,
 }
 
-await writeFile(outputPath(), `${JSON.stringify(result, null, 2)}\n`, 'utf8')
+await writeFile(destination, `${JSON.stringify(result, null, 2)}\n`, 'utf8')
 console.log(JSON.stringify({
-  output: outputPath(),
+  output: destination,
+  sourceRows: rows.length,
   relevantDeepInfraModels: models.length,
   policyExcluded: excluded.length,
   types: [...new Set(models.map((row) => row.reportedType || row.type))],
