@@ -6,7 +6,7 @@
  * providers, models, endpoints, or credentials.
  */
 
-// DeepInfra — OpenAI-compatible text and multimodal vision
+// DeepInfra — OpenAI-compatible text, vision, image and audio transports
 export {
   deepinfraChat,
   deepinfraVision,
@@ -21,6 +21,11 @@ export {
   type DeepInfraImageEditRequest,
   type DeepInfraImageEditResponse,
 } from './deepinfra-image-client.js'
+export {
+  deepinfraTextToSpeech,
+  type DeepInfraSpeechRequest,
+  type DeepInfraSpeechResponse,
+} from './deepinfra-audio-client.js'
 
 // MiMo remains approved as coding-tools-only metadata. Do not export a
 // callable backend runtime client from this provider package.
