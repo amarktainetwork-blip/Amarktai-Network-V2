@@ -184,38 +184,155 @@ export function inferCapabilitiesFromModelId(modelId: string, rawType = ''): Cap
   return [...caps]
 }
 
-export function buildCapabilityReadiness(model: ProviderDiscoveredModel): CapabilityExecutionReadiness[] {
-  return model.inferredCapabilities.map((capability) => {
-    const modelDiscovered = model.liveDiscovered || model.docsKnown
-    const modelCatalogued = Boolean(model.modelId)
-    const capabilityInferred = true
-    const endpointShapeKnown = model.endpointShapeKnown
-    const providerClientExists = model.providerClientExists
-    const workerExecutorExists = model.workerExecutorExists && hasExecutorRegistration(capability, model.executionProvider)
-    const artifactPersistenceExists = model.artifactPersistenceExists
-    const liveProbePassed = model.liveDiscovered
-    const blockers = [
-      !modelDiscovered ? 'model_not_discovered' : '',
-      !modelCatalogued ? 'model_not_catalogued' : '',
-      !endpointShapeKnown ? 'endpoint_shape_unknown' : '',
-      !providerClientExists ? 'provider_client_missing' : '',
-      !workerExecutorExists ? 'worker_executor_missing' : '',
-      model.artifactOutput && !artifactPersistenceExists ? 'artifact_persistence_missing' : '',
-      !liveProbePassed ? 'live_probe_missing' : '',
-      model.policyRestrictedByApp ? model.policyBlockedReason || 'policy_restricted' : '',
-    ].filter(Boolean)
+export function modalitiesForCapabilities(capabilities: CapabilityKey[]): string[] {
+  const modalities = new Set<string>()
+  for (const capability of capabilities) {
+    if (['chat', 'reasoning', 'code', 'summarization', 'translation', 'classification', 'extraction', 'structured_output', 'campaign_generation', 'social_content_generation'].includes(capability)) {
+      modalities.add('text')
+    }
+    if (['image_generation', 'image_edit', 'ocr'].includes(capability)) modalities.add('image')
+    if (['video_generation', 'image_to_video', 'long_form_video', 'avatar_generation'].includes(capability)) modalities.add('video')
+    if (['music_generation', 'tts', 'stt'].includes(capability)) modalities.add('audio')
+    if (['embeddings', 'reranking', 'rag_search', 'rag_ingest', 'research'].includes(capability)) modalities.add('retrieval')
+    if (capability === 'visual_question_answering') modalities.add('multimodal')
+  }
+  return [...modalities]
+}
+
+export function createDiscoveredModel(input: Omit<ProviderDiscoveredModel,
+  | 'executionProvider'
+  | 'upstreamProvider'
+  | 'discoverySource'
+  | 'docsKnown'
+  | 'liveDiscovered'
+  | 'category'
+  | 'providerCategory'
+  | 'modalities'
+  | 'modalitiesIn'
+  | 'modalitiesOut'
+  | 'artifactOutput'
+  | 'artifactOutputKnown'
+  | 'artifactPersistenceExists'
+  | 'authRequired'
+  | 'providerCapabilityKnown'
+  | 'policyRestrictedByApp'
+  | 'policyBlockedReason'
+  | 'transportProfile'
+  | 'endpointFamily'
+  | 'toolCallingSupported'
+  | 'functionCallingSupported'
+  | 'webhookSupported'
+  | 'executableNow'
+  | 'executableBlockers'
+  | 'catalogueOnlyReason'
+  | 'blockedReason'> & {
+  executionProvider?: ProviderKey
+  upstreamProvider?: string
+  discoverySource?: ModelDiscoverySource
+  docsKnown?: boolean
+  liveDiscovered?: boolean
+  category?: string
+  providerCategory?: string
+  modalities?: string[]
+  modalitiesIn?: string[]
+  modalitiesOut?: string[]
+  artifactOutput?: boolean
+  artifactOutputKnown?: boolean
+  artifactPersistenceExists?: boolean
+  authRequired?: boolean
+  providerCapabilityKnown?: boolean
+  policyRestrictedByApp?: boolean
+  policyBlockedReason?: string
+  transportProfile?: TransportProfile
+  endpointFamily?: string
+  toolCallingSupported?: boolean
+  functionCallingSupported?: boolean
+  webhookSupported?: boolean
+  executableNow?: boolean
+  executableBlockers?: string[]
+  catalogueOnlyReason?: string
+  blockedReason?: string
+}): ProviderDiscoveredModel {
+  const artifactOutput = input.artifactOutput ?? input.inferredCapabilities.some((capability) =>
+    ['image_generation', 'image_edit', 'video_generation', 'image_to_video', 'long_form_video', 'avatar_generation', 'music_generation', 'tts'].includes(capability)
+  )
+  const artifactPersistenceExists = input.artifactPersistenceExists ?? !artifactOutput
+  const policyRestrictedByApp = input.policyRestrictedByApp ?? input.provider === 'mimo'
+  const policyBlockedReason = input.policyBlockedReason ?? (input.provider === 'mimo' ? 'coding_agent_only_not_backend_runtime' : '')
+  const executableBlockers = input.executableBlockers ?? buildDiscoveryBlockers({
+    ...input,
+    artifactOutput,
+    artifactPersistenceExists,
+    policyRestrictedByApp,
+  })
+  const executableNow = false
+  const blockedReason = input.blockedReason ?? (executableBlockers.join(', ') || 'runtime_truth_required')
+  const defaultModalities = modalitiesForCapabilities(input.inferredCapabilities)
+
+  return {
+    ...input,
+    executionProvider: input.executionProvider ?? input.provider,
+    upstreamProvider: input.upstreamProvider ?? input.provider,
+    discoverySource: input.discoverySource ?? input.source,
+    docsKnown: input.docsKnown ?? input.source !== 'live_endpoint',
+    liveDiscovered: input.liveDiscovered ?? (input.source === 'live_endpoint' || input.source === 'live_discovered'),
+    category: input.category ?? input.rawProviderType,
+    providerCategory: input.providerCategory ?? input.rawProviderType,
+    modalitiesIn: input.modalitiesIn ?? defaultModalities,
+    modalitiesOut: input.modalitiesOut ?? defaultModalities,
+    modalities: input.modalities ?? defaultModalities,
+    artifactOutput,
+    artifactOutputKnown: input.artifactOutputKnown ?? artifactOutput,
+    artifactPersistenceExists,
+    authRequired: input.authRequired ?? true,
+    providerCapabilityKnown: input.providerCapabilityKnown ?? true,
+    policyRestrictedByApp,
+    policyBlockedReason,
+    transportProfile: input.transportProfile ?? (input.provider === 'mimo' ? 'docs_only_policy_restricted' : 'native_inference_json'),
+    endpointFamily: input.endpointFamily ?? input.endpointSource,
+    toolCallingSupported: input.toolCallingSupported ?? false,
+    functionCallingSupported: input.functionCallingSupported ?? false,
+    webhookSupported: input.webhookSupported ?? false,
+    executableNow,
+    executableBlockers,
+    catalogueOnlyReason: input.catalogueOnlyReason ?? blockedReason,
+    blockedReason,
+  }
+}
+
+function buildDiscoveryBlockers(input: Pick<ProviderDiscoveredModel, 'endpointShapeKnown' | 'requestShapeKnown' | 'responseShapeKnown' | 'providerClientExists' | 'workerExecutorExists'> & {
+  artifactOutput?: boolean
+  artifactPersistenceExists?: boolean
+  policyRestrictedByApp?: boolean
+}): string[] {
+  const missing: string[] = []
+  if (!input.endpointShapeKnown) missing.push('endpoint_shape_unknown')
+  if (!input.requestShapeKnown) missing.push('request_shape_unknown')
+  if (!input.responseShapeKnown) missing.push('response_shape_unknown')
+  if (!input.providerClientExists) missing.push('provider_client_missing')
+  if (!input.workerExecutorExists) missing.push('worker_executor_missing')
+  if (input.artifactOutput && input.artifactPersistenceExists === false) missing.push('artifact_persistence_missing')
+  if (input.policyRestrictedByApp) missing.push('policy_restricted_by_app')
+  return missing
+}
+
+export function buildCapabilityReadiness(models: ProviderDiscoveredModel[]): CapabilityExecutionReadiness[] {
+  return CAPABILITY_KEYS.map((capability) => {
+    const candidates = models.filter((model) => model.inferredCapabilities.includes(capability))
+    const executorRegistered = candidates.some((model) => hasExecutorRegistration(capability, model.provider))
+    const first = candidates[0]
     return {
       capability,
-      modelDiscovered,
-      modelCatalogued,
-      capabilityInferred,
-      endpointShapeKnown,
-      providerClientExists,
-      workerExecutorExists,
-      artifactPersistenceExists,
-      liveProbePassed,
-      executableNow: blockers.length === 0,
-      blockedReason: blockers.join(', '),
+      modelDiscovered: candidates.length > 0,
+      modelCatalogued: candidates.length > 0,
+      capabilityInferred: candidates.length > 0,
+      endpointShapeKnown: candidates.some((model) => model.endpointShapeKnown),
+      providerClientExists: executorRegistered,
+      workerExecutorExists: executorRegistered,
+      artifactPersistenceExists: candidates.some((model) => model.artifactOutput),
+      liveProbePassed: false,
+      executableNow: false,
+      blockedReason: executorRegistered ? 'runtime_configuration_and_proof_required' : first?.blockedReason ?? 'no_discovered_model',
     }
   })
 }
