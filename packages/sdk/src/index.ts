@@ -1,8 +1,80 @@
 export interface AmarktAIClientOptions { apiKey: string; baseUrl?: string; fetch?: typeof globalThis.fetch }
 export interface ExecuteRequest { capability: string; prompt?: string; input?: Record<string, unknown>; metadata?: Record<string, unknown>; callbackUrl?: string }
-export type BrandProfilePayload = Record<string, unknown>
-export interface SocialAdPlanPayload { request: Record<string, unknown>; campaign: Record<string, unknown> }
-export interface SocialAdApprovalPayload { decision: 'approved' | 'rejected'; notes?: string }
+export interface BrandAssetReference {
+  artifactId: string
+  role: 'primary_logo' | 'secondary_logo' | 'icon' | 'product' | 'offering' | 'campaign_reference' | 'photography' | 'video' | 'audio'
+  approved: boolean
+  rightsVerified: boolean
+  sourceEvidenceIds: string[]
+  offeringIds: string[]
+}
+export type BrandProfilePayload = Record<string, unknown> & { visual?: Record<string, unknown> & { assets?: BrandAssetReference[] } }
+export interface MarketingCampaignBrief {
+  campaignId: string
+  brandProfileId: string
+  title: string
+  objective: string
+  audienceIds: string[]
+  offeringIds?: string[]
+  channels: Array<'facebook' | 'instagram' | 'linkedin' | 'x' | 'tiktok' | 'youtube' | 'email' | 'website' | 'blog' | 'paid_search' | 'display'>
+  callToAction: string
+  locale?: string
+  constraints?: string[]
+  sourceArtifactIds?: string[]
+  qualityProfile?: 'draft' | 'standard' | 'premium' | 'publication'
+  approvalRequired?: boolean
+  maxCredits?: number | null
+  dueAt?: string | null
+}
+export interface ProductBreakoutRequest {
+  brandProfileId: string
+  campaignId: string
+  mode: 'product_breakout'
+  prompt: string
+  objective: string
+  audienceId: string
+  offeringId: string
+  productArtifactId: string
+  logoArtifactIds?: string[]
+  callToAction: string
+  sourceArtifactIds?: string[]
+  aspectRatios: Array<'16:9' | '9:16' | '1:1'>
+  durationSeconds: number
+  candidateCount?: number
+  includeCaptions?: boolean
+  includeSubtitleFiles?: boolean
+  includeThumbnail?: boolean
+  includeSocialCopy?: boolean
+  qualityProfile?: 'draft' | 'standard' | 'premium' | 'publication'
+  approvalRequired?: boolean
+  maxCredits: number
+}
+export interface ProductBreakoutCreativeContract {
+  version: 'product-breakout-v1'
+  productSourceArtifactId: string
+  logoArtifactIds: string[]
+  treatment: 'social_post_card_frame'
+  initialContainment: 'product_inside_frame'
+  breakoutRequirement: 'product_visibly_crosses_frame_boundary'
+  depthTreatment: Record<string, unknown>
+  motion: Record<string, unknown>
+  preservation: Record<string, unknown>
+  brandSafeBackground: string
+  approvedClaims: string[]
+  prohibitedClaims: string[]
+  requiredDisclaimers: string[]
+  overlayInstructions: string[]
+  captionInstructions: string[]
+  safeAreas: Record<string, unknown>
+  callToAction: string
+  durationSeconds: number
+  candidateCount: number
+  creditCeiling: number
+  segmentationAvailable: boolean
+  visualLimitation: string | null
+}
+export interface SocialAdPlanPayload { request: ProductBreakoutRequest | Record<string, unknown>; campaign: Record<string, unknown>; idempotencyKey?: string }
+export interface SocialAdApprovalPayload { decision: 'approved' | 'rejected' | 'revision_requested'; notes?: string }
 export interface MemorySearchOptions { namespace: string; query?: string; limit?: number; types?: Array<'event' | 'summary' | 'context' | 'learned'> }
 export interface MemoryWritePayload { namespace: string; content: string; key?: string; memoryType?: 'event' | 'summary' | 'context' | 'learned'; importance?: number; ttlSeconds?: number }
 export interface RagIngestPayload { namespace: string; sourceId: string; title?: string; url?: string; text: string; metadata?: Record<string, unknown>; chunkSize?: number; chunkOverlap?: number }
@@ -111,9 +183,15 @@ export class AmarktAIClient {
   createBrandProfile(profile: BrandProfilePayload) { return this.request('/api/v1/brand-profiles', { method: 'POST', body: JSON.stringify(profile) }) }
   updateBrandProfile(brandProfileId: string, profile: BrandProfilePayload) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'PUT', body: JSON.stringify(profile) }) }
   archiveBrandProfile(brandProfileId: string) { return this.request(`/api/v1/brand-profiles/${encodeURIComponent(brandProfileId)}`, { method: 'DELETE' }) }
+  marketingCampaigns() { return this.request('/api/v1/marketing-campaigns') }
+  saveMarketingCampaign(campaign: MarketingCampaignBrief) { return this.request('/api/v1/marketing-campaigns', { method: 'POST', body: JSON.stringify(campaign) }) }
   planSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/plan', { method: 'POST', body: JSON.stringify(payload) }) }
   executeSocialAdVideo(payload: SocialAdPlanPayload) { return this.request('/api/v1/social-ad-video/executions', { method: 'POST', body: JSON.stringify(payload) }) }
   socialAdVideoExecution(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}`) }
+  resumeSocialAdVideo(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/resume`, { method: 'POST' }) }
+  retrySocialAdVideoCandidate(executionId: string, candidateJobId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/candidates/${encodeURIComponent(candidateJobId)}/retry`, { method: 'POST' }) }
+  cancelSocialAdVideo(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/cancel`, { method: 'POST' }) }
+  regenerateSocialAdVideo(executionId: string, notes?: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/regenerate`, { method: 'POST', body: JSON.stringify({ notes }) }) }
   assembleSocialAdVideo(executionId: string) { return this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/assemble`, { method: 'POST' }) }
   async decideSocialAdVideo(executionId: string, payload: SocialAdApprovalPayload): Promise<unknown> {
     const approval = await this.request(`/api/v1/social-ad-video/executions/${encodeURIComponent(executionId)}/approval`, { method: 'POST', body: JSON.stringify(payload) })

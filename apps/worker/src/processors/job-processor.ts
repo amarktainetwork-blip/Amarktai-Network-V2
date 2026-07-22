@@ -349,6 +349,7 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           provider: string | null
           model: string | null
           output: string | null
+          metadataJson: string
           progress: number
           completedAt: Date
           error: null
@@ -358,6 +359,18 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           provider: result.provider ?? null,
           model: result.model ?? null,
           output: result.output ?? null,
+          metadataJson: JSON.stringify({
+            ...safeParseJsonObject(job.metadataJson),
+            executionEvidence: result.metadata ?? {},
+            providerEvidence: {
+              provider: result.provider ?? null,
+              model: result.model ?? null,
+              completedAt: new Date().toISOString(),
+              evidenceSource: result.metadata?.evidenceSource ?? 'provider_executor',
+              liveProviderProof: result.metadata?.liveProviderProof === true,
+            },
+            usageEvidence: result.metadata?.usage ?? null,
+          }),
           progress: 100,
           completedAt: new Date(),
           error: null,

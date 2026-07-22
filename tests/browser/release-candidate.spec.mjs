@@ -202,8 +202,30 @@ test('long-form execution survives reload and renders component/final evidence',
   await expectDownload(finalId)
 })
 
+test('product-breakout workspace executes candidates, approvals and the authorised final pack', async () => {
+  await page.goto(`${baseURL}/dashboard/social-ad`)
+  await expect(page.getByRole('heading', { name: 'Product-Breakout Social Ads' })).toBeVisible()
+  await expect(page.getByLabel('Approved product asset').locator('option')).not.toHaveCount(0, { timeout: 30_000 })
+  await page.getByLabel('Candidates').fill('2')
+  await page.getByRole('button', { name: 'Plan without execution' }).click()
+  await expect(page.getByText('product-breakout-v1', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('social_post_card_frame', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Execute approved plan' }).click()
+  await expect(page.getByRole('button', { name: 'Approve winner' })).toBeVisible({ timeout: 4 * 60_000 })
+  await expect(page.locator('video')).toHaveCount(2)
+  await expect(page.getByText(/Execution evidence: .*fixture\/image_to_video/).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Approve winner' }).click()
+  await expect(page.getByRole('button', { name: 'Assemble deterministic social pack' })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Assemble deterministic social pack' }).click()
+  await expect(page.getByRole('button', { name: 'Final approve delivery pack' })).toBeVisible({ timeout: 6 * 60_000 })
+  await expect(page.getByText('Final delivery pack', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Download / })).toHaveCount(10)
+  await page.getByRole('button', { name: 'Final approve delivery pack' }).click()
+  await expect(page.getByText('completed', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
+})
+
 test('dashboards expose no provider/model override controls and navigation has no console errors', async () => {
-  for (const route of ['chat', 'image', 'video', 'music', 'voice', 'capability-lab']) {
+  for (const route of ['chat', 'image', 'video', 'music', 'voice', 'capability-lab', 'social-ad']) {
     await page.goto(`${baseURL}/dashboard/${route}`)
     await expect(page.locator('input[name="provider"],select[name="provider"],input[name="model"],select[name="model"]')).toHaveCount(0)
     await expect(page.getByLabel('Provider', { exact: true })).toHaveCount(0)

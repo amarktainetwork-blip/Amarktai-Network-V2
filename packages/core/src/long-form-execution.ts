@@ -5,22 +5,80 @@ import type {
   LongFormScene,
 } from './long-form-video.js'
 
-/** Canonical durable workflow evidence; this is not a provider executor. */
-export const DURABLE_WORKFLOW_REGISTRATIONS = [{
-  id: 'long-form-video.durable-orchestration',
-  capability: 'long_form_video',
-  handlerName: 'createLongFormExecutionState',
-  persistence: 'prisma_job_parent_child_state',
-  assembly: 'bullmq_exactly_once_handoff',
-  requiredCapabilities: ['video_generation', 'tts', 'music_generation', 'song_generation'],
-}] as const satisfies ReadonlyArray<{
+export interface DurableWorkflowRegistration {
   id: string
-  capability: 'long_form_video'
+  capability: CapabilityKey
   handlerName: string
   persistence: string
-  assembly: string
+  recovery: string
+  artifactPersistence: string
+  infrastructure: readonly string[]
   requiredCapabilities: readonly CapabilityKey[]
-}>
+  fixtureProof: string
+}
+
+/**
+ * Canonical durable-workflow evidence. A capability belongs here only when its
+ * authenticated API, grants, durable state, worker path, persisted result,
+ * recovery policy and authoritative fixture are all present.
+ */
+export const DURABLE_WORKFLOW_REGISTRATIONS = [
+  {
+    id: 'long-form-video.durable-orchestration',
+    capability: 'long_form_video',
+    handlerName: 'createLongFormExecutionState',
+    persistence: 'prisma_job_parent_child_state',
+    recovery: 'bullmq_exactly_once_handoff',
+    artifactPersistence: 'validated_multimedia_delivery_artifact',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
+    requiredCapabilities: ['video_generation', 'tts', 'music_generation', 'song_generation'],
+    fixtureProof: 'capability:long_form_video',
+  },
+  {
+    id: 'rag-ingest.durable-orchestration',
+    capability: 'rag_ingest',
+    handlerName: 'advanceRagIngestWorkflow',
+    persistence: 'prisma_job_parent_child_state',
+    recovery: 'bullmq_idempotent_parent_resume',
+    artifactPersistence: 'source_and_ingest_manifest_artifacts',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'qdrant'],
+    requiredCapabilities: ['embeddings'],
+    fixtureProof: 'RAG_QDRANT_ROUND_TRIP',
+  },
+  {
+    id: 'rag-search.durable-orchestration',
+    capability: 'rag_search',
+    handlerName: 'advanceRagSearchWorkflow',
+    persistence: 'prisma_job_parent_child_state',
+    recovery: 'bullmq_idempotent_parent_resume',
+    artifactPersistence: 'cited_search_result_artifact',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'qdrant'],
+    requiredCapabilities: ['embeddings', 'reranking', 'question_answering'],
+    fixtureProof: 'RAG_CITED_ANSWER',
+  },
+  {
+    id: 'research.durable-orchestration',
+    capability: 'research',
+    handlerName: 'advanceResearchWorkflow',
+    persistence: 'prisma_job_parent_child_state',
+    recovery: 'bullmq_idempotent_parent_resume',
+    artifactPersistence: 'research_report_and_source_snapshot_artifacts',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'searxng', 'controlled_browser'],
+    requiredCapabilities: ['structured_output'],
+    fixtureProof: 'RESEARCH_RELEASE_FIXTURE',
+  },
+  {
+    id: 'social-ad-video.durable-orchestration',
+    capability: 'social_content_generation',
+    handlerName: 'refreshSocialAdParentState',
+    persistence: 'prisma_job_parent_child_candidate_state',
+    recovery: 'bullmq_idempotent_resume_and_duplicate_protection',
+    artifactPersistence: 'candidate_quality_copy_and_delivery_pack_artifacts',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
+    requiredCapabilities: ['image_to_video', 'video_understanding', 'structured_output'],
+    fixtureProof: 'SOCIAL_AD_PRODUCT_BREAKOUT_RELEASE_FIXTURE',
+  },
+] as const satisfies readonly DurableWorkflowRegistration[]
 
 // ── Scene Execution Payload ────────────────────────────────────────────────────
 

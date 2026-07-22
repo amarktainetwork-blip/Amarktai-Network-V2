@@ -34,7 +34,7 @@ describe('social-ad local assembly contract', () => {
 
   it('keeps social copy pending instead of fabricating it during media assembly', () => {
     expect(assembly).toContain("'pending_text_quality_workflow'")
-    expect(parentWorkflow).toContain("phase = copyPending ? 'social_copy_pending' : 'completed'")
+    expect(parentWorkflow).toContain("phase = copyPending ? 'social_copy_pending' : 'final_approval_pending'")
   })
 
   it('is idempotent for recovery and duplicate resume requests', () => {

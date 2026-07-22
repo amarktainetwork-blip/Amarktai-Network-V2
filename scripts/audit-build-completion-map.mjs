@@ -118,6 +118,8 @@ async function checkDashboardPages() {
           content?.includes('/api/v1/jobs') ||
           content?.includes('/api/admin/studio/jobs') ||
           content?.includes('/api/admin/jobs') ||
+          content?.includes('/api/admin/marketing') ||
+          content?.includes('/social-ad-video/') ||
           content?.includes('useStudioStore') ||
           content?.includes('submitJob') ||
           content?.includes('pollJob')
@@ -163,11 +165,13 @@ async function checkDashboardPages() {
             if (page === 'music') {
               pendingCapabilities = ['music_generation']
             } else if (page === 'research') {
-              pendingCapabilities = ['research', 'rag_search', 'rag_ingest', 'brand_scrape']
+              status = 'design-ready'
+              pendingCapabilities = ['brand_scrape']
+              reason = 'RAG and research are registered durable workflows; this legacy page remains design-only and brand_scrape is not implemented.'
             } else if (page === 'long-form') {
               pendingCapabilities = ['long_form_video']
             }
-            reason = 'UI design-ready; backend not wired.'
+            if (!reason) reason = 'UI design-ready; backend not wired.'
           } else {
             status = 'design-ready'
             reason = 'Page contains disabled/pending controls.'
@@ -423,11 +427,11 @@ async function runAudit() {
     
     // Qdrant/RAG - check for actual workflow, not just package installation
     // Need: rag_ingest/rag_search routes, worker executor, qdrant upsert/search
-    const hasRagRoutes = await fileExists('apps/api/src/routes/rag.ts') || 
-                         await fileExists('apps/api/src/routes/rag-ingest.ts') ||
-                         await fileExists('apps/api/src/routes/rag-search.ts')
-    const hasRagWorker = workerExecution.found && 
-                        (workerExecution.executors.ragIngest || workerExecution.executors.ragSearch)
+    const hasRagRoutes = await fileExists('apps/api/src/routes/app-rag.ts')
+      && await fileExists('apps/api/src/routes/app-rag-ingest-route.ts')
+      && await fileExists('apps/api/src/routes/app-rag-search-route.ts')
+    const hasRagWorker = await fileExists('apps/worker/src/rag-ingest-workflow.ts')
+      && await fileExists('apps/worker/src/rag-search-workflow.ts')
     
     if (libs.qdrant && (hasRagRoutes || hasRagWorker)) {
       openSourceWired.push('qdrant-vector-search')
@@ -927,6 +931,15 @@ async function runAudit() {
       policyRestrictedCapabilities: capabilityInventory.filter(capability => capability.classification === 'POLICY_RESTRICTED').map(capability => capability.capability),
       blockedCapabilities: capabilityInventory.filter(capability => capability.classification === 'BLOCKED').map(capability => capability.capability),
       missingCapabilities: capabilityInventory.filter(capability => capability.classification === 'MISSING').map(capability => capability.capability),
+      durableWorkflowCounts: {
+        implemented: canonicalRuntimeTruth.durableWorkflows.length,
+        blocked: canonicalRuntimeTruth.durableWorkflowBlockers.length,
+      },
+      durableWorkflows: canonicalRuntimeTruth.durableWorkflows.map(workflow => ({
+        ...workflow,
+        releaseReadiness: canonicalRuntimeTruth.releaseReadiness.find(item => item.capability === workflow.capability) ?? null,
+      })),
+      durableWorkflowBlockers: canonicalRuntimeTruth.durableWorkflowBlockers,
     },
     
     modelCatalogueSummary: {
@@ -1082,6 +1095,16 @@ async function runAudit() {
     }
   }
   console.log(`   Display-only: ${completionMap.dashboardStatus.displayOnlyPages.length}`)
+
+  console.log('\n🔁 DURABLE WORKFLOW TRUTH')
+  console.log(`   Implemented: ${completionMap.canonicalRuntimeTruth.durableWorkflowCounts.implemented}`)
+  for (const workflow of completionMap.canonicalRuntimeTruth.durableWorkflows) {
+    console.log(`     ✓ ${workflow.capability} (${workflow.fixtureProof})`)
+  }
+  console.log(`   Blocked: ${completionMap.canonicalRuntimeTruth.durableWorkflowCounts.blocked}`)
+  for (const workflow of completionMap.canonicalRuntimeTruth.durableWorkflowBlockers) {
+    console.log(`     ✗ ${workflow.capability}: ${workflow.blocker}`)
+  }
   console.log()
   
   console.log('🔧 WORKER EXECUTION')

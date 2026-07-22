@@ -17,7 +17,7 @@ function isAssemblyJob(metadataJson: string): boolean {
 }
 
 export async function refreshSocialAdAssemblyParent(parentJobId: string): Promise<{
-  phase: 'assembly_processing' | 'assembly_failed' | 'social_copy_pending' | 'completed'
+  phase: 'assembly_processing' | 'assembly_failed' | 'social_copy_pending' | 'final_approval_pending'
   artifactId: string | null
 } | null> {
   const parent = await prisma.job.findUnique({ where: { id: parentJobId } })
@@ -55,29 +55,34 @@ export async function refreshSocialAdAssemblyParent(parentJobId: string): Promis
   const output = safeJson(assembly.output)
   const socialCopyStatus = output.socialCopyStatus
   const copyPending = socialCopyStatus === 'pending_text_quality_workflow'
-  const phase = copyPending ? 'social_copy_pending' : 'completed'
+  const phase = copyPending ? 'social_copy_pending' : 'final_approval_pending'
   const metadata = {
     ...parentMetadata,
     currentPhase: phase,
     assemblyJobId: assembly.id,
     assemblyArtifactId: assembly.artifactId,
+    masterVideoArtifactId: output.masterVideoArtifactId ?? assembly.artifactId,
     deliveryVariants: output.variants ?? [],
     subtitleArtifactIds: output.subtitleArtifactIds ?? [],
     thumbnailArtifactId: output.thumbnailArtifactId ?? null,
     deliveryReportArtifactId: output.reportArtifactId ?? null,
+    finalQualityReportArtifactId: output.finalQualityReportArtifactId ?? null,
     socialCopyStatus: socialCopyStatus ?? 'not_requested',
     assemblyCompletedAt: new Date().toISOString(),
   }
   await prisma.job.update({
     where: { id: parent.id },
     data: {
-      status: copyPending ? 'processing' : 'completed',
+      status: 'processing',
       workflowPhase: phase,
-      progress: copyPending ? 93 : 100,
+      progress: copyPending ? 93 : 98,
       artifactId: assembly.artifactId,
       error: null,
-      completedAt: copyPending ? null : new Date(),
-      metadataJson: JSON.stringify(metadata),
+      completedAt: null,
+      metadataJson: JSON.stringify({
+        ...metadata,
+        finalApproval: copyPending ? parentMetadata.finalApproval ?? { status: 'not_ready' } : { status: 'pending' },
+      }),
     },
   })
   return { phase, artifactId: assembly.artifactId }

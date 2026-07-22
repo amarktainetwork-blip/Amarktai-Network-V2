@@ -92,7 +92,7 @@ describe('governed voice and avatar profile API contract', () => {
       'archiveAvatarProfile(avatarProfileId: string)',
       'uploadProfileArtifact(purpose: VoiceAvatarEvidencePurpose',
     ]) expect(sdk).toContain(method)
-    expect(openapi).toContain('version: 1.6.0')
+    expect(openapi).toContain('version: 1.7.0')
     expect(openapi).toContain('ProfileEvidencePurpose:')
     expect(openapi).toContain('HumanConsentEvidence:')
     expect(openapi).toContain('/api/v1/profile-artifacts/{purpose}:')

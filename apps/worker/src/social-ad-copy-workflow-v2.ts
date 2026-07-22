@@ -67,6 +67,7 @@ export async function advanceSocialAdCopyWorkflow(parentJobId: string, queue: Qu
       appGrantSnapshotAt: parentMetadata.copyGrantSnapshotAt ?? new Date().toISOString(),
       routingMode: grant.routingMode ?? 'quality',
       executionProfile: 'external_app',
+      copyContext: copyContext(parentMetadata),
     }
     const job = await prisma.job.create({
       data: {

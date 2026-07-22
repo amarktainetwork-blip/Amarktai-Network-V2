@@ -46,6 +46,9 @@ export async function advanceParentWorkflow(parentJobId: string, queue: Queue): 
   if (!parent) return { kind: 'unknown', advanced: false }
 
   const kind = classifyParentWorkflow(parent)
+  if ((parent.status === 'cancelled' || parent.status === 'cancelling') && kind !== 'unknown') {
+    return { kind, advanced: false }
+  }
   if (kind === 'long_form_video') {
     await advanceLongFormWorkflow(parent.id, queue)
     return { kind, advanced: true }

@@ -1,4 +1,5 @@
 import type { Queue } from 'bullmq'
+import { saveArtifact } from '@amarktai/artifacts'
 import {
   DEFAULT_JOB_OPTIONS,
   rankQualityCandidates,
@@ -7,6 +8,7 @@ import {
 import { prisma } from '@amarktai/db'
 import {
   brandRightsVerified,
+  inspectCandidateVideo,
   isQualityJob,
   parseAnalysis,
   qualityEvidence,
@@ -161,16 +163,82 @@ export async function advanceSocialAdQualityWorkflow(
   }
 
   const rightsVerified = brandRightsVerified(parentMetadata)
-  const evidence = completed.map((qualityJob) => {
+  const evaluated = await Promise.all(completed.map(async (qualityJob) => {
     const metadata = safeJson(qualityJob.metadataJson)
     const generationJob = generationJobs.find((job) => job.id === metadata.candidateJobId) ?? null
-    return qualityEvidence({
+    if (!generationJob?.artifactId) throw new Error('Quality candidate is missing its source artifact')
+    const analysis = parseAnalysis(qualityJob.output)
+    const measured = await inspectCandidateVideo(generationJob.artifactId)
+    const evidence = qualityEvidence({
       generationJob,
       qualityJob,
-      analysis: parseAnalysis(qualityJob.output),
+      analysis,
       rightsVerified,
+      measured,
     })
-  })
+    const rawReport = {
+      version: 'social-ad-candidate-quality-v1',
+      candidateJobId: generationJob.id,
+      candidateArtifactId: generationJob.artifactId,
+      measured,
+      modelEvaluated: {
+        evidenceSource: 'video_understanding',
+        evaluatorJobId: qualityJob.id,
+        summary: analysis.summary,
+        scores: analysis.scores,
+        issues: analysis.issues,
+        frameObservations: analysis.frameObservations,
+      },
+      humanReviewRequired: [
+        'pixel_level_product_source_similarity',
+        'product_identity_preservation',
+        'malformed_product_geometry',
+        'logo_integrity',
+        'caption_safe_area',
+        'frame_boundary_breakout_visibility',
+        'product_visible_outside_social_frame',
+        'channel_suitability',
+      ],
+      canonicalEvidence: evidence,
+    }
+    const artifact = await saveArtifact({
+      input: {
+        appSlug: parent.appSlug,
+        type: 'document',
+        subType: 'social_ad_candidate_quality_report',
+        title: `Social-ad candidate ${generationJob.sceneNumber ?? generationJob.id} quality report`,
+        description: 'Measured, model-evaluated and human-review-required candidate evidence.',
+        provider: 'amarktai-network',
+        model: 'social-ad-quality-evidence-v1',
+        traceId: qualityJob.traceId,
+        mimeType: 'application/json',
+        metadata: {
+          socialAdVideo: true,
+          parentJobId: parent.id,
+          candidateJobId: generationJob.id,
+          candidateArtifactId: generationJob.artifactId,
+          evidenceSource: 'measured_and_model_evaluated',
+          liveProviderProof: false,
+        },
+      },
+      data: Buffer.from(JSON.stringify(rawReport, null, 2), 'utf8'),
+      explicitMimeType: 'application/json',
+    })
+    await prisma.job.update({
+      where: { id: qualityJob.id },
+      data: {
+        artifactId: artifact.id,
+        metadataJson: JSON.stringify({
+          ...metadata,
+          qualityReportArtifactId: artifact.id,
+          measuredTechnicalEvidence: measured,
+          humanReviewRequired: rawReport.humanReviewRequired,
+        }),
+      },
+    })
+    return { evidence, reportArtifactId: artifact.id, rawReport }
+  }))
+  const evidence = evaluated.map((entry) => entry.evidence)
   const ranked = rankQualityCandidates(evidence, selectionPolicy(parentMetadata))
   const winner = ranked.find((entry) => entry.decision.status === 'accepted')
   if (!winner) {
@@ -186,6 +254,13 @@ export async function advanceSocialAdQualityWorkflow(
           qualityRanking: ranked.map((entry) => ({
             candidateJobId: entry.candidate.candidateId,
             decision: entry.decision,
+          })),
+          qualityReports: evaluated.map((entry) => ({
+            candidateJobId: entry.rawReport.candidateJobId,
+            artifactId: entry.reportArtifactId,
+            measured: entry.rawReport.measured,
+            modelEvaluated: entry.rawReport.modelEvaluated,
+            humanReviewRequired: entry.rawReport.humanReviewRequired,
           })),
           qualityCompletedAt: new Date().toISOString(),
         }),
@@ -203,6 +278,13 @@ export async function advanceSocialAdQualityWorkflow(
       candidateJobId: entry.candidate.candidateId,
       artifactId: generationJobs.find((job) => job.id === entry.candidate.candidateId)?.artifactId ?? null,
       decision: entry.decision,
+    })),
+    qualityReports: evaluated.map((entry) => ({
+      candidateJobId: entry.rawReport.candidateJobId,
+      artifactId: entry.reportArtifactId,
+      measured: entry.rawReport.measured,
+      modelEvaluated: entry.rawReport.modelEvaluated,
+      humanReviewRequired: entry.rawReport.humanReviewRequired,
     })),
     selectedCandidateJobId: generationWinner.id,
     selectedCandidateArtifactId: generationWinner.artifactId,

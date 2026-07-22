@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '@amarktai/db'
 import { authenticateAppKey } from './jobs.js'
+import type { SocialAdRouteAuthResolver } from './app-social-ad-video.js'
 
 function safeJson(value: string | null | undefined): Record<string, unknown> {
   if (!value?.trim()) return {}
@@ -26,9 +27,12 @@ async function findParent(appSlug: string, id: string) {
   return parent && safeJson(parent.metadataJson).socialAdVideo === true ? parent : null
 }
 
-export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v1/social-ad-video/executions/:id/final-approval', async (request, reply) => {
-    const auth = await authenticateAppKey(request.headers.authorization)
+export async function registerSocialAdFinalApprovalRoutes(
+  app: FastifyInstance,
+  options: { prefix: string; authenticate: SocialAdRouteAuthResolver },
+): Promise<void> {
+  app.post(`${options.prefix}/social-ad-video/executions/:id/final-approval`, async (request, reply) => {
+    const auth = await options.authenticate(request.headers.authorization, request)
     if (!auth.ok) {
       return reply.status(auth.statusCode).send({
         error: true,
@@ -39,11 +43,11 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
     const { id } = request.params as { id: string }
     const body = request.body as Record<string, unknown>
     const decision = body.decision
-    if (decision !== 'approved' && decision !== 'rejected') {
+    if (decision !== 'approved' && decision !== 'rejected' && decision !== 'revision_requested') {
       return reply.status(400).send({
         error: true,
         code: 'INVALID_SOCIAL_AD_FINAL_APPROVAL',
-        message: 'decision must be approved or rejected.',
+        message: 'decision must be approved, rejected, or revision_requested.',
       })
     }
     const notes = typeof body.notes === 'string' ? body.notes.slice(0, 5000) : ''
@@ -64,32 +68,59 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
     }
 
     const metadata = safeJson(parent.metadataJson)
+    const plan = metadata.plan && typeof metadata.plan === 'object' && !Array.isArray(metadata.plan)
+      ? metadata.plan as Record<string, unknown>
+      : {}
+    const socialCopyRequired = Array.isArray(plan.deliverables) && plan.deliverables.includes('social_copy')
     const primaryVideoArtifactId = parent.artifactId ?? metadata.assemblyArtifactId
     const copyArtifactId = metadata.copyArtifactId
     const deliveryVariants = metadata.deliveryVariants
     const thumbnailArtifactId = metadata.thumbnailArtifactId
     const reportArtifactId = metadata.deliveryReportArtifactId
+    const finalQualityReportArtifactId = metadata.finalQualityReportArtifactId
     if (
       typeof primaryVideoArtifactId !== 'string'
       || !primaryVideoArtifactId
-      || typeof copyArtifactId !== 'string'
-      || !copyArtifactId
+      || (socialCopyRequired && (typeof copyArtifactId !== 'string' || !copyArtifactId))
       || !Array.isArray(deliveryVariants)
       || deliveryVariants.length === 0
       || typeof thumbnailArtifactId !== 'string'
       || !thumbnailArtifactId
       || typeof reportArtifactId !== 'string'
       || !reportArtifactId
+      || typeof finalQualityReportArtifactId !== 'string'
+      || !finalQualityReportArtifactId
     ) {
       return reply.status(409).send({
         error: true,
         code: 'SOCIAL_AD_FINAL_PACK_INCOMPLETE',
-        message: 'Video variants, social copy, thumbnail, or delivery evidence is missing.',
+        message: 'Video variants, requested social copy, thumbnail, final quality, or execution evidence is missing.',
       })
     }
 
     const decidedAt = new Date().toISOString()
-    if (decision === 'rejected') {
+    const affectedArtifactIds = [
+      primaryVideoArtifactId,
+      ...(typeof copyArtifactId === 'string' ? [copyArtifactId] : []),
+      thumbnailArtifactId,
+      reportArtifactId,
+      finalQualityReportArtifactId,
+      ...(Array.isArray(deliveryVariants)
+        ? deliveryVariants.map((item) => safeJson(JSON.stringify(item)).artifactId).filter((item): item is string => typeof item === 'string')
+        : []),
+    ]
+    const evidence = {
+      decision,
+      actor: `app:${auth.app!.slug}`,
+      timestamp: decidedAt,
+      notes,
+      selectedCandidateJobId: metadata.selectedCandidateJobId ?? null,
+      selectedCandidateArtifactId: metadata.selectedCandidateArtifactId ?? null,
+      affectedArtifactIds,
+      workflowVersion: 'social-ad-product-breakout-v1',
+      stage: 'final_pack_approval',
+    }
+    if (decision === 'rejected' || decision === 'revision_requested') {
       await prisma.job.update({
         where: { id: parent.id },
         data: {
@@ -101,11 +132,15 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
             ...metadata,
             currentPhase: 'final_revision_required',
             finalApproval: {
-              status: 'rejected',
+              status: decision,
               notes,
               decidedAt,
               appSlug: auth.app!.slug,
             },
+            decisionEvidence: [
+              ...(Array.isArray(metadata.decisionEvidence) ? metadata.decisionEvidence : []),
+              evidence,
+            ],
           }),
         },
       })
@@ -137,6 +172,10 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
             decidedAt,
             appSlug: auth.app!.slug,
           },
+          decisionEvidence: [
+            ...(Array.isArray(metadata.decisionEvidence) ? metadata.decisionEvidence : []),
+            evidence,
+          ],
           completedAt: decidedAt,
         }),
       },
@@ -150,11 +189,13 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
       decision,
       artifacts: {
         primaryVideoArtifactId,
+        masterVideoArtifactId: primaryVideoArtifactId,
         deliveryVariants,
         copyArtifactId,
         thumbnailArtifactId,
         subtitleArtifactIds: Array.isArray(metadata.subtitleArtifactIds) ? metadata.subtitleArtifactIds : [],
         reportArtifactId,
+        finalQualityReportArtifactId,
       },
       qualityEvidence: {
         selectedCandidateJobId: metadata.selectedCandidateJobId ?? null,
@@ -163,5 +204,12 @@ export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Prom
         selectedCopyQualityScore: metadata.selectedCopyQualityScore ?? null,
       },
     })
+  })
+}
+
+export async function appSocialAdFinalApprovalRoutes(app: FastifyInstance): Promise<void> {
+  return registerSocialAdFinalApprovalRoutes(app, {
+    prefix: '/api/v1',
+    authenticate: async (authorization) => authenticateAppKey(authorization),
   })
 }

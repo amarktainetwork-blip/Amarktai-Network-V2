@@ -7,6 +7,67 @@ import {
 } from '@amarktai/core'
 import { prisma } from '@amarktai/db'
 
+const execFileAsync = promisify(execFile)
+
+export interface MeasuredVideoEvidence {
+  evidenceSource: 'ffprobe'
+  validVideoStream: boolean
+  durationSeconds: number | null
+  width: number | null
+  height: number | null
+  aspectRatio: string | null
+  fileSizeBytes: number
+  codec: string | null
+  container: string | null
+  supportedCodecContainer: boolean
+  nonEmpty: boolean
+  technicalValid: boolean
+  raw: Record<string, unknown>
+}
+
+export async function inspectCandidateVideo(artifactId: string): Promise<MeasuredVideoEvidence> {
+  const record = await getArtifactRecord(artifactId)
+  const file = await getArtifactFile(artifactId)
+  if (!record || !file) throw new Error('Candidate artifact is unavailable for measured quality validation')
+  const workspace = await mkdtemp(join(tmpdir(), 'amarktai-social-ad-quality-'))
+  try {
+    const path = join(workspace, record.mimeType === 'video/webm' ? 'candidate.webm' : 'candidate.mp4')
+    await writeFile(path, file.buffer)
+    const { stdout } = await execFileAsync(process.env.FFPROBE_PATH?.trim() || 'ffprobe', [
+      '-v', 'error', '-show_streams', '-show_format', '-of', 'json', path,
+    ], { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true })
+    const raw = JSON.parse(String(stdout)) as { streams?: Array<Record<string, unknown>>; format?: Record<string, unknown> }
+    const video = raw.streams?.find((stream) => stream.codec_type === 'video')
+    const duration = Number(raw.format?.duration ?? video?.duration ?? 0)
+    const width = Number(video?.width ?? 0)
+    const height = Number(video?.height ?? 0)
+    const codec = typeof video?.codec_name === 'string' ? video.codec_name : null
+    const container = typeof raw.format?.format_name === 'string' ? raw.format.format_name : null
+    const supportedCodecContainer = Boolean(codec && ['h264', 'hevc', 'vp8', 'vp9', 'av1'].includes(codec)
+      && container && /(mp4|mov|webm|matroska)/.test(container))
+    const nonEmpty = file.buffer.length > 1024
+    const validVideoStream = Boolean(video && width > 0 && height > 0)
+    const technicalValid = validVideoStream && duration > 0 && supportedCodecContainer && nonEmpty
+    return {
+      evidenceSource: 'ffprobe',
+      validVideoStream,
+      durationSeconds: duration > 0 ? duration : null,
+      width: width > 0 ? width : null,
+      height: height > 0 ? height : null,
+      aspectRatio: width > 0 && height > 0 ? `${width}:${height}` : null,
+      fileSizeBytes: file.buffer.length,
+      codec,
+      container,
+      supportedCodecContainer,
+      nonEmpty,
+      technicalValid,
+      raw: { streams: raw.streams ?? [], format: raw.format ?? {} },
+    }
+  } finally {
+    await rm(workspace, { recursive: true, force: true })
+  }
+}
+
 export interface CandidateAnalysisOutput {
   summary: string
   scores: {
@@ -106,7 +167,9 @@ export function qualityPrompt(input: {
     `Candidate creative brief: ${input.candidatePrompt}`,
     prohibitedClaims.length ? `Flag any implication of prohibited claims: ${prohibitedClaims.join('; ')}.` : '',
     'Judge only visible evidence across the ordered timeline frames. Score prompt adherence, brand consistency, visual quality, composition, temporal continuity, and safety from 0 to 100.',
-    'List concrete defects such as warped logos, anatomy errors, unreadable text, duplicated subjects, abrupt scene changes, low fidelity, or unsupported claims.',
+    'Inspect product identity and geometry preservation, visual continuity, motion stability, clipping, logo corruption, prohibited claims, caption-safe areas, frame-boundary breakout visibility, product visibility outside the social frame, and requested-channel suitability.',
+    'List concrete defects such as warped products or logos, malformed geometry, clipping, unreadable generated text, abrupt motion, low fidelity, unsupported claims, or a product that never visibly crosses the frame.',
+    'Do not claim pixel-level product similarity, segmentation, geometry verification, caption-safe compliance or logo integrity unless the ordered frame evidence genuinely supports it; otherwise list the item as requiring human review.',
     'Do not award quality merely because a file exists.',
   ].filter(Boolean).join(' ')
 }
@@ -139,13 +202,14 @@ export function qualityEvidence(input: {
   qualityJob: Awaited<ReturnType<typeof prisma.job.findUnique>>
   analysis: CandidateAnalysisOutput
   rightsVerified: boolean
+  measured: MeasuredVideoEvidence
 }): QualityCandidateEvidence {
-  const { generationJob, qualityJob, analysis, rightsVerified } = input
+  const { generationJob, qualityJob, analysis, rightsVerified, measured } = input
   if (!generationJob || !qualityJob || !generationJob.artifactId) {
     throw new Error('Social-ad candidate quality evidence is incomplete')
   }
   const dimensions: QualityDimensionScore[] = [
-    { dimension: 'technical_validity', score: 100, weight: 2, required: true, blocking: true, evidence: [`artifact:${generationJob.artifactId}`], notes: [] },
+    { dimension: 'technical_validity', score: measured.technicalValid ? 100 : 0, weight: 2, required: true, blocking: true, evidence: [`artifact:${generationJob.artifactId}`, `ffprobe:${qualityJob.id}`], notes: measured.technicalValid ? [] : ['FFprobe technical validation failed'] },
     { dimension: 'prompt_adherence', score: analysis.scores.promptAdherence, weight: 2, required: true, blocking: true, evidence: [`quality-job:${qualityJob.id}`], notes: [] },
     { dimension: 'brand_consistency', score: analysis.scores.brandConsistency, weight: 2, required: true, blocking: true, evidence: [`quality-job:${qualityJob.id}`], notes: [] },
     { dimension: 'visual_quality', score: analysis.scores.visualQuality, weight: 2, required: true, blocking: true, evidence: [`quality-job:${qualityJob.id}`], notes: [] },
@@ -158,7 +222,7 @@ export function qualityEvidence(input: {
     candidateId: generationJob.id,
     capability: generationJob.capability as QualityCandidateEvidence['capability'],
     outputType: 'video',
-    technicalValid: generationJob.status === 'completed' && Boolean(generationJob.artifactId),
+    technicalValid: generationJob.status === 'completed' && Boolean(generationJob.artifactId) && measured.technicalValid,
     dimensions,
     criticalFailures: [],
     warnings: analysis.issues,
@@ -168,7 +232,7 @@ export function qualityEvidence(input: {
     provenanceComplete: true,
     rightsVerified,
     safetyPassed: analysis.scores.safety >= 85,
-    humanReview: 'not_required',
+    humanReview: 'pending',
   }
 }
 
@@ -181,9 +245,28 @@ export function brandRightsVerified(parentMetadata: Record<string, unknown>): bo
   const assets = visual && typeof visual === 'object' && !Array.isArray(visual)
     ? (visual as Record<string, unknown>).assets
     : []
-  return !Array.isArray(assets) || assets.every((asset) => {
+  const plan = parentMetadata.plan && typeof parentMetadata.plan === 'object' && !Array.isArray(parentMetadata.plan)
+    ? parentMetadata.plan as Record<string, unknown>
+    : {}
+  const contract = plan.creativeContract && typeof plan.creativeContract === 'object' && !Array.isArray(plan.creativeContract)
+    ? plan.creativeContract as Record<string, unknown>
+    : {}
+  const requiredIds = new Set([
+    ...(typeof contract.productSourceArtifactId === 'string' ? [contract.productSourceArtifactId] : []),
+    ...(Array.isArray(contract.logoArtifactIds) ? contract.logoArtifactIds.filter((item): item is string => typeof item === 'string') : []),
+  ])
+  if (!Array.isArray(assets) || requiredIds.size === 0) return false
+  const selected = assets.filter((asset) => asset && typeof asset === 'object' && !Array.isArray(asset)
+    && requiredIds.has(String((asset as Record<string, unknown>).artifactId ?? '')))
+  return selected.length === requiredIds.size && selected.every((asset) => {
     if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return false
     const value = asset as Record<string, unknown>
     return value.approved === true && value.rightsVerified === true
   })
 }
+import { execFile } from 'node:child_process'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import { getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'

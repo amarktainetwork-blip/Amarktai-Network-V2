@@ -68,6 +68,41 @@ function textResult(payload: WorkerJobData, provider: ProviderKey, model: string
   const prompt = payload.prompt.trim()
   let output: unknown = `Fixture response for: ${prompt}`
   if (payload.capability === 'structured_output') output = { fixture: true, summary: prompt.slice(0, 80) }
+  if (payload.capability === 'structured_output' && payload.metadata?.socialAdCopyCandidate === true) {
+    const context = payload.metadata.copyContext && typeof payload.metadata.copyContext === 'object'
+      ? payload.metadata.copyContext as Record<string, unknown>
+      : {}
+    const channels = Array.isArray(context.channels) ? context.channels.filter((item): item is string => typeof item === 'string') : []
+    const disclaimer = Array.isArray(context.disclaimers) ? context.disclaimers.filter((item): item is string => typeof item === 'string').join(' ') : ''
+    const cta = typeof context.callToAction === 'string' ? context.callToAction : 'Learn more'
+    const primaryText = `A deterministic, brand-safe product story for the approved campaign. ${disclaimer}`.trim()
+    output = {
+      headline: 'See the approved product break through',
+      primaryText,
+      shortCaption: 'The approved product, presented with clarity.',
+      longCaption: `${primaryText} ${cta}.`,
+      callToAction: cta,
+      hashtags: ['#ProductStory'],
+      claimsUsed: [],
+      channelVariants: Object.fromEntries(channels.map((channel) => [channel, `${primaryText} ${cta}.`])),
+    }
+  }
+  if (payload.capability === 'video_understanding' && payload.metadata?.socialAdQualityAnalysis === true) {
+    output = {
+      summary: 'Deterministic fixture evaluator observed a technically coherent product-breakout candidate; specialist visual assertions remain human-review-required.',
+      scores: {
+        promptAdherence: 96,
+        brandConsistency: 96,
+        visualQuality: 96,
+        composition: 95,
+        temporalContinuity: 96,
+        safety: 100,
+      },
+      issues: [],
+      frameObservations: ['Ordered fixture frames are stable and contain no generated text or prohibited claims.'],
+      recommended: true,
+    }
+  }
   if (payload.capability === 'classification' || payload.capability === 'zero_shot_classification') output = { label: 'fixture_label', score: 0.99 }
   if (payload.capability === 'token_classification') output = [{ entity: 'FIXTURE', word: prompt.split(/\s+/)[0] || 'fixture', score: 0.99 }]
   if (payload.capability === 'fill_mask') output = [{ token_str: 'fixture', score: 0.99 }]
@@ -144,7 +179,7 @@ async function verifySourceArtifact(payload: WorkerJobData): Promise<string | nu
   return sourceId
 }
 
-async function generateFixtureMedia(capability: CapabilityKey): Promise<{ data: Buffer; mimeType: string; type: 'image' | 'video' | 'audio' | 'music'; duration?: number; width?: number; height?: number }> {
+async function generateFixtureMedia(capability: CapabilityKey, payload: WorkerJobData): Promise<{ data: Buffer; mimeType: string; type: 'image' | 'video' | 'audio' | 'music'; duration?: number; width?: number; height?: number }> {
   const ffmpeg = process.env.FFMPEG_PATH?.trim() || 'ffmpeg'
   const dir = await mkdtemp(join(tmpdir(), 'amarktai-release-fixture-'))
   try {
@@ -164,14 +199,17 @@ async function generateFixtureMedia(capability: CapabilityKey): Promise<{ data: 
       return { data: Buffer.from(transcriptData), mimeType: 'application/json', type: 'audio', duration: 2 }
     }
     const output = join(dir, 'fixture.mp4')
+    const requestedDuration = typeof payload.input?.duration === 'number' && Number.isFinite(payload.input.duration)
+      ? Math.max(2, Math.min(10, payload.input.duration))
+      : 2
     await runFile(ffmpeg, [
       '-hide_banner', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', 'color=c=0x172554:s=320x180:r=24:d=2',
-      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=2',
+      '-f', 'lavfi', '-i', `color=c=0x172554:s=320x180:r=24:d=${requestedDuration}`,
+      '-f', 'lavfi', '-i', `sine=frequency=440:sample_rate=48000:duration=${requestedDuration}`,
       '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
       '-movflags', '+faststart', '-y', output,
     ])
-    return { data: await readFile(output), mimeType: 'video/mp4', type: 'video', duration: 2, width: 320, height: 180 }
+    return { data: await readFile(output), mimeType: 'video/mp4', type: 'video', duration: requestedDuration, width: 320, height: 180 }
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -212,7 +250,7 @@ export async function executeReleaseFixture(payload: WorkerJobData): Promise<Pro
     }
   }
 
-  const media = await generateFixtureMedia(capability)
+  const media = await generateFixtureMedia(capability, payload)
   const artifact = await saveArtifact({
     input: {
       appSlug: payload.appSlug,

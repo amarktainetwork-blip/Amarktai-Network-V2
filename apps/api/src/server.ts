@@ -37,6 +37,8 @@ import { appBrandProfileRoutes } from './routes/app-brand-profiles.js'
 import { appSocialAdVideoRoutes } from './routes/app-social-ad-video.js'
 import { appSocialAdAssemblyRoutes } from './routes/app-social-ad-assembly.js'
 import { appSocialAdFinalApprovalRoutes } from './routes/app-social-ad-final-approval.js'
+import { adminMarketingWorkspaceRoutes } from './routes/admin-marketing-workspace.js'
+import { appMarketingCampaignRoutes } from './routes/app-marketing-campaigns.js'
 import { appMemoryRoutes } from './routes/app-memory.js'
 import { appRagRoutes } from './routes/app-rag.js'
 import { appResearchRoutes } from './routes/app-research.js'
@@ -113,6 +115,8 @@ async function main(): Promise<void> {
   await app.register(appSocialAdVideoRoutes)
   await app.register(appSocialAdAssemblyRoutes)
   await app.register(appSocialAdFinalApprovalRoutes)
+  await app.register(adminMarketingWorkspaceRoutes)
+  await app.register(appMarketingCampaignRoutes)
   await app.register(appMemoryRoutes)
   await app.register(appRagRoutes)
   await app.register(appResearchRoutes)

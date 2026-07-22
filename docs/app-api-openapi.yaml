@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AmarktAI Thin-App API
-  version: 1.6.0
+  version: 1.7.0
 servers:
   - url: https://network.amarktai.com
 security:
@@ -32,26 +32,144 @@ components:
         displayName: { type: string }
         summary: { type: string }
         voice: { type: object }
-        visual: { type: object }
+        visual:
+          type: object
+          required: [assets]
+          properties:
+            palette: { type: array, items: { type: object } }
+            typography: { type: array, items: { type: object } }
+            imageStyleRules: { type: array, items: { type: string } }
+            videoStyleRules: { type: array, items: { type: string } }
+            assets: { type: array, items: { $ref: '#/components/schemas/BrandAssetReference' } }
         sourceEvidence: { type: array, items: { type: object } }
         overallConfidence: { type: number, minimum: 0, maximum: 1 }
         rightsDeclaredBy: { type: string }
         rightsDeclaredAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+    BrandAssetReference:
+      type: object
+      additionalProperties: false
+      required: [artifactId, role, approved, rightsVerified, sourceEvidenceIds, offeringIds]
+      properties:
+        artifactId: { type: string }
+        role: { enum: [primary_logo, secondary_logo, icon, product, offering, campaign_reference, photography, video, audio] }
+        approved: { type: boolean }
+        rightsVerified: { type: boolean }
+        sourceEvidenceIds: { type: array, minItems: 1, items: { type: string } }
+        offeringIds: { type: array, items: { type: string }, description: Product/offering compatibility scope. }
     SocialAdPlanRequest:
       type: object
       additionalProperties: false
       required: [request, campaign]
       properties:
-        request: { type: object, description: SocialAdVideoRequest contract. Provider/model/route fields are forbidden. }
-        campaign: { type: object, description: MarketingCampaignBrief contract. }
+        request: { $ref: '#/components/schemas/ProductBreakoutRequest' }
+        campaign: { $ref: '#/components/schemas/MarketingCampaignBrief' }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200, pattern: '^[A-Za-z0-9._:-]+$' }
+    ProductBreakoutRequest:
+      type: object
+      additionalProperties: false
+      required: [brandProfileId, campaignId, mode, prompt, objective, audienceId, offeringId, productArtifactId, callToAction, aspectRatios, durationSeconds, maxCredits]
+      description: Provider-neutral product-breakout request. Provider, model, route, executor, endpoint and credential fields are rejected.
+      properties:
+        brandProfileId: { type: string }
+        campaignId: { type: string }
+        mode: { const: product_breakout }
+        prompt: { type: string, minLength: 10, maxLength: 10000 }
+        objective: { type: string, minLength: 10, maxLength: 5000 }
+        audienceId: { type: string }
+        offeringId: { type: string }
+        productArtifactId: { type: string, description: Same-app approved, rights-verified product/offering artifact linked to offeringId. }
+        logoArtifactIds: { type: array, maxItems: 10, items: { type: string } }
+        callToAction: { type: string, maxLength: 500 }
+        sourceArtifactIds: { type: array, maxItems: 200, items: { type: string } }
+        aspectRatios: { type: array, minItems: 1, items: { enum: ['16:9', '9:16', '1:1'] } }
+        durationSeconds: { type: integer, minimum: 5, maximum: 180 }
+        candidateCount: { type: integer, minimum: 2, maximum: 6, default: 3 }
+        includeCaptions: { type: boolean, default: true }
+        includeSubtitleFiles: { type: boolean, default: true }
+        includeThumbnail: { type: boolean, default: true }
+        includeSocialCopy: { type: boolean, default: true }
+        qualityProfile: { enum: [draft, standard, premium, publication], default: premium }
+        approvalRequired: { const: true }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+    MarketingCampaignBrief:
+      type: object
+      additionalProperties: false
+      required: [campaignId, brandProfileId, title, objective, audienceIds, channels, callToAction]
+      properties:
+        campaignId: { type: string }
+        brandProfileId: { type: string }
+        title: { type: string }
+        objective: { type: string }
+        audienceIds: { type: array, minItems: 1, items: { type: string } }
+        offeringIds: { type: array, items: { type: string } }
+        channels: { type: array, minItems: 1, items: { enum: [facebook, instagram, linkedin, x, tiktok, youtube, email, website, blog, paid_search, display] } }
+        callToAction: { type: string }
+        locale: { type: string }
+        constraints: { type: array, items: { type: string } }
+        sourceArtifactIds: { type: array, items: { type: string } }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        approvalRequired: { type: boolean }
+        maxCredits: { type: [number, 'null'] }
+        dueAt: { type: [string, 'null'], format: date-time }
+    ProductBreakoutCreativeContract:
+      type: object
+      additionalProperties: false
+      required: [version, productSourceArtifactId, logoArtifactIds, treatment, initialContainment, breakoutRequirement, approvedClaims, prohibitedClaims, requiredDisclaimers, callToAction, durationSeconds, qualityProfile, candidateCount, creditCeiling, segmentationAvailable]
+      properties:
+        version: { const: product-breakout-v1 }
+        productSourceArtifactId: { type: string }
+        logoArtifactIds: { type: array, items: { type: string } }
+        treatment: { const: social_post_card_frame }
+        initialContainment: { const: product_inside_frame }
+        breakoutRequirement: { const: product_visibly_crosses_frame_boundary }
+        depthTreatment: { type: object }
+        motion: { type: object }
+        preservation: { type: object }
+        brandSafeBackground: { type: string }
+        approvedClaims: { type: array, items: { type: string } }
+        prohibitedClaims: { type: array, items: { type: string } }
+        requiredDisclaimers: { type: array, items: { type: string } }
+        overlayInstructions: { type: array, items: { type: string } }
+        captionInstructions: { type: array, items: { type: string } }
+        safeAreas: { type: object }
+        callToAction: { type: string }
+        durationSeconds: { type: integer }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        candidateCount: { type: integer }
+        creditCeiling: { type: number }
+        segmentationAvailable: { type: boolean }
+        visualLimitation: { type: [string, 'null'] }
+    SocialAdExecutionStatus:
+      type: object
+      description: Durable parent, candidate lineage, measured and model-evaluated quality reports, immutable approvals, assembly pack and final artifact IDs.
+      properties:
+        executionId: { type: string }
+        parentJobId: { type: string }
+        status: { type: string }
+        phase: { type: string }
+        generation: { type: object }
+        quality: { type: object }
+        assembly: { type: object }
+        socialCopy: { type: object }
+        humanApproval: { type: object }
+        finalApproval: { type: object }
+        plan: { type: object }
+    StableError:
+      type: object
+      additionalProperties: true
+      required: [error, code, message]
+      properties:
+        error: { const: true }
+        code: { type: string }
+        message: { type: string }
     ApprovalDecision:
       type: object
       additionalProperties: false
       required: [decision]
       properties:
-        decision: { enum: [approved, rejected] }
+        decision: { enum: [approved, rejected, revision_requested] }
         notes: { type: string, maxLength: 5000 }
     Namespace:
       type: string
@@ -294,6 +412,18 @@ paths:
       summary: Archive rather than destructively delete a Brand Profile
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
       responses: { '200': { description: Archived } }
+  /api/v1/marketing-campaigns:
+    get:
+      summary: List same-app persisted marketing campaigns
+      responses: { '200': { description: Campaign list } }
+    post:
+      summary: Persist an authorised campaign brief for social workflow execution
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MarketingCampaignBrief' } } } } }
+      responses:
+        '201': { description: Campaign created }
+        '200': { description: Campaign updated }
+        '400': { description: Invalid campaign, content: { application/json: { schema: { $ref: '#/components/schemas/StableError' } } } }
+        '403': { description: Capability grant required, content: { application/json: { schema: { $ref: '#/components/schemas/StableError' } } } }
   /api/v1/social-ad-video/plan:
     post:
       summary: Build a provider-neutral social-ad execution plan
@@ -320,6 +450,35 @@ paths:
       summary: Idempotently resume approved internal media assembly
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
       responses: { '202': { description: Assembly queued or already active }, '409': { description: Creative approval or quality winner missing } }
+  /api/v1/social-ad-video/executions/{id}/resume:
+    post:
+      summary: Idempotently resume retryable durable children without duplicating completed work
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: No duplicate work was required }, '202': { description: Retryable children requeued within the credit ceiling }, '409': { description: Cancelled or over-budget execution } }
+  /api/v1/social-ad-video/executions/{id}/candidates/{jobId}/retry:
+    post:
+      summary: Retry one failed candidate within retry and credit ceilings
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: path, name: jobId, required: true, schema: { type: string } }
+      responses: { '202': { description: Candidate requeued with immutable retry history }, '404': { description: Candidate not owned by the execution }, '409': { description: Candidate, retry, cancellation or budget state rejects retry } }
+  /api/v1/social-ad-video/executions/{id}/cancel:
+    post:
+      summary: Cancel the parent and unfinished children while protecting against late results
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Cancellation persisted or already complete }, '409': { description: Completed execution cannot be cancelled } }
+  /api/v1/social-ad-video/executions/{id}/regenerate:
+    post:
+      summary: Generate one revision candidate within the six-candidate and credit ceilings
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: { notes: { type: string, maxLength: 2000 } }
+      responses: { '202': { description: Revision candidate queued with lineage evidence }, '409': { description: State, regeneration limit or credit ceiling rejects regeneration } }
   /api/v1/social-ad-video/executions/{id}/final-approval:
     post:
       summary: Approve or reject the complete delivery pack

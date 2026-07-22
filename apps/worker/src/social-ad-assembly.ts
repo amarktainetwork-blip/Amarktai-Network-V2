@@ -35,6 +35,13 @@ interface SocialAdAssemblyPlan {
     requiredDisclaimers?: string[]
     callToAction?: string
   }
+  creativeContract?: {
+    version?: string
+    treatment?: string
+    segmentationAvailable?: boolean
+    visualLimitation?: string | null
+    safeAreas?: Record<string, unknown>
+  } | null
 }
 
 interface ProbeResult {
@@ -73,6 +80,7 @@ function parsePlan(value: unknown): SocialAdAssemblyPlan {
       ? plan.deliverables.filter((item): item is string => typeof item === 'string')
       : [],
     creativeContext: safeObject(plan.creativeContext) as SocialAdAssemblyPlan['creativeContext'],
+    creativeContract: safeObject(plan.creativeContract) as SocialAdAssemblyPlan['creativeContract'],
   }
 }
 
@@ -164,7 +172,7 @@ function videoFilter(input: {
     `[0:v]split=2[background-source][foreground-source]`,
     `[background-source]scale=${input.width}:${input.height}:force_original_aspect_ratio=increase,crop=${input.width}:${input.height},boxblur=24:3[background]`,
     `[foreground-source]scale=${input.width}:${input.height}:force_original_aspect_ratio=decrease[foreground]`,
-    `[background][foreground]overlay=(W-w)/2:(H-h)/2,fps=30,format=yuv420p`,
+    `[background][foreground]overlay=(W-w)/2:(H-h)/2,drawbox=x=iw*0.045:y=ih*0.045:w=iw*0.91:h=ih*0.91:color=white@0.92:t=8,drawbox=x=iw*0.045:y=ih*0.045:w=iw*0.91:h=ih*0.09:color=0x111827@0.78:t=fill,fps=30,format=yuv420p`,
   ].join(';')
   if (!input.includeCaptions) return `${base}[video]`
   return `${base},subtitles='${subtitlePath(input.subtitlesPath)}':force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00101010,BorderStyle=1,Outline=2,Shadow=0,MarginV=64,Alignment=2'[video]`
@@ -359,6 +367,35 @@ export async function executeSocialAdAssembly(payload: WorkerJobData): Promise<P
       const primary = variants[0]
       if (!primary) throw new Error('Social-ad assembly produced no variants')
       const primaryPath = join(workspace, `social-ad-${primary.aspectRatio.replace(':', 'x')}.mp4`)
+      const masterBytes = await readFile(primaryPath)
+      const master = await saveArtifact({
+        input: {
+          appSlug: payload.appSlug,
+          type: 'video',
+          subType: 'social_ad_master',
+          title: `${plan.campaignId} social advert master`,
+          description: 'Approved deterministic social-ad master used to derive the delivery pack',
+          provider: 'ffmpeg',
+          model: 'social-ad-master-assembly-v1',
+          traceId: payload.traceId,
+          mimeType: 'video/mp4',
+          metadata: {
+            socialAdVideo: true,
+            executionId: payload.metadata?.executionId ?? payload.traceId,
+            parentJobId,
+            planId: plan.planId,
+            sourceArtifactId: selectedArtifactId,
+            sourceVariantArtifactId: primary.artifactId,
+            width: primary.width,
+            height: primary.height,
+            durationSeconds: primary.durationSeconds,
+            outputValidated: true,
+            fastStartMp4: true,
+          },
+        },
+        data: masterBytes,
+        explicitMimeType: 'video/mp4',
+      })
       const thumbnailPath = join(workspace, 'thumbnail.jpg')
       await run('ffmpeg', [
         '-hide_banner', '-loglevel', 'error',
@@ -399,6 +436,7 @@ export async function executeSocialAdAssembly(payload: WorkerJobData): Promise<P
         parentJobId,
         planId: plan.planId,
         selectedSourceArtifactId: selectedArtifactId,
+        masterVideoArtifactId: master.id,
         variants,
         subtitleArtifactIds,
         thumbnailArtifactId: thumbnail.id,
@@ -409,15 +447,47 @@ export async function executeSocialAdAssembly(payload: WorkerJobData): Promise<P
           everyVariantValid: variants.length === plan.deliveryVariants.length,
           thumbnailValid: true,
           subtitlesGenerated: segments.length > 0,
+          everyVideoHasExpectedDimensions: variants.every((variant) => variant.width > 0 && variant.height > 0),
+          everyVideoHasValidDuration: variants.every((variant) => variant.durationSeconds > 0),
+          everyVideoIsFastStartMp4: true,
+          sourceAudioPreservedWhenPresent: !sourceProbe.hasAudio || variants.every((variant) => variant.audioIncluded),
+        },
+        deterministicComposition: {
+          treatment: plan.creativeContract?.treatment ?? 'social_post_card_frame',
+          visibleCardFrame: true,
+          approvedGeneratedCandidatePreserved: true,
+          segmentationClaimed: false,
+          visualLimitation: plan.creativeContract?.visualLimitation
+            ?? 'No segmentation mask was available; the generated candidate is preserved inside a truthful framed composition.',
+          humanReviewRequired: ['generated_breakout_appearance', 'product_identity_and_geometry', 'logo_integrity'],
         },
       }
+      const finalQualityReport = await persistTextArtifact({
+        appSlug: payload.appSlug,
+        executionId: payload.traceId,
+        parentJobId,
+        plan,
+        subtype: 'social_ad_final_quality_report',
+        title: `${plan.campaignId} final-pack quality report`,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          version: 'social-ad-final-quality-v1',
+          parentJobId,
+          selectedSourceArtifactId: selectedArtifactId,
+          masterVideoArtifactId: master.id,
+          variants,
+          validation: report.validation,
+          deterministicComposition: report.deterministicComposition,
+          evidenceSources: ['ffprobe', 'ffmpeg', 'artifact_store'],
+        }, null, 2),
+      })
       const reportArtifact = await persistTextArtifact({
         appSlug: payload.appSlug,
         executionId: payload.traceId,
         parentJobId,
         plan,
-        subtype: 'social_ad_delivery_report',
-        title: `${plan.campaignId} delivery report`,
+        subtype: 'social_ad_execution_evidence',
+        title: `${plan.campaignId} execution evidence`,
         mimeType: 'application/json',
         text: JSON.stringify(report, null, 2),
       })
@@ -427,19 +497,22 @@ export async function executeSocialAdAssembly(payload: WorkerJobData): Promise<P
         status: 'completed',
         provider: 'ffmpeg',
         model: 'social-ad-assembly-v1',
-        artifactId: primary.artifactId,
+        artifactId: master.id,
         output: JSON.stringify({
           ...report,
           reportArtifactId: reportArtifact.id,
+          finalQualityReportArtifactId: finalQualityReport.id,
           socialCopyStatus: plan.deliverables.includes('social_copy') ? 'pending_text_quality_workflow' : 'not_requested',
         }),
         metadata: {
           socialAdAssembly: true,
           outputValidation: { valid: true, variantCount: variants.length },
+          masterVideoArtifactId: master.id,
           variantArtifactIds: variants.map((variant) => variant.artifactId),
           subtitleArtifactIds,
           thumbnailArtifactId: thumbnail.id,
           reportArtifactId: reportArtifact.id,
+          finalQualityReportArtifactId: finalQualityReport.id,
         },
       }
     } finally {

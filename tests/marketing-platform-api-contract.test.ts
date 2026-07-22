@@ -29,7 +29,7 @@ describe('marketing platform API contract', () => {
   })
 
   it('creates durable parent and candidate child jobs with generation and quality grants', () => {
-    expect(socialAdRoutes).toContain("app.post('/api/v1/social-ad-video/executions'")
+    expect(socialAdRoutes).toContain('`${options.prefix}/social-ad-video/executions`')
     expect(socialAdRoutes).toContain("'video_understanding'")
     expect(socialAdRoutes).toContain('qualityGrantSnapshot: qualityGrant.grant')
     expect(socialAdRoutes).toContain("capability: 'social_content_generation'")
@@ -50,7 +50,7 @@ describe('marketing platform API contract', () => {
   })
 
   it('polls generation and quality evidence without mutating parent state', () => {
-    expect(socialAdRoutes).toContain("app.get('/api/v1/social-ad-video/executions/:id'")
+    expect(socialAdRoutes).toContain('`${options.prefix}/social-ad-video/executions/:id`')
     expect(socialAdRoutes).toContain('appSlug: auth.app!.slug')
     expect(socialAdRoutes).toContain('provider: job.provider')
     expect(socialAdRoutes).toContain('model: job.model')
@@ -59,7 +59,7 @@ describe('marketing platform API contract', () => {
   })
 
   it('allows the Marketing App to decide only after Network quality selection', () => {
-    expect(socialAdRoutes).toContain("app.post('/api/v1/social-ad-video/executions/:id/approval'")
+    expect(socialAdRoutes).toContain('`${options.prefix}/social-ad-video/executions/:id/approval`')
     expect(socialAdRoutes).toContain("parent.workflowPhase !== 'human_approval_pending'")
     expect(socialAdRoutes).toContain('SOCIAL_AD_QUALITY_WINNER_MISSING')
     expect(socialAdRoutes).toContain("? 'assembly_pending'")

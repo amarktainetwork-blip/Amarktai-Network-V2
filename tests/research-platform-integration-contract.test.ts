@@ -72,7 +72,7 @@ describe('durable governed research integration contract', () => {
     const sdkContract = sdk.match(/export interface ResearchExecutionPayload[\s\S]+?(?=export type VoiceAvatarUseScope)/)?.[0] ?? ''
     expect(sdkContract).toContain('includeSnapshots?: boolean')
     expect(sdkContract).not.toMatch(/appSlug|provider|model|route|executorId|endpoint|apiKey|ragNamespace/)
-    expect(openapi).toContain('version: 1.6.0')
+    expect(openapi).toContain('version: 1.7.0')
     expect(openapi).toContain('ResearchExecution:')
     expect(openapi).toContain('additionalProperties: false')
     expect(openapi).toContain('/api/v1/research/executions:')

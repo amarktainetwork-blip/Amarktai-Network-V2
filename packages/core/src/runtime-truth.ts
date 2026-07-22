@@ -217,6 +217,23 @@ export interface RuntimeTruth {
   countsByClassification: Record<CapabilityRuntimeClassification, number>
   releaseReadiness: ReleaseReadinessProjection[]
   releaseCandidateCapabilities: CapabilityKey[]
+  durableWorkflows: Array<{
+    id: string
+    capability: CapabilityKey
+    implementationStatus: 'IMPLEMENTED_DURABLE'
+    handlerName: string
+    persistence: string
+    recovery: string
+    artifactPersistence: string
+    infrastructure: string[]
+    requiredCapabilities: CapabilityKey[]
+    fixtureProof: string
+  }>
+  durableWorkflowBlockers: Array<{
+    capability: CapabilityKey
+    implementationStatus: 'NOT_IMPLEMENTED'
+    blocker: string
+  }>
   metrics: RuntimeTruthMetrics
 }
 
@@ -493,40 +510,39 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
   const releaseCandidateCapabilities = getReleaseCandidateCapabilityKeys()
   const releaseCandidateSet = new Set(releaseCandidateCapabilities)
   const capabilityMap = new Map(capabilities.map((capability) => [capability.capability, capability]))
-  // The base durable workflow is executable with video scenes and FFmpeg.
-  // Voiceover and music remain optional component paths, not prerequisites for
-  // the first video-only long-form execution profile.
-  const longFormDependencies = ['video_generation']
-    .map((capability) => capabilityMap.get(capability as CapabilityKey))
-    .filter((capability): capability is CapabilityRuntimeTruth => Boolean(capability))
-
   const releaseReadiness: ReleaseReadinessProjection[] = capabilities.map((capability) => {
     const releaseCandidate = releaseCandidateSet.has(capability.capability)
     const workflowPresent = DURABLE_WORKFLOW_REGISTRATIONS.some((entry) => entry.capability === capability.capability)
     const schemaPresent = Boolean(capability.inputContractReference && capability.outputContractReference && capability.schemaKey)
     const clientPresent = capability.clientImplemented || workflowPresent
-    const executorPresent = capability.executorRegistered
+    const executorPresent = capability.executorRegistered || workflowPresent
     const appSlug = getDashboardAppSlug(capability.capability)
     const workflow = DURABLE_WORKFLOW_REGISTRATIONS.find((entry) => entry.capability === capability.capability)
+    const workflowDependencies = (workflow?.requiredCapabilities ?? [])
+      .map((required) => capabilityMap.get(required))
+      .filter((dependency): dependency is CapabilityRuntimeTruth => Boolean(dependency))
     const requiredGrantCapabilities: readonly CapabilityKey[] = workflow
       ? [capability.capability, ...workflow.requiredCapabilities]
       : [capability.capability]
     const appGrantPresent = requiredGrantCapabilities.every((required) => input.appGrants?.[appSlug]?.[required] === true)
-    const infrastructureRequired = [
-      'mariadb',
-      ...(capability.requiresQueueExecution || workflowPresent ? ['redis', 'worker'] : []),
-      ...(capability.artifactRequired ? ['artifact_storage'] : []),
-      ...(workflowPresent ? ['ffmpeg'] : []),
-    ]
+    const infrastructureRequired = workflow
+      ? [...workflow.infrastructure]
+      : [
+          'mariadb',
+          ...(capability.requiresQueueExecution ? ['redis', 'worker'] : []),
+          ...(capability.artifactRequired ? ['artifact_storage'] : []),
+        ]
     const workflowReady = workflowPresent
-      && input.longFormComponents?.videoOnlyAssemblyReady === true
-      && longFormDependencies.every((dependency) => dependency.configured && dependency.infrastructureReady)
+      && workflowDependencies.length === (workflow?.requiredCapabilities.length ?? 0)
+      && workflowDependencies.every((dependency) => dependency.implementationReady)
+      && (capability.capability !== 'long_form_video' || input.longFormComponents?.videoOnlyAssemblyReady === true)
     const implementationReady = workflowPresent ? workflowReady : capability.implementationReady
     const configured = workflowPresent
-      ? longFormDependencies.every((dependency) => dependency.configured)
+      ? workflowDependencies.every((dependency) => dependency.configured)
       : capability.configured
     const infrastructureReady = workflowPresent
-      ? input.longFormComponents?.videoOnlyAssemblyReady === true
+      ? workflowDependencies.every((dependency) => dependency.infrastructureReady)
+        && (capability.capability !== 'long_form_video' || input.longFormComponents?.videoOnlyAssemblyReady === true)
       : capability.infrastructureReady
     const locallyProven = input.localStaticEvidence?.[capability.capability] === true
     const blockedReasons: string[] = []
@@ -599,6 +615,23 @@ export function getRuntimeTruth(input: RuntimeTruthInput = {}): RuntimeTruth {
     countsByClassification,
     releaseReadiness,
     releaseCandidateCapabilities,
+    durableWorkflows: DURABLE_WORKFLOW_REGISTRATIONS.map((workflow) => ({
+      id: workflow.id,
+      capability: workflow.capability,
+      implementationStatus: 'IMPLEMENTED_DURABLE' as const,
+      handlerName: workflow.handlerName,
+      persistence: workflow.persistence,
+      recovery: workflow.recovery,
+      artifactPersistence: workflow.artifactPersistence,
+      infrastructure: [...workflow.infrastructure],
+      requiredCapabilities: [...workflow.requiredCapabilities],
+      fixtureProof: workflow.fixtureProof,
+    })),
+    durableWorkflowBlockers: (['brand_scrape', 'document_ingest', 'campaign_generation'] as const).map((capability) => ({
+      capability,
+      implementationStatus: 'NOT_IMPLEMENTED' as const,
+      blocker: 'No authoritative durable API/worker/persistence/recovery/fixture registration exists.',
+    })),
     metrics,
   }
 }

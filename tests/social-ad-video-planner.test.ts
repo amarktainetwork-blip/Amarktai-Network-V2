@@ -20,7 +20,10 @@ function brandProfile() {
     voice: { tones: ['credible', 'encouraging'], styleRules: ['Use plain language'], approvedPhrases: [], forbiddenPhrases: [], locale: 'en-ZA' },
     visual: {
       palette: [], typography: [], imageStyleRules: ['Real people and natural light'], videoStyleRules: ['Controlled motion and restrained overlays'],
-      assets: [{ artifactId: 'logo-1', role: 'primary_logo' as const, approved: true, rightsVerified: true, sourceEvidenceIds: ['source-1'] }],
+      assets: [
+        { artifactId: 'logo-1', role: 'primary_logo' as const, approved: true, rightsVerified: true, sourceEvidenceIds: ['source-1'], offeringIds: [] },
+        { artifactId: 'product-1', role: 'product' as const, approved: true, rightsVerified: true, sourceEvidenceIds: ['source-1'], offeringIds: ['data-programme'] },
+      ],
     },
     offerings: [{ offeringId: 'data-programme', name: 'Data Career Programme', description: 'Practical data training with career support.', url: null, priceText: null, approvedClaims: ['Practical portfolio projects'], requiredDisclaimers: [] }],
     approvedClaims: ['Practical portfolio projects'],
@@ -44,7 +47,7 @@ function request() {
   return {
     brandProfileId: 'brand-1', campaignId: 'campaign-1', mode: 'product_breakout' as const,
     prompt: 'Create a premium transformation-led advert for the approved programme.', objective: 'Increase qualified programme enquiries.',
-    audienceId: 'career-switchers', offeringId: 'data-programme', callToAction: 'Explore the programme', sourceArtifactIds: [],
+    audienceId: 'career-switchers', offeringId: 'data-programme', productArtifactId: 'product-1', logoArtifactIds: ['logo-1'], callToAction: 'Explore the programme', sourceArtifactIds: [],
     aspectRatios: ['16:9', '9:16', '1:1'] as const, durationSeconds: 30, candidateCount: 3,
     includeCaptions: true, includeSubtitleFiles: true, includeThumbnail: true, includeSocialCopy: true,
     qualityProfile: 'premium' as const, approvalRequired: true, maxCredits: 250,
@@ -61,6 +64,17 @@ describe('social ad video planner', () => {
     expect(JSON.stringify(plan)).not.toMatch(/"provider"|"model"|"route"|"executorId"/)
     expect(plan.deliverables).toContain('quality_report')
     expect(plan.qualityPolicy.requireHumanApproval).toBe(true)
+    expect(plan.creativeContract).toMatchObject({
+      version: 'product-breakout-v1',
+      productSourceArtifactId: 'product-1',
+      breakoutRequirement: 'product_visibly_crosses_frame_boundary',
+      segmentationAvailable: false,
+    })
+    expect(plan.candidates[0]).toMatchObject({
+      productSourceArtifactId: 'product-1',
+      logoArtifactIds: ['logo-1'],
+      creativeContractVersion: 'product-breakout-v1',
+    })
   })
 
   it('requires a source video for repurposing mode', () => {
@@ -78,5 +92,22 @@ describe('social ad video planner', () => {
   it('does not allow premium output to bypass app approval', () => {
     expect(() => buildSocialAdVideoPlan({ request: { ...request(), approvalRequired: false }, campaign: campaign(), brandProfile: brandProfile() }))
       .toThrow('SOCIAL_AD_PREMIUM_APPROVAL_REQUIRED')
+  })
+
+  it('rejects missing, unapproved, rights-unverified and offering-mismatched product assets', () => {
+    expect(() => buildSocialAdVideoPlan({ request: { ...request(), productArtifactId: null }, campaign: campaign(), brandProfile: brandProfile() }))
+      .toThrow('SOCIAL_AD_PRODUCT_ASSET_REQUIRED')
+    const unapproved = brandProfile()
+    unapproved.visual.assets[1]!.approved = false
+    expect(() => buildSocialAdVideoPlan({ request: request(), campaign: campaign(), brandProfile: unapproved }))
+      .toThrow('SOCIAL_AD_PRODUCT_ASSET_NOT_APPROVED')
+    const unverified = brandProfile()
+    unverified.visual.assets[1]!.rightsVerified = false
+    expect(() => buildSocialAdVideoPlan({ request: request(), campaign: campaign(), brandProfile: unverified }))
+      .toThrow('SOCIAL_AD_PRODUCT_ASSET_RIGHTS_UNVERIFIED')
+    const mismatched = brandProfile()
+    mismatched.visual.assets[1]!.offeringIds = ['other-offering']
+    expect(() => buildSocialAdVideoPlan({ request: request(), campaign: campaign(), brandProfile: mismatched }))
+      .toThrow('SOCIAL_AD_PRODUCT_ASSET_OFFERING_MISMATCH')
   })
 })

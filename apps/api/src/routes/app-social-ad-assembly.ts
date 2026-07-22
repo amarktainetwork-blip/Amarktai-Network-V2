@@ -8,6 +8,7 @@ import {
 } from '@amarktai/core'
 import { prisma } from '@amarktai/db'
 import { authenticateAppKey } from './jobs.js'
+import type { SocialAdRouteAuthResolver } from './app-social-ad-video.js'
 
 function safeJson(value: string | null | undefined): Record<string, unknown> {
   if (!value?.trim()) return {}
@@ -37,7 +38,10 @@ async function findParent(appSlug: string, id: string) {
   return parent && safeJson(parent.metadataJson).socialAdVideo === true ? parent : null
 }
 
-export async function appSocialAdAssemblyRoutes(app: FastifyInstance): Promise<void> {
+export async function registerSocialAdAssemblyRoutes(
+  app: FastifyInstance,
+  options: { prefix: string; authenticate: SocialAdRouteAuthResolver },
+): Promise<void> {
   let queue: Queue | null = null
   const getQueue = () => {
     if (!queue) {
@@ -47,8 +51,8 @@ export async function appSocialAdAssemblyRoutes(app: FastifyInstance): Promise<v
     return queue
   }
 
-  app.post('/api/v1/social-ad-video/executions/:id/assemble', async (request, reply) => {
-    const auth = await authenticateAppKey(request.headers.authorization)
+  app.post(`${options.prefix}/social-ad-video/executions/:id/assemble`, async (request, reply) => {
+    const auth = await options.authenticate(request.headers.authorization, request)
     if (!auth.ok) {
       return reply.status(auth.statusCode).send({
         error: true,
@@ -224,5 +228,12 @@ export async function appSocialAdAssemblyRoutes(app: FastifyInstance): Promise<v
       phase: 'assembly_processing',
       executionAuthority: 'internal_local_ffmpeg',
     })
+  })
+}
+
+export async function appSocialAdAssemblyRoutes(app: FastifyInstance): Promise<void> {
+  return registerSocialAdAssemblyRoutes(app, {
+    prefix: '/api/v1',
+    authenticate: async (authorization) => authenticateAppKey(authorization),
   })
 }

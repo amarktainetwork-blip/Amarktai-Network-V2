@@ -128,10 +128,11 @@ export const MarketingSourceEvidenceSchema = z.object({
 
 export const BrandAssetReferenceSchema = z.object({
   artifactId: z.string().min(1).max(200),
-  role: z.enum(['primary_logo', 'secondary_logo', 'icon', 'product', 'campaign_reference', 'photography', 'video', 'audio']),
+  role: z.enum(['primary_logo', 'secondary_logo', 'icon', 'product', 'offering', 'campaign_reference', 'photography', 'video', 'audio']),
   approved: z.boolean().default(false),
   rightsVerified: z.boolean().default(false),
   sourceEvidenceIds: z.array(z.string().min(1)).min(1),
+  offeringIds: z.array(z.string().min(1).max(120)).max(100).default([]),
 }).strict()
 
 export const BrandProfileSchema = z.object({
@@ -244,6 +245,8 @@ export const SocialAdVideoRequestSchema = z.object({
   objective: z.string().min(10).max(5000),
   audienceId: z.string().min(1).max(120),
   offeringId: z.string().min(1).max(120).nullable().default(null),
+  productArtifactId: z.string().min(1).max(200).nullable().default(null),
+  logoArtifactIds: z.array(z.string().min(1).max(200)).max(10).default([]),
   callToAction: z.string().min(1).max(500),
   sourceArtifactIds: z.array(z.string().min(1).max(200)).max(200).default([]),
   aspectRatios: z.array(z.enum(SOCIAL_VIDEO_ASPECT_RATIOS)).min(1),

@@ -25,6 +25,7 @@ export function getReleaseCandidateCapabilityKeys(): CapabilityKey[] {
  */
 export function getDashboardAppSlug(capability: CapabilityKey): string {
   const mode = CAPABILITY_BY_KEY[capability].studioMode
+  if (capability === 'social_content_generation' || capability === 'campaign_generation' || capability === 'brand_scrape') return 'dashboard-marketing'
   if (mode === 'longvideo') return 'dashboard-long-form'
   if (mode === 'image') return 'dashboard-image'
   if (mode === 'music' || mode === 'song_generation') return 'dashboard-music'
