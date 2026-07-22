@@ -109,16 +109,28 @@ function isVisionRecord(record: Record<string, unknown>, modelId: string, task: 
 
 function transportForTask(task: string): ProviderDiscoveredModel['transportProfile'] {
   if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'openai_chat_sse'
-  if (['text-to-image', 'image-to-image', 'text-to-speech'].includes(task)) return 'native_inference_binary'
+  if (task === 'image-to-image') return 'openai_images_edits_multipart'
+  if (['text-to-image', 'text-to-speech'].includes(task)) return 'native_inference_binary'
   if (task === 'text-to-video') return 'native_inference_async_webhook'
   return 'native_inference_json'
 }
 
 function endpointFamilyForTask(task: string): string {
   if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'deepinfra_openai_v1/openai_chat'
+  if (task === 'image-to-image') return 'deepinfra_openai_v1/images_edits'
   if (task === 'embeddings' || task === 'feature-extraction' || task === 'sentence-similarity') return 'deepinfra_openai_v1/embeddings'
   if (task === 'reranker' || task === 'rerank') return 'deepinfra_native_v1/rerank/native_inference'
   return 'deepinfra_native_v1/native_inference'
+}
+
+function modalitiesForTask(task: string, vision: boolean): { modalitiesIn?: string[]; modalitiesOut?: string[] } {
+  if (task === 'image-to-image') return { modalitiesIn: ['text', 'image'], modalitiesOut: ['image'] }
+  if (vision) return { modalitiesIn: ['text', 'image'], modalitiesOut: ['text'] }
+  if (task === 'text-to-image') return { modalitiesIn: ['text'], modalitiesOut: ['image'] }
+  if (task === 'text-to-video') return { modalitiesIn: ['text'], modalitiesOut: ['video'] }
+  if (task === 'text-to-speech' || task === 'text-to-music') return { modalitiesIn: ['text'], modalitiesOut: ['audio'] }
+  if (task === 'automatic-speech-recognition' || task === 'audio-classification' || task === 'voice-activity-detection') return { modalitiesIn: ['audio'], modalitiesOut: ['json'] }
+  return {}
 }
 
 function structuredModes(record: Record<string, unknown>): string[] {
@@ -182,8 +194,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
   const modes = structuredModes(record)
   const parameters = Array.isArray(record.supported_parameters) ? record.supported_parameters : []
   const isReranker = task === 'reranker' || task === 'rerank'
-  const modalitiesIn = vision ? ['text', 'image'] : undefined
-  const modalitiesOut = vision ? ['text'] : undefined
+  const { modalitiesIn, modalitiesOut } = modalitiesForTask(task, vision)
   return modelFromProviderRecord({
     provider: 'deepinfra',
     modelId,
@@ -214,7 +225,7 @@ function toModel(record: Record<string, unknown>, timestamp: string): ProviderDi
       category: task,
       capabilities,
       modalitiesIn: modalitiesIn ?? [],
-      modalitiesOut: modalitiesOut ?? (task === 'text-to-image' ? ['image'] : ['json']),
+      modalitiesOut: modalitiesOut ?? ['json'],
       structuredOutputModes: modes.length ? modes : ['none'],
       supportedParameters: isReranker ? [...new Set([...parameters, 'queries'])] : parameters,
       endpointFamily: endpointFamilyForTask(task),
