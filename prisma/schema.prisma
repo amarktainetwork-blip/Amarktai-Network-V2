@@ -551,7 +551,7 @@ model AppAiProfile {
   suggestiveMode Boolean @default(false) @map("suggestive_mode")
 
   // Capabilities (JSON array of enabled capability strings)
-  enabledCapabilities String @default("[]") @map("enabled_capabilities")
+  enabledCapabilities String @default("[]") @map("enabled_capabilities") @db.LongText
   enabledAgents       String @default("[]") @map("enabled_agents")
 
   // Routing strategy

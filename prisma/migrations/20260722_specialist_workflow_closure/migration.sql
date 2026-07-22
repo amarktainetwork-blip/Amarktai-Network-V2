@@ -21,3 +21,6 @@ CREATE TABLE `document_ingest_chunks` (
   INDEX `document_ingest_chunks_citation_id_idx` (`citation_id`),
   PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE `app_ai_profiles`
+  MODIFY `enabled_capabilities` LONGTEXT NOT NULL;
