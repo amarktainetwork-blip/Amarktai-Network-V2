@@ -83,11 +83,13 @@ describe('internal atomic executor truth', () => {
     const dispatcher = source('apps/worker/src/providers/durable-provider-fallback.ts')
     const handler = source('apps/worker/src/handlers/voice-audio-handlers.ts')
     const fixture = source('scripts/lib/proof-voice-audio-release-fixture.mjs')
+    const runner = source('scripts/proof-release-fixture.mjs')
     expect(dispatcher).toContain("payload.capability === 'audio_to_audio'")
     expect(dispatcher).toContain('return handleAudioToAudioJob(payload)')
     expect(handler).toContain("evidenceSource: 'internal_ffmpeg'")
     expect(handler).toContain("provider: 'internal'")
-    expect(fixture).toContain('VOICE_AUDIO_RELEASE_FIXTURE')
+    expect(fixture).toContain("operation: 'normalize'")
+    expect(runner).toContain('VOICE_AUDIO_RELEASE_FIXTURE=PASS')
   })
 
   it('accepts only complete local evidence and rejects a false live-provider claim', () => {
