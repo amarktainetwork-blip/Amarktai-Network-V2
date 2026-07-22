@@ -65,6 +65,22 @@
     "./governed-tts": {
       "types": "./dist/governed-tts.d.ts",
       "import": "./dist/governed-tts.js"
+    },
+    "./source-audio-validation": {
+      "types": "./dist/source-audio-validation.d.ts",
+      "import": "./dist/source-audio-validation.js"
+    },
+    "./voice-clone-contracts": {
+      "types": "./dist/voice-clone-contracts.d.ts",
+      "import": "./dist/voice-clone-contracts.js"
+    },
+    "./voice-conversion-contracts": {
+      "types": "./dist/voice-conversion-contracts.d.ts",
+      "import": "./dist/voice-conversion-contracts.js"
+    },
+    "./audio-to-audio-contracts": {
+      "types": "./dist/audio-to-audio-contracts.d.ts",
+      "import": "./dist/audio-to-audio-contracts.js"
     }
   },
   "scripts": {
