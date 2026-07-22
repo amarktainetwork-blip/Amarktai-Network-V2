@@ -16,6 +16,11 @@ export {
   type DeepInfraVisionImage,
   type DeepInfraVisionRequest,
 } from './deepinfra-client.js'
+export {
+  deepinfraEditImage,
+  type DeepInfraImageEditRequest,
+  type DeepInfraImageEditResponse,
+} from './deepinfra-image-client.js'
 
 // MiMo remains approved as coding-tools-only metadata. Do not export a
 // callable backend runtime client from this provider package.
