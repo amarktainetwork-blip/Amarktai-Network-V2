@@ -107,7 +107,7 @@ function inspectWavDuration(buffer: Buffer): number {
   while (offset + 8 <= buffer.length) {
     const id = buffer.subarray(offset, offset + 4).toString('ascii')
     const size = buffer.readUInt32LE(offset + 4)
-    if (id === 'fmt ' && size >= 16 && offset + 16 <= buffer.length) byteRate = buffer.readUInt32LE(offset + 12)
+    if (id === 'fmt ' && size >= 16 && offset + 20 <= buffer.length) byteRate = buffer.readUInt32LE(offset + 16)
     if (id === 'data') { dataSize = Math.min(size, Math.max(0, buffer.length - offset - 8)); break }
     offset += 8 + size + (size % 2)
   }
