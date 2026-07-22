@@ -1,9 +1,9 @@
 /**
- * Voice Audio Routes — feature registration module.
+ * Voice Audio Routes — canonical Fastify feature plugin.
  *
- * This module registers all voice and audio routes into a Fastify instance.
- * It is structured for later integration into the main server with a small
- * explicit import and registration call.
+ * Registers governed voice-clone, voice-conversion, and executable
+ * audio-to-audio routes on the main API server. Registration is awaited so
+ * startup cannot report ready before the complete route surface exists.
  */
 
 import type { FastifyInstance } from 'fastify'
@@ -11,15 +11,11 @@ import { registerVoiceCloneRoutes } from './voice-clone.js'
 import { registerVoiceConversionRoutes } from './voice-conversion.js'
 import { registerAudioToAudioRoutes } from './audio-to-audio.js'
 
-// ── Feature Registration ──────────────────────────────────────────────────────
-
-export function registerVoiceAudioRoutes(app: FastifyInstance): void {
-  registerVoiceCloneRoutes(app)
-  registerVoiceConversionRoutes(app)
-  registerAudioToAudioRoutes(app)
+export async function registerVoiceAudioRoutes(app: FastifyInstance): Promise<void> {
+  await registerVoiceCloneRoutes(app)
+  await registerVoiceConversionRoutes(app)
+  await registerAudioToAudioRoutes(app)
 }
-
-// ── Individual Route Registration ─────────────────────────────────────────────
 
 export { registerVoiceCloneRoutes } from './voice-clone.js'
 export { registerVoiceConversionRoutes } from './voice-conversion.js'
