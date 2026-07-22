@@ -1,56 +1,64 @@
 /**
- * Audio-to-Audio Routes — isolated API routes for audio transformation operations.
+ * Audio-to-Audio Routes — governed durable audio transformations.
  *
- * Uses canonical queue configuration, deterministic trace idempotency,
- * and real FFmpeg execution in the worker. Internal operations (trim, resample,
- * channel_convert, loudness_normalize, normalize) are genuinely executable.
+ * Executable internal operations use the canonical job queue and the central
+ * worker. Unsupported operations fail closed before queue submission and are
+ * never represented as fixture or live-provider proof.
  */
 
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
 import {
   DEFAULT_JOB_OPTIONS,
   QUEUE_NAMES,
+  durableIdempotencyTrace,
   type JobPayload,
   type CapabilityKey,
 } from '@amarktai/core'
+import { hasVoiceAvatarBlockedOverrides } from '@amarktai/core/voice-avatar-platform'
 import {
-  hasVoiceAvatarBlockedOverrides,
-} from '@amarktai/core/voice-avatar-platform'
-import { createAudioToAudioDomainService } from '@amarktai/core/audio-to-audio-contracts'
+  createAudioToAudioDomainService,
+  type AudioToAudioOperation,
+} from '@amarktai/core/audio-to-audio-contracts'
 import { authenticateAppKey } from './jobs.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AuthenticatedRequest extends FastifyRequest {
   auth?: Awaited<ReturnType<typeof authenticateAppKey>>
 }
 
-// ── Canonical Idempotency ─────────────────────────────────────────────────────
-
-function durableIdempotencyTrace(appSlug: string, capability: string, idempotencyKey: string): string {
-  return createHash('sha256').update(`${appSlug}:${capability}:${idempotencyKey}`).digest('hex')
-}
+const INTERNAL_FFMPEG_OPERATIONS = new Set<AudioToAudioOperation>([
+  'trim',
+  'resample',
+  'channel_convert',
+  'loudness_normalize',
+  'normalize',
+])
 
 async function findIdempotentJob(appSlug: string, capability: string, traceId: string) {
   return prisma.job.findFirst({
-    where: {
-      appSlug,
-      capability,
-      traceId,
-      status: { in: ['queued', 'processing', 'completed'] },
-    },
+    where: { appSlug, capability, traceId },
     orderBy: { createdAt: 'desc' },
   })
 }
 
-// ── Route Registration ────────────────────────────────────────────────────────
+function statusView(status: string): string {
+  if (status === 'completed' || status === 'failed' || status === 'cancelled') return status
+  return status === 'queued' ? 'accepted' : 'processing'
+}
+
+function safeMetadata(value: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
 
 export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<void> {
-  // Canonical queue: reuse Fastify Redis connection, one lazy instance
   let queue: Queue | null = null
   function getQueue(): Queue {
     if (!queue) {
@@ -60,16 +68,12 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
     return queue
   }
 
-  // Submit audio-to-audio operation
   app.post('/api/v1/audio-to-audio', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
-      // 1. Authenticate
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
       const appSlug = auth.app!.slug
 
-      // 2. Compliance gate: block provider/model overrides
       const body = request.body as Record<string, unknown>
       const blockedField = hasVoiceAvatarBlockedOverrides(body)
         || hasVoiceAvatarBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
@@ -80,9 +84,10 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
         })
       }
 
-      // 3. Resolve grant
       const grantResolution = await resolveAppCapabilityGrantSnapshot(
-        appSlug, 'audio_to_audio' as CapabilityKey, auth.allowedCapabilities ?? [],
+        appSlug,
+        'audio_to_audio' as CapabilityKey,
+        auth.allowedCapabilities ?? [],
       )
       if (!grantResolution || !grantResolution.grant.enabled) {
         return reply.status(403).send({ error: 'App does not have audio_to_audio capability grant', code: 'CAPABILITY_GRANT_DENIED' })
@@ -91,77 +96,130 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
         return reply.status(403).send({ error: 'App capability grant denies artifact read/write for audio_to_audio', code: 'GRANT_DENIED' })
       }
 
-      // 4. Validate request
       const domainService = createAudioToAudioDomainService()
       const validation = domainService.validateRequest(request.body)
       if (!validation.success) {
         return reply.status(400).send({ error: validation.error, code: 'VALIDATION_FAILED', issues: validation.issues })
       }
-      const a2aRequest = validation.data!
-
-      // 5. Deterministic trace idempotency
-      const idempotencyKey = a2aRequest.idempotencyKey ?? `auto_${randomUUID()}`
+      const audioRequest = validation.data!
+      const idempotencyKey = audioRequest.idempotencyKey ?? `auto_${randomUUID()}`
       const traceId = durableIdempotencyTrace(appSlug, 'audio_to_audio', idempotencyKey)
       const existing = await findIdempotentJob(appSlug, 'audio_to_audio', traceId)
       if (existing) {
+        const existingMetadata = safeMetadata(existing.metadataJson)
         return reply.status(200).send({
-          status: existing.status,
+          status: statusView(existing.status),
           audioToAudioId: existing.id,
-          sourceAudioArtifactId: a2aRequest.sourceAudioArtifactId,
-          operation: a2aRequest.operation,
-          provider: existing.provider ?? undefined,
-          evidence: { evidenceSource: 'internal_ffmpeg', liveProviderProof: false, operation: a2aRequest.operation, idempotent: true },
+          sourceAudioArtifactId: existingMetadata.sourceArtifactId ?? audioRequest.sourceAudioArtifactId,
+          operation: existingMetadata.operation ?? audioRequest.operation,
+          provider: existing.provider ?? (existing.status === 'completed' ? 'internal' : undefined),
+          outputArtifactId: existing.artifactId ?? undefined,
+          evidence: {
+            evidenceSource: existing.status === 'failed' ? 'executor_unavailable' : 'internal_ffmpeg',
+            liveProviderProof: false,
+            operation: existingMetadata.operation ?? audioRequest.operation,
+            idempotent: true,
+          },
           createdAt: existing.createdAt.toISOString(),
           completedAt: existing.completedAt?.toISOString(),
+          error: existing.error ?? undefined,
         })
       }
 
-      // 6. Load source artifact with ownership check
       const sourceArtifact = await prisma.artifact.findFirst({
-        where: { id: a2aRequest.sourceAudioArtifactId, appSlug },
+        where: { id: audioRequest.sourceAudioArtifactId, appSlug, status: 'completed' },
       })
       if (!sourceArtifact) {
         return reply.status(404).send({ error: 'Source audio artifact not found or not accessible', code: 'ARTIFACT_NOT_FOUND' })
       }
       if (sourceArtifact.type !== 'audio' && !sourceArtifact.mimeType.startsWith('audio/')) {
-        return reply.status(400).send({ error: 'Source artifact must be an audio artifact', code: 'INVALID_ARTIFACT_TYPE' })
+        return reply.status(400).send({ error: 'Source artifact must be a completed audio artifact', code: 'INVALID_ARTIFACT_TYPE' })
       }
 
-      // 7. Create durable Job record with deterministic traceId
+      const now = new Date()
+      const immutableMetadata = {
+        ...audioRequest.metadata,
+        executionProfile: 'external_app',
+        idempotencyKey,
+        sourceArtifactId: audioRequest.sourceAudioArtifactId,
+        operation: audioRequest.operation,
+        parameters: audioRequest.parameters,
+        outputFormat: audioRequest.outputFormat,
+        intendedUse: audioRequest.intendedUse,
+        maxCredits: audioRequest.maxCredits ?? null,
+        appGrantSnapshot: grantResolution.grant,
+        appGrantSnapshotSource: grantResolution.source,
+        appGrantSnapshotAt: now.toISOString(),
+      }
+
+      if (!INTERNAL_FFMPEG_OPERATIONS.has(audioRequest.operation)) {
+        const blocker = audioRequest.operation === 'voice_conversion'
+          ? 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE'
+          : 'AUDIO_OPERATION_EXECUTOR_UNAVAILABLE'
+        const message = audioRequest.operation === 'voice_conversion'
+          ? 'No production voice-conversion provider route is currently configured.'
+          : `No production executor is currently registered for audio operation '${audioRequest.operation}'.`
+        const blocked = await prisma.job.create({
+          data: {
+            appSlug,
+            capability: 'audio_to_audio',
+            prompt: `Audio ${audioRequest.operation} from artifact ${audioRequest.sourceAudioArtifactId}`,
+            inputJson: JSON.stringify(audioRequest),
+            metadataJson: JSON.stringify({
+              ...immutableMetadata,
+              executionEvidence: {
+                evidenceSource: 'executor_unavailable',
+                liveProviderProof: false,
+                blocker,
+                operation: audioRequest.operation,
+              },
+            }),
+            traceId,
+            status: 'failed',
+            provider: null,
+            model: null,
+            error: `${blocker}: ${message}`,
+            completedAt: now,
+          },
+        })
+        return reply.status(422).send({
+          status: 'failed',
+          audioToAudioId: blocked.id,
+          sourceAudioArtifactId: audioRequest.sourceAudioArtifactId,
+          operation: audioRequest.operation,
+          evidence: { evidenceSource: 'executor_unavailable', liveProviderProof: false, blocker, operation: audioRequest.operation },
+          error: blocked.error,
+          errorCode: blocker,
+          createdAt: blocked.createdAt.toISOString(),
+          completedAt: blocked.completedAt?.toISOString(),
+        })
+      }
+
       const job = await prisma.job.create({
         data: {
           appSlug,
           capability: 'audio_to_audio',
-          prompt: `Audio ${a2aRequest.operation} from artifact ${a2aRequest.sourceAudioArtifactId}`,
-          inputJson: JSON.stringify(a2aRequest),
-          metadataJson: JSON.stringify({
-            idempotencyKey,
-            sourceArtifactId: a2aRequest.sourceAudioArtifactId,
-            operation: a2aRequest.operation,
-            parameters: a2aRequest.parameters,
-            outputFormat: a2aRequest.outputFormat,
-            grantSnapshot: grantResolution.grant,
-            grantSource: grantResolution.source,
-          }),
+          prompt: `Audio ${audioRequest.operation} from artifact ${audioRequest.sourceAudioArtifactId}`,
+          inputJson: JSON.stringify(audioRequest),
+          metadataJson: JSON.stringify(immutableMetadata),
           traceId,
           status: 'queued',
         },
       })
 
-      // 8. Submit to canonical BullMQ queue
       const payload: JobPayload = {
         jobId: job.id,
         appSlug,
         capability: 'audio_to_audio',
         executionProfile: 'external_app',
-        prompt: `Audio ${a2aRequest.operation} from artifact ${a2aRequest.sourceAudioArtifactId}`,
+        prompt: job.prompt,
         input: {
-          sourceAudioArtifactId: a2aRequest.sourceAudioArtifactId,
-          operation: a2aRequest.operation,
-          parameters: a2aRequest.parameters,
-          outputFormat: a2aRequest.outputFormat,
+          sourceAudioArtifactId: audioRequest.sourceAudioArtifactId,
+          operation: audioRequest.operation,
+          parameters: audioRequest.parameters,
+          outputFormat: audioRequest.outputFormat,
         },
-        metadata: { idempotencyKey },
+        metadata: immutableMetadata,
         traceId,
         routingMode: 'balanced',
         appGrantSnapshot: grantResolution.grant,
@@ -169,22 +227,27 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
 
       try {
         await getQueue().add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: job.id })
-      } catch (err) {
         await prisma.job.update({
           where: { id: job.id },
-          data: { status: 'failed', error: 'Failed to enqueue job', completedAt: new Date() },
+          data: { queueJobId: job.id, queuedAt: new Date() },
         })
-        app.log.error({ err }, 'Failed to push audio_to_audio job to queue')
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to enqueue job'
+        await prisma.job.update({
+          where: { id: job.id },
+          data: { status: 'failed', error: message, completedAt: new Date() },
+        })
+        app.log.error({ error }, 'Failed to push audio_to_audio job to queue')
         return reply.status(500).send({ error: 'Failed to enqueue job', code: 'QUEUE_SUBMISSION_FAILED' })
       }
 
       return reply.status(202).send({
         status: 'accepted',
         audioToAudioId: job.id,
-        sourceAudioArtifactId: a2aRequest.sourceAudioArtifactId,
-        operation: a2aRequest.operation,
+        sourceAudioArtifactId: audioRequest.sourceAudioArtifactId,
+        operation: audioRequest.operation,
         provider: 'internal',
-        evidence: { evidenceSource: 'internal_ffmpeg', liveProviderProof: false, operation: a2aRequest.operation },
+        evidence: { evidenceSource: 'internal_ffmpeg', liveProviderProof: false, operation: audioRequest.operation },
         createdAt: job.createdAt.toISOString(),
       })
     } catch (error) {
@@ -193,27 +256,30 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
     }
   })
 
-  // Get audio-to-audio status
   app.get('/api/v1/audio-to-audio/:id', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
-      const appSlug = auth.app!.slug
       const { id } = request.params as { id: string }
-
-      const job = await prisma.job.findFirst({ where: { id, appSlug, capability: 'audio_to_audio' } })
+      const job = await prisma.job.findFirst({ where: { id, appSlug: auth.app!.slug, capability: 'audio_to_audio' } })
       if (!job) return reply.status(404).send({ error: 'Audio-to-audio execution not found', code: 'EXECUTION_NOT_FOUND' })
-
-      const inputMeta = JSON.parse(job.metadataJson || '{}')
+      const metadata = safeMetadata(job.metadataJson)
+      const executionEvidence = metadata.executionEvidence && typeof metadata.executionEvidence === 'object'
+        ? metadata.executionEvidence as Record<string, unknown>
+        : {}
       return reply.send({
-        status: job.status === 'completed' ? 'completed' : job.status === 'failed' ? 'failed' : job.status === 'cancelled' ? 'cancelled' : 'processing',
+        status: statusView(job.status),
         audioToAudioId: job.id,
-        sourceAudioArtifactId: inputMeta.sourceArtifactId ?? '',
-        operation: inputMeta.operation ?? 'normalize',
-        provider: job.provider ?? 'internal',
+        sourceAudioArtifactId: metadata.sourceArtifactId ?? '',
+        operation: metadata.operation ?? 'normalize',
+        provider: job.provider ?? (job.status === 'completed' ? 'internal' : undefined),
         outputArtifactId: job.artifactId ?? undefined,
-        evidence: { evidenceSource: 'internal_ffmpeg', liveProviderProof: false, operation: inputMeta.operation ?? 'normalize' },
+        evidence: {
+          evidenceSource: executionEvidence.evidenceSource ?? (job.status === 'failed' ? 'executor_unavailable' : 'internal_ffmpeg'),
+          liveProviderProof: false,
+          operation: metadata.operation ?? 'normalize',
+          blocker: executionEvidence.blocker,
+        },
         createdAt: job.createdAt.toISOString(),
         completedAt: job.completedAt?.toISOString(),
         error: job.error ?? undefined,
@@ -224,21 +290,16 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
     }
   })
 
-  // Cancel audio-to-audio
   app.post('/api/v1/audio-to-audio/:id/cancel', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
-      const appSlug = auth.app!.slug
       const { id } = request.params as { id: string }
-
       const result = await prisma.job.updateMany({
-        where: { id, appSlug, capability: 'audio_to_audio', status: { in: ['queued', 'processing'] } },
+        where: { id, appSlug: auth.app!.slug, capability: 'audio_to_audio', status: { in: ['queued', 'processing'] } },
         data: { status: 'cancelled', completedAt: new Date(), error: 'Cancelled by app' },
       })
       if (!result.count) return reply.status(409).send({ error: 'Audio-to-audio execution not found, already terminal, or belongs to another app', code: 'EXECUTION_NOT_CANCELLABLE' })
-
       return reply.send({ status: 'cancelled', audioToAudioId: id, message: 'Audio-to-audio operation cancelled' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Internal server error'
@@ -246,25 +307,24 @@ export async function registerAudioToAudioRoutes(app: FastifyInstance): Promise<
     }
   })
 
-  // Get audio-to-audio evidence
   app.get('/api/v1/audio-to-audio/:id/evidence', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
-      const appSlug = auth.app!.slug
       const { id } = request.params as { id: string }
-
-      const job = await prisma.job.findFirst({ where: { id, appSlug, capability: 'audio_to_audio' } })
+      const job = await prisma.job.findFirst({ where: { id, appSlug: auth.app!.slug, capability: 'audio_to_audio' } })
       if (!job) return reply.status(404).send({ error: 'Audio-to-audio execution not found', code: 'EXECUTION_NOT_FOUND' })
-
-      const inputMeta = JSON.parse(job.metadataJson || '{}')
+      const metadata = safeMetadata(job.metadataJson)
+      const executionEvidence = metadata.executionEvidence && typeof metadata.executionEvidence === 'object'
+        ? metadata.executionEvidence as Record<string, unknown>
+        : {}
       return reply.send({
         audioToAudioId: id,
         evidence: {
-          evidenceSource: 'internal_ffmpeg',
+          evidenceSource: executionEvidence.evidenceSource ?? (job.status === 'failed' ? 'executor_unavailable' : 'internal_ffmpeg'),
           liveProviderProof: false,
-          operation: inputMeta.operation ?? 'normalize',
+          operation: metadata.operation ?? 'normalize',
+          blocker: executionEvidence.blocker,
           status: job.status,
           outputArtifactId: job.artifactId ?? undefined,
         },
