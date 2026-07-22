@@ -38,6 +38,8 @@ describe('product-breakout platform closure', () => {
     expect(route).toContain('SOCIAL_AD_EXECUTION_AUTHORITY_FORBIDDEN')
     expect(prismaSchema).toMatch(/model Campaign[\s\S]+metadata\s+String\s+@default\("\{\}"\) @db\.LongText/)
     expect(campaignMetadataMigration).toContain('ALTER TABLE `campaigns` MODIFY `metadata` LONGTEXT NOT NULL')
+    expect(prismaSchema).toMatch(/model CampaignItem[\s\S]+metadata\s+String\s+@default\("\{\}"\) @db\.LongText/)
+    expect(campaignMetadataMigration).toContain('ALTER TABLE `campaign_items` MODIFY `metadata` LONGTEXT NOT NULL')
   })
 
   it('persists measured, model-evaluated and human-review-required evidence', () => {

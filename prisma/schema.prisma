@@ -1639,7 +1639,7 @@ model CampaignItem {
   approvalStatus String    @default("draft") @map("approval_status")
   approvalNotes  String    @default("") @map("approval_notes")
   /// JSON metadata blob
-  metadata       String    @default("{}")
+  metadata       String    @default("{}") @db.LongText
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
