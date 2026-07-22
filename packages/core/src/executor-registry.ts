@@ -172,6 +172,14 @@ const EMBEDDINGS = profile(
 )
 const RERANK = profile(['rerank', 'reranker'], ['rerank', 'reranker', 'reranking'], ['native_inference_json'], ['rerank', 'native_inference'], ['text'], 'json')
 const IMAGE = profile(['image', 'text-to-image', 'image-generation'], ['image', 'text-to-image'], ['native_inference_json', 'native_inference_binary'], ['image_generation', 'native_inference'], ['text'], 'image')
+const DEEPINFRA_IMAGE_TRANSFORM = profile(
+  ['image-to-image'],
+  ['image-to-image'],
+  ['openai_images_edits_multipart'],
+  ['images_edits'],
+  ['text', 'image'],
+  'image',
+)
 const TOGETHER_TTS = profile(['text-to-speech', 'tts', 'audio'], ['text-to-speech', 'tts', 'audio'], ['openai_audio_speech_binary'], ['audio_speech'], ['text'], 'audio')
 const TOGETHER_STT = profile(['automatic-speech-recognition', 'transcription', 'stt', 'audio'], ['transcription', 'stt', 'audio'], ['openai_audio_transcription_multipart'], ['audio_transcriptions'], ['audio'], 'text')
 const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>
@@ -194,6 +202,8 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
   ),
+  registration('deepinfra.task-inference', 'deepinfra', 'image_edit', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
+  registration('deepinfra.task-inference', 'deepinfra', 'image_to_image', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT, 'queued', 'semantic_text_fallback'),
   ),
