@@ -19,8 +19,11 @@ async function forward(request, { params }) {
     cache: 'no-store',
   }
   if (!['GET', 'HEAD'].includes(request.method)) {
-    headers['Content-Type'] = 'application/json'
-    init.body = await request.text()
+    const body = await request.text()
+    if (body) {
+      headers['Content-Type'] = request.headers.get('content-type') ?? 'application/json'
+      init.body = body
+    }
   }
   try {
     const response = await fetch(upstream, init)

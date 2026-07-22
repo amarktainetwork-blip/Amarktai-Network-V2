@@ -10,6 +10,7 @@ const assembly = read('apps/worker/src/social-ad-assembly.ts')
 const fixture = read('scripts/lib/proof-social-ad-release-fixture.mjs')
 const runner = read('scripts/proof-release-fixture.mjs')
 const dashboard = read('app/dashboard/social-ad/page.js')
+const dashboardProxy = read('app/api/admin/marketing/[...path]/route.js')
 const openapi = read('docs/app-api-openapi.yaml')
 const sdk = read('packages/sdk/src/index.ts')
 const prismaSchema = read('prisma/schema.prisma')
@@ -66,6 +67,8 @@ describe('product-breakout platform closure', () => {
     expect(dashboard).toContain('Final approve delivery pack')
     expect(dashboard).toContain('Download ${artifact.label}')
     expect(dashboard).not.toMatch(/label="Provider"|label="Model"|name="provider"|name="model"/)
+    expect(dashboardProxy).toContain('if (body)')
+    expect(dashboardProxy).toContain("request.headers.get('content-type') ?? 'application/json'")
   })
 
   it('publishes idempotent provider-neutral SDK and OpenAPI operations', () => {
