@@ -50,6 +50,10 @@
       "types": "./dist/durable-workflows.d.ts",
       "import": "./dist/durable-workflows.js"
     },
+    "./effective-runtime-truth": {
+      "types": "./dist/effective-runtime-truth.d.ts",
+      "import": "./dist/effective-runtime-truth.js"
+    },
     "./voice-avatar-platform": {
       "types": "./dist/voice-avatar-platform.d.ts",
       "import": "./dist/voice-avatar-platform.js"
