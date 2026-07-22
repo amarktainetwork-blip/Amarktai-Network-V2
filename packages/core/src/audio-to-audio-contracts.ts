@@ -1,55 +1,28 @@
-/**
- * Audio-to-Audio — canonical contracts and domain service.
- *
- * Implements broader audio transformation operations including
- * voice conversion, denoise, normalize, trim, resample, and more.
- * Safe deterministic FFmpeg operations may be implemented internally.
- */
-
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import {
-  VOICE_AVATAR_USE_SCOPES,
-  hasVoiceAvatarBlockedOverrides,
-} from './voice-avatar-platform.js'
-import {
-  validateSourceAudio,
-  type SourceAudioValidationResult,
-} from './source-audio-validation.js'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
+import { VOICE_AVATAR_USE_SCOPES, hasVoiceAvatarBlockedOverrides } from './voice-avatar-platform.js'
+import { validateSourceAudio, type SourceAudioValidationResult } from './source-audio-validation.js'
 
 export const AUDIO_TO_AUDIO_OPERATIONS = [
-  'voice_conversion',
-  'denoise',
-  'normalize',
-  'trim',
-  'resample',
-  'channel_convert',
-  'loudness_normalize',
+  'voice_conversion', 'denoise', 'normalize', 'trim', 'resample', 'channel_convert', 'loudness_normalize',
 ] as const
-
 export type AudioToAudioOperation = typeof AUDIO_TO_AUDIO_OPERATIONS[number]
 
+export const INTERNAL_FFMPEG_AUDIO_OPERATIONS = [
+  'normalize', 'trim', 'resample', 'channel_convert', 'loudness_normalize',
+] as const satisfies readonly AudioToAudioOperation[]
+
 export const AUDIO_TO_AUDIO_BLOCKED_FIELDS = [
-  'provider',
-  'model',
-  'executorId',
-  'endpoint',
-  'apiKey',
-  'rawProviderPayload',
+  'provider', 'model', 'executorId', 'endpoint', 'apiKey', 'rawProviderPayload',
 ] as const
 
 export const AUDIO_TO_AUDIO_STATUSES = [
-  'accepted',
-  'queued',
-  'processing',
-  'completed',
-  'rejected',
-  'failed',
-  'cancelled',
+  'accepted', 'queued', 'processing', 'completed', 'rejected', 'failed', 'cancelled',
 ] as const
 
-// ── Request Schema ────────────────────────────────────────────────────────────
+export const AUDIO_TO_AUDIO_EVIDENCE_SOURCES = [
+  'live_provider', 'local_fixture', 'cached', 'internal_ffmpeg', 'platform_policy', 'executor_unavailable',
+] as const
 
 export const AudioToAudioRequestSchema = z.object({
   sourceAudioArtifactId: z.string().uuid(),
@@ -65,8 +38,6 @@ export const AudioToAudioRequestSchema = z.object({
 
 export type AudioToAudioRequest = z.infer<typeof AudioToAudioRequestSchema>
 
-// ── Result Schema ─────────────────────────────────────────────────────────────
-
 export const AudioToAudioResultSchema = z.object({
   status: z.enum(AUDIO_TO_AUDIO_STATUSES),
   audioToAudioId: z.string().uuid().optional(),
@@ -76,20 +47,10 @@ export const AudioToAudioResultSchema = z.object({
   model: z.string().optional(),
   providerResourceRef: z.string().optional(),
   outputArtifactId: z.string().uuid().optional(),
-  usage: z.object({
-    inputTokens: z.number().int().nonnegative().optional(),
-    outputTokens: z.number().int().nonnegative().optional(),
-    totalTokens: z.number().int().nonnegative().optional(),
-    providerReportedCost: z.number().nonnegative().optional(),
-    currency: z.string().optional(),
-  }).optional(),
-  cost: z.object({
-    estimatedCost: z.number().nonnegative().optional(),
-    currency: z.string().optional(),
-    source: z.enum(['provider', 'estimated', 'fixture']).optional(),
-  }).optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
+  cost: z.record(z.string(), z.unknown()).optional(),
   evidence: z.object({
-    evidenceSource: z.enum(['live_provider', 'local_fixture', 'cached', 'internal_ffmpeg']),
+    evidenceSource: z.enum(AUDIO_TO_AUDIO_EVIDENCE_SOURCES),
     liveProviderProof: z.boolean(),
     providerSelected: z.string().optional(),
     modelSelected: z.string().optional(),
@@ -98,7 +59,9 @@ export const AudioToAudioResultSchema = z.object({
     operation: z.string(),
     parameters: z.record(z.string(), z.unknown()).optional(),
     outputValidation: z.record(z.string(), z.unknown()).optional(),
-  }),
+    blocker: z.string().optional(),
+    idempotent: z.boolean().optional(),
+  }).passthrough(),
   error: z.string().optional(),
   errorCode: z.string().optional(),
   createdAt: z.string().datetime().optional(),
@@ -107,12 +70,9 @@ export const AudioToAudioResultSchema = z.object({
 
 export type AudioToAudioResult = z.infer<typeof AudioToAudioResultSchema>
 
-// ── Provider Adapter Interface ────────────────────────────────────────────────
-
 export interface AudioToAudioProviderAdapter {
   readonly provider: string
   readonly supportsOperations: readonly AudioToAudioOperation[]
-
   submitOperation(request: {
     sourceAudioBuffer: Buffer
     sourceMimeType: string
@@ -120,7 +80,6 @@ export interface AudioToAudioProviderAdapter {
     parameters: Record<string, unknown>
     outputFormat: string
   }): Promise<AudioToAudioProviderResult>
-
   pollOperation(providerJobRef: string): Promise<AudioToAudioProviderPollResult>
 }
 
@@ -143,8 +102,6 @@ export interface AudioToAudioProviderPollResult {
   errorCode?: string
 }
 
-// ── Domain Service ────────────────────────────────────────────────────────────
-
 export interface AudioToAudioDomainService {
   validateRequest(request: unknown): { success: boolean; data?: AudioToAudioRequest; error?: string; issues?: Array<{ path: string; message: string }> }
   evaluateEligibility(input: {
@@ -161,14 +118,14 @@ export interface AudioToAudioDomainService {
   }): Promise<AudioToAudioResult>
 }
 
-// ── Implementation ────────────────────────────────────────────────────────────
+function validationFailure(error: z.ZodError) {
+  const issues = error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }))
+  return { success: false as const, error: `Invalid audio_to_audio request: ${issues.map((issue) => `${issue.path || 'input'} ${issue.message}`).join('; ')}`, issues }
+}
 
-export function createAudioToAudioDomainService(
-  providerAdapter?: AudioToAudioProviderAdapter,
-): AudioToAudioDomainService {
+export function createAudioToAudioDomainService(providerAdapter?: AudioToAudioProviderAdapter): AudioToAudioDomainService {
   return {
-    validateRequest(request: unknown) {
-      // Check for blocked provider/model fields
+    validateRequest(request) {
       const blockedField = hasVoiceAvatarBlockedOverrides(request)
       if (blockedField) {
         return {
@@ -177,259 +134,136 @@ export function createAudioToAudioDomainService(
           issues: [{ path: blockedField, message: 'Provider and model selection are Network-owned' }],
         }
       }
-
       const parsed = AudioToAudioRequestSchema.safeParse(request)
-      if (!parsed.success) {
-        const issues = parsed.error.issues.map((issue) => ({
-          path: issue.path.join('.'),
-          message: issue.message,
-        }))
-        return {
-          success: false,
-          error: `Invalid audio_to_audio request: ${issues.map((i) => `${i.path || 'input'} ${i.message}`).join('; ')}`,
-          issues,
-        }
-      }
-
-      return { success: true, data: parsed.data }
+      return parsed.success ? { success: true, data: parsed.data } : validationFailure(parsed.error)
     },
 
-    evaluateEligibility(input) {
-      const { request, sourceAudioValidation } = input
+    evaluateEligibility({ request, sourceAudioValidation }) {
       const reasons: string[] = []
-
-      // Check source audio validation
-      if (!sourceAudioValidation.valid) {
-        reasons.push(`Source audio validation failed: ${sourceAudioValidation.errorMessage}`)
-      }
-
-      // Check if operation is supported
-      if (!(AUDIO_TO_AUDIO_OPERATIONS as readonly string[]).includes(request.operation)) {
-        reasons.push(`Operation '${request.operation}' is not supported`)
-      }
-
-      // Check if provider adapter supports the operation
+      if (!sourceAudioValidation.valid) reasons.push(`Source audio validation failed: ${sourceAudioValidation.errorMessage}`)
+      if (!AUDIO_TO_AUDIO_OPERATIONS.includes(request.operation)) reasons.push(`Operation '${request.operation}' is not supported`)
       if (providerAdapter && !providerAdapter.supportsOperations.includes(request.operation)) {
         reasons.push(`Provider does not support operation '${request.operation}'`)
       }
-
-      return {
-        eligible: reasons.length === 0,
-        reasons,
-      }
+      return { eligible: reasons.length === 0, reasons }
     },
 
-    async executeOperation(input) {
-      const { appSlug, request, sourceAudioBuffer, sourceMimeType } = input
+    async executeOperation({ appSlug, request, sourceAudioBuffer, sourceMimeType }) {
       const now = new Date().toISOString()
-
-      // Validate source audio
       const sourceValidation = validateSourceAudio({
         artifactId: request.sourceAudioArtifactId,
         appSlug,
         buffer: sourceAudioBuffer,
         declaredMimeType: sourceMimeType,
       })
-
       if (!sourceValidation.valid) {
         return {
-          status: 'rejected',
-          sourceAudioArtifactId: request.sourceAudioArtifactId,
+          status: 'rejected', sourceAudioArtifactId: request.sourceAudioArtifactId,
           operation: request.operation,
-          evidence: {
-            evidenceSource: 'local_fixture',
-            liveProviderProof: false,
-            operation: request.operation,
-          },
-          error: sourceValidation.errorMessage,
-          errorCode: sourceValidation.errorCode,
-          createdAt: now,
+          evidence: { evidenceSource: 'platform_policy', liveProviderProof: false, operation: request.operation },
+          error: sourceValidation.errorMessage, errorCode: sourceValidation.errorCode, createdAt: now,
         }
       }
-
-      // Evaluate eligibility
-      const eligibility = this.evaluateEligibility({
-        appSlug,
-        request,
-        sourceAudioValidation: sourceValidation,
-      })
-
+      const eligibility = this.evaluateEligibility({ appSlug, request, sourceAudioValidation: sourceValidation })
       if (!eligibility.eligible) {
         return {
-          status: 'rejected',
-          sourceAudioArtifactId: request.sourceAudioArtifactId,
+          status: 'rejected', sourceAudioArtifactId: request.sourceAudioArtifactId,
           operation: request.operation,
           evidence: {
-            evidenceSource: 'local_fixture',
-            liveProviderProof: false,
-            operation: request.operation,
-            parameters: request.parameters,
+            evidenceSource: 'platform_policy', liveProviderProof: false,
+            operation: request.operation, parameters: request.parameters,
           },
-          error: eligibility.reasons.join('; '),
-          errorCode: 'ELIGIBILITY_FAILED',
+          error: eligibility.reasons.join('; '), errorCode: 'ELIGIBILITY_FAILED', createdAt: now,
+        }
+      }
+      if ((INTERNAL_FFMPEG_AUDIO_OPERATIONS as readonly string[]).includes(request.operation)) {
+        return {
+          status: 'accepted', audioToAudioId: randomUUID(),
+          sourceAudioArtifactId: request.sourceAudioArtifactId, operation: request.operation,
+          provider: 'internal', model: 'ffmpeg',
+          evidence: {
+            evidenceSource: 'internal_ffmpeg', liveProviderProof: false,
+            operation: request.operation, parameters: request.parameters,
+            sourceChecksum: sourceValidation.checksum,
+            outputValidation: { pendingWorkerExecution: true },
+          },
           createdAt: now,
         }
       }
-
-      // Check if this is an internal FFmpeg operation
-      const internalOperations: AudioToAudioOperation[] = ['trim', 'resample', 'channel_convert', 'loudness_normalize', 'normalize']
-      if (internalOperations.includes(request.operation)) {
-        return executeInternalFfmpegOperation(appSlug, request, sourceAudioBuffer, sourceMimeType, sourceValidation)
-      }
-
-      // If no provider adapter, return blocked status
       if (!providerAdapter || !providerAdapter.supportsOperations.includes(request.operation)) {
         return {
-          status: 'rejected',
-          sourceAudioArtifactId: request.sourceAudioArtifactId,
+          status: 'failed', sourceAudioArtifactId: request.sourceAudioArtifactId,
           operation: request.operation,
           evidence: {
-            evidenceSource: 'local_fixture',
-            liveProviderProof: false,
-            operation: request.operation,
-            parameters: request.parameters,
+            evidenceSource: 'executor_unavailable', liveProviderProof: false,
+            blocker: 'AUDIO_OPERATION_EXECUTOR_UNAVAILABLE',
+            operation: request.operation, parameters: request.parameters,
           },
-          error: `Provider does not support operation '${request.operation}'`,
-          errorCode: 'PROVIDER_OPERATION_NOT_SUPPORTED',
-          createdAt: now,
+          error: `No production executor is available for '${request.operation}'`,
+          errorCode: 'AUDIO_OPERATION_EXECUTOR_UNAVAILABLE', createdAt: now,
         }
       }
-
-      // Submit to provider
       try {
-        const providerResult = await providerAdapter.submitOperation({
-          sourceAudioBuffer,
-          sourceMimeType,
-          operation: request.operation,
-          parameters: request.parameters,
-          outputFormat: request.outputFormat,
+        const result = await providerAdapter.submitOperation({
+          sourceAudioBuffer, sourceMimeType, operation: request.operation,
+          parameters: request.parameters, outputFormat: request.outputFormat,
         })
-
-        if (providerResult.status === 'failed') {
+        const fixture = providerAdapter.provider === 'fixture'
+        if (result.status === 'failed') {
           return {
-            status: 'failed',
-            sourceAudioArtifactId: request.sourceAudioArtifactId,
-            operation: request.operation,
-            provider: providerAdapter.provider,
-            providerResourceRef: providerResult.providerResourceRef,
+            status: 'failed', sourceAudioArtifactId: request.sourceAudioArtifactId,
+            operation: request.operation, provider: providerAdapter.provider,
+            providerResourceRef: result.providerResourceRef,
             evidence: {
-              evidenceSource: 'live_provider',
-              liveProviderProof: false,
-              providerSelected: providerAdapter.provider,
-              sanitizedProviderRef: providerResult.providerResourceRef,
-              operation: request.operation,
-              parameters: request.parameters,
+              evidenceSource: fixture ? 'local_fixture' : 'live_provider', liveProviderProof: false,
+              providerSelected: providerAdapter.provider, sanitizedProviderRef: result.providerResourceRef,
+              operation: request.operation, parameters: request.parameters,
             },
-            error: providerResult.error ?? 'Provider submission failed',
-            errorCode: providerResult.errorCode ?? 'PROVIDER_SUBMISSION_FAILED',
-            createdAt: now,
+            error: result.error ?? 'Provider submission failed',
+            errorCode: result.errorCode ?? 'PROVIDER_SUBMISSION_FAILED', createdAt: now,
           }
         }
-
-        // Success
         return {
-          status: providerResult.status === 'completed' ? 'completed' : 'accepted',
-          audioToAudioId: crypto.randomUUID(),
-          sourceAudioArtifactId: request.sourceAudioArtifactId,
-          operation: request.operation,
-          provider: providerAdapter.provider,
-          providerResourceRef: providerResult.providerResourceRef,
+          status: result.status === 'completed' ? 'completed' : 'accepted',
+          audioToAudioId: randomUUID(), sourceAudioArtifactId: request.sourceAudioArtifactId,
+          operation: request.operation, provider: providerAdapter.provider,
+          providerResourceRef: result.providerResourceRef,
           evidence: {
-            evidenceSource: 'live_provider',
-            liveProviderProof: providerResult.status === 'completed',
-            providerSelected: providerAdapter.provider,
-            sanitizedProviderRef: providerResult.providerResourceRef,
-            operation: request.operation,
-            parameters: request.parameters,
-            outputValidation: { status: providerResult.status },
+            evidenceSource: fixture ? 'local_fixture' : 'live_provider',
+            liveProviderProof: !fixture && result.status === 'completed',
+            providerSelected: providerAdapter.provider, sanitizedProviderRef: result.providerResourceRef,
+            operation: request.operation, parameters: request.parameters,
+            outputValidation: { status: result.status },
           },
-          createdAt: now,
-          completedAt: providerResult.status === 'completed' ? now : undefined,
+          createdAt: now, completedAt: result.status === 'completed' ? now : undefined,
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown provider error'
         return {
-          status: 'failed',
-          sourceAudioArtifactId: request.sourceAudioArtifactId,
-          operation: request.operation,
-          provider: providerAdapter.provider,
+          status: 'failed', sourceAudioArtifactId: request.sourceAudioArtifactId,
+          operation: request.operation, provider: providerAdapter.provider,
           evidence: {
-            evidenceSource: 'live_provider',
-            liveProviderProof: false,
-            providerSelected: providerAdapter.provider,
-            operation: request.operation,
-            parameters: request.parameters,
+            evidenceSource: 'live_provider', liveProviderProof: false,
+            providerSelected: providerAdapter.provider, operation: request.operation,
           },
-          error: `Provider execution failed: ${message}`,
-          errorCode: 'PROVIDER_EXECUTION_ERROR',
-          createdAt: now,
+          error: `Provider execution failed: ${message}`, errorCode: 'PROVIDER_EXECUTION_ERROR', createdAt: now,
         }
       }
     },
   }
 }
 
-// ── Internal FFmpeg Operations ────────────────────────────────────────────────
-
-function executeInternalFfmpegOperation(
-  _appSlug: string,
-  request: AudioToAudioRequest,
-  _sourceBuffer: Buffer,
-  _sourceMimeType: string,
-  sourceValidation: SourceAudioValidationResult,
-): AudioToAudioResult {
-  const now = new Date().toISOString()
-
-  // Real FFmpeg execution is handled by the worker handler (voice-audio-handlers.ts).
-  // This domain service validates and classifies the operation.
-  // The worker executes the actual FFmpeg command and returns real output.
-  const outputMimeType = request.outputFormat === 'wav' ? 'audio/wav' :
-    request.outputFormat === 'mp3' ? 'audio/mpeg' :
-    request.outputFormat === 'flac' ? 'audio/flac' : 'audio/ogg'
-
-  return {
-    status: 'accepted',
-    audioToAudioId: crypto.randomUUID(),
-    sourceAudioArtifactId: request.sourceAudioArtifactId,
-    operation: request.operation,
-    provider: 'internal',
-    evidence: {
-      evidenceSource: 'internal_ffmpeg',
-      liveProviderProof: false,
-      operation: request.operation,
-      parameters: request.parameters,
-      outputValidation: {
-        mimeType: outputMimeType,
-        status: 'queued_for_worker_execution',
-        sourceDurationSeconds: sourceValidation.metadata?.durationSeconds,
-      },
-    },
-    createdAt: now,
-  }
-}
-
-// ── Fixture Adapter ───────────────────────────────────────────────────────────
-
 export function createFixtureAudioToAudioProviderAdapter(): AudioToAudioProviderAdapter {
   return {
     provider: 'fixture',
-    supportsOperations: [...AUDIO_TO_AUDIO_OPERATIONS],
-
+    supportsOperations: AUDIO_TO_AUDIO_OPERATIONS,
     async submitOperation(request) {
-      return {
-        providerJobRef: `fixture_a2a_${Date.now()}`,
-        status: 'submitted',
-        providerResourceRef: `fixture_resource_${request.operation}`,
-      }
+      return { providerJobRef: `fixture_job_${Date.now()}`, status: 'submitted', providerResourceRef: `fixture_audio_${request.operation}` }
     },
-
-    async pollOperation(_providerJobRef) {
+    async pollOperation() {
       return {
-        status: 'completed',
-        progress: 100,
-        outputBuffer: Buffer.from('fixture_audio_to_audio_output'),
-        outputMimeType: 'audio/wav',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        status: 'completed', progress: 100, outputBuffer: Buffer.from('fixture_audio_output'),
+        outputMimeType: 'audio/wav', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         cost: { estimatedCost: 0, currency: 'USD', source: 'fixture' },
       }
     },
