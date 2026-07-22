@@ -1,0 +1,55 @@
+name: authoritative-status-map
+
+on:
+  push:
+    branches: [feat/batch-b-platform-closure]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authoritative-status-map-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VALIDATED_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact head checkout
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$VALIDATED_SHA"
+          echo "VALIDATED_HEAD_SHA=$actual_sha"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate canonical 68-capability map
+        run: npx tsx scripts/generate-authoritative-status-map.mjs --output=authoritative-status-map.json
+
+      - name: Validate generated map
+        shell: bash
+        run: |
+          node -e "const fs=require('fs'); const map=JSON.parse(fs.readFileSync('authoritative-status-map.json','utf8')); if(map.counts.catalogue!==68) throw new Error('Expected 68 capabilities'); if(map.capabilities.length!==68) throw new Error('Expected 68 capability rows'); console.log(JSON.stringify(map.counts));"
+
+      - name: Upload authoritative status map
+        uses: actions/upload-artifact@v4
+        with:
+          name: authoritative-status-map-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 14
+          if-no-files-found: error
+          path: authoritative-status-map.json
