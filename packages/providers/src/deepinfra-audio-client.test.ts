@@ -22,6 +22,12 @@ function wavFixture(): Buffer {
   return buffer
 }
 
+function ownedBytes(buffer: Buffer): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(new ArrayBuffer(buffer.byteLength))
+  bytes.set(buffer)
+  return bytes
+}
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('deepinfraTextToSpeech', () => {
@@ -37,7 +43,7 @@ describe('deepinfraTextToSpeech', () => {
         speed: 1.1,
         voice: 'af_heart',
       })
-      return new Response(wav, { status: 200, headers: { 'Content-Type': 'audio/wav' } })
+      return new Response(ownedBytes(wav), { status: 200, headers: { 'Content-Type': 'audio/wav' } })
     })
     vi.stubGlobal('fetch', fetchMock)
 
