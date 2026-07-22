@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AmarktAIVoiceAudioClient, VoiceAudioSdkError } from './voice-audio.js'
+import { AmarktAIVoiceAudioClient } from './voice-audio.js'
 
 const ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
 
@@ -48,7 +48,7 @@ describe('AmarktAIVoiceAudioClient', () => {
       sourceAudioArtifactId: ID,
       targetVoiceProfileId: ID,
       intendedUse: 'narration',
-    })).rejects.toMatchObject<VoiceAudioSdkError>({ status: 403, code: 'CAPABILITY_GRANT_DENIED', message: 'Grant denied' })
+    })).rejects.toMatchObject({ status: 403, code: 'CAPABILITY_GRANT_DENIED', message: 'Grant denied' })
   })
 
   it('encodes execution identifiers on status routes', async () => {
