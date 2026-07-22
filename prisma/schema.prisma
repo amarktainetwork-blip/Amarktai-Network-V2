@@ -1962,7 +1962,7 @@ model DocumentIngestChunk {
   ocrEvidence        String?  @map("ocr_evidence") @db.Text
   ingestedAt         DateTime @default(now()) @map("ingested_at")
 
-  @@unique([appSlug, documentId, checksum, chunkIndex], name: "document_chunk_version_unique")
+  @@unique([appSlug, documentId, checksum, chunkIndex], map: "document_chunk_version_unique")
   @@index([appSlug, documentId])
   @@index([artifactId])
   @@index([citationId])
