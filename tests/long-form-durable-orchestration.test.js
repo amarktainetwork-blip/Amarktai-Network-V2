@@ -312,6 +312,33 @@ describe('durable long-form orchestration', () => {
     await app.close()
   })
 
+  it('keeps scene orchestration metadata outside strict governed TTS input', async () => {
+    const app = makeApp()
+    await app.register(adminLongFormVideoRoutes)
+    await app.ready()
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/long-form-video/executions',
+      headers: auth,
+      payload: requestPayload({ voiceoverEnabled: true }),
+    })
+
+    expect(response.statusCode).toBe(202)
+    const parentId = response.json().parentJobId
+    const voiceovers = db.jobs.filter((job) => job.parentJobId === parentId && job.capability === 'tts')
+    expect(voiceovers).toHaveLength(3)
+    for (const voiceover of voiceovers) {
+      const input = JSON.parse(voiceover.inputJson)
+      const metadata = JSON.parse(voiceover.metadataJson)
+      expect(input).not.toHaveProperty('sceneNumber')
+      expect(metadata.sceneNumber).toBe(voiceover.sceneNumber)
+      expect(input.text).toEqual(expect.any(String))
+    }
+
+    await app.close()
+  })
+
   it('does not let external-app disablement or cost ceilings block the authenticated internal dashboard', async () => {
     db.setAppGrantOverrides({ enabled: false, approvalRequired: true, maxCostPerRequest: 0.000001, maxCostPerWorkflow: 0.000001 })
     const app = makeApp()
