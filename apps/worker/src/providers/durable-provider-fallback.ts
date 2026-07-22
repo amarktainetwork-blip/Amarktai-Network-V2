@@ -70,11 +70,16 @@ function isInternalDocumentExtraction(payload: WorkerJobData): boolean {
     && payload.metadata.internalLocalExecution === true
 }
 
+function isInternalAudioTransform(payload: WorkerJobData): boolean {
+  return payload.capability === 'audio_to_audio'
+}
+
 function isInternalLocalExecution(payload: WorkerJobData): boolean {
   return isInternalLongFormAssembly(payload)
     || isInternalSocialAdAssembly(payload)
     || isInternalResearchEvidence(payload)
     || isInternalDocumentExtraction(payload)
+    || isInternalAudioTransform(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -96,6 +101,10 @@ async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> 
   if (isInternalDocumentExtraction(payload)) {
     const { executeDocumentExtraction } = await import('../document-extraction-executor.js')
     return executeDocumentExtraction(payload)
+  }
+  if (isInternalAudioTransform(payload)) {
+    const { handleAudioToAudioJob } = await import('../handlers/voice-audio-handlers.js')
+    return handleAudioToAudioJob(payload)
   }
   return executeWithProvider(payload)
 }
