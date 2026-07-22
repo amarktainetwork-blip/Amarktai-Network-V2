@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { VOICE_AVATAR_USE_SCOPES, hasVoiceAvatarBlockedOverrides } from './voice-avatar-platform.js'
-import { validateSourceAudio, type SourceAudioValidationResult } from './source-audio-validation.js'
+import { validateSourceAudio, computeAudioChecksum, type SourceAudioValidationResult } from './source-audio-validation.js'
 
 export const AUDIO_TO_AUDIO_OPERATIONS = [
   'voice_conversion', 'denoise', 'normalize', 'trim', 'resample', 'channel_convert', 'loudness_normalize',
@@ -184,7 +184,7 @@ export function createAudioToAudioDomainService(providerAdapter?: AudioToAudioPr
           evidence: {
             evidenceSource: 'internal_ffmpeg', liveProviderProof: false,
             operation: request.operation, parameters: request.parameters,
-            sourceChecksum: sourceValidation.checksum,
+            sourceChecksum: computeAudioChecksum(sourceAudioBuffer),
             outputValidation: { pendingWorkerExecution: true },
           },
           createdAt: now,
