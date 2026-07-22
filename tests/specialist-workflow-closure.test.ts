@@ -105,6 +105,7 @@ describe('specialist vision and durable workflow closure', () => {
     }
     expect(api).toContain('forbiddenAuthority')
     expect(dashboard).not.toMatch(/provider\s*<select|model\s*<select/i)
+    expect(dashboard).toContain('A production-compatible executor is not registered. Local fixture proof is not live-provider proof.')
     expect(fixture).toContain("evidenceSource === 'local_fixture'")
     expect(fixture).toContain('liveProviderProof === false')
   })
