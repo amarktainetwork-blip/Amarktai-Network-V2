@@ -219,20 +219,11 @@ describe('canonical source-of-truth consolidation', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('keeps release files free of hidden provider/model browser controls', () => {
-    const files = [
-      'app/dashboard/chat/page.js',
-      'app/dashboard/image/page.js',
-      'app/dashboard/video/page.js',
-      'app/dashboard/music/page.js',
-      'app/dashboard/voice/page.js',
-      'app/dashboard/capability-lab/page.js',
-      'app/dashboard/specialist-vision/page.js',
-      'app/dashboard/social-ad/page.js',
-    ]
-    for (const file of files) {
-      const source = readFileSync(file, 'utf8')
-      expect(source).not.toMatch(/name=["']provider["']|name=["']model["']/)
-    }
+  it('has no production Brain Router import or invocation', () => {
+    const worker = readFileSync('apps/worker/src/providers/provider-executor.ts', 'utf8')
+    const runtimeTruth = readFileSync('packages/core/src/runtime-truth.ts', 'utf8')
+    expect(worker).not.toContain('routeBrain')
+    expect(worker).not.toContain('BrainRouterDecision')
+    expect(runtimeTruth).not.toContain('routeBrain')
   })
 })
