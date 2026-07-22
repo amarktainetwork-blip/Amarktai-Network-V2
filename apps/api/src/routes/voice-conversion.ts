@@ -1,17 +1,15 @@
 /**
- * Voice Conversion Routes — isolated API routes for voice conversion operations.
+ * Voice Conversion Routes — governed, durable, fail-closed conversion requests.
  *
- * Uses canonical queue configuration, deterministic trace idempotency,
- * real Voice Profile governance with evaluateVoiceProfileRights, and
- * truthful provider blockers. Does not enqueue known blockers.
+ * Requests that pass authentication, grants, source ownership, and target Voice
+ * Profile rights checks are persisted as terminal blockers until an approved
+ * production executor exists. Known blockers are never queued.
  */
 
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { prisma } from '@amarktai/db'
-import {
-  type CapabilityKey,
-} from '@amarktai/core'
+import { type CapabilityKey } from '@amarktai/core'
 import {
   hasVoiceAvatarBlockedOverrides,
   evaluateVoiceProfileRights,
@@ -20,44 +18,28 @@ import {
 import { authenticateAppKey } from './jobs.js'
 import { getVoiceProfile } from '../lib/voice-avatar-profile-store.js'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { persistBlockedCapabilityJob } from '../lib/blocked-capability-job.js'
 
 interface AuthenticatedRequest extends FastifyRequest {
   auth?: Awaited<ReturnType<typeof authenticateAppKey>>
 }
 
-// ── Canonical Idempotency ─────────────────────────────────────────────────────
-
-function durableIdempotencyTrace(appSlug: string, capability: string, idempotencyKey: string): string {
-  return createHash('sha256').update(`${appSlug}:${capability}:${idempotencyKey}`).digest('hex')
+function safeMetadata(value: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
 }
-
-async function findIdempotentJob(appSlug: string, capability: string, traceId: string) {
-  return prisma.job.findFirst({
-    where: {
-      appSlug,
-      capability,
-      traceId,
-      status: { in: ['queued', 'processing', 'completed'] },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
-}
-
-// ── Route Registration ────────────────────────────────────────────────────────
 
 export async function registerVoiceConversionRoutes(app: FastifyInstance): Promise<void> {
-  // Submit voice conversion
   app.post('/api/v1/voice-conversion', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
-      // 1. Authenticate
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
       const appSlug = auth.app!.slug
 
-      // 2. Compliance gate: block provider/model overrides
       const body = request.body as Record<string, unknown>
       const blockedField = hasVoiceAvatarBlockedOverrides(body)
         || hasVoiceAvatarBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
@@ -68,9 +50,10 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
         })
       }
 
-      // 3. Resolve grant
       const grantResolution = await resolveAppCapabilityGrantSnapshot(
-        appSlug, 'voice_conversion' as CapabilityKey, auth.allowedCapabilities ?? [],
+        appSlug,
+        'voice_conversion' as CapabilityKey,
+        auth.allowedCapabilities ?? [],
       )
       if (!grantResolution || !grantResolution.grant.enabled) {
         return reply.status(403).send({ error: 'App does not have voice_conversion capability grant', code: 'CAPABILITY_GRANT_DENIED' })
@@ -79,44 +62,23 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
         return reply.status(403).send({ error: 'App capability grant denies source-artifact read for voice_conversion', code: 'GRANT_DENIED' })
       }
 
-      // 4. Validate request
       const { createVoiceConversionDomainService } = await import('@amarktai/core/voice-conversion-contracts')
-      const domainService = createVoiceConversionDomainService()
-      const validation = domainService.validateRequest(request.body)
+      const validation = createVoiceConversionDomainService().validateRequest(request.body)
       if (!validation.success) {
         return reply.status(400).send({ error: validation.error, code: 'VALIDATION_FAILED', issues: validation.issues })
       }
       const conversionRequest = validation.data!
 
-      // 5. Deterministic trace idempotency
-      const idempotencyKey = conversionRequest.idempotencyKey ?? `auto_${randomUUID()}`
-      const traceId = durableIdempotencyTrace(appSlug, 'voice_conversion', idempotencyKey)
-      const existing = await findIdempotentJob(appSlug, 'voice_conversion', traceId)
-      if (existing) {
-        return reply.status(200).send({
-          status: existing.status,
-          voiceConversionId: existing.id,
-          sourceAudioArtifactId: conversionRequest.sourceAudioArtifactId,
-          targetVoiceProfileId: conversionRequest.targetVoiceProfileId,
-          provider: existing.provider ?? undefined,
-          evidence: { evidenceSource: 'platform_policy', liveProviderProof: false, idempotent: true },
-          createdAt: existing.createdAt.toISOString(),
-          completedAt: existing.completedAt?.toISOString(),
-        })
-      }
-
-      // 6. Load source artifact with ownership check
       const sourceArtifact = await prisma.artifact.findFirst({
-        where: { id: conversionRequest.sourceAudioArtifactId, appSlug },
+        where: { id: conversionRequest.sourceAudioArtifactId, appSlug, status: 'completed' },
       })
       if (!sourceArtifact) {
         return reply.status(404).send({ error: 'Source audio artifact not found or not accessible', code: 'ARTIFACT_NOT_FOUND' })
       }
       if (sourceArtifact.type !== 'audio' && !sourceArtifact.mimeType.startsWith('audio/')) {
-        return reply.status(400).send({ error: 'Source artifact must be an audio artifact', code: 'INVALID_ARTIFACT_TYPE' })
+        return reply.status(400).send({ error: 'Source artifact must be a completed audio artifact', code: 'INVALID_ARTIFACT_TYPE' })
       }
 
-      // 7. Load real Voice Profile with full governance
       const targetProfile = await getVoiceProfile(appSlug, conversionRequest.targetVoiceProfileId)
       if (!targetProfile) {
         return reply.status(404).send({ error: 'Target voice profile not found or not accessible', code: 'VOICE_PROFILE_NOT_FOUND' })
@@ -125,7 +87,6 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
         return reply.status(403).send({ error: 'Target voice profile does not belong to this application', code: 'CROSS_APP_PROFILE_DENIED' })
       }
 
-      // 8. Full rights enforcement using canonical evaluator
       const rightsDecision = evaluateVoiceProfileRights({
         profile: targetProfile,
         intendedUse: conversionRequest.intendedUse as VoiceAvatarUseScope,
@@ -138,24 +99,66 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
         })
       }
 
-      // 9. Resolve provider route availability — do NOT enqueue known blockers
-      // Voice conversion has no production provider route currently
+      const idempotencyKey = conversionRequest.idempotencyKey ?? `auto_${randomUUID()}`
+      const blocker = 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE'
+      const blockerMessage = 'No production voice conversion provider route is currently configured.'
+      const persisted = await persistBlockedCapabilityJob({
+        appSlug,
+        capability: 'voice_conversion',
+        prompt: `Governed voice conversion to profile ${conversionRequest.targetVoiceProfileId}`,
+        requestInput: conversionRequest,
+        idempotencyKey,
+        blocker,
+        message: blockerMessage,
+        metadata: {
+          ...conversionRequest.metadata,
+          sourceArtifactId: conversionRequest.sourceAudioArtifactId,
+          targetVoiceProfileId: conversionRequest.targetVoiceProfileId,
+          intendedUse: conversionRequest.intendedUse,
+          preserveTiming: conversionRequest.preserveTiming,
+          preserveProsody: conversionRequest.preserveProsody,
+          outputFormat: conversionRequest.outputFormat,
+          qualityProfile: conversionRequest.qualityProfile,
+          maxCredits: conversionRequest.maxCredits ?? null,
+          appGrantSnapshot: grantResolution.grant,
+          appGrantSnapshotSource: grantResolution.source,
+          appGrantSnapshotAt: new Date().toISOString(),
+          rightsSnapshot: {
+            allowed: rightsDecision.allowed,
+            reasons: rightsDecision.reasons,
+            profileStatus: targetProfile.status,
+            rightsStatus: targetProfile.rightsStatus,
+            verifierReference: targetProfile.rightsDecision?.verifierReference ?? null,
+            decidedAt: targetProfile.rightsDecision?.decidedAt ?? null,
+          },
+          consentSnapshot: targetProfile.consentEvidence ? {
+            consentArtifactId: targetProfile.consentEvidence.consentArtifactId,
+            sourceRecordingConsentArtifactId: targetProfile.consentEvidence.sourceRecordingConsentArtifactId ?? null,
+            verifiedAt: targetProfile.consentEvidence.verifiedAt,
+            expiresAt: targetProfile.consentEvidence.expiresAt ?? null,
+            permittedUses: targetProfile.consentEvidence.permittedUses,
+          } : null,
+        },
+      })
+
       return reply.status(422).send({
-        status: 'blocked_by_account_access',
+        status: 'failed',
+        voiceConversionId: persisted.job.id,
         sourceAudioArtifactId: conversionRequest.sourceAudioArtifactId,
         targetVoiceProfileId: conversionRequest.targetVoiceProfileId,
-        provider: 'amarktai-network',
         evidence: {
           evidenceSource: 'executor_unavailable',
           liveProviderProof: false,
-          blocker: 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE',
+          blocker,
           capability: 'voice_conversion',
           appSlug,
+          idempotent: persisted.deduplicated,
           rightsSnapshot: { allowed: rightsDecision.allowed, reasons: rightsDecision.reasons },
         },
-        error: 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE: No production voice conversion provider route is currently configured.',
-        errorCode: 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE',
-        createdAt: new Date().toISOString(),
+        error: persisted.job.error,
+        errorCode: blocker,
+        createdAt: persisted.job.createdAt.toISOString(),
+        completedAt: persisted.job.completedAt?.toISOString(),
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Internal server error'
@@ -163,27 +166,29 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
     }
   })
 
-  // Get voice conversion status
   app.get('/api/v1/voice-conversion/:id', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
-      const appSlug = auth.app!.slug
       const { id } = request.params as { id: string }
-
-      const job = await prisma.job.findFirst({ where: { id, appSlug, capability: 'voice_conversion' } })
+      const job = await prisma.job.findFirst({ where: { id, appSlug: auth.app!.slug, capability: 'voice_conversion' } })
       if (!job) return reply.status(404).send({ error: 'Voice conversion execution not found', code: 'EXECUTION_NOT_FOUND' })
-
-      const inputMeta = JSON.parse(job.metadataJson || '{}')
+      const metadata = safeMetadata(job.metadataJson)
+      const evidence = metadata.executionEvidence && typeof metadata.executionEvidence === 'object'
+        ? metadata.executionEvidence as Record<string, unknown>
+        : {}
       return reply.send({
-        status: job.status === 'completed' ? 'completed' : job.status === 'failed' ? 'failed' : job.status === 'cancelled' ? 'cancelled' : 'processing',
+        status: job.status,
         voiceConversionId: job.id,
-        sourceAudioArtifactId: inputMeta.sourceArtifactId ?? '',
-        targetVoiceProfileId: inputMeta.targetVoiceProfileId ?? '',
+        sourceAudioArtifactId: metadata.sourceArtifactId ?? '',
+        targetVoiceProfileId: metadata.targetVoiceProfileId ?? '',
         provider: job.provider ?? undefined,
         outputArtifactId: job.artifactId ?? undefined,
-        evidence: { evidenceSource: 'executor_unavailable', liveProviderProof: false },
+        evidence: {
+          evidenceSource: evidence.evidenceSource ?? 'executor_unavailable',
+          liveProviderProof: false,
+          blocker: evidence.blocker ?? 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE',
+        },
         createdAt: job.createdAt.toISOString(),
         completedAt: job.completedAt?.toISOString(),
         error: job.error ?? undefined,
@@ -194,21 +199,16 @@ export async function registerVoiceConversionRoutes(app: FastifyInstance): Promi
     }
   })
 
-  // Cancel voice conversion
   app.post('/api/v1/voice-conversion/:id/cancel', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) return reply.status(auth.statusCode).send({ error: auth.error, code: 'AUTH_REQUIRED' })
-
-      const appSlug = auth.app!.slug
       const { id } = request.params as { id: string }
-
       const result = await prisma.job.updateMany({
-        where: { id, appSlug, capability: 'voice_conversion', status: { in: ['queued', 'processing'] } },
+        where: { id, appSlug: auth.app!.slug, capability: 'voice_conversion', status: { in: ['queued', 'processing'] } },
         data: { status: 'cancelled', completedAt: new Date(), error: 'Cancelled by app' },
       })
       if (!result.count) return reply.status(409).send({ error: 'Voice conversion execution not found, already terminal, or belongs to another app', code: 'EXECUTION_NOT_CANCELLABLE' })
-
       return reply.send({ status: 'cancelled', voiceConversionId: id, message: 'Voice conversion operation cancelled' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Internal server error'
