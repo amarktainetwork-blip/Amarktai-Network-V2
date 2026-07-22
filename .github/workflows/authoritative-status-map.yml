@@ -46,9 +46,9 @@ jobs:
       - name: Capture current approved public DeepInfra standard-model catalogue
         shell: bash
         run: |
-          node --input-type=module <<'NODE'
+          cat > /tmp/capture-deepinfra-models.ts <<'NODE'
           import fs from 'node:fs'
-          import { getRuntimeModelPolicyBlocker } from './packages/core/src/model-family-policy.ts'
+          import { getRuntimeModelPolicyBlocker } from '${{ github.workspace }}/packages/core/src/model-family-policy.ts'
           const response = await fetch('https://api.deepinfra.com/models/list', { headers: { Accept: 'application/json' } })
           if (!response.ok) throw new Error(`DeepInfra model list failed: ${response.status}`)
           const rows = await response.json()
@@ -59,8 +59,8 @@ jobs:
             'audio-classification', 'voice-activity-detection', 'text-to-speech',
           ])
           const relevant = rows
-            .filter((row) => relevantTypes.has(String(row.reported_type || row.type || '').toLowerCase().replaceAll('_', '-')))
-            .map((row) => ({
+            .filter((row: Record<string, unknown>) => relevantTypes.has(String(row.reported_type || row.type || '').toLowerCase().replaceAll('_', '-')))
+            .map((row: Record<string, unknown>) => ({
               modelId: row.model_name,
               type: row.type,
               reportedType: row.reported_type,
@@ -72,11 +72,11 @@ jobs:
             }))
             .filter((row) => row.modelId && row.private === 0 && !row.deprecated)
           const excluded = relevant
-            .map((row) => ({ modelId: row.modelId, blocker: getRuntimeModelPolicyBlocker(row.modelId) }))
+            .map((row) => ({ modelId: String(row.modelId), blocker: getRuntimeModelPolicyBlocker(String(row.modelId)) }))
             .filter((row) => row.blocker)
           const excludedIds = new Set(excluded.map((row) => row.modelId))
           const models = relevant
-            .filter((row) => !excludedIds.has(row.modelId))
+            .filter((row) => !excludedIds.has(String(row.modelId)))
             .sort((a, b) => `${a.reportedType}:${a.modelId}`.localeCompare(`${b.reportedType}:${b.modelId}`))
           fs.writeFileSync('deepinfra-standard-models.json', `${JSON.stringify({
             capturedAt: new Date().toISOString(),
@@ -89,6 +89,7 @@ jobs:
           }, null, 2)}\n`)
           console.log(JSON.stringify({ relevantDeepInfraModels: models.length, policyExcluded: excluded.length, types: [...new Set(models.map((row) => row.reportedType || row.type))] }))
           NODE
+          npx tsx /tmp/capture-deepinfra-models.ts
 
       - name: Validate generated truth artifacts
         shell: bash
