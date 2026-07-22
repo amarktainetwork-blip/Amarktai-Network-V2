@@ -14,8 +14,6 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
-// ── Mocks ─────────────────────────────────────────────────────────────────────
-
 const mockPrisma = {
   artifact: { findFirst: vi.fn() },
   job: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
@@ -32,11 +30,19 @@ vi.mock('../apps/api/src/routes/jobs.js', () => ({ authenticateAppKey: mockAuthe
 vi.mock('../apps/api/src/lib/app-grant-loader.js', () => ({ resolveAppCapabilityGrantSnapshot: mockResolveAppCapabilityGrantSnapshot }))
 vi.mock('../apps/api/src/lib/voice-avatar-profile-store.js', () => ({ getVoiceProfile: mockGetVoiceProfile }))
 vi.mock('@amarktai/core/voice-avatar-platform', () => ({
+  VOICE_AVATAR_USE_SCOPES: [
+    'narration',
+    'conversational_agent',
+    'marketing',
+    'education',
+    'accessibility',
+    'customer_support',
+    'avatar_performance',
+    'internal_production',
+  ],
   hasVoiceAvatarBlockedOverrides: mockHasVoiceAvatarBlockedOverrides,
   evaluateVoiceProfileRights: mockEvaluateVoiceProfileRights,
 }))
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function createMockRequest(auth?: string, body?: Record<string, unknown>, params?: Record<string, string>) {
   return {
@@ -65,11 +71,11 @@ function createMockApp() {
   } as any
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 describe('voice audio API contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockHasVoiceAvatarBlockedOverrides.mockReturnValue(null)
+    mockPrisma.job.findFirst.mockResolvedValue(null)
   })
 
   describe('authentication', () => {
@@ -256,8 +262,8 @@ describe('voice audio API contract', () => {
       const reply = createMockReply()
       await postHandler(req, reply)
 
-      // Should fail at artifact lookup (404) or validation (400)
-      expect([400, 404]).toContain(reply.statusCode)
+      expect(reply.statusCode).toBe(404)
+      expect(reply.body.code).toBe('ARTIFACT_NOT_FOUND')
     })
   })
 
