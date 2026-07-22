@@ -110,7 +110,8 @@ function isVisionRecord(record: Record<string, unknown>, modelId: string, task: 
 function transportForTask(task: string): ProviderDiscoveredModel['transportProfile'] {
   if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'openai_chat_sse'
   if (task === 'image-to-image') return 'openai_images_edits_multipart'
-  if (['text-to-image', 'text-to-speech'].includes(task)) return 'native_inference_binary'
+  if (task === 'text-to-speech') return 'openai_audio_speech_binary'
+  if (task === 'text-to-image') return 'native_inference_binary'
   if (task === 'text-to-video') return 'native_inference_async_webhook'
   return 'native_inference_json'
 }
@@ -118,6 +119,7 @@ function transportForTask(task: string): ProviderDiscoveredModel['transportProfi
 function endpointFamilyForTask(task: string): string {
   if (['text-generation', 'text', 'chat', 'vision', 'multimodal', 'image-text-to-text'].includes(task)) return 'deepinfra_openai_v1/openai_chat'
   if (task === 'image-to-image') return 'deepinfra_openai_v1/images_edits'
+  if (task === 'text-to-speech') return 'deepinfra_v1/audio_speech'
   if (task === 'embeddings' || task === 'feature-extraction' || task === 'sentence-similarity') return 'deepinfra_openai_v1/embeddings'
   if (task === 'reranker' || task === 'rerank') return 'deepinfra_native_v1/rerank/native_inference'
   return 'deepinfra_native_v1/native_inference'
