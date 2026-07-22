@@ -186,7 +186,7 @@ export {
   type TransportProfile,
 } from './provider-model-discovery.js'
 
-// Provider-backed executor registrations
+// Executor registrations
 export {
   EXECUTOR_REGISTRATIONS,
   getExecutorRegistrations,
@@ -368,38 +368,110 @@ export {
 } from './provider-key-security.js'
 
 // Long-form video orchestration
-export * from './long-form-video.js'
-export * from './long-form-execution.js'
-export * from './long-form-production.js'
-export * from './long-form-runtime.js'
+export {
+  LongFormVideoRequestSchema,
+  LongFormVideoPlanSchema,
+  LongFormSceneSchema,
+  LongFormStoryboardSchema,
+  LongFormRenderStepSchema,
+  LongFormVideoArtifactPlanSchema,
+  LongFormVideoSafetyLevel,
+  LongFormVideoAspectRatio,
+  LongFormVideoStyle,
+  LongFormVideoTone,
+  LongFormSceneStatus,
+  LongFormRenderStepType,
+  LongFormRenderStatus,
+  PlanningMode,
+  VoiceProfileSchema,
+  LongFormOverlaySchema,
+  StructuredSceneSchema,
+  validateLongFormVideoRequest,
+  validateLongFormVideoPlan,
+  type LongFormVideoRequest,
+  type LongFormVideoPlan,
+  type LongFormScene,
+  type LongFormStoryboard,
+  type LongFormRenderStep,
+  type LongFormVideoArtifactPlan,
+  type PlanningMode as PlanningModeType,
+  type VoiceProfile,
+  type LongFormOverlay,
+  type StructuredScene,
+} from './long-form-video.js'
 
-// Application capability grant defaults and cost estimation
-export * from './app-capability-grants.js'
-export * from './cost-estimation.js'
+export {
+  createLongFormVideoPlan,
+  validatePlanCompleteness,
+} from './long-form-planner.js'
 
-// Webhook security and terminal job delivery contracts
-export * from './webhooks.js'
+export {
+  DURABLE_WORKFLOW_REGISTRATIONS,
+  buildSceneVideoPrompt,
+  createSceneExecutionPayloads,
+  createLongFormExecutionState,
+  updateSceneExecutionState,
+  calculateLongFormProgress,
+  getExecutionSummary,
+  type SceneExecutionPayload,
+  type SceneExecutionState,
+  type LongFormExecutionState,
+  type LongFormAssemblyHandoff,
+} from './long-form-execution.js'
 
-// Output evaluation and orchestration quality gates
-export * from './output-evaluation.js'
+export {
+  getReleaseCandidateCapabilityKeys,
+  getDashboardAppSlug,
+  getInternalDashboardApps,
+  canReadSourceArtifactForApp,
+  type InternalDashboardAppDefinition,
+} from './dashboard-apps.js'
 
-// Campaign generation contracts
-export * from './campaign-generation.js'
+// Music generation foundation
+export {
+  MUSIC_STYLES,
+  MUSIC_DURATION_LIMITS,
+  MUSIC_OUTPUT_FORMATS,
+  MUSIC_SAFETY_LEVELS,
+  MUSIC_RIGHTS_BASES,
+  MUSIC_FEATURE_CLASSIFICATIONS,
+  GENX_LYRIA_REQUEST_CONTRACT,
+  MAX_REFERENCE_AUDIO_BYTES,
+  MAX_REFERENCE_AUDIO_DURATION_SECONDS,
+  MusicGenerationRequestSchema,
+  MusicReferenceRightsDeclarationSchema,
+  MusicReferenceUploadRequestSchema,
+  validateMusicGenerationRequest,
+  validateMusicReferenceUploadRequest,
+  normalizeMusicPrompt,
+  createMusicProviderPrompt,
+  inspirationProfileToPrompt,
+  analyzeMusicReferenceAudio,
+  createLongFormMusicRequest,
+  createMusicGenerationPlan,
+  getMusicCapabilityStatus,
+  type MusicStyle,
+  type MusicDuration,
+  type MusicOutputFormat,
+  type MusicSafetyLevel,
+  type MusicRightsBasis,
+  type MusicFeatureClassification,
+  type MusicGenerationRequest,
+  type MusicReferenceUploadRequest,
+  type MusicInspirationProfile,
+  type MusicPromptNormalization,
+  type MusicCapabilityStatus,
+  type MusicGenerationPlan,
+  type MusicGenerationResult,
+} from './music-generation.js'
 
-// Voice and avatar reusable profile platform
-export * from './voice-avatar-platform.js'
-export * from './voice-avatar-resources.js'
-
-// Voice clone, conversion, and audio-to-audio contracts
-export * from './voice-clone-contracts.js'
-export * from './voice-conversion-contracts.js'
-export * from './audio-to-audio-contracts.js'
-
-// Effective admin-facing runtime truth projection
-export * from './effective-runtime-truth.js'
-
-// Social-ad Product Breakout workflow
-export * from './social-ad-video.js'
-
-// Source-artifact governance
-export * from './source-artifacts.js'
+// Subtitle generation
+export {
+  generateSubtitles,
+  buildSubtitleSegments,
+  generateSrt,
+  generateVtt,
+  getSubtitleMimeType,
+  type SubtitleSegment,
+  type SubtitleGenerationInput,
+} from './subtitle-generation.js'
