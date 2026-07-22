@@ -49,7 +49,7 @@ async function createImage(apiRequest, invariant, delay, appKey, label) {
       input: { width: 320, height: 180, steps: 4 }, metadata: { fixtureAssetRole: label },
     }),
   })
-  invariant(submitted.response.status === 202 && submitted.body.jobId, submitted.body.message || `Image ${label} submission failed`)
+  invariant(submitted.response.status === 201 && submitted.body.jobId, submitted.body.message || `Image ${label} submission returned ${submitted.response.status}`)
   const job = await pollJob(apiRequest, invariant, delay, appKey, submitted.body.jobId)
   invariant(job.status === 'completed' && job.artifactId, job.error || `Image ${label} did not complete`)
   return job.artifactId
