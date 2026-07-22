@@ -1,3 +1,4 @@
+import type { CapabilityKey } from './capabilities.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
 import {
   CAPABILITY_RUNTIME_CLASSIFICATIONS,
@@ -55,7 +56,10 @@ function workflowOperationalState(input: {
  * being reported as NOT_IMPLEMENTED merely because they have no direct model row.
  */
 export function normalizeDurableWorkflowRuntimeTruth<T extends RuntimeTruth>(truth: T): T {
-  const workflows = new Map(DURABLE_WORKFLOW_REGISTRATIONS.map((workflow) => [workflow.capability, workflow]))
+  type WorkflowRegistration = (typeof DURABLE_WORKFLOW_REGISTRATIONS)[number]
+  const workflows = new Map<CapabilityKey, WorkflowRegistration>(
+    DURABLE_WORKFLOW_REGISTRATIONS.map((workflow) => [workflow.capability, workflow]),
+  )
   const readiness = new Map(truth.releaseReadiness.map((entry) => [entry.capability, entry]))
 
   const capabilities = truth.capabilities.map((row): CapabilityRuntimeTruth => {
