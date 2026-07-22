@@ -7,8 +7,8 @@ import {
   getInternalExecutorRegistration,
   getReleaseCandidateCapabilityKeys,
   getRuntimeTruth,
-  normalizeEffectiveRuntimeTruth,
 } from '../packages/core/src/index.ts'
+import { normalizeEffectiveRuntimeTruth } from '../packages/core/src/effective-runtime-truth.ts'
 import { validateInternalExecutorProof } from '../apps/api/src/lib/internal-executor-proof.ts'
 
 const root = process.cwd()
