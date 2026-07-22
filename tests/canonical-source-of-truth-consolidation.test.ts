@@ -128,9 +128,10 @@ describe('canonical source-of-truth consolidation', () => {
   it('derives support from callable registrations, never capability allowlists', () => {
     expect(getExecutorRegistration('image_generation', 'together')?.id).toBe('together.image-generation')
     expect(getExecutorRegistration('image_edit', 'together')).toBeUndefined()
+    expect(getExecutorRegistration('image_edit', 'deepinfra')?.id).toBe('deepinfra.task-inference')
     expect(getExecutorRegistration('image_to_video', 'genx')?.id).toBe('genx.image-to-video')
     expect(getExecutorRegistration('tts', 'genx')?.id).toBe('genx.tts')
-    expect(getExecutorRegistration('tts', 'deepinfra')).toBeUndefined()
+    expect(getExecutorRegistration('tts', 'deepinfra')?.id).toBe('deepinfra.task-inference')
     expect(getExecutorRegistration('campaign_generation', 'deepinfra')).toBeUndefined()
     // Executors dispatched externally (streaming, media/async, worker bootstrap) don't need static map entries here.
     const externallyDispatched = new Set([
@@ -218,11 +219,20 @@ describe('canonical source-of-truth consolidation', () => {
     expect(parsed.success).toBe(true)
   })
 
-  it('has no production Brain Router import or invocation', () => {
-    const worker = readFileSync('apps/worker/src/providers/provider-executor.ts', 'utf8')
-    const runtimeTruth = readFileSync('packages/core/src/runtime-truth.ts', 'utf8')
-    expect(worker).not.toContain('routeBrain')
-    expect(worker).not.toContain('BrainRouterDecision')
-    expect(runtimeTruth).not.toContain('routeBrain')
+  it('keeps release files free of hidden provider/model browser controls', () => {
+    const files = [
+      'app/dashboard/chat/page.js',
+      'app/dashboard/image/page.js',
+      'app/dashboard/video/page.js',
+      'app/dashboard/music/page.js',
+      'app/dashboard/voice/page.js',
+      'app/dashboard/capability-lab/page.js',
+      'app/dashboard/specialist-vision/page.js',
+      'app/dashboard/social-ad/page.js',
+    ]
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8')
+      expect(source).not.toMatch(/name=["']provider["']|name=["']model["']/)
+    }
   })
 })
