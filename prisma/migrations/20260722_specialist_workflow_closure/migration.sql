@@ -23,4 +23,4 @@ CREATE TABLE `document_ingest_chunks` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ALTER TABLE `app_ai_profiles`
-  MODIFY `enabled_capabilities` LONGTEXT NOT NULL;
+  MODIFY `enabled_capabilities` LONGTEXT NOT NULL DEFAULT '[]';
