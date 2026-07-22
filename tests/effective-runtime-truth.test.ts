@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CAPABILITY_RUNTIME_CLASSIFICATIONS, getRuntimeTruth } from '../packages/core/src/runtime-truth.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from '../packages/core/src/long-form-execution.js'
-import { normalizeDurableWorkflowRuntimeTruth } from '../packages/core/src/effective-runtime-truth.js'
+import { normalizeEffectiveRuntimeTruth } from '../packages/core/src/effective-runtime-truth.js'
 
 const root = process.cwd()
 
@@ -24,7 +24,7 @@ function executableWorkflowTruth() {
   const localStaticEvidence = Object.fromEntries(
     DURABLE_WORKFLOW_REGISTRATIONS.map((workflow) => [workflow.capability, true]),
   )
-  return normalizeDurableWorkflowRuntimeTruth(getRuntimeTruth({
+  return normalizeEffectiveRuntimeTruth(getRuntimeTruth({
     capabilities,
     localStaticEvidence,
     longFormComponents: {
@@ -83,7 +83,8 @@ describe('effective runtime truth', () => {
     const projection = readFileSync(resolve(root, 'apps/api/src/lib/effective-admin-runtime-truth.ts'), 'utf8')
     expect(route).toContain('buildEffectiveAdminRuntimeTruth')
     expect(route).not.toContain("from '../lib/admin-runtime-truth.js'")
-    expect(projection).toContain('normalizeDurableWorkflowRuntimeTruth')
+    expect(projection).toContain('normalizeEffectiveRuntimeTruth')
+    expect(projection).toContain('applyPersistedInternalExecutorProof')
     expect(projection).toContain('buildAdminRuntimeTruth')
   })
 })
