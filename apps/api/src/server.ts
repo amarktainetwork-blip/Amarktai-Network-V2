@@ -46,6 +46,7 @@ import { appDurableWorkflowRoutes } from './routes/app-durable-workflows.js'
 import { appSourceArtifactRoutes } from './routes/app-source-artifacts.js'
 import { appVoiceAvatarProfileRoutes } from './routes/app-voice-avatar-profiles.js'
 import { appVoiceAvatarEvidenceRoutes } from './routes/app-voice-avatar-evidence.js'
+import { registerVoiceAudioRoutes } from './routes/voice-audio.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
   await app.register(appDurableWorkflowRoutes)
   await app.register(appVoiceAvatarProfileRoutes)
   await app.register(appVoiceAvatarEvidenceRoutes)
+  await app.register(registerVoiceAudioRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)
