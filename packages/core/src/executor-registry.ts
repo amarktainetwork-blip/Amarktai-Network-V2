@@ -180,6 +180,14 @@ const DEEPINFRA_IMAGE_TRANSFORM = profile(
   ['text', 'image'],
   'image',
 )
+const DEEPINFRA_TTS = profile(
+  ['text-to-speech'],
+  ['text-to-speech'],
+  ['openai_audio_speech_binary'],
+  ['audio_speech'],
+  ['text'],
+  'audio',
+)
 const TOGETHER_TTS = profile(['text-to-speech', 'tts', 'audio'], ['text-to-speech', 'tts', 'audio'], ['openai_audio_speech_binary'], ['audio_speech'], ['text'], 'audio')
 const TOGETHER_STT = profile(['automatic-speech-recognition', 'transcription', 'stt', 'audio'], ['transcription', 'stt', 'audio'], ['openai_audio_transcription_multipart'], ['audio_transcriptions'], ['audio'], 'text')
 const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>
@@ -204,6 +212,7 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   ),
   registration('deepinfra.task-inference', 'deepinfra', 'image_edit', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
   registration('deepinfra.task-inference', 'deepinfra', 'image_to_image', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
+  registration('deepinfra.task-inference', 'deepinfra', 'tts', 'executeDeepInfraTaskCapability', DEEPINFRA_TTS),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT, 'queued', 'semantic_text_fallback'),
   ),
