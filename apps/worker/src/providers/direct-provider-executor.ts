@@ -22,6 +22,7 @@ import {
 } from '@amarktai/providers'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 import { executeDeepInfraImageTransform } from './deepinfra-image-transform-executor.js'
+import { executeDeepInfraTts } from './deepinfra-tts-executor.js'
 
 type DirectHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
 type TextProvider = Extract<ProviderKey, 'deepinfra' | 'together' | 'genx'>
@@ -32,7 +33,9 @@ export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>
   'deepinfra.text-transform': (payload, model) => executeValidatedTextCapability('deepinfra', payload, model),
   'deepinfra.task-inference': (payload, model) => isImageTransform(payload.capability)
     ? executeDeepInfraImageTransform(payload, model)
-    : executeDeepInfraTaskCapability(payload, model),
+    : payload.capability === 'tts'
+      ? executeDeepInfraTts(payload, model)
+      : executeDeepInfraTaskCapability(payload, model),
   'deepinfra.embeddings': (payload, model) => executeEmbeddingsCapability('deepinfra', payload, model),
   'deepinfra.reranking': (payload, model) => executeRerankingCapability('deepinfra', payload, model),
   'together.chat': (payload, model) => executeValidatedTextCapability('together', payload, model),
@@ -95,7 +98,7 @@ async function executeValidatedTextCapability(
         schemaValidation = validateJsonSchemaValue(output, plan.schema)
         if (!schemaValidation.valid) throw malformed(provider, `${capability} output schema failed: ${schemaValidation.errors.join('; ')}`)
       } catch (firstError) {
-        const repair = await call(`Repair this invalid ${capability} response. Return only a JSON object matching the required schema.\nInvalid response:\n${result.content}`)
+        const repair = await call(`Repair this invalid ${capability} response. Return only one JSON object matching the required schema.\nInvalid response:\n${result.content}`)
         output = parseJsonObject(repair.content, `${capability} repair returned invalid JSON`)
         schemaValidation = validateJsonSchemaValue(output, plan.schema)
         if (!schemaValidation.valid) throw malformed(provider, `${capability} repaired output schema failed: ${schemaValidation.errors.join('; ')}`)
