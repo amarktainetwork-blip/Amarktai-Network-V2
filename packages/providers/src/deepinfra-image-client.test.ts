@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CanonicalProviderError } from './provider-errors.js'
 import { deepinfraEditImage } from './deepinfra-image-client.js'
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])
@@ -58,6 +57,6 @@ describe('deepinfraEditImage', () => {
       imageBuffer: PNG,
       imageMimeType: 'image/png',
       prompt: 'Edit this image',
-    })).rejects.toMatchObject<CanonicalProviderError>({ code: 'malformed_response', provider: 'deepinfra' })
+    })).rejects.toMatchObject({ code: 'malformed_response', provider: 'deepinfra' })
   })
 })
