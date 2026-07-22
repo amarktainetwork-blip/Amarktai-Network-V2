@@ -1,19 +1,23 @@
 /**
  * Voice Clone Routes — isolated API routes for voice clone operations.
  *
- * Uses real authentication, artifact authorization, and domain services.
- * Voice clone returns truthful provider-route blockers when no production
- * provider route exists.
+ * Uses real authentication, Voice Profile governance, artifact authorization,
+ * BullMQ queue submission, and exact idempotency. Voice clone returns truthful
+ * provider-route blockers when no production provider route exists.
  */
 
+import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import { Queue } from 'bullmq'
 import { prisma } from '@amarktai/db'
+import { DEFAULT_JOB_OPTIONS, type JobPayload, type CapabilityKey } from '@amarktai/core'
 import {
   createVoiceCloneDomainService,
-  createFixtureVoiceCloneProviderAdapter,
   type VoiceCloneResult,
 } from '@amarktai/core/voice-clone-contracts'
 import { authenticateAppKey } from './jobs.js'
+import { getVoiceProfile } from '../lib/voice-avatar-profile-store.js'
+import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -21,33 +25,24 @@ interface AuthenticatedRequest extends FastifyRequest {
   auth?: Awaited<ReturnType<typeof authenticateAppKey>>
 }
 
-// ── Persistence Helpers ───────────────────────────────────────────────────────
+// ── Queue Helper ──────────────────────────────────────────────────────────────
 
-async function loadArtifactForApp(artifactId: string, appSlug: string) {
-  const artifact = await prisma.artifact.findFirst({
-    where: { id: artifactId, appSlug },
-  })
-  if (!artifact) return null
-  return artifact
+function getQueue(): Queue {
+  return new Queue('amarktai-jobs', { connection: { url: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379' } })
 }
 
-async function loadVoiceProfileForApp(_profileId: string, _appSlug: string) {
-  // Voice profiles are stored in domain-specific storage, not Prisma
-  // Return a stub that indicates the profile exists for validation purposes
-  return { id: _profileId, appSlug: _appSlug, status: 'verified' }
-}
+// ── Idempotency Helper ────────────────────────────────────────────────────────
 
-async function findExistingExecution(appSlug: string, idempotencyKey: string) {
-  const existing = await prisma.job.findFirst({
+async function findIdempotentJob(appSlug: string, capability: string, idempotencyKey: string) {
+  return prisma.job.findFirst({
     where: {
       appSlug,
-      capability: 'voice_clone',
-      metadataJson: { contains: idempotencyKey },
+      capability,
       status: { in: ['queued', 'processing', 'completed'] },
+      metadataJson: { contains: `"idempotencyKey":"${idempotencyKey}"` },
     },
     orderBy: { createdAt: 'desc' },
   })
-  return existing
 }
 
 // ── Route Registration ────────────────────────────────────────────────────────
@@ -56,6 +51,7 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
   // Submit voice clone
   app.post('/api/v1/voice-clone', async (request: AuthenticatedRequest, reply: FastifyReply) => {
     try {
+      // 1. Authenticate
       const auth = await authenticateAppKey(request.headers.authorization)
       if (!auth.ok) {
         return reply.status(auth.statusCode).send({
@@ -65,15 +61,29 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
       }
 
       const appSlug = auth.app!.slug
-      const allowedCaps = auth.allowedCapabilities ?? []
-      if (!allowedCaps.includes('voice_clone')) {
+
+      // 2. Resolve grant
+      const grantResolution = await resolveAppCapabilityGrantSnapshot(
+        appSlug,
+        'voice_clone' as CapabilityKey,
+        auth.allowedCapabilities ?? [],
+      )
+      if (!grantResolution || !grantResolution.grant.enabled) {
         return reply.status(403).send({
           error: 'App does not have voice_clone capability grant',
           code: 'CAPABILITY_GRANT_DENIED',
         })
       }
 
-      const domainService = createVoiceCloneDomainService(createFixtureVoiceCloneProviderAdapter())
+      if (!grantResolution.grant.artifactRead) {
+        return reply.status(403).send({
+          error: 'App capability grant denies source-artifact read for voice_clone',
+          code: 'GRANT_DENIED',
+        })
+      }
+
+      // 3. Validate request
+      const domainService = createVoiceCloneDomainService()
       const validation = domainService.validateRequest(request.body)
       if (!validation.success) {
         return reply.status(400).send({
@@ -85,15 +95,15 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
 
       const cloneRequest = validation.data!
 
-      // Check idempotency
+      // 4. Check idempotency (exact app-scoped match)
       if (cloneRequest.idempotencyKey) {
-        const existing = await findExistingExecution(appSlug, cloneRequest.idempotencyKey)
+        const existing = await findIdempotentJob(appSlug, 'voice_clone', cloneRequest.idempotencyKey)
         if (existing) {
           return reply.status(200).send({
             status: existing.status,
             voiceCloneId: existing.id,
             voiceProfileId: cloneRequest.voiceProfileId,
-            provider: existing.provider ?? 'fixture',
+            provider: existing.provider ?? undefined,
             evidence: {
               evidenceSource: 'local_fixture',
               liveProviderProof: false,
@@ -105,8 +115,10 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
         }
       }
 
-      // Load source artifact with ownership check
-      const sourceArtifact = await loadArtifactForApp(cloneRequest.sourceAudioArtifactId, appSlug)
+      // 5. Load source artifact with ownership check
+      const sourceArtifact = await prisma.artifact.findFirst({
+        where: { id: cloneRequest.sourceAudioArtifactId, appSlug },
+      })
       if (!sourceArtifact) {
         return reply.status(404).send({
           error: 'Source audio artifact not found or not accessible',
@@ -121,8 +133,8 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
         })
       }
 
-      // Load voice profile with ownership check
-      const voiceProfile = await loadVoiceProfileForApp(cloneRequest.voiceProfileId, appSlug)
+      // 6. Load real Voice Profile with full governance
+      const voiceProfile = await getVoiceProfile(appSlug, cloneRequest.voiceProfileId)
       if (!voiceProfile) {
         return reply.status(404).send({
           error: 'Voice profile not found or not accessible',
@@ -130,7 +142,44 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
         })
       }
 
-      // Create job for async execution
+      // Enforce profile ownership
+      if (voiceProfile.appSlug !== appSlug) {
+        return reply.status(403).send({
+          error: 'Voice profile does not belong to this application',
+          code: 'CROSS_APP_PROFILE_DENIED',
+        })
+      }
+
+      // Enforce profile lifecycle
+      if (voiceProfile.status === 'draft') {
+        return reply.status(422).send({
+          error: 'Voice profile is in draft status',
+          code: 'PROFILE_NOT_VERIFIED',
+        })
+      }
+      if (voiceProfile.status === 'revoked') {
+        return reply.status(422).send({
+          error: 'Voice profile has been revoked',
+          code: 'PROFILE_REVOKED',
+        })
+      }
+      if (voiceProfile.status === 'archived') {
+        return reply.status(422).send({
+          error: 'Voice profile has been archived',
+          code: 'PROFILE_ARCHIVED',
+        })
+      }
+
+      // Enforce rights status
+      if (voiceProfile.rightsStatus !== 'verified') {
+        return reply.status(422).send({
+          error: `Voice profile rights status is '${voiceProfile.rightsStatus}', requires 'verified'`,
+          code: 'RIGHTS_NOT_VERIFIED',
+        })
+      }
+
+      // 7. Create durable Job record
+      const traceId = `trace_${randomUUID()}`
       const job = await prisma.job.create({
         data: {
           appSlug,
@@ -138,23 +187,62 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
           prompt: `Voice clone from artifact ${cloneRequest.sourceAudioArtifactId}`,
           inputJson: JSON.stringify(cloneRequest),
           metadataJson: JSON.stringify({
-            ...cloneRequest.metadata,
             idempotencyKey: cloneRequest.idempotencyKey,
             sourceArtifactId: cloneRequest.sourceAudioArtifactId,
             voiceProfileId: cloneRequest.voiceProfileId,
+            intendedUse: cloneRequest.intendedUse,
+            consentEvidenceReference: cloneRequest.consentEvidenceReference,
+            rightsDeclarationReference: cloneRequest.rightsDeclarationReference,
+            grantSnapshot: grantResolution.grant,
+            grantSource: grantResolution.source,
           }),
-          traceId: crypto.randomUUID(),
+          traceId,
           status: 'queued',
-          provider: 'fixture',
-          model: 'voice_clone',
         },
       })
+
+      // 8. Submit to BullMQ queue
+      const payload: JobPayload = {
+        jobId: job.id,
+        appSlug,
+        capability: 'voice_clone',
+        executionProfile: 'external_app',
+        prompt: `Voice clone from artifact ${cloneRequest.sourceAudioArtifactId}`,
+        input: {
+          sourceAudioArtifactId: cloneRequest.sourceAudioArtifactId,
+          voiceProfileId: cloneRequest.voiceProfileId,
+          language: cloneRequest.language,
+          intendedUse: cloneRequest.intendedUse,
+        },
+        metadata: {
+          idempotencyKey: cloneRequest.idempotencyKey,
+          consentEvidenceReference: cloneRequest.consentEvidenceReference,
+          rightsDeclarationReference: cloneRequest.rightsDeclarationReference,
+        },
+        traceId,
+        routingMode: 'balanced',
+        appGrantSnapshot: grantResolution.grant,
+      }
+
+      try {
+        const q = getQueue()
+        await q.add('process', payload, {
+          ...DEFAULT_JOB_OPTIONS,
+          jobId: job.id,
+        })
+      } catch (err) {
+        await prisma.job.update({
+          where: { id: job.id },
+          data: { status: 'failed', error: 'Failed to enqueue job', completedAt: new Date() },
+        })
+        app.log.error({ err }, 'Failed to push voice_clone job to queue')
+        return reply.status(500).send({ error: 'Failed to enqueue job', code: 'QUEUE_SUBMISSION_FAILED' })
+      }
 
       const result: VoiceCloneResult = {
         status: 'accepted',
         voiceCloneId: job.id,
         voiceProfileId: cloneRequest.voiceProfileId,
-        provider: 'fixture',
         evidence: {
           evidenceSource: 'local_fixture',
           liveProviderProof: false,
@@ -202,7 +290,8 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
           job.status === 'cancelled' ? 'cancelled' : 'processing',
         voiceCloneId: job.id,
         voiceProfileId: inputMeta.voiceProfileId ?? '',
-        provider: job.provider ?? 'fixture',
+        provider: job.provider ?? undefined,
+        outputArtifactId: job.artifactId ?? undefined,
         evidence: {
           evidenceSource: 'local_fixture',
           liveProviderProof: false,
@@ -249,7 +338,7 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
 
       if (!result.count) {
         return reply.status(409).send({
-          error: 'Voice clone execution not found, already completed, or belongs to another app',
+          error: 'Voice clone execution not found, already terminal, or belongs to another app',
           code: 'EXECUTION_NOT_CANCELLABLE',
         })
       }
@@ -295,10 +384,8 @@ export function registerVoiceCloneRoutes(app: FastifyInstance): void {
         evidence: {
           evidenceSource: 'local_fixture',
           liveProviderProof: false,
-          providerSelected: job.provider ?? 'fixture',
-          sanitizedProviderRef: `fixture_resource_${id}`,
           status: job.status,
-          output: job.output,
+          outputArtifactId: job.artifactId ?? undefined,
         },
       })
     } catch (error) {

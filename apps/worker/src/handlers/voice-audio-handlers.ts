@@ -4,6 +4,11 @@
  * These handlers execute through the domain services with real FFmpeg operations
  * for internal audio transformations. Voice clone and voice conversion return
  * truthful provider blockers when no production provider route exists.
+ *
+ * - Workers load source artifacts from the artifact store
+ * - FFmpeg outputs are saved as durable artifacts
+ * - Cancellation is checked before expensive execution
+ * - Registration is real and type-compatible with the worker registry
  */
 
 import { execFile } from 'node:child_process'
@@ -11,43 +16,19 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import {
-  createVoiceCloneDomainService,
-  createFixtureVoiceCloneProviderAdapter,
-  type VoiceCloneResult,
-} from '@amarktai/core/voice-clone-contracts'
-import {
-  createVoiceConversionDomainService,
-  createFixtureVoiceConversionProviderAdapter,
-  type VoiceConversionResult,
-} from '@amarktai/core/voice-conversion-contracts'
+import { createHash } from 'node:crypto'
+import { prisma } from '@amarktai/db'
 import {
   type AudioToAudioOperation,
-  type AudioToAudioResult,
 } from '@amarktai/core/audio-to-audio-contracts'
+import {
+  getArtifactFile,
+  getArtifactRecord,
+  saveArtifact,
+} from '@amarktai/artifacts'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 
 const execFileAsync = promisify(execFile)
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface VoiceAudioJobData {
-  capability: 'voice_clone' | 'voice_conversion' | 'audio_to_audio'
-  appSlug: string
-  requestId: string
-  input: Record<string, unknown>
-  sourceAudioBuffer?: Buffer
-  sourceMimeType?: string
-  metadata?: Record<string, unknown>
-}
-
-export interface VoiceAudioJobResult {
-  success: boolean
-  status: string
-  data?: VoiceCloneResult | VoiceConversionResult | AudioToAudioResult
-  error?: string
-  errorCode?: string
-}
 
 // ── FFmpeg Execution ──────────────────────────────────────────────────────────
 
@@ -132,7 +113,8 @@ async function executeFfmpegOperation(
         const startTime = typeof parameters.startTime === 'number' ? parameters.startTime / 1000 : 0
         const endTime = typeof parameters.endTime === 'number' ? parameters.endTime / 1000 : inputProbe.duration
         const duration = endTime - startTime
-        await runFfmpeg([...baseArgs, '-ss', String(startTime), '-t', String(duration), '-c', 'copy', outputFile])
+        // Re-encode for deterministic validation
+        await runFfmpeg([...baseArgs, '-ss', String(startTime), '-t', String(duration), outputFile])
         break
       }
       case 'resample': {
@@ -175,35 +157,38 @@ async function executeFfmpegOperation(
   }
 }
 
+// ── Cancellation Check ────────────────────────────────────────────────────────
+
+async function isJobCancelled(jobId: string): Promise<boolean> {
+  const job = await prisma.job.findUnique({ where: { id: jobId }, select: { status: true } })
+  return job?.status === 'cancelled'
+}
+
+// ── Checksum ──────────────────────────────────────────────────────────────────
+
+function computeChecksum(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex')
+}
+
 // ── Voice Clone Handler ───────────────────────────────────────────────────────
 
 export async function handleVoiceCloneJob(payload: WorkerJobData): Promise<ProcessorResult> {
   try {
-    const domainService = createVoiceCloneDomainService(createFixtureVoiceCloneProviderAdapter())
-
-    const input = payload.input ?? {}
-    const validation = domainService.validateRequest(input)
-    if (!validation.success) {
-      return {
-        success: false,
-        status: 'failed',
-        error: validation.error,
-        provider: 'fixture',
-        model: 'voice_clone',
-      }
-    }
-
     // Voice clone requires a provider route - return truthful blocker
+    // No production voice clone provider route is currently configured
     return {
       success: false,
       status: 'failed',
       error: 'VOICE_CLONE_PROVIDER_ROUTE_UNAVAILABLE: No production voice clone provider route is currently configured.',
-      provider: 'fixture',
+      provider: 'amarktai-network',
       model: 'voice_clone',
       metadata: {
         evidenceSource: 'local_fixture',
         liveProviderProof: false,
         blocker: 'PROVIDER_ACCOUNT_OR_ROUTE_REQUIRED',
+        capability: 'voice_clone',
+        appSlug: payload.appSlug,
+        jobId: payload.jobId,
       },
     }
   } catch (error) {
@@ -212,7 +197,7 @@ export async function handleVoiceCloneJob(payload: WorkerJobData): Promise<Proce
       success: false,
       status: 'failed',
       error: message,
-      provider: 'fixture',
+      provider: 'amarktai-network',
       model: 'voice_clone',
     }
   }
@@ -222,31 +207,21 @@ export async function handleVoiceCloneJob(payload: WorkerJobData): Promise<Proce
 
 export async function handleVoiceConversionJob(payload: WorkerJobData): Promise<ProcessorResult> {
   try {
-    const domainService = createVoiceConversionDomainService(createFixtureVoiceConversionProviderAdapter())
-
-    const input = payload.input ?? {}
-    const validation = domainService.validateRequest(input)
-    if (!validation.success) {
-      return {
-        success: false,
-        status: 'failed',
-        error: validation.error,
-        provider: 'fixture',
-        model: 'voice_conversion',
-      }
-    }
-
     // Voice conversion requires a provider route - return truthful blocker
+    // No production voice conversion provider route is currently configured
     return {
       success: false,
       status: 'failed',
       error: 'VOICE_CONVERSION_PROVIDER_ROUTE_UNAVAILABLE: No production voice conversion provider route is currently configured.',
-      provider: 'fixture',
+      provider: 'amarktai-network',
       model: 'voice_conversion',
       metadata: {
         evidenceSource: 'local_fixture',
         liveProviderProof: false,
         blocker: 'PROVIDER_ACCOUNT_OR_ROUTE_REQUIRED',
+        capability: 'voice_conversion',
+        appSlug: payload.appSlug,
+        jobId: payload.jobId,
       },
     }
   } catch (error) {
@@ -255,7 +230,7 @@ export async function handleVoiceConversionJob(payload: WorkerJobData): Promise<
       success: false,
       status: 'failed',
       error: message,
-      provider: 'fixture',
+      provider: 'amarktai-network',
       model: 'voice_conversion',
     }
   }
@@ -268,65 +243,151 @@ export async function handleAudioToAudioJob(payload: WorkerJobData): Promise<Pro
     const input = payload.input ?? {}
     const operation = input.operation as AudioToAudioOperation
 
-    // Internal FFmpeg operations
-    const internalOperations: AudioToAudioOperation[] = ['trim', 'resample', 'channel_convert', 'loudness_normalize', 'normalize']
-
-    if (internalOperations.includes(operation)) {
-      // Source audio buffer must be provided in the job payload
-      const sourceBuffer = input.sourceAudioBuffer
-      if (!sourceBuffer || !Buffer.isBuffer(sourceBuffer)) {
-        return {
-          success: false,
-          status: 'failed',
-          error: 'Source audio buffer is required for internal FFmpeg operations',
-          provider: 'internal',
-          model: operation,
-        }
-      }
-
-      const sourceMimeType = String(input.sourceMimeType ?? 'audio/wav')
-      const outputFormat = String(input.outputFormat ?? 'wav')
-      const parameters = (input.parameters ?? {}) as Record<string, unknown>
-
-      const result = await executeFfmpegOperation(
-        operation,
-        sourceBuffer,
-        sourceMimeType,
-        parameters,
-        outputFormat,
-      )
-
+    // Check cancellation before expensive execution
+    if (await isJobCancelled(payload.jobId)) {
       return {
-        success: true,
-        status: 'completed',
+        success: false,
+        status: 'failed',
+        error: 'Job was cancelled before execution',
         provider: 'internal',
         model: `ffmpeg-${operation}`,
-        output: JSON.stringify({
-          outputMimeType: result.outputMimeType,
-          outputSizeBytes: result.outputBuffer.length,
-          validation: result.validation,
-        }),
-        metadata: {
-          evidenceSource: 'internal_ffmpeg',
-          liveProviderProof: false,
-          operation,
-          parameters,
-          outputValidation: result.validation,
-        },
       }
     }
 
-    // Non-internal operations require a provider
+    // Internal FFmpeg operations
+    const internalOperations: AudioToAudioOperation[] = ['trim', 'resample', 'channel_convert', 'loudness_normalize', 'normalize']
+
+    if (!internalOperations.includes(operation)) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Operation '${operation}' is not supported as an internal FFmpeg operation. Only ${internalOperations.join(', ')} are supported.`,
+        provider: 'internal',
+        model: operation,
+      }
+    }
+
+    // Load source artifact from artifact store
+    const sourceArtifactId = String(input.sourceAudioArtifactId ?? '')
+    if (!sourceArtifactId) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'sourceAudioArtifactId is required',
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+      }
+    }
+
+    const sourceRecord = await getArtifactRecord(sourceArtifactId)
+    if (!sourceRecord) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Source artifact ${sourceArtifactId} not found`,
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+      }
+    }
+
+    const sourceFile = await getArtifactFile(sourceArtifactId)
+    if (!sourceFile) {
+      return {
+        success: false,
+        status: 'failed',
+        error: `Source artifact ${sourceArtifactId} file not found or not readable`,
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+      }
+    }
+
+    const sourceMimeType = sourceFile.mimeType
+    const outputFormat = String(input.outputFormat ?? 'wav')
+    const parameters = (input.parameters ?? {}) as Record<string, unknown>
+
+    // Check cancellation again before FFmpeg
+    if (await isJobCancelled(payload.jobId)) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'Job was cancelled before FFmpeg execution',
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+      }
+    }
+
+    // Execute real FFmpeg operation
+    const result = await executeFfmpegOperation(
+      operation,
+      sourceFile.buffer,
+      sourceMimeType,
+      parameters,
+      outputFormat,
+    )
+
+    // Check cancellation before artifact persistence
+    if (await isJobCancelled(payload.jobId)) {
+      return {
+        success: false,
+        status: 'failed',
+        error: 'Job was cancelled before artifact persistence',
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+      }
+    }
+
+    // Save output artifact
+    const outputChecksum = computeChecksum(result.outputBuffer)
+    const outputArtifact = await saveArtifact({
+      input: {
+        appSlug: payload.appSlug,
+        type: 'audio',
+        subType: `audio_to_audio_${operation}`,
+        title: `Audio ${operation} output`,
+        description: `Real FFmpeg ${operation} operation`,
+        provider: 'internal',
+        model: `ffmpeg-${operation}`,
+        traceId: payload.traceId,
+        mimeType: result.outputMimeType,
+        metadata: {
+          operation,
+          parameters,
+          sourceArtifactId,
+          sourceChecksum: sourceRecord.metadata ? JSON.parse(sourceRecord.metadata).checksum : undefined,
+          outputChecksum,
+          outputValidation: result.validation,
+          sourceLineage: sourceArtifactId,
+          evidenceSource: 'internal_ffmpeg',
+          liveProviderProof: false,
+        },
+      },
+      data: result.outputBuffer,
+      explicitMimeType: result.outputMimeType,
+    })
+
     return {
-      success: false,
-      status: 'failed',
-      error: `Operation '${operation}' requires a provider route. No production provider is currently configured for this operation.`,
-      provider: 'fixture',
-      model: operation,
+      success: true,
+      status: 'completed',
+      provider: 'internal',
+      model: `ffmpeg-${operation}`,
+      artifactId: outputArtifact.id,
+      output: JSON.stringify({
+        artifactId: outputArtifact.id,
+        artifactUrl: outputArtifact.storageUrl,
+        mimeType: outputArtifact.mimeType,
+        fileSizeBytes: outputArtifact.fileSizeBytes,
+        checksum: outputChecksum,
+        validation: result.validation,
+      }),
       metadata: {
-        evidenceSource: 'local_fixture',
+        evidenceSource: 'internal_ffmpeg',
         liveProviderProof: false,
-        blocker: 'PROVIDER_OPERATION_NOT_SUPPORTED',
+        operation,
+        parameters,
+        sourceArtifactId,
+        outputArtifactId: outputArtifact.id,
+        outputChecksum,
+        outputValidation: result.validation,
       },
     }
   } catch (error) {
@@ -349,9 +410,12 @@ export const VOICE_AUDIO_HANDLERS: Record<string, (payload: WorkerJobData) => Pr
   audio_to_audio: handleAudioToAudioJob,
 }
 
-export function registerVoiceAudioHandlers(): void {
-  // This function would be called during worker initialization
-  // to register the handlers with the job processor
-  // Central worker import remains deferred, but the isolated registry
-  // is directly usable and type-compatible with ProcessorResult
+/**
+ * Register voice audio handlers with the worker's capability registry.
+ * When passed the canonical registry object, this performs real registration.
+ */
+export function registerVoiceAudioHandlers(registry: Record<string, (payload: WorkerJobData) => Promise<ProcessorResult>>): void {
+  registry.voice_clone = handleVoiceCloneJob
+  registry.voice_conversion = handleVoiceConversionJob
+  registry.audio_to_audio = handleAudioToAudioJob
 }

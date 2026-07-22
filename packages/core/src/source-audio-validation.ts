@@ -50,6 +50,7 @@ export type SourceAudioErrorCode =
   | 'AUDIO_CHANNELS_UNSUPPORTED'
   | 'CONSENT_EVIDENCE_REQUIRED'
   | 'RIGHTS_EVIDENCE_REQUIRED'
+  | 'CHECKSUM_REQUIRED'
   | 'CHECKSUM_MISMATCH'
   | 'MALFORMED_AUDIO'
 
@@ -230,7 +231,14 @@ export function validateSourceAudio(
   }
 
   // Check checksum if required
-  if (options?.requireChecksum && input.checksum) {
+  if (options?.requireChecksum) {
+    if (!input.checksum?.trim()) {
+      return {
+        valid: false,
+        errorCode: 'CHECKSUM_REQUIRED',
+        errorMessage: 'Checksum is required but was not supplied',
+      }
+    }
     const computed = computeAudioChecksum(input.buffer)
     if (computed !== input.checksum) {
       return {
