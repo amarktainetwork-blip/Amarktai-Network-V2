@@ -18,6 +18,10 @@
       "types": "./dist/model-family-policy.d.ts",
       "import": "./dist/model-family-policy.js"
     },
+    "./image-upscale-contracts": {
+      "types": "./dist/image-upscale-contracts.d.ts",
+      "import": "./dist/image-upscale-contracts.js"
+    },
     "./premium-media-policy": {
       "types": "./dist/premium-media-policy.d.ts",
       "import": "./dist/premium-media-policy.js"
