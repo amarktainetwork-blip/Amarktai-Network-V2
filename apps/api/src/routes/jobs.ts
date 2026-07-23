@@ -28,6 +28,10 @@ import {
   type JobStatusResponse,
   validateDirectProviderRequest,
 } from '@amarktai/core'
+import {
+  StoryboardGenerationRequestSchema,
+  SubtitleGenerationRequestSchema,
+} from '@amarktai/core/storyboard-subtitle-contracts'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
@@ -98,7 +102,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     const body = request.body as Record<string, unknown>
 
-    // 2. COMPLIANCE GATE: Block provider/model overrides in every app-facing request layer.
+    // COMPLIANCE GATE: Block provider/model overrides in every app-facing request layer.
     const blockedField = hasBlockedOverrides(body)
       || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
       || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
@@ -117,7 +121,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     const effectiveCallbackUrl = configuredWebhookUrl
 
     const imageUpscale = capability === 'image_upscale'
+    const storyboardGeneration = capability === 'storyboard_generation'
+    const subtitleGeneration = capability === 'subtitle_generation'
+    const internalArtifactCapability = imageUpscale || storyboardGeneration || subtitleGeneration
     let validatedInput: Record<string, unknown>
+
     if (imageUpscale) {
       const upscaleRequest = ImageUpscaleRequestSchema.safeParse(input)
       if (!upscaleRequest.success) {
@@ -128,6 +136,29 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         })
       }
       validatedInput = upscaleRequest.data
+    } else if (storyboardGeneration) {
+      const storyboardRequest = StoryboardGenerationRequestSchema.safeParse({
+        ...input,
+        brief: typeof input.brief === 'string' && input.brief.trim() ? input.brief : prompt,
+      })
+      if (!storyboardRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid storyboard_generation request: ${storyboardRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: storyboardRequest.error.issues,
+        })
+      }
+      validatedInput = storyboardRequest.data
+    } else if (subtitleGeneration) {
+      const subtitleRequest = SubtitleGenerationRequestSchema.safeParse(input)
+      if (!subtitleRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid subtitle_generation request: ${subtitleRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: subtitleRequest.error.issues,
+        })
+      }
+      validatedInput = subtitleRequest.data
     } else {
       const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
       if (!capabilityRequest.success) {
@@ -164,12 +195,23 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     if (governedSourceArtifact && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
       return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_GRANT_REQUIRED', message: `${capability} requires artifact read and write grants.` })
     }
+    if (internalArtifactCapability && !grantResolution.grant.artifactWrite) {
+      return reply.status(403).send({ error: true, code: 'ARTIFACT_WRITE_GRANT_REQUIRED', message: `${capability} requires artifact write permission.` })
+    }
     if (route) {
       const routeKey = `${route.provider}/${route.model}`
       if (grantResolution.grant.routingMode !== 'app_selectable_allowlist' || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
         return reply.status(403).send({ error: true, message: `Route '${routeKey}' is not approved for this app and capability.` })
       }
     }
+
+    const internalExecution = imageUpscale
+      ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' }
+      : storyboardGeneration
+        ? { internalExecutionEngine: 'planner' }
+        : subtitleGeneration
+          ? { internalExecutionEngine: 'formatter' }
+          : {}
 
     const immutableMetadata = {
       ...metadata,
@@ -178,7 +220,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       appGrantSnapshotSource: grantResolution.source,
       appGrantSnapshotAt: new Date().toISOString(),
       requestedRoute: route ?? null,
-      ...(imageUpscale ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' } : {}),
+      ...internalExecution,
     }
 
     if (auth.dailyBudgetCents && auth.dailyBudgetCents > 0) {
@@ -203,7 +245,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const idempotencyKey = governedSourceArtifact && typeof validatedInput.idempotencyKey === 'string' ? validatedInput.idempotencyKey : null
+    const idempotencyKey = internalArtifactCapability && typeof validatedInput.idempotencyKey === 'string'
+      ? validatedInput.idempotencyKey
+      : null
     const traceId = idempotencyKey ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey) : `trace_${randomUUID()}`
     if (idempotencyKey) {
       const existing = await prisma.job.findFirst({ where: { appSlug: auth.app!.slug, capability, traceId }, orderBy: { createdAt: 'desc' } })
@@ -265,6 +309,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     const jobMetadata = parseJobMetadata(job.metadataJson)
     const routeAttempts = Array.isArray(jobMetadata.orchestraRouteAttempts) ? jobMetadata.orchestraRouteAttempts : []
+    const internalEvidence = objectMetadata(jobMetadata.internalExecutionEvidence)
     const response: JobStatusResponse = {
       jobId: job.id,
       executionId: job.executionId || stringMetadata(jobMetadata.orchestraExecutionId),
@@ -279,14 +324,20 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       output: job.output,
       executionEvidence: {
         grantSnapshotSource: stringMetadata(jobMetadata.appGrantSnapshotSource),
-        executorId: stringMetadata(jobMetadata.directProviderExecutorId) || stringMetadata(jobMetadata.orchestraActualExecutorId) || stringMetadata(jobMetadata.orchestraSelectedExecutorId),
-        routeType: stringMetadata(jobMetadata.directProviderRouteType),
+        executorId: stringMetadata(jobMetadata.directProviderExecutorId)
+          || stringMetadata(jobMetadata.orchestraActualExecutorId)
+          || stringMetadata(jobMetadata.orchestraSelectedExecutorId)
+          || stringMetadata(internalEvidence.model),
+        routeType: stringMetadata(jobMetadata.directProviderRouteType)
+          || stringMetadata(internalEvidence.evidenceSource),
         fallbackAttempts: routeAttempts,
         usage: jobMetadata.directProviderUsage ?? null,
         cost: jobMetadata.directProviderCostEvidence ?? null,
-        outputValidation: jobMetadata.directProviderOutputValidation ?? jobMetadata.outputValidation ?? null,
+        outputValidation: jobMetadata.directProviderOutputValidation ?? jobMetadata.outputValidation ?? internalEvidence.outputValidation ?? null,
         errorClassification: jobMetadata.directProviderErrorClassification ?? null,
-        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId) || stringMetadata(jobMetadata.internalSourceArtifactId),
+        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId)
+          || stringMetadata(jobMetadata.internalSourceArtifactId)
+          || stringMetadata(internalEvidence.sourceArtifactId),
       },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
@@ -303,6 +354,10 @@ function parseJobMetadata(value: string): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function objectMetadata(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
 function stringMetadata(value: unknown): string | null {
