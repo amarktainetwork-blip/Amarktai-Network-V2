@@ -11,6 +11,7 @@ import { proveVoiceAvatarProfileReleaseFixture } from './lib/proof-voice-avatar-
 import { proveVoiceAudioReleaseFixture } from './lib/proof-voice-audio-release-fixture.mjs'
 import { proveSocialAdReleaseFixture } from './lib/proof-social-ad-release-fixture.mjs'
 import { proveSpecialistWorkflowReleaseFixture } from './lib/proof-specialist-workflow-release-fixture.mjs'
+import { proveStoryboardSubtitleReleaseFixture } from './lib/proof-storyboard-subtitle-release-fixture.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
@@ -290,6 +291,7 @@ try {
   await proveVoiceAudioReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveSocialAdReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   await proveSpecialistWorkflowReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken, queueControl })
+  await proveStoryboardSubtitleReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
@@ -326,4 +328,5 @@ console.log('SPECIALIST_VISION_RELEASE_FIXTURE=PASS')
 console.log('BRAND_SCRAPE_RELEASE_FIXTURE=PASS')
 console.log('DOCUMENT_INGEST_RELEASE_FIXTURE=PASS')
 console.log('CAMPAIGN_GENERATION_RELEASE_FIXTURE=PASS')
+console.log('STORYBOARD_SUBTITLE_RELEASE_FIXTURE=PASS')
 console.log('BROWSER_E2E=PASS')
