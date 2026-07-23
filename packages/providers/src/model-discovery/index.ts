@@ -1,5 +1,4 @@
-import { getRuntimeModelPolicyBlocker } from '@amarktai/core/model-family-policy'
-import type { ProviderDiscoveryResult, ProviderKey } from '@amarktai/core'
+import { getRuntimeModelPolicyBlocker, type ProviderDiscoveryResult, type ProviderKey } from '@amarktai/core'
 import { discoverDeepInfraProviderModels } from './deepinfra.js'
 import { discoverGenXProviderModels } from './genx.js'
 import { discoverMimoProviderModels } from './mimo.js'
