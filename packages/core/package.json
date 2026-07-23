@@ -14,6 +14,10 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     },
+    "./model-family-policy": {
+      "types": "./dist/model-family-policy.d.ts",
+      "import": "./dist/model-family-policy.js"
+    },
     "./premium-media-policy": {
       "types": "./dist/premium-media-policy.d.ts",
       "import": "./dist/premium-media-policy.js"
