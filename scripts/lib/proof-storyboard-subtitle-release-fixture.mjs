@@ -45,11 +45,17 @@ async function pollJob(apiRequest, invariant, delay, appKey, jobId, timeoutMs = 
   throw new Error(`Storyboard/subtitle fixture job ${jobId} timed out`)
 }
 
-async function downloadArtifact(apiRequest, invariant, appKey, artifactId, expectedMime) {
-  const result = await apiRequest(`/api/v1/artifacts/${encodeURIComponent(artifactId)}/file?download=1`, appKey)
-  invariant(result.response.ok, `Artifact ${artifactId} download returned ${result.response.status}`)
-  invariant(String(result.response.headers.get('content-type') || '').startsWith(expectedMime), `Artifact ${artifactId} MIME was not ${expectedMime}`)
-  return Buffer.from(await result.response.arrayBuffer())
+async function downloadArtifact(invariant, appKey, artifactId, expectedMime) {
+  // apiRequest intentionally parses JSON response bodies for normal fixture API
+  // calls. Binary artifact proof must use its own response so the body remains
+  // unread until arrayBuffer() consumes it.
+  const response = await fetch(`http://127.0.0.1:3211/api/v1/artifacts/${encodeURIComponent(artifactId)}/file?download=1`, {
+    headers: { Authorization: `Bearer ${appKey}` },
+    signal: AbortSignal.timeout(30_000),
+  })
+  invariant(response.ok, `Artifact ${artifactId} download returned ${response.status}`)
+  invariant(String(response.headers.get('content-type') || '').startsWith(expectedMime), `Artifact ${artifactId} MIME was not ${expectedMime}`)
+  return Buffer.from(await response.arrayBuffer())
 }
 
 export async function proveStoryboardSubtitleReleaseFixture({ apiRequest, invariant, delay, adminToken }) {
@@ -82,7 +88,7 @@ export async function proveStoryboardSubtitleReleaseFixture({ apiRequest, invari
   invariant(storyboardJob.status === 'completed' && storyboardJob.provider === 'internal' && storyboardJob.model === 'planner-storyboard-v1' && storyboardJob.artifactId, storyboardJob.error || 'Storyboard job did not complete internally')
   invariant(storyboardJob.executionEvidence?.routeType === 'internal_planner', 'Storyboard execution evidence was misclassified')
   invariant(storyboardJob.executionEvidence?.outputValidation?.providerCallsStarted === false, 'Storyboard fixture falsely claimed provider execution')
-  const storyboardBytes = await downloadArtifact(apiRequest, invariant, appKey, storyboardJob.artifactId, 'application/json')
+  const storyboardBytes = await downloadArtifact(invariant, appKey, storyboardJob.artifactId, 'application/json')
   const storyboardArtifact = JSON.parse(storyboardBytes.toString('utf8'))
   invariant(storyboardArtifact.providerCallsStarted === false && storyboardArtifact.plan?.storyboard?.scenes?.length === 6, 'Storyboard artifact did not contain the validated six-scene plan')
   const storyboardDenied = await apiRequest(`/api/v1/jobs/${encodeURIComponent(storyboardSubmitted.body.jobId)}`, otherKey)
@@ -111,7 +117,7 @@ export async function proveStoryboardSubtitleReleaseFixture({ apiRequest, invari
   invariant(subtitleJob.status === 'completed' && subtitleJob.provider === 'internal' && subtitleJob.model === 'formatter-subtitle-v1' && subtitleJob.artifactId, subtitleJob.error || 'Subtitle job did not complete internally')
   invariant(subtitleJob.executionEvidence?.routeType === 'internal_formatter', 'Subtitle execution evidence was misclassified')
   invariant(subtitleJob.executionEvidence?.outputValidation?.segmentCount === 3 && subtitleJob.executionEvidence?.outputValidation?.nonOverlapping === true, 'Subtitle timing validation was missing')
-  const subtitleBytes = await downloadArtifact(apiRequest, invariant, appKey, subtitleJob.artifactId, 'application/x-subrip')
+  const subtitleBytes = await downloadArtifact(invariant, appKey, subtitleJob.artifactId, 'application/x-subrip')
   const subtitleText = subtitleBytes.toString('utf8')
   invariant(subtitleText.includes('00:00:00,000 --> 00:00:05,000') && subtitleText.includes('Create your horse profile today.'), 'Subtitle artifact content was invalid')
   const subtitleDenied = await apiRequest(`/api/v1/artifacts/${encodeURIComponent(subtitleJob.artifactId)}/file`, otherKey)
