@@ -133,14 +133,21 @@ describe('standalone subtitle contracts', () => {
     expect(result.evidence.liveProviderProof).toBe(false)
   })
 
-  it('binds the generic Job route and central worker to strict contracts', () => {
+  it('binds the generic Job route, central worker and authoritative fixture', () => {
     const jobs = source('apps/api/src/routes/jobs.ts')
     const worker = source('apps/worker/src/providers/durable-provider-fallback.ts')
+    const fixture = source('scripts/lib/proof-storyboard-subtitle-release-fixture.mjs')
+    const runner = source('scripts/proof-release-fixture.mjs')
     expect(jobs).toContain('StoryboardGenerationRequestSchema.safeParse')
     expect(jobs).toContain('SubtitleGenerationRequestSchema.safeParse')
     expect(jobs).toContain("internalExecutionEngine: 'planner'")
     expect(jobs).toContain("internalExecutionEngine: 'formatter'")
     expect(worker).toContain('handleStoryboardGenerationJob')
     expect(worker).toContain('handleSubtitleGenerationJob')
+    expect(fixture).toContain('STORYBOARD_SUBTITLE_RELEASE_FIXTURE=PASS')
+    expect(fixture).toContain('Cross-app storyboard Job access was not denied')
+    expect(fixture).toContain('Cross-app subtitle Artifact access was not denied')
+    expect(runner).toContain('proveStoryboardSubtitleReleaseFixture')
+    expect(runner).toContain('STORYBOARD_SUBTITLE_RELEASE_FIXTURE=PASS')
   })
 })
