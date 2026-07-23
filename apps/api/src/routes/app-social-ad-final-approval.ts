@@ -154,32 +154,47 @@ export async function registerSocialAdFinalApprovalRoutes(
       })
     }
 
-    await prisma.job.update({
-      where: { id: parent.id },
-      data: {
-        status: 'completed',
-        workflowPhase: 'completed',
-        progress: 100,
-        error: null,
-        completedAt: new Date(),
-        artifactId: primaryVideoArtifactId,
-        metadataJson: JSON.stringify({
-          ...metadata,
-          currentPhase: 'completed',
-          finalApproval: {
-            status: 'approved',
-            notes,
-            decidedAt,
-            appSlug: auth.app!.slug,
-          },
-          decisionEvidence: [
-            ...(Array.isArray(metadata.decisionEvidence) ? metadata.decisionEvidence : []),
-            evidence,
-          ],
-          completedAt: decidedAt,
-        }),
-      },
-    })
+    const completedAt = new Date()
+    await prisma.$transaction([
+      prisma.job.updateMany({
+        where: {
+          appSlug: parent.appSlug,
+          parentJobId: parent.id,
+          status: { in: ['planned', 'queued', 'processing', 'failed'] },
+        },
+        data: {
+          status: 'cancelled',
+          workflowPhase: 'superseded_by_final_approval',
+          completedAt,
+        },
+      }),
+      prisma.job.update({
+        where: { id: parent.id },
+        data: {
+          status: 'completed',
+          workflowPhase: 'completed',
+          progress: 100,
+          error: null,
+          completedAt,
+          artifactId: primaryVideoArtifactId,
+          metadataJson: JSON.stringify({
+            ...metadata,
+            currentPhase: 'completed',
+            finalApproval: {
+              status: 'approved',
+              notes,
+              decidedAt,
+              appSlug: auth.app!.slug,
+            },
+            decisionEvidence: [
+              ...(Array.isArray(metadata.decisionEvidence) ? metadata.decisionEvidence : []),
+              evidence,
+            ],
+            completedAt: decidedAt,
+          }),
+        },
+      }),
+    ])
 
     return reply.send({
       executionId: parent.executionId,
