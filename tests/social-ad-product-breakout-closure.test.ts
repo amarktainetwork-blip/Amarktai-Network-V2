@@ -4,6 +4,7 @@ import { DURABLE_WORKFLOW_REGISTRATIONS } from '../packages/core/src/long-form-e
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 const route = read('apps/api/src/routes/app-social-ad-video.ts')
+const finalApprovalRoute = read('apps/api/src/routes/app-social-ad-final-approval.ts')
 const campaignRoute = read('apps/api/src/routes/app-marketing-campaigns.ts')
 const quality = read('apps/worker/src/social-ad-quality-workflow-v2.ts')
 const assembly = read('apps/worker/src/social-ad-assembly.ts')
@@ -79,6 +80,14 @@ describe('product-breakout platform closure', () => {
     expect(openapi).toContain('/api/v1/social-ad-video/executions/{id}/candidates/{jobId}/retry:')
     expect(openapi).toContain('/api/v1/social-ad-video/executions/{id}/cancel:')
     expect(openapi).toContain('/api/v1/social-ad-video/executions/{id}/regenerate:')
+  })
+
+  it('atomically supersedes unfinished children before final completion', () => {
+    expect(finalApprovalRoute).toContain('prisma.$transaction([')
+    expect(finalApprovalRoute).toContain("status: { in: ['planned', 'queued', 'processing', 'failed'] }")
+    expect(finalApprovalRoute).toContain("workflowPhase: 'superseded_by_final_approval'")
+    expect(finalApprovalRoute).toContain("status: 'completed'")
+    expect(fixture).toContain('Completed resume duplicated work')
   })
 
   it('runs the authoritative real-service and browser proof', () => {
