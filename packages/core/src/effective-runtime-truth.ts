@@ -1,4 +1,5 @@
 import type { CapabilityKey } from './capabilities.js'
+import { getCapabilityActivationBlocker } from './capability-activation-blockers.js'
 import { INTERNAL_EXECUTOR_REGISTRATIONS } from './internal-executor-registry.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
 import {
@@ -85,11 +86,13 @@ function internalOperationalState(input: {
 }
 
 /**
- * Effective runtime truth keeps three execution classes separate:
+ * Effective runtime truth keeps four execution classes separate:
  * - provider-backed atomic executors remain grounded in model compatibility;
  * - durable composite workflows are grounded in workflow registrations;
  * - internal atomic executors are grounded in their local engine, queue, worker,
- *   artifact and fixture registrations and never acquire a fake provider/model.
+ *   artifact and fixture registrations and never acquire a fake provider/model;
+ * - activation-blocked capabilities retain their canonical contract while the
+ *   exact live account/schema or internal executor evidence remains outstanding.
  */
 export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T): T {
   type WorkflowRegistration = (typeof DURABLE_WORKFLOW_REGISTRATIONS)[number]
@@ -143,48 +146,91 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
     }
 
     const internal = internals.get(row.capability)
-    if (!internal) return row
-    const projection = readiness.get(row.capability)
-    const infrastructureReady = row.infrastructureReady || (projection ? !projection.blockedReasons.includes('infrastructure_missing') : false)
-    const policyAllowed = row.policyAllowed && !projection?.blockedReasons.includes('policy_restricted')
-    const locallyProven = row.locallyProven || projection?.locallyProven === true
-    const executableNow = infrastructureReady && policyAllowed
-    const blockedReasons = row.blockedReasons.filter((reason) => !INTERNAL_PROVIDER_BLOCKERS.has(reason))
-    if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
-    if (!policyAllowed) blockedReasons.push('policy_restricted')
-    if (executableNow && !locallyProven) blockedReasons.push('local_proof_missing')
-    const uniqueBlockers = [...new Set(blockedReasons)]
+    if (internal) {
+      const projection = readiness.get(row.capability)
+      const infrastructureReady = row.infrastructureReady || (projection ? !projection.blockedReasons.includes('infrastructure_missing') : false)
+      const policyAllowed = row.policyAllowed && !projection?.blockedReasons.includes('policy_restricted')
+      const locallyProven = row.locallyProven || projection?.locallyProven === true
+      const executableNow = infrastructureReady && policyAllowed
+      const blockedReasons = row.blockedReasons.filter((reason) => !INTERNAL_PROVIDER_BLOCKERS.has(reason))
+      if (!infrastructureReady) blockedReasons.push('infrastructure_missing')
+      if (!policyAllowed) blockedReasons.push('policy_restricted')
+      if (executableNow && !locallyProven) blockedReasons.push('local_proof_missing')
+      const uniqueBlockers = [...new Set(blockedReasons)]
 
+      return {
+        ...row,
+        clientImplemented: true,
+        adapterPresent: true,
+        executorRegistered: true,
+        executorRegistrationIds: [...new Set([...row.executorRegistrationIds, `internal:${internal.id}`])],
+        requestShapeKnown: true,
+        responseShapeKnown: true,
+        routeImplemented: true,
+        queuePathImplemented: true,
+        artifactPathImplemented: internal.artifactOutput !== null,
+        implementationReady: true,
+        configured: true,
+        infrastructureReady,
+        policyAllowed,
+        executableNow,
+        locallyProven,
+        liveProven: false,
+        eligibleProviders: [],
+        eligibleModels: [],
+        blockedReasons: uniqueBlockers,
+        remainingWork: uniqueBlockers,
+        operationalState: internalOperationalState({ executableNow, infrastructureReady, policyAllowed }),
+        classification: classifyInternal({ locallyProven, executableNow, infrastructureReady, policyAllowed }),
+      }
+    }
+
+    const activationBlocker = getCapabilityActivationBlocker(row.capability)
+    if (!activationBlocker || !row.policyAllowed) return row
+    const activationReason = `activation:${activationBlocker.blockerCode}`
+    const blockedReasons = [...new Set([
+      ...row.blockedReasons.filter((reason) => !STRUCTURAL_ATOMIC_BLOCKERS.has(reason)),
+      activationReason,
+    ])]
     return {
       ...row,
-      clientImplemented: true,
-      adapterPresent: true,
-      executorRegistered: true,
-      executorRegistrationIds: [...new Set([...row.executorRegistrationIds, `internal:${internal.id}`])],
-      requestShapeKnown: true,
-      responseShapeKnown: true,
-      routeImplemented: true,
-      queuePathImplemented: true,
-      artifactPathImplemented: internal.artifactOutput !== null,
-      implementationReady: true,
-      configured: true,
-      infrastructureReady,
-      policyAllowed,
-      executableNow,
-      locallyProven,
+      configured: activationBlocker.provider === 'network' ? true : row.configured,
+      executableNow: false,
       liveProven: false,
-      eligibleProviders: [],
-      eligibleModels: [],
-      blockedReasons: uniqueBlockers,
-      remainingWork: uniqueBlockers,
-      operationalState: internalOperationalState({ executableNow, infrastructureReady, policyAllowed }),
-      classification: classifyInternal({ locallyProven, executableNow, infrastructureReady, policyAllowed }),
+      blockedReasons,
+      remainingWork: [activationReason],
+      operationalState: activationBlocker.stage === 'staging_live_discovery' ? 'account_access_required' : 'contract_unknown',
+      classification: 'BLOCKED',
+      activationBlocker: {
+        provider: activationBlocker.provider,
+        stage: activationBlocker.stage,
+        code: activationBlocker.blockerCode,
+        message: activationBlocker.message,
+        requiredEvidence: [...activationBlocker.requiredEvidence],
+      },
     }
   })
 
   const capabilityMap = new Map(capabilities.map((capability) => [capability.capability, capability]))
   const releaseReadiness = truth.releaseReadiness.map((entry) => {
     const internal = internals.get(entry.capability)
+    const activationBlocker = getCapabilityActivationBlocker(entry.capability)
+    if (activationBlocker && !internal) {
+      const capability = capabilityMap.get(entry.capability)!
+      return {
+        ...entry,
+        releaseCandidate: true,
+        catalogued: true,
+        clientPresent: capability.clientImplemented,
+        executorPresent: false,
+        workflowPresent: false,
+        schemaPresent: Boolean(capability.inputContractReference && capability.outputContractReference && capability.schemaKey),
+        locallyProven: capability.locallyProven,
+        liveProven: false,
+        readyForDashboardExecution: false,
+        blockedReasons: [`activation:${activationBlocker.blockerCode}`],
+      }
+    }
     if (!internal) return entry
     const capability = capabilityMap.get(entry.capability)!
     const blockedReasons: string[] = []
@@ -222,6 +268,7 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
     releaseCandidateCapabilities: [...new Set([
       ...truth.releaseCandidateCapabilities,
       ...INTERNAL_EXECUTOR_REGISTRATIONS.map((registration) => registration.capability),
+      ...capabilities.filter((capability) => capability.activationBlocker).map((capability) => capability.capability),
     ])],
     countsByClassification,
   }
