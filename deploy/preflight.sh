@@ -8,7 +8,14 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-feat/production-activation-music-longform}"
 DEPLOY_SHA="${DEPLOY_SHA:-}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/amarktai}"
 
-[[ "$DEPLOY_BRANCH" == "feat/production-activation-music-longform" ]] || { echo 'ERROR: unexpected deployment branch' >&2; exit 2; }
+case "$DEPLOY_BRANCH" in
+  feat/production-activation-music-longform|feat/batch-b-platform-closure)
+    ;;
+  *)
+    echo 'ERROR: unexpected deployment branch' >&2
+    exit 2
+    ;;
+esac
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: DEPLOY_SHA must be a 40-character SHA' >&2; exit 2; }
 cd "$REPO_DIR"
 source "$REPO_DIR/deploy/nginx-check.sh"
@@ -27,7 +34,7 @@ ENV_MODE="$(stat -c '%a' .env)"
 
 env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
 env_name_present() { grep -Eq "^$1=" .env; }
-for key in DATABASE_URL MYSQL_ROOT_PASSWORD MYSQL_PASSWORD REDIS_URL QDRANT_URL JWT_SECRET PROVIDER_KEY_ENCRYPTION_SECRET STORAGE_ROOT PUBLIC_API_URL GENX_BASE_URL GENX_API_KEY TOGETHER_API_KEY DEEPINFRA_API_KEY ADMIN_EMAIL ADMIN_PASSWORD; do
+for key in DATABASE_URL MYSQL_ROOT_PASSWORD MYSQL_PASSWORD REDIS_URL QDRANT_URL SEARXNG_SECRET JWT_SECRET PROVIDER_KEY_ENCRYPTION_SECRET STORAGE_ROOT PUBLIC_API_URL GENX_BASE_URL GENX_API_KEY TOGETHER_API_KEY DEEPINFRA_API_KEY ADMIN_EMAIL ADMIN_PASSWORD; do
   env_name_present "$key" || { echo "ERROR: required environment name is absent: $key" >&2; exit 2; }
 done
 PUBLIC_URL="$(env_value PUBLIC_API_URL)"
@@ -35,6 +42,7 @@ PUBLIC_URL="$(env_value PUBLIC_API_URL)"
 [[ "$PUBLIC_URL" != *example.com* && "$PUBLIC_URL" != *localhost* && "$PUBLIC_URL" != *127.0.0.1* ]] || { echo 'ERROR: PUBLIC_API_URL is a placeholder or local URL' >&2; exit 2; }
 GENX_URL="$(env_value GENX_BASE_URL)"
 [[ "$GENX_URL" =~ ^https:// ]] || { echo 'ERROR: GENX_BASE_URL must be an HTTPS URL' >&2; exit 2; }
+[[ -n "$(env_value SEARXNG_SECRET)" ]] || { echo 'ERROR: SEARXNG_SECRET must be nonempty' >&2; exit 2; }
 [[ -n "$(env_value ADMIN_PASSWORD)" ]] || { echo 'ERROR: ADMIN_PASSWORD must be nonempty for authenticated post-deploy proof' >&2; exit 2; }
 
 command -v docker >/dev/null
