@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { getArtifactFile, getArtifactRecord } from '@amarktai/artifacts'
+import type { AppCapabilityGrantContext } from '@amarktai/core'
+import { validateSourceAudio } from '@amarktai/core/source-audio-validation'
 import {
   VoiceActivityDetectionOutputSchema,
   VoiceActivityDetectionRequestSchema,
-  validateSourceAudio,
-  type AppCapabilityGrantContext,
   type VoiceActivitySegment,
-} from '@amarktai/core'
+} from '@amarktai/core/voice-activity-detection-contracts'
 import { prisma } from '@amarktai/db'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 
