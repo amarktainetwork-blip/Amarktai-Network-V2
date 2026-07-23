@@ -6,6 +6,7 @@ import {
   createLongFormVideoPlan,
   generateSrt,
   generateVtt,
+  LongFormVideoRequestSchema,
   type SubtitleSegment,
 } from '@amarktai/core'
 import {
@@ -83,7 +84,7 @@ export async function handleStoryboardGenerationJob(payload: WorkerJobData): Pro
       request.brief ?? 'Create a production-ready storyboard from the supplied script.',
       request.script ? `Script context:\n${request.script}` : '',
     ].filter(Boolean).join('\n\n').slice(0, 5_000)
-    const plan = createLongFormVideoPlan({
+    const longFormRequest = LongFormVideoRequestSchema.parse({
       prompt: planningPrompt,
       targetDurationSeconds: request.targetDurationSeconds,
       sceneCount: request.sceneCount,
@@ -104,6 +105,7 @@ export async function handleStoryboardGenerationJob(payload: WorkerJobData): Pro
       legalQualifier: request.legalQualifier,
       voiceoverScript: request.script,
     })
+    const plan = createLongFormVideoPlan(longFormRequest)
 
     const artifactDocument = {
       schemaVersion: 1,
