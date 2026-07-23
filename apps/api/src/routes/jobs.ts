@@ -32,6 +32,7 @@ import {
   StoryboardGenerationRequestSchema,
   SubtitleGenerationRequestSchema,
 } from '@amarktai/core/storyboard-subtitle-contracts'
+import { VoiceActivityDetectionRequestSchema } from '@amarktai/core/voice-activity-detection-contracts'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
@@ -123,6 +124,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     const imageUpscale = capability === 'image_upscale'
     const storyboardGeneration = capability === 'storyboard_generation'
     const subtitleGeneration = capability === 'subtitle_generation'
+    const voiceActivityDetection = capability === 'voice_activity_detection'
     const internalArtifactCapability = imageUpscale || storyboardGeneration || subtitleGeneration
     let validatedInput: Record<string, unknown>
 
@@ -159,6 +161,16 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         })
       }
       validatedInput = subtitleRequest.data
+    } else if (voiceActivityDetection) {
+      const vadRequest = VoiceActivityDetectionRequestSchema.safeParse(input)
+      if (!vadRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid voice_activity_detection request: ${vadRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: vadRequest.error.issues,
+        })
+      }
+      validatedInput = vadRequest.data
     } else {
       const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
       if (!capabilityRequest.success) {
@@ -168,9 +180,10 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const specialistVision = (SPECIALIST_VISION_CAPABILITIES as readonly string[]).includes(capability)
-    const governedSourceArtifact = specialistVision || imageUpscale
+    const sourceReadWriteCapability = specialistVision || imageUpscale
+    const governedSourceArtifact = sourceReadWriteCapability || voiceActivityDetection
     if (governedSourceArtifact) {
-      const sourceArtifactId = ['sourceImageArtifactId', 'sourceVideoArtifactId', 'sourceDocumentArtifactId']
+      const sourceArtifactId = ['sourceImageArtifactId', 'sourceVideoArtifactId', 'sourceDocumentArtifactId', 'sourceAudioArtifactId']
         .map((field) => validatedInput[field])
         .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
       if (sourceArtifactId) {
@@ -182,6 +195,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         if (imageUpscale && sourceArtifact.type !== 'image' && !sourceArtifact.mimeType.startsWith('image/')) {
           return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'image_upscale requires a completed image artifact.' })
         }
+        if (voiceActivityDetection && sourceArtifact.type !== 'audio' && !sourceArtifact.mimeType.startsWith('audio/')) {
+          return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'voice_activity_detection requires a completed audio artifact.' })
+        }
       }
     }
 
@@ -192,8 +208,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
       return reply.status(403).send({ error: true, message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.` })
     }
-    if (governedSourceArtifact && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
+    if (sourceReadWriteCapability && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
       return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_GRANT_REQUIRED', message: `${capability} requires artifact read and write grants.` })
+    }
+    if (voiceActivityDetection && !grantResolution.grant.artifactRead) {
+      return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_READ_GRANT_REQUIRED', message: 'voice_activity_detection requires artifact read permission.' })
     }
     if (internalArtifactCapability && !grantResolution.grant.artifactWrite) {
       return reply.status(403).send({ error: true, code: 'ARTIFACT_WRITE_GRANT_REQUIRED', message: `${capability} requires artifact write permission.` })
@@ -207,11 +226,13 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
     const internalExecution = imageUpscale
       ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' }
-      : storyboardGeneration
-        ? { internalExecutionEngine: 'planner' }
-        : subtitleGeneration
-          ? { internalExecutionEngine: 'formatter' }
-          : {}
+      : voiceActivityDetection
+        ? { internalSourceArtifactId: validatedInput.sourceAudioArtifactId, internalExecutionEngine: 'ffmpeg' }
+        : storyboardGeneration
+          ? { internalExecutionEngine: 'planner' }
+          : subtitleGeneration
+            ? { internalExecutionEngine: 'formatter' }
+            : {}
 
     const immutableMetadata = {
       ...metadata,
