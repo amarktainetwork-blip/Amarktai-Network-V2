@@ -94,8 +94,9 @@ test('chat renders a multi-chunk SSE response with execution evidence', async ()
 
 test('image result is rendered, range-readable, and downloadable', async () => {
   await page.goto(`${baseURL}/dashboard/image`)
-  await page.getByPlaceholder('Describe the image you want to generate...').fill('A deterministic green release fixture')
-  await page.getByRole('button', { name: 'Generate' }).click()
+  const imagePrompt = page.getByPlaceholder('Describe the image you want to generate...')
+  await imagePrompt.fill('A deterministic green release fixture')
+  await imagePrompt.press('Enter')
   const image = page.getByAltText('Generated image')
   await expect(image).toBeVisible({ timeout: 90_000 })
   const download = page.getByRole('link', { name: 'Download' })
