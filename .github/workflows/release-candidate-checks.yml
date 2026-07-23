@@ -141,9 +141,7 @@ jobs:
 
       - name: Production dependency audit
         shell: bash
-        run: |
-          set -o pipefail
-          npm audit --omit=dev 2>&1 | tee production-dependency-audit.log
+        run: bash scripts/audit-production-dependencies.sh
 
       - name: Upload production dependency audit diagnostics
         if: always()
