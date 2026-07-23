@@ -44,12 +44,40 @@ jobs:
         run: npx tsx scripts/generate-authoritative-status-map.mjs --output=authoritative-status-map.json
 
       - name: Capture current approved public DeepInfra standard-model catalogue
-        run: npx tsx scripts/capture-deepinfra-standard-models.ts --output=deepinfra-standard-models.json
+        shell: bash
+        run: |
+          set +e
+          npx tsx scripts/capture-deepinfra-standard-models.ts --output=deepinfra-standard-models.json 2>&1 | tee deepinfra-capture.log
+          capture_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$capture_status" -ne 0 ] || [ ! -s deepinfra-standard-models.json ]; then
+            CAPTURE_STATUS="$capture_status" node <<'NODE'
+          const fs = require('fs')
+          const log = fs.existsSync('deepinfra-capture.log') ? fs.readFileSync('deepinfra-capture.log', 'utf8').slice(-4000) : 'capture process produced no log'
+          fs.writeFileSync('deepinfra-standard-models.json', `${JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            captureSucceeded: false,
+            source: 'https://api.deepinfra.com/models/list',
+            policySource: 'packages/core/src/model-family-policy.ts',
+            sourceRowCount: 0,
+            relevantRowCount: 0,
+            count: 0,
+            excludedCount: 0,
+            excludedReasons: [],
+            excludedModels: [],
+            models: [],
+            error: `capture process exited ${process.env.CAPTURE_STATUS}: ${log}`,
+          }, null, 2)}\n`)
+          NODE
+            echo "DEEPINFRA_PUBLIC_CAPTURE=FAIL_CLOSED status=$capture_status"
+          else
+            echo "DEEPINFRA_PUBLIC_CAPTURE=PASS"
+          fi
 
       - name: Validate generated truth artifacts
         shell: bash
         run: |
-          node -e "const fs=require('fs'); const map=JSON.parse(fs.readFileSync('authoritative-status-map.json','utf8')); if(map.counts.catalogue!==68) throw new Error('Expected 68 capabilities'); if(map.capabilities.length!==68) throw new Error('Expected 68 capability rows'); const models=JSON.parse(fs.readFileSync('deepinfra-standard-models.json','utf8')); if(!Array.isArray(models.models)) throw new Error('Expected DeepInfra model rows'); if(models.models.some((row)=>/(?:^|[\/_-])(?:qwen|xiaomi[-_]?mimo|mimo)(?:$|[\/_-])/i.test(row.modelId))) throw new Error('Removed model family entered approved catalogue'); console.log(JSON.stringify({capabilities:map.counts, deepinfraModels:models.count, policyExcluded:models.excludedCount}));"
+          node -e "const fs=require('fs'); const map=JSON.parse(fs.readFileSync('authoritative-status-map.json','utf8')); if(map.counts.catalogue!==68) throw new Error('Expected 68 capabilities'); if(map.capabilities.length!==68) throw new Error('Expected 68 capability rows'); const models=JSON.parse(fs.readFileSync('deepinfra-standard-models.json','utf8')); if(!Array.isArray(models.models)) throw new Error('Expected DeepInfra model rows'); if(models.models.some((row)=>/(?:^|[\/_-])(?:qwen|xiaomi[-_]?mimo|mimo)(?:$|[\/_-])/i.test(row.modelId))) throw new Error('Removed model family entered approved catalogue'); console.log(JSON.stringify({capabilities:map.counts, deepinfraCaptureSucceeded:models.captureSucceeded, deepinfraModels:models.count, policyExcluded:models.excludedCount, captureError:models.error||null}));"
 
       - name: Upload authoritative status map
         uses: actions/upload-artifact@v4
@@ -60,3 +88,4 @@ jobs:
           path: |
             authoritative-status-map.json
             deepinfra-standard-models.json
+            deepinfra-capture.log
