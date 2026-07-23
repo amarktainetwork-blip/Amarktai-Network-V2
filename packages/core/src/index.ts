@@ -435,7 +435,7 @@ export {
   calculateLongFormProgress,
   getExecutionSummary,
   type SceneExecutionPayload,
-  type LongFormExecutionState,
+  type SceneExecutionState,
   type LongFormExecutionState,
   type LongFormAssemblyHandoff,
 } from './long-form-execution.js'
