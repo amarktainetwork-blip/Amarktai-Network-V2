@@ -1,7 +1,7 @@
 import { CAPABILITY_BY_KEY, type CapabilityKey } from './capabilities.js'
 
-export type InternalExecutionEngine = 'ffmpeg'
-export type InternalEvidenceSource = 'internal_ffmpeg'
+export type InternalExecutionEngine = 'ffmpeg' | 'planner' | 'formatter'
+export type InternalEvidenceSource = 'internal_ffmpeg' | 'internal_planner' | 'internal_formatter'
 
 export interface InternalExecutorRegistration {
   id: string
@@ -12,7 +12,7 @@ export interface InternalExecutorRegistration {
   acceptedRequestContract: string
   outputContract: string
   sourceArtifactRequired: boolean
-  artifactOutput: 'audio' | 'image' | null
+  artifactOutput: 'audio' | 'image' | 'document' | 'transcript' | null
   executionMode: 'queued'
   evidenceSource: InternalEvidenceSource
   infrastructure: readonly string[]
@@ -57,6 +57,36 @@ export const INTERNAL_EXECUTOR_REGISTRATIONS = [
     evidenceSource: 'internal_ffmpeg',
     infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
     fixtureProof: 'IMAGE_UPSCALE_RELEASE_FIXTURE',
+  },
+  {
+    id: 'internal.planner.storyboard-generation',
+    capability: 'storyboard_generation',
+    engine: 'planner',
+    handlerName: 'handleStoryboardGenerationJob',
+    dispatchPath: 'executeWithDurableProviderFallback -> handleStoryboardGenerationJob',
+    acceptedRequestContract: CAPABILITY_BY_KEY.storyboard_generation.inputContractReference,
+    outputContract: CAPABILITY_BY_KEY.storyboard_generation.outputContractReference,
+    sourceArtifactRequired: false,
+    artifactOutput: 'document',
+    executionMode: 'queued',
+    evidenceSource: 'internal_planner',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage'],
+    fixtureProof: 'STORYBOARD_SUBTITLE_RELEASE_FIXTURE',
+  },
+  {
+    id: 'internal.formatter.subtitle-generation',
+    capability: 'subtitle_generation',
+    engine: 'formatter',
+    handlerName: 'handleSubtitleGenerationJob',
+    dispatchPath: 'executeWithDurableProviderFallback -> handleSubtitleGenerationJob',
+    acceptedRequestContract: CAPABILITY_BY_KEY.subtitle_generation.inputContractReference,
+    outputContract: CAPABILITY_BY_KEY.subtitle_generation.outputContractReference,
+    sourceArtifactRequired: false,
+    artifactOutput: 'transcript',
+    executionMode: 'queued',
+    evidenceSource: 'internal_formatter',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage'],
+    fixtureProof: 'STORYBOARD_SUBTITLE_RELEASE_FIXTURE',
   },
 ] as const satisfies readonly InternalExecutorRegistration[]
 
