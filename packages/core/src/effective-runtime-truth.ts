@@ -1,5 +1,5 @@
 import type { CapabilityKey } from './capabilities.js'
-import { getCapabilityActivationBlocker } from './capability-activation-blockers.js'
+import { CAPABILITY_ACTIVATION_BLOCKERS, getCapabilityActivationBlocker } from './capability-activation-blockers.js'
 import { INTERNAL_EXECUTOR_REGISTRATIONS } from './internal-executor-registry.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
 import {
@@ -201,13 +201,6 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
       remainingWork: [activationReason],
       operationalState: activationBlocker.stage === 'staging_live_discovery' ? 'account_access_required' : 'contract_unknown',
       classification: 'BLOCKED',
-      activationBlocker: {
-        provider: activationBlocker.provider,
-        stage: activationBlocker.stage,
-        code: activationBlocker.blockerCode,
-        message: activationBlocker.message,
-        requiredEvidence: [...activationBlocker.requiredEvidence],
-      },
     }
   })
 
@@ -268,7 +261,7 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
     releaseCandidateCapabilities: [...new Set([
       ...truth.releaseCandidateCapabilities,
       ...INTERNAL_EXECUTOR_REGISTRATIONS.map((registration) => registration.capability),
-      ...capabilities.filter((capability) => capability.activationBlocker).map((capability) => capability.capability),
+      ...CAPABILITY_ACTIVATION_BLOCKERS.map((blocker) => blocker.capability),
     ])],
     countsByClassification,
   }
