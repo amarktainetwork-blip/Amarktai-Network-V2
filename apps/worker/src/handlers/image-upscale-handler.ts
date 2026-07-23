@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { prisma } from '@amarktai/db'
 import { getArtifactFile, getArtifactRecord, saveArtifact } from '@amarktai/artifacts'
+import { canReadSourceArtifactForApp } from '@amarktai/core'
 import { inspectImageArtifact } from '@amarktai/core/specialist-vision'
 import {
   IMAGE_UPSCALE_MAX_DIMENSION,
@@ -59,7 +60,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
     }
 
     const sourceRecord = await getArtifactRecord(request.sourceImageArtifactId)
-    if (!sourceRecord || sourceRecord.appSlug !== payload.appSlug) {
+    if (!sourceRecord || !canReadSourceArtifactForApp(payload.appSlug, sourceRecord.appSlug)) {
       return { success: false, status: 'failed', error: 'Authorised source image artifact was not found', provider: 'internal', model: ENGINE_MODEL }
     }
     if (sourceRecord.status !== 'completed' || (sourceRecord.type !== 'image' && !sourceRecord.mimeType.startsWith('image/'))) {
@@ -130,6 +131,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
           mimeType: expectedMime,
           metadata: {
             sourceArtifactId: request.sourceImageArtifactId,
+            sourceArtifactAppSlug: sourceRecord.appSlug,
             sourceChecksum: sourceInspection.checksum,
             sourceWidth,
             sourceHeight,
@@ -178,6 +180,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
           evidenceSource: 'internal_ffmpeg',
           liveProviderProof: false,
           sourceArtifactId: request.sourceImageArtifactId,
+          sourceArtifactAppSlug: sourceRecord.appSlug,
           outputArtifactId: outputArtifact.id,
           outputChecksum,
           outputValidation: { valid: true, width: targetWidth, height: targetHeight, mimeType: expectedMime, filter: 'lanczos' },
