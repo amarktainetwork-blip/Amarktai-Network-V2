@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { prisma } from '@amarktai/db'
 import { saveArtifact } from '@amarktai/artifacts'
 import {
+  buildSubtitleSegments,
   createLongFormVideoPlan,
   generateSrt,
-  generateSubtitles,
   generateVtt,
   type SubtitleSegment,
 } from '@amarktai/core'
@@ -15,6 +15,7 @@ import {
   StoryboardGenerationRequestSchema,
   SubtitleGenerationOutputSchema,
   SubtitleGenerationRequestSchema,
+  type SubtitleGenerationRequest,
 } from '@amarktai/core/storyboard-subtitle-contracts'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 
@@ -202,21 +203,18 @@ export async function handleStoryboardGenerationJob(payload: WorkerJobData): Pro
   }
 }
 
-function normalizeSubtitleSegments(input: ReturnType<typeof SubtitleGenerationRequestSchema.parse>): {
+function normalizeSubtitleSegments(input: SubtitleGenerationRequest): {
   segments: SubtitleSegment[]
   content: string
   timingSource: 'explicit_scenes' | 'explicit_segments'
 } {
   if (input.scenes) {
-    const generated = generateSubtitles({
-      scenes: input.scenes.map((scene) => ({
-        sceneNumber: scene.sceneNumber,
-        subtitleText: scene.subtitleText,
-        durationSeconds: scene.durationSeconds,
-      })),
-      format: input.format,
-    })
-    return { segments: generated.segments, content: generated.content, timingSource: 'explicit_scenes' }
+    const segments = buildSubtitleSegments(input.scenes)
+    return {
+      segments,
+      content: input.format === 'vtt' ? generateVtt(segments) : generateSrt(segments),
+      timingSource: 'explicit_scenes',
+    }
   }
   const segments = input.segments!.map((segment, index) => ({
     index: index + 1,
@@ -256,6 +254,9 @@ export async function handleSubtitleGenerationJob(payload: WorkerJobData): Promi
 
     const request = parsed.data
     const normalized = normalizeSubtitleSegments(request)
+    if (!normalized.segments.length || !normalized.content.trim()) {
+      return { success: false, status: 'failed', provider: 'internal', model, error: 'Subtitle generation produced no timed segments' }
+    }
     const data = Buffer.from(normalized.content, 'utf8')
     const outputChecksum = checksum(data)
     const durationSeconds = Math.max(...normalized.segments.map((segment) => segment.endTimeSeconds))
