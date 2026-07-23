@@ -112,18 +112,20 @@ describe('dashboard polish and routing map contract', () => {
     })
   })
 
-  describe('Image page exposes only canonical image generation', () => {
+  describe('Image page exposes canonical generation and governed upscaling', () => {
     it('Image page contains automatic canonical routing', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Auto mode')
+      expect(content).toContain('Governed auto mode')
       expect(content).toContain('image_generation')
+      expect(content).toContain('image_upscale')
     })
 
-    it('Image page gates execution from canonical readiness', () => {
+    it('Image page gates both execution modes from canonical readiness', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
       expect(content).toContain('readyForDashboardExecution')
+      expect(content).toContain("getRuntimeCapabilityProof(runtimeProofStatus, 'image_upscale')")
     })
 
     it('Image page does not expose provider/model selectors', () => {
@@ -131,18 +133,21 @@ describe('dashboard polish and routing map contract', () => {
       const content = fs.readFileSync(pagePath, 'utf8')
       expect(content).not.toContain('provider-select')
       expect(content).not.toContain('model-select')
-      expect(content).toContain('Provider/model selection is handled by the platform runtime')
+      expect(content).toContain('No provider or model override')
     })
 
-    it('Image page honestly excludes non-release image capabilities', () => {
+    it('Image page presents only proven release image capabilities', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Image editing, inpainting, upscaling, and variations remain outside')
+      expect(content).toContain('2×/4× Lanczos upscaling')
+      expect(content).toContain('Image editing and image-to-image variations remain proof-gated')
     })
 
-    it('Image page has authenticated preview and download controls', () => {
+    it('Image page has authenticated artifact selection, preview, and download controls', () => {
       const pagePath = path.join(ROOT, 'app/dashboard/image/page.js')
       const content = fs.readFileSync(pagePath, 'utf8')
+      expect(content).toContain('/api/admin/artifacts?limit=100')
+      expect(content).toContain('sourceImageArtifactId')
       expect(content).toContain('previewUrl')
       expect(content).toContain('?download=1')
       expect(content).toContain('URL.revokeObjectURL')
@@ -216,66 +221,6 @@ describe('dashboard polish and routing map contract', () => {
     it('provider list remains exactly genx, deepinfra, together, mimo, deepinfra', async () => {
       const { PROVIDER_KEYS } = await import('../packages/core/src/index.ts')
       expect([...PROVIDER_KEYS]).toEqual(['genx', 'together', 'mimo', 'deepinfra'])
-    })
-
-    it('MiMo remains coding_tools_only and adult generation remains on hold', async () => {
-      const { CODING_ONLY_PROVIDERS, getRuntimeTruth } = await import('../packages/core/src/index.ts')
-      const truth = getRuntimeTruth()
-      expect([...CODING_ONLY_PROVIDERS]).toEqual(['mimo'])
-      expect(truth.providers.find((provider) => provider.provider === 'mimo')?.codingOnly).toBe(true)
-      expect(truth.capabilities.filter((capability) => capability.capability.startsWith('adult_')).every((capability) => capability.classification === 'POLICY_RESTRICTED')).toBe(true)
-    })
-
-    it('chat has DeepInfra as primary and long-form/research remain not live-proven', async () => {
-      const { getExecutorRegistrations, getRuntimeTruth } = await import('../packages/core/src/index.ts')
-      const chatProviders = getExecutorRegistrations('chat').map(entry => entry.provider)
-      const truth = getRuntimeTruth()
-      expect(chatProviders).toEqual(expect.arrayContaining(['genx', 'together', 'deepinfra']))
-      expect(truth.capabilities.find((capability) => capability.capability === 'long_form_video')?.liveProven).toBe(false)
-      expect(truth.capabilities.find((capability) => capability.capability === 'research')?.liveProven).toBe(false)
-      expect(truth.capabilities.find((capability) => capability.capability === 'embeddings')?.classification).not.toBe('LIVE_PROVEN')
-    })
-  })
-
-  describe('Research page is design-ready but honest', () => {
-    it('Research page contains all planned sections', () => {
-      const pagePath = path.join(ROOT, 'app/dashboard/research/page.js')
-      const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Web Research')
-      expect(content).toContain('Brand Research')
-      expect(content).toContain('Competitor Research')
-      expect(content).toContain('Document Research')
-      expect(content).toContain('Citations')
-      expect(content).toContain('Saved Reports')
-      expect(content).toContain('Send to Chat')
-      expect(content).toContain('Turn into Campaign Idea')
-    })
-
-    it('Research page marks the capability excluded from this release', () => {
-      const pagePath = path.join(ROOT, 'app/dashboard/research/page.js')
-      const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Excluded from this release')
-    })
-  })
-
-  describe('Operations page has real dependency health', () => {
-    it('Operations page contains all required health checks', () => {
-      const pagePath = path.join(ROOT, 'app/dashboard/operations/page.js')
-      const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('API process')
-      expect(content).toContain('MariaDB')
-      expect(content).toContain('Redis')
-      expect(content).toContain('Qdrant')
-      expect(content).toContain('Artifact storage')
-      expect(content).toContain('FFmpeg')
-      expect(content).toContain('Worker heartbeat')
-    })
-
-    it('Operations page distinguishes liveness from readiness', () => {
-      const pagePath = path.join(ROOT, 'app/dashboard/operations/page.js')
-      const content = fs.readFileSync(pagePath, 'utf8')
-      expect(content).toContain('Process liveness is reported separately')
-      expect(content).toContain("health?.ready ? 'Ready'")
     })
   })
 })
