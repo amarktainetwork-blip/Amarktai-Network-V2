@@ -45,8 +45,9 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
   const token = parseBearerToken(bearerHeader)
   if (!token) return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
 
+  const hashedToken = hashAppApiKey(token)
   const apiKey = await prisma.appApiKey.findUnique({
-    where: { key: hashAppApiKey(token) },
+    where: { key: hashedToken },
     include: {
       appConnection: {
         select: {
@@ -96,6 +97,8 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
     const body = request.body as Record<string, unknown>
+
+    // 2. COMPLIANCE GATE: Block provider/model overrides in every app-facing request layer.
     const blockedField = hasBlockedOverrides(body)
       || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
       || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
