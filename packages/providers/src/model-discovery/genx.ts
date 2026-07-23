@@ -1,4 +1,4 @@
-import { getGenxBaseUrl, type CapabilityKey, type ProviderDiscoveryResult, type TransportProfile } from '@amarktai/core'
+import { getGenxBaseUrl, hasExecutorRegistration, type CapabilityKey, type ProviderDiscoveryResult, type TransportProfile } from '@amarktai/core'
 import { discoveryTimestamp, failedLiveResult, fetchModelList, liveResult, modelFromProviderRecord, skippedResult, stringField, type DiscoveryAdapterOptions } from './common.js'
 
 const GENX_MODEL_CATEGORIES = ['', 'text', 'image', 'video', 'avatar', 'transcription', 'stt', 'voice', 'audio', 'music', 'multimodal']
@@ -15,11 +15,20 @@ function classifyGenx(record: Record<string, unknown>, modelId: string, rawType:
   const advertised = [record.task, record.tasks, record.capabilities, record.modalities, record.description]
     .flatMap((value) => Array.isArray(value) ? value : [value]).filter((value): value is string => typeof value === 'string').join(' ')
   const text = `${modelId} ${rawType} ${advertised}`.toLowerCase()
+
+  // Specialist contracts must win before broad video/voice/audio matches. Live
+  // discovery may identify a model family, but it does not create a callable
+  // executor or prove the model-specific request/response schema.
   if (/transcri|speech-to-text|automatic-speech-recognition|\bstt\b|whisper/.test(text)) return { taskType: 'transcription', capabilities: ['stt'], inputs: ['audio'], outputs: ['text'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/lip[-_ ]?sync|sync[-_ ]?lips|talking[-_ ]?(head|photo)/.test(text)) return { taskType: 'lip-sync', capabilities: ['lip_sync'], inputs: ['video', 'audio'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/avatar|digital[-_ ]?human/.test(text)) return { taskType: 'avatar', capabilities: ['avatar_generation'], inputs: ['text', 'image', 'audio'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/voice[-_ ]?clone|clone[-_ ]?voice|instant[-_ ]?voice/.test(text)) return { taskType: 'voice-clone', capabilities: ['voice_clone'], inputs: ['audio', 'text'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/voice[-_ ]?(conversion|convert|remix)|speech[-_ ]?to[-_ ]?speech/.test(text)) return { taskType: 'voice-conversion', capabilities: ['voice_conversion'], inputs: ['audio'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
+  if (/text[-_ ]?to[-_ ]?audio|sound[-_ ]?effect|\bsfx\b|audio[-_ ]?generation/.test(text)) return { taskType: 'text-to-audio', capabilities: ['text_to_audio'], inputs: ['text'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/image-to-video|(^|[-_/])i2v($|[-_/])/.test(text)) return { taskType: 'image-to-video', capabilities: ['image_to_video'], inputs: ['text', 'image'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/video-to-video|reference-video|(^|[-_/])r2v($|[-_/])/.test(text)) return { taskType: 'video-to-video', capabilities: ['video_to_video'], inputs: ['text', 'video'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/text-to-video|video|seedance|veo|wan/.test(text)) return { taskType: 'text-to-video', capabilities: ['video_generation'], inputs: ['text'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
-  if (/music|lyria|song|audio-generation|text-to-music/.test(text)) {
+  if (/music|lyria|song|text-to-music/.test(text)) {
     const songCapable = /song|vocal|lyrics|lyria[-_ ]?3[-_ ]?pro/.test(text)
     return {
       taskType: songCapable ? 'song' : 'music',
@@ -31,7 +40,6 @@ function classifyGenx(record: Record<string, unknown>, modelId: string, rawType:
     }
   }
   if (/text-to-speech|\btts\b|voice|speech-synthesis/.test(text)) return { taskType: 'text-to-speech', capabilities: ['tts'], inputs: ['text'], outputs: ['audio'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
-  if (/avatar/.test(text)) return { taskType: 'avatar', capabilities: ['avatar_generation'], inputs: ['text', 'image', 'audio'], outputs: ['video'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/image-edit|inpaint|image-to-image/.test(text)) return { taskType: 'image-to-image', capabilities: ['image_edit', 'image_to_image'], inputs: ['text', 'image'], outputs: ['image'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/image/.test(text)) return { taskType: 'text-to-image', capabilities: ['image_generation'], inputs: ['text'], outputs: ['image'], transport: 'async_job_poll', endpointFamily: 'genx_generation_v1' }
   if (/chat|text|reasoning|code/.test(text)) return { taskType: 'text-generation', capabilities: ['chat', 'streaming_chat', 'reasoning', 'code', 'summarization', 'translation', 'question_answering', 'classification', 'extraction', 'structured_output'], inputs: ['text'], outputs: ['text'], transport: 'openai_chat_sse', endpointFamily: 'openai_chat' }
@@ -53,7 +61,7 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
   ]
 
   if (!options.live || !options.apiKey) {
-    return skippedResult('genx', endpointSource, staticModels, ['GenX safe discovery inspects repo/client truth only. Live mode sweeps /api/v1/models categories and checks for music/Lyria-like models without generation calls.'])
+    return skippedResult('genx', endpointSource, staticModels, ['GenX safe discovery inspects repo/client truth only. Live mode sweeps /api/v1/models categories without generation calls.'])
   }
 
   try {
@@ -73,7 +81,11 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
       const modelId = stringField(record, ['id', 'model', 'model_id', 'slug', 'name'])
       const rawType = stringField(record, ['category', 'type', 'kind'])
       const classification = classifyGenx(record, modelId, rawType)
-      const contractKnown = classification.capabilities.length > 0
+      const executorImplemented = classification.capabilities.some((capability) => hasExecutorRegistration(capability, 'genx'))
+      const capabilityKnown = classification.capabilities.length > 0
+      const activationBlocker = capabilityKnown && !executorImplemented
+        ? 'genx_live_model_schema_and_executor_activation_required'
+        : null
       return modelFromProviderRecord({
         provider: 'genx',
         modelId,
@@ -90,19 +102,38 @@ export async function discoverGenXProviderModels(options: DiscoveryAdapterOption
         discoverySource: 'live_endpoint',
         upstreamProvider: stringField(record, ['provider', 'upstreamProvider', 'upstream_provider'], 'genx'),
         endpointFamily: classification.endpointFamily,
-        providerClientExists: contractKnown,
-        workerExecutorExists: contractKnown,
-        endpointShapeKnown: contractKnown,
-        requestShapeKnown: contractKnown,
-        responseShapeKnown: contractKnown,
-        artifactPersistenceExists: contractKnown,
-        streamingSupported: classification.transport === 'openai_chat_sse',
+        providerClientExists: executorImplemented,
+        workerExecutorExists: executorImplemented,
+        endpointShapeKnown: capabilityKnown,
+        requestShapeKnown: executorImplemented,
+        responseShapeKnown: executorImplemented,
+        artifactPersistenceExists: executorImplemented,
+        executableBlockers: activationBlocker ? [activationBlocker] : [],
+        catalogueOnlyReason: activationBlocker ?? undefined,
+        streamingSupported: classification.transport === 'openai_chat_sse' && executorImplemented,
         transportProfile: classification.transport,
-        rawMetadata: { ...record, taskType: classification.taskType, capabilities: classification.capabilities, modalitiesIn: classification.inputs, modalitiesOut: classification.outputs, endpointFamily: classification.endpointFamily, transportProfile: classification.transport, endpointShapeKnown: contractKnown, requestShapeKnown: contractKnown, responseShapeKnown: contractKnown, providerClientExists: contractKnown, workerExecutorExists: contractKnown, streamingSupported: classification.transport === 'openai_chat_sse' },
+        rawMetadata: {
+          ...record,
+          taskType: classification.taskType,
+          capabilities: classification.capabilities,
+          modalitiesIn: classification.inputs,
+          modalitiesOut: classification.outputs,
+          endpointFamily: classification.endpointFamily,
+          transportProfile: classification.transport,
+          endpointShapeKnown: capabilityKnown,
+          requestShapeKnown: executorImplemented,
+          responseShapeKnown: executorImplemented,
+          providerClientExists: executorImplemented,
+          workerExecutorExists: executorImplemented,
+          streamingSupported: classification.transport === 'openai_chat_sse' && executorImplemented,
+          activationBlocker,
+        },
       })
     })
 
-    return liveResult('genx', endpointSource, 'live_model_list', models, ['GenX live discovery swept model-list categories only. Lyria 3 Pro is eligible for full-song execution only when account accessibility, pricing, and the complete song contract are confirmed.'])
+    return liveResult('genx', endpointSource, 'live_model_list', models, [
+      'GenX live discovery sweeps model-list categories only. Specialist avatar, lip-sync, voice-clone, voice-conversion and text-to-audio models remain catalogue-only until the authenticated account exposes the exact model schema and a matching governed worker executor is registered.',
+    ])
   } catch (error) {
     return failedLiveResult('genx', endpointSource, error instanceof Error ? error.message : 'GenX discovery failed', [])
   }
