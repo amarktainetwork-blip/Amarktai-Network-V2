@@ -95,9 +95,12 @@ function validSubtitleProof() {
 
 describe('internal atomic executor truth', () => {
   it('registers FFmpeg, planner and formatter executors in the release set', () => {
-    expect(INTERNAL_EXECUTOR_REGISTRATIONS).toHaveLength(4)
+    expect(INTERNAL_EXECUTOR_REGISTRATIONS).toHaveLength(5)
     expect(getInternalExecutorRegistration('audio_to_audio')).toMatchObject({
       id: 'internal.ffmpeg.audio-to-audio', handlerName: 'handleAudioToAudioJob', artifactOutput: 'audio',
+    })
+    expect(getInternalExecutorRegistration('voice_activity_detection')).toMatchObject({
+      id: 'internal.ffmpeg.voice-activity-detection', handlerName: 'handleVoiceActivityDetectionJob', artifactOutput: null,
     })
     expect(getInternalExecutorRegistration('image_upscale')).toMatchObject({
       id: 'internal.ffmpeg.image-upscale', handlerName: 'handleImageUpscaleJob', artifactOutput: 'image',
@@ -109,13 +112,13 @@ describe('internal atomic executor truth', () => {
       id: 'internal.formatter.subtitle-generation', handlerName: 'handleSubtitleGenerationJob', artifactOutput: 'transcript', sourceArtifactRequired: false,
     })
     expect(getReleaseCandidateCapabilityKeys()).toEqual(expect.arrayContaining([
-      'audio_to_audio', 'image_upscale', 'storyboard_generation', 'subtitle_generation',
+      'audio_to_audio', 'voice_activity_detection', 'image_upscale', 'storyboard_generation', 'subtitle_generation',
     ]))
     expect(getInternalExecutorRegistration('voice_clone')).toBeUndefined()
     expect(getInternalExecutorRegistration('voice_conversion')).toBeUndefined()
   })
 
-  it.each(['audio_to_audio', 'image_upscale', 'storyboard_generation', 'subtitle_generation'] as const)(
+  it.each(['audio_to_audio', 'voice_activity_detection', 'image_upscale', 'storyboard_generation', 'subtitle_generation'] as const)(
     'projects %s without fake provider, model, or credential blockers',
     (capability) => {
       const appSlug = getDashboardAppSlug(capability)
@@ -145,6 +148,7 @@ describe('internal atomic executor truth', () => {
     const dispatcher = source('apps/worker/src/providers/durable-provider-fallback.ts')
     for (const [capability, handler] of [
       ['audio_to_audio', 'handleAudioToAudioJob'],
+      ['voice_activity_detection', 'handleVoiceActivityDetectionJob'],
       ['image_upscale', 'handleImageUpscaleJob'],
       ['storyboard_generation', 'handleStoryboardGenerationJob'],
       ['subtitle_generation', 'handleSubtitleGenerationJob'],
@@ -158,7 +162,7 @@ describe('internal atomic executor truth', () => {
     expect(plannerFormatter).toContain('providerCallsStarted: false')
   })
 
-  it('accepts complete local evidence for all four operations and rejects false live proof', () => {
+  it('accepts complete local artifact evidence for four operations and rejects false live proof', () => {
     for (const [proof, capability, completedAt] of [
       [validAudioProof(), 'audio_to_audio', '2026-07-22T18:00:00.000Z'],
       [validImageProof(), 'image_upscale', '2026-07-22T18:05:00.000Z'],
