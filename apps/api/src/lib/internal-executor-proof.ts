@@ -64,6 +64,7 @@ export function validateInternalExecutorProof(
   if (artifact.appSlug !== job.appSlug || artifact.traceId !== job.traceId) return null
   if (artifact.subType !== registration.capability && !artifact.subType.startsWith(`${registration.capability}_`)) return null
   if (registration.artifactOutput === 'audio' && (artifact.type !== 'audio' || !artifact.mimeType.startsWith('audio/'))) return null
+  if (registration.artifactOutput === 'image' && (artifact.type !== 'image' || !artifact.mimeType.startsWith('image/'))) return null
   if (!artifact.storagePath || !artifact.storageUrl || artifact.fileSizeBytes <= 0) return null
 
   const artifactMetadata = parseObject(artifact.metadata)
@@ -71,6 +72,13 @@ export function validateInternalExecutorProof(
   if (artifactMetadata.liveProviderProof !== false) return null
   if (typeof artifactMetadata.outputChecksum !== 'string' || !artifactMetadata.outputChecksum.trim()) return null
   if (typeof artifactMetadata.sourceArtifactId !== 'string' || !artifactMetadata.sourceArtifactId.trim()) return null
+  if (registration.capability === 'image_upscale') {
+    if (artifactMetadata.outputValidation === null || typeof artifactMetadata.outputValidation !== 'object') return null
+    const validation = artifactMetadata.outputValidation as Record<string, unknown>
+    if (validation.valid !== true || validation.filter !== 'lanczos') return null
+    if (!Number.isInteger(validation.width) || Number(validation.width) <= 0) return null
+    if (!Number.isInteger(validation.height) || Number(validation.height) <= 0) return null
+  }
 
   const completedAt = job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt
   return { capability: registration.capability, completedAt }
