@@ -1,5 +1,5 @@
 import type { CapabilityKey } from './capabilities.js'
-import { CAPABILITY_ACTIVATION_BLOCKERS, getCapabilityActivationBlocker } from './capability-activation-blockers.js'
+import { getCapabilityActivationBlocker } from './capability-activation-blockers.js'
 import { INTERNAL_EXECUTOR_REGISTRATIONS } from './internal-executor-registry.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
 import {
@@ -212,7 +212,7 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
       const capability = capabilityMap.get(entry.capability)!
       return {
         ...entry,
-        releaseCandidate: true,
+        releaseCandidate: false,
         catalogued: true,
         clientPresent: capability.clientImplemented,
         executorPresent: false,
@@ -261,7 +261,6 @@ export function normalizeEffectiveRuntimeTruth<T extends RuntimeTruth>(truth: T)
     releaseCandidateCapabilities: [...new Set([
       ...truth.releaseCandidateCapabilities,
       ...INTERNAL_EXECUTOR_REGISTRATIONS.map((registration) => registration.capability),
-      ...CAPABILITY_ACTIVATION_BLOCKERS.map((blocker) => blocker.capability),
     ])],
     countsByClassification,
   }
