@@ -17,6 +17,13 @@ case "$DEPLOY_BRANCH" in
     ;;
 esac
 [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'ERROR: DEPLOY_SHA must be a 40-character SHA' >&2; exit 2; }
+
+# Production Compose requires immutable build identity variables even for
+# read-only config/ps checks. Derive them from the already validated target SHA
+# so standalone preflight and deploy.sh use the same exact identity contract.
+export GIT_SHA="$DEPLOY_SHA"
+export BUILD_TIME="${BUILD_TIME:-preflight-$DEPLOY_SHA}"
+
 cd "$REPO_DIR"
 source "$REPO_DIR/deploy/nginx-check.sh"
 
