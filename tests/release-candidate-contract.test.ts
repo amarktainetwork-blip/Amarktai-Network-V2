@@ -77,6 +77,7 @@ describe('production release-candidate canonical contract', () => {
   it('has fail-closed schema guards, recovery, CI, preflight and production proof tooling', () => {
     const workflow = source('.github/workflows/release-candidate-checks.yml')
     const packageJson = source('package.json')
+    const preflight = source('deploy/preflight.sh')
     expect(source('apps/api/src/server.ts')).toContain('assertDatabaseSchemaCurrent')
     expect(source('apps/worker/src/worker.ts')).toContain('assertDatabaseSchemaCurrent')
     expect(source('apps/worker/src/recovery.ts')).toContain('recoverStaleProcessingJobs')
@@ -91,7 +92,10 @@ describe('production release-candidate canonical contract', () => {
     expect(source('docker-compose.release-fixture.yml')).toContain('healthcheck.sh", "--connect", "--innodb_initialized"')
     expect(source('prisma/migrations/20260715_expand_app_connection_capabilities/migration.sql')).toContain('VARCHAR(4096)')
     expect(source('prisma/migrations/20260715_expand_job_prompt/migration.sql')).toContain('TEXT NOT NULL')
-    expect(source('deploy/preflight.sh')).toContain('PRODUCTION_PREFLIGHT=PASS')
+    expect(preflight).toContain('PRODUCTION_PREFLIGHT=PASS')
+    expect(preflight).toContain('feat/batch-b-platform-closure')
+    expect(preflight).toContain('SEARXNG_SECRET')
+    expect(preflight).toContain('SEARXNG_SECRET must be nonempty')
     expect(source('scripts/proof-production-release-candidate.mjs')).toContain('--base-url is required')
   })
 
