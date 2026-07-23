@@ -20,6 +20,7 @@ import {
   DEFAULT_JOB_OPTIONS,
   TOKEN_COST_MULTIPLIER,
   SPECIALIST_VISION_CAPABILITIES,
+  ImageUpscaleRequestSchema,
   durableIdempotencyTrace,
   isValidRoutingMode,
   type JobPayload,
@@ -27,10 +28,7 @@ import {
   type JobStatusResponse,
   validateDirectProviderRequest,
 } from '@amarktai/core'
-import { ImageUpscaleRequestSchema } from '@amarktai/core/image-upscale-contracts'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
-
-// ── Auth Helper ───────────────────────────────────────────────────────────────
 
 export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   ok: boolean
@@ -43,19 +41,12 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
   connectionId?: string
   webhookUrl?: string
 }> {
-  if (!bearerHeader) {
-    return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
-  }
-
+  if (!bearerHeader) return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
   const token = parseBearerToken(bearerHeader)
-  if (!token) {
-    return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
-  }
-
-  const hashedToken = hashAppApiKey(token)
+  if (!token) return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
 
   const apiKey = await prisma.appApiKey.findUnique({
-    where: { key: hashedToken },
+    where: { key: hashAppApiKey(token) },
     include: {
       appConnection: {
         select: {
@@ -70,31 +61,14 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
       },
     },
   })
-
-  if (!apiKey) {
-    return { ok: false, statusCode: 401, error: 'Invalid API key' }
-  }
-
-  if (!apiKey.active) {
-    return { ok: false, statusCode: 403, error: 'API key is deactivated' }
-  }
-
+  if (!apiKey) return { ok: false, statusCode: 401, error: 'Invalid API key' }
+  if (!apiKey.active) return { ok: false, statusCode: 403, error: 'API key is deactivated' }
   const conn = apiKey.appConnection
-  if (!conn || conn.status !== 'active') {
-    return { ok: false, statusCode: 403, error: 'App connection is not active' }
-  }
+  if (!conn || conn.status !== 'active') return { ok: false, statusCode: 403, error: 'App connection is not active' }
 
   let allowedCaps: string[] = []
-  try {
-    allowedCaps = JSON.parse(conn.allowedCapabilities ?? '[]')
-  } catch {
-    allowedCaps = []
-  }
-
-  const budget = await prisma.appBudgetConfig.findUnique({
-    where: { appSlug: conn.appSlug },
-  })
-
+  try { allowedCaps = JSON.parse(conn.allowedCapabilities ?? '[]') } catch { allowedCaps = [] }
+  const budget = await prisma.appBudgetConfig.findUnique({ where: { appSlug: conn.appSlug } })
   return {
     ok: true,
     statusCode: 200,
@@ -106,8 +80,6 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
     webhookUrl: conn.webhookUrl,
   }
 }
-
-// ── Route Registration ────────────────────────────────────────────────────────
 
 export async function jobRoutes(app: FastifyInstance): Promise<void> {
   let queue: Queue | null = null
@@ -121,37 +93,23 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/v1/jobs', async (request, reply) => {
     const auth = await authenticateAppKey(request.headers.authorization)
-    if (!auth.ok) {
-      return reply.status(auth.statusCode).send({ error: true, message: auth.error })
-    }
+    if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
     const body = request.body as Record<string, unknown>
     const blockedField = hasBlockedOverrides(body)
       || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
       || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
     if (blockedField) {
-      return reply.status(400).send({
-        error: true,
-        message: `Field '${blockedField}' is not allowed. Provider and model routing decisions are made exclusively by the AmarktAI Network engine.`,
-      })
+      return reply.status(400).send({ error: true, message: `Field '${blockedField}' is not allowed. Provider and model routing decisions are made exclusively by the AmarktAI Network engine.` })
     }
 
     const parsed = CreateJobRequestSchema.safeParse(body)
-    if (!parsed.success) {
-      return reply.status(400).send({
-        error: true,
-        message: 'Invalid request body',
-        details: parsed.error.issues,
-      })
-    }
+    if (!parsed.success) return reply.status(400).send({ error: true, message: 'Invalid request body', details: parsed.error.issues })
 
     const { capability, prompt, input, metadata, callbackUrl, route } = parsed.data
     const configuredWebhookUrl = auth.webhookUrl || undefined
     if (callbackUrl && callbackUrl !== configuredWebhookUrl) {
-      return reply.status(400).send({
-        error: true,
-        message: 'callbackUrl must exactly match the app webhook configured by an administrator.',
-      })
+      return reply.status(400).send({ error: true, message: 'callbackUrl must exactly match the app webhook configured by an administrator.' })
     }
     const effectiveCallbackUrl = configuredWebhookUrl
 
@@ -170,11 +128,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     } else {
       const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
       if (!capabilityRequest.success) {
-        return reply.status(400).send({
-          error: true,
-          message: capabilityRequest.error,
-          details: capabilityRequest.issues,
-        })
+        return reply.status(400).send({ error: true, message: capabilityRequest.error, details: capabilityRequest.issues })
       }
       validatedInput = capabilityRequest.data ?? input
     }
@@ -190,51 +144,36 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
           where: { id: sourceArtifactId, appSlug: auth.app!.slug, status: 'completed' },
           select: { id: true, type: true, mimeType: true },
         })
-        if (!sourceArtifact) {
-          return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
-        }
+        if (!sourceArtifact) return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
         if (imageUpscale && sourceArtifact.type !== 'image' && !sourceArtifact.mimeType.startsWith('image/')) {
           return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'image_upscale requires a completed image artifact.' })
         }
       }
     }
 
-    const allowedCaps = auth.allowedCapabilities ?? []
-    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, allowedCaps)
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, auth.allowedCapabilities ?? [])
     if (!grantResolution || !grantResolution.grant.enabled) {
-      return reply.status(403).send({
-        error: true,
-        message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.`,
-      })
+      return reply.status(403).send({ error: true, message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.` })
     }
     if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
-      return reply.status(403).send({
-        error: true,
-        message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
-      })
+      return reply.status(403).send({ error: true, message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.` })
     }
     if (governedSourceArtifact && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
-      return reply.status(403).send({
-        error: true,
-        code: 'SOURCE_ARTIFACT_GRANT_REQUIRED',
-        message: `${capability} requires artifact read and write grants.`,
-      })
+      return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_GRANT_REQUIRED', message: `${capability} requires artifact read and write grants.` })
     }
     if (route) {
       const routeKey = `${route.provider}/${route.model}`
-      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist'
-          || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
+      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist' || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
         return reply.status(403).send({ error: true, message: `Route '${routeKey}' is not approved for this app and capability.` })
       }
     }
 
-    const grantSnapshotAt = new Date().toISOString()
     const immutableMetadata = {
       ...metadata,
       executionProfile: 'external_app',
       appGrantSnapshot: grantResolution.grant,
       appGrantSnapshotSource: grantResolution.source,
-      appGrantSnapshotAt: grantSnapshotAt,
+      appGrantSnapshotAt: new Date().toISOString(),
       requestedRoute: route ?? null,
       ...(imageUpscale ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' } : {}),
     }
@@ -243,18 +182,11 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const usage = await prisma.usageMeter.aggregate({
-        where: {
-          appSlug: auth.app!.slug,
-          date: { gte: today },
-        },
+        where: { appSlug: auth.app!.slug, date: { gte: today } },
         _sum: { costUsdCents: true },
       })
-      const dailySpend = usage._sum.costUsdCents ?? 0
-      if (dailySpend >= auth.dailyBudgetCents) {
-        return reply.status(429).send({
-          error: true,
-          message: 'Daily cost budget limit reached. Try again tomorrow.',
-        })
+      if ((usage._sum.costUsdCents ?? 0) >= auth.dailyBudgetCents) {
+        return reply.status(429).send({ error: true, message: 'Daily cost budget limit reached. Try again tomorrow.' })
       }
     }
 
@@ -268,25 +200,12 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const idempotencyKey = governedSourceArtifact && typeof validatedInput.idempotencyKey === 'string'
-      ? validatedInput.idempotencyKey
-      : null
-    const traceId = idempotencyKey
-      ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey)
-      : `trace_${randomUUID()}`
+    const idempotencyKey = governedSourceArtifact && typeof validatedInput.idempotencyKey === 'string' ? validatedInput.idempotencyKey : null
+    const traceId = idempotencyKey ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey) : `trace_${randomUUID()}`
     if (idempotencyKey) {
-      const existing = await prisma.job.findFirst({
-        where: { appSlug: auth.app!.slug, capability, traceId },
-        orderBy: { createdAt: 'desc' },
-      })
+      const existing = await prisma.job.findFirst({ where: { appSlug: auth.app!.slug, capability, traceId }, orderBy: { createdAt: 'desc' } })
       if (existing) {
-        return reply.status(200).send({
-          jobId: existing.id,
-          status: existing.status,
-          capability,
-          createdAt: existing.createdAt.toISOString(),
-          deduplicated: true,
-        })
+        return reply.status(200).send({ jobId: existing.id, status: existing.status, capability, createdAt: existing.createdAt.toISOString(), deduplicated: true })
       }
     }
 
@@ -304,13 +223,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     })
 
     if (auth.connectionId && costMultiplier > 0) {
-      await prisma.appConnection.update({
-        where: { id: auth.connectionId },
-        data: { tokenBalance: { decrement: costMultiplier } },
-      })
+      await prisma.appConnection.update({ where: { id: auth.connectionId }, data: { tokenBalance: { decrement: costMultiplier } } })
     }
 
-    const routingMode = isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced'
     const payload: JobPayload = {
       jobId: job.id,
       appSlug: auth.app!.slug,
@@ -321,53 +236,32 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       metadata: immutableMetadata,
       traceId,
       callbackUrl: effectiveCallbackUrl,
-      routingMode,
+      routingMode: isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced',
       appGrantSnapshot: grantResolution.grant,
     }
 
     try {
-      const q = getQueue()
-      await q.add('process', payload, {
-        ...DEFAULT_JOB_OPTIONS,
-        jobId: job.id,
-      })
+      await getQueue().add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: job.id })
     } catch (err) {
-      await prisma.job.update({
-        where: { id: job.id },
-        data: { status: 'failed', error: 'Failed to enqueue job' },
-      })
+      await prisma.job.update({ where: { id: job.id }, data: { status: 'failed', error: 'Failed to enqueue job' } })
       app.log.error({ err }, 'Failed to push job to queue')
       return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
     }
 
-    const response: CreateJobResponse = {
-      jobId: job.id,
-      status: 'queued',
-      capability,
-      createdAt: job.createdAt.toISOString(),
-    }
-
+    const response: CreateJobResponse = { jobId: job.id, status: 'queued', capability, createdAt: job.createdAt.toISOString() }
     return reply.status(201).send(response)
   })
 
   app.get('/api/v1/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
     const auth = await authenticateAppKey(request.headers.authorization)
-    if (!auth.ok) {
-      return reply.status(auth.statusCode).send({ error: true, message: auth.error })
-    }
+    if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
     const job = await prisma.job.findUnique({ where: { id } })
-    if (!job) {
-      return reply.status(404).send({ error: true, message: 'Job not found' })
-    }
-    if (job.appSlug !== auth.app!.slug) {
-      return reply.status(404).send({ error: true, message: 'Job not found' })
-    }
+    if (!job || job.appSlug !== auth.app!.slug) return reply.status(404).send({ error: true, message: 'Job not found' })
 
     const jobMetadata = parseJobMetadata(job.metadataJson)
     const routeAttempts = Array.isArray(jobMetadata.orchestraRouteAttempts) ? jobMetadata.orchestraRouteAttempts : []
-
     const response: JobStatusResponse = {
       jobId: job.id,
       executionId: job.executionId || stringMetadata(jobMetadata.orchestraExecutionId),
@@ -395,7 +289,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       startedAt: job.startedAt?.toISOString() ?? null,
       completedAt: job.completedAt?.toISOString() ?? null,
     }
-
     return reply.send(response)
   })
 }
