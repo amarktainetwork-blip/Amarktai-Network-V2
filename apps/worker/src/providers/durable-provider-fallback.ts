@@ -78,6 +78,14 @@ function isInternalImageUpscale(payload: WorkerJobData): boolean {
   return payload.capability === 'image_upscale'
 }
 
+function isInternalStoryboardGeneration(payload: WorkerJobData): boolean {
+  return payload.capability === 'storyboard_generation'
+}
+
+function isInternalSubtitleGeneration(payload: WorkerJobData): boolean {
+  return payload.capability === 'subtitle_generation'
+}
+
 function isInternalLocalExecution(payload: WorkerJobData): boolean {
   return isInternalLongFormAssembly(payload)
     || isInternalSocialAdAssembly(payload)
@@ -85,6 +93,8 @@ function isInternalLocalExecution(payload: WorkerJobData): boolean {
     || isInternalDocumentExtraction(payload)
     || isInternalAudioTransform(payload)
     || isInternalImageUpscale(payload)
+    || isInternalStoryboardGeneration(payload)
+    || isInternalSubtitleGeneration(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -114,6 +124,14 @@ async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> 
   if (isInternalImageUpscale(payload)) {
     const { handleImageUpscaleJob } = await import('../handlers/image-upscale-handler.js')
     return handleImageUpscaleJob(payload)
+  }
+  if (isInternalStoryboardGeneration(payload)) {
+    const { handleStoryboardGenerationJob } = await import('../handlers/storyboard-subtitle-handlers.js')
+    return handleStoryboardGenerationJob(payload)
+  }
+  if (isInternalSubtitleGeneration(payload)) {
+    const { handleSubtitleGenerationJob } = await import('../handlers/storyboard-subtitle-handlers.js')
+    return handleSubtitleGenerationJob(payload)
   }
   return executeWithProvider(payload)
 }
