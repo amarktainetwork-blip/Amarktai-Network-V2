@@ -81,9 +81,20 @@ async function pollAudio(apiRequest, invariant, delay, appKey, executionId, time
   throw new Error(`Audio-to-audio fixture ${executionId} timed out`)
 }
 
+async function pollJob(apiRequest, invariant, delay, appKey, jobId, timeoutMs = 120000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const result = await apiRequest(`/api/v1/jobs/${encodeURIComponent(jobId)}`, appKey)
+    invariant(result.response.ok, result.body.error || `Job status returned ${result.response.status}`)
+    if (['completed', 'failed', 'cancelled'].includes(result.body.status)) return result.body
+    await delay(300)
+  }
+  throw new Error(`Voice activity detection job ${jobId} timed out`)
+}
+
 export async function proveVoiceAudioReleaseFixture({ apiRequest, invariant, delay, adminToken }) {
   const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
-  const capabilities = ['audio_to_audio', 'voice_clone', 'voice_conversion']
+  const capabilities = ['audio_to_audio', 'voice_activity_detection', 'voice_clone', 'voice_conversion']
   const appSlug = `voice-audio-fixture-${suffix}`
   const otherSlug = `voice-audio-isolation-${suffix}`
   const appKey = await createApp(apiRequest, invariant, adminToken, appSlug, capabilities)
@@ -117,6 +128,34 @@ export async function proveVoiceAudioReleaseFixture({ apiRequest, invariant, del
     body: JSON.stringify({ ...transformPayload, sourceAudioArtifactId: crossAppAudioId, idempotencyKey: `cross-${suffix}` }),
   })
   invariant(crossApp.response.status === 404 && crossApp.body.code === 'ARTIFACT_NOT_FOUND', 'Cross-app source audio was not hidden')
+
+  const vadPayload = {
+    capability: 'voice_activity_detection',
+    prompt: 'Detect speech segments in the authorised source audio.',
+    input: {
+      sourceAudioArtifactId: sourceAudioId,
+      thresholdDb: -35,
+      minimumSpeechMs: 250,
+      minimumSilenceMs: 300,
+      idempotencyKey: `vad-${suffix}`,
+    },
+    metadata: { fixture: 'voice-activity-detection' },
+  }
+  const vadSubmitted = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(vadPayload) })
+  invariant(vadSubmitted.response.status === 201 && vadSubmitted.body.jobId, vadSubmitted.body.message || `VAD submission returned ${vadSubmitted.response.status}`)
+  const vadDuplicate = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(vadPayload) })
+  invariant(vadDuplicate.response.status === 200 && vadDuplicate.body.deduplicated === true && vadDuplicate.body.jobId === vadSubmitted.body.jobId, 'VAD idempotency failed')
+  const vadCompleted = await pollJob(apiRequest, invariant, delay, appKey, vadSubmitted.body.jobId)
+  invariant(vadCompleted.status === 'completed' && vadCompleted.provider === 'internal' && vadCompleted.model === 'ffmpeg-silencedetect', vadCompleted.error || 'VAD did not complete through FFmpeg')
+  const vadOutput = JSON.parse(vadCompleted.output || '{}')
+  invariant(vadOutput.evidence?.evidenceSource === 'internal_ffmpeg' && vadOutput.evidence?.liveProviderProof === false, 'VAD evidence was misclassified')
+  invariant(Array.isArray(vadOutput.segments) && vadOutput.segments.length === 0 && vadOutput.speechRatio === 0, 'Silent fixture audio was not classified as silence')
+  invariant(vadOutput.durationSeconds > 0 && vadOutput.evidence?.outputValidation?.durationProbed === true, 'VAD duration evidence is incomplete')
+  const vadCrossApp = await apiRequest('/api/v1/jobs', appKey, {
+    method: 'POST', headers: jsonHeaders(),
+    body: JSON.stringify({ ...vadPayload, input: { ...vadPayload.input, sourceAudioArtifactId: crossAppAudioId, idempotencyKey: `vad-cross-${suffix}` } }),
+  })
+  invariant(vadCrossApp.response.status === 404 && vadCrossApp.body.code === 'SOURCE_ARTIFACT_NOT_FOUND', 'VAD cross-app source audio was not hidden')
 
   const unsupportedPayload = { ...transformPayload, operation: 'denoise', idempotencyKey: `denoise-${suffix}` }
   const unsupported = await apiRequest('/api/v1/audio-to-audio', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(unsupportedPayload) })
@@ -186,5 +225,5 @@ export async function proveVoiceAudioReleaseFixture({ apiRequest, invariant, del
   const conversionDuplicate = await apiRequest('/api/v1/voice-conversion', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(conversionPayload) })
   invariant(conversionDuplicate.response.status === 422 && conversionDuplicate.body.voiceConversionId === conversion.body.voiceConversionId && conversionDuplicate.body.evidence?.idempotent === true, 'Voice conversion blocker was not idempotent')
 
-  console.log(`VOICE_AUDIO_RELEASE_FIXTURE=PASS transformJob=${submitted.body.audioToAudioId} cloneBlocker=${clone.body.voiceCloneId} conversionBlocker=${conversion.body.voiceConversionId}`)
+  console.log(`VOICE_AUDIO_RELEASE_FIXTURE=PASS transformJob=${submitted.body.audioToAudioId} vadJob=${vadSubmitted.body.jobId} cloneBlocker=${clone.body.voiceCloneId} conversionBlocker=${conversion.body.voiceConversionId}`)
 }
