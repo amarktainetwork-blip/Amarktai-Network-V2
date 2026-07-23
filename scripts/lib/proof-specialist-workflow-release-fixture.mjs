@@ -98,17 +98,18 @@ export async function proveSpecialistWorkflowReleaseFixture({ apiRequest, invari
   const upscaleInput = { sourceImageArtifactId: imageArtifactId, scaleFactor: 2, outputFormat: 'png', idempotencyKey: `upscale-${suffix}`, maxCredits: 100 }
   const upscaleSubmitted = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ capability: 'image_upscale', prompt: 'Governed 2x Lanczos upscale', input: upscaleInput }) })
   invariant(upscaleSubmitted.response.status === 201 && upscaleSubmitted.body.jobId, upscaleSubmitted.body.message || 'image_upscale did not queue')
+  const upscaleDuplicate = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ capability: 'image_upscale', prompt: 'Governed 2x Lanczos upscale duplicate', input: upscaleInput }) })
+  invariant(upscaleDuplicate.response.status === 200 && upscaleDuplicate.body.deduplicated === true && upscaleDuplicate.body.jobId === upscaleSubmitted.body.jobId, 'image_upscale was not idempotent')
   const upscaleJob = await pollJob(apiRequest, invariant, delay, appKey, upscaleSubmitted.body.jobId)
   invariant(upscaleJob.status === 'completed' && upscaleJob.artifactId, upscaleJob.error || 'image_upscale failed')
   const upscaleOutput = JSON.parse(upscaleJob.output)
   invariant(upscaleOutput.width === 640 && upscaleOutput.height === 360 && upscaleOutput.scaleFactor === 2, 'image_upscale dimensions are incorrect')
   invariant(upscaleOutput.evidence?.evidenceSource === 'internal_ffmpeg' && upscaleOutput.evidence?.liveProviderProof === false && upscaleOutput.evidence?.filter === 'lanczos', 'image_upscale evidence is incorrect')
+  invariant(upscaleJob.executionEvidence?.outputValidation?.valid === true && upscaleJob.executionEvidence?.sourceArtifactId === imageArtifactId, 'image_upscale status evidence is incomplete')
   const upscaleDownload = await apiRequest(`/api/v1/artifacts/${encodeURIComponent(upscaleJob.artifactId)}/file?download=1`, appKey)
   invariant(upscaleDownload.response.ok, 'image_upscale artifact was not downloadable')
   const crossUpscaleSubmitted = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ capability: 'image_upscale', prompt: 'Cross-App image denial', input: { ...upscaleInput, sourceImageArtifactId: crossAppImageId, idempotencyKey: `upscale-cross-${suffix}` } }) })
-  invariant(crossUpscaleSubmitted.response.status === 201 && crossUpscaleSubmitted.body.jobId, 'Cross-App image_upscale request did not enter the governed worker path')
-  const crossUpscaleJob = await pollJob(apiRequest, invariant, delay, appKey, crossUpscaleSubmitted.body.jobId)
-  invariant(crossUpscaleJob.status === 'failed' && /authorised source image artifact was not found/i.test(crossUpscaleJob.error || ''), 'Cross-App image_upscale did not fail closed')
+  invariant(crossUpscaleSubmitted.response.status === 404 && crossUpscaleSubmitted.body.code === 'SOURCE_ARTIFACT_NOT_FOUND', 'Cross-App image_upscale source was not hidden at the API boundary')
 
   const requests = {
     depth_estimation: { sourceImageArtifactId: imageArtifactId, outputMode: 'relative', normalize: true, visualization: true, maxCredits: 100, idempotencyKey: `depth-${suffix}` },
