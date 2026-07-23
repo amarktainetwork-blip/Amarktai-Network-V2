@@ -22,6 +22,10 @@
       "types": "./dist/image-upscale-contracts.d.ts",
       "import": "./dist/image-upscale-contracts.js"
     },
+    "./storyboard-subtitle-contracts": {
+      "types": "./dist/storyboard-subtitle-contracts.d.ts",
+      "import": "./dist/storyboard-subtitle-contracts.js"
+    },
     "./premium-media-policy": {
       "types": "./dist/premium-media-policy.d.ts",
       "import": "./dist/premium-media-policy.js"
