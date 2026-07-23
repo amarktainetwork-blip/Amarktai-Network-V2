@@ -13,7 +13,6 @@ const EXPECTED_ACTIVATION_BLOCKERS = [
   'visual_document_retrieval',
   'video_classification',
   'audio_classification',
-  'voice_activity_detection',
   'voice_clone',
   'voice_conversion',
   'text_to_audio',
@@ -55,9 +54,15 @@ describe('capability activation blockers', () => {
   it('does not disturb canonical internal executor truth', () => {
     const truth = normalizeEffectiveRuntimeTruth(getRuntimeTruth())
     const imageUpscale = truth.capabilities.find((item) => item.capability === 'image_upscale')!
+    const vad = truth.capabilities.find((item) => item.capability === 'voice_activity_detection')!
     expect(imageUpscale.executorRegistered).toBe(true)
     expect(imageUpscale.executorRegistrationIds).toContain('internal:internal.ffmpeg.image-upscale')
     expect(imageUpscale.eligibleProviders).toEqual([])
     expect(imageUpscale.eligibleModels).toEqual([])
+    expect(vad.executorRegistered).toBe(true)
+    expect(vad.executorRegistrationIds).toContain('internal:internal.ffmpeg.voice-activity-detection')
+    expect(vad.eligibleProviders).toEqual([])
+    expect(vad.eligibleModels).toEqual([])
+    expect(getCapabilityActivationBlocker('voice_activity_detection')).toBeUndefined()
   })
 })
