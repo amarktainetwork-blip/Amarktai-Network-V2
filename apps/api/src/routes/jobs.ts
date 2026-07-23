@@ -245,7 +245,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    const idempotencyKey = internalArtifactCapability && typeof validatedInput.idempotencyKey === 'string'
+    const idempotencyKey = typeof validatedInput.idempotencyKey === 'string'
       ? validatedInput.idempotencyKey
       : null
     const traceId = idempotencyKey ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey) : `trace_${randomUUID()}`
