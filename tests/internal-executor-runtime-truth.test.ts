@@ -84,7 +84,7 @@ describe('internal atomic executor truth', () => {
     expect(release).toMatchObject({ releaseCandidate: true, executorPresent: true, appGrantPresent: true, readyForDashboardExecution: true, locallyProven: true, liveProven: false })
   })
 
-  it('binds both registries to real central worker dispatch', () => {
+  it('binds both registries to real central worker dispatch and durable status evidence', () => {
     const dispatcher = source('apps/worker/src/providers/durable-provider-fallback.ts')
     const audioHandler = source('apps/worker/src/handlers/voice-audio-handlers.ts')
     const imageHandler = source('apps/worker/src/handlers/image-upscale-handler.ts')
@@ -95,6 +95,9 @@ describe('internal atomic executor truth', () => {
     expect(audioHandler).toContain("evidenceSource: 'internal_ffmpeg'")
     expect(imageHandler).toContain("filter: 'lanczos'")
     expect(imageHandler).toContain("provider: 'internal'")
+    expect(imageHandler).toContain('internalExecutionEvidence')
+    expect(imageHandler).toContain('internalSourceArtifactId')
+    expect(imageHandler).toContain('metadataJson: JSON.stringify')
   })
 
   it('accepts only complete local evidence and rejects false live-provider claims', () => {
