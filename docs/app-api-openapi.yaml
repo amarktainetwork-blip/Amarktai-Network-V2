@@ -1,19 +1,751 @@
 openapi: 3.1.0
-info: { title: AmarktAI Thin-App API, version: 1.0.0 }
-servers: [{ url: https://network.amarktai.com }]
-security: [{ bearerAuth: [] }]
+info:
+  title: AmarktAI Thin-App API
+  version: 1.7.0
+servers:
+  - url: https://network.amarktai.com
+security:
+  - bearerAuth: []
 components:
-  securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
   schemas:
-    Route: { type: object, required: [provider, model], properties: { provider: { enum: [genx, together, deepinfra] }, model: { type: string } } }
-    Execute: { type: object, required: [capability, prompt], properties: { capability: { type: string }, prompt: { type: string }, input: { type: object }, metadata: { type: object }, route: { $ref: '#/components/schemas/Route' }, callbackUrl: { type: string, format: uri, description: Must exactly match the administrator-configured HTTPS webhook URL. } } }
+    Execute:
+      type: object
+      additionalProperties: false
+      required: [capability, prompt]
+      properties:
+        capability: { type: string }
+        prompt: { type: string }
+        input: { type: object }
+        metadata: { type: object }
+        callbackUrl: { type: string, format: uri, description: Must exactly match the administrator-configured HTTPS webhook URL. }
+    BrandProfile:
+      type: object
+      additionalProperties: false
+      required: [version, brandProfileId, appSlug, status, displayName, summary, voice, visual, sourceEvidence, overallConfidence, rightsDeclaredBy, rightsDeclaredAt, createdAt, updatedAt]
+      properties:
+        version: { const: 1 }
+        brandProfileId: { type: string }
+        appSlug: { type: string }
+        status: { enum: [draft, verified, archived] }
+        displayName: { type: string }
+        summary: { type: string }
+        voice: { type: object }
+        visual:
+          type: object
+          required: [assets]
+          properties:
+            palette: { type: array, items: { type: object } }
+            typography: { type: array, items: { type: object } }
+            imageStyleRules: { type: array, items: { type: string } }
+            videoStyleRules: { type: array, items: { type: string } }
+            assets: { type: array, items: { $ref: '#/components/schemas/BrandAssetReference' } }
+        sourceEvidence: { type: array, items: { type: object } }
+        overallConfidence: { type: number, minimum: 0, maximum: 1 }
+        rightsDeclaredBy: { type: string }
+        rightsDeclaredAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BrandAssetReference:
+      type: object
+      additionalProperties: false
+      required: [artifactId, role, approved, rightsVerified, sourceEvidenceIds, offeringIds]
+      properties:
+        artifactId: { type: string }
+        role: { enum: [primary_logo, secondary_logo, icon, product, offering, campaign_reference, photography, video, audio] }
+        approved: { type: boolean }
+        rightsVerified: { type: boolean }
+        sourceEvidenceIds: { type: array, minItems: 1, items: { type: string } }
+        offeringIds: { type: array, items: { type: string }, description: Product/offering compatibility scope. }
+    SocialAdPlanRequest:
+      type: object
+      additionalProperties: false
+      required: [request, campaign]
+      properties:
+        request: { $ref: '#/components/schemas/ProductBreakoutRequest' }
+        campaign: { $ref: '#/components/schemas/MarketingCampaignBrief' }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200, pattern: '^[A-Za-z0-9._:-]+$' }
+    ProductBreakoutRequest:
+      type: object
+      additionalProperties: false
+      required: [brandProfileId, campaignId, mode, prompt, objective, audienceId, offeringId, productArtifactId, callToAction, aspectRatios, durationSeconds, maxCredits]
+      description: Provider-neutral product-breakout request. Provider, model, route, executor, endpoint and credential fields are rejected.
+      properties:
+        brandProfileId: { type: string }
+        campaignId: { type: string }
+        mode: { const: product_breakout }
+        prompt: { type: string, minLength: 10, maxLength: 10000 }
+        objective: { type: string, minLength: 10, maxLength: 5000 }
+        audienceId: { type: string }
+        offeringId: { type: string }
+        productArtifactId: { type: string, description: Same-app approved, rights-verified product/offering artifact linked to offeringId. }
+        logoArtifactIds: { type: array, maxItems: 10, items: { type: string } }
+        callToAction: { type: string, maxLength: 500 }
+        sourceArtifactIds: { type: array, maxItems: 200, items: { type: string } }
+        aspectRatios: { type: array, minItems: 1, items: { enum: ['16:9', '9:16', '1:1'] } }
+        durationSeconds: { type: integer, minimum: 5, maximum: 180 }
+        candidateCount: { type: integer, minimum: 2, maximum: 6, default: 3 }
+        includeCaptions: { type: boolean, default: true }
+        includeSubtitleFiles: { type: boolean, default: true }
+        includeThumbnail: { type: boolean, default: true }
+        includeSocialCopy: { type: boolean, default: true }
+        qualityProfile: { enum: [draft, standard, premium, publication], default: premium }
+        approvalRequired: { const: true }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+    MarketingCampaignBrief:
+      type: object
+      additionalProperties: false
+      required: [campaignId, brandProfileId, title, objective, audienceIds, channels, callToAction]
+      properties:
+        campaignId: { type: string }
+        brandProfileId: { type: string }
+        title: { type: string }
+        objective: { type: string }
+        audienceIds: { type: array, minItems: 1, items: { type: string } }
+        offeringIds: { type: array, items: { type: string } }
+        channels: { type: array, minItems: 1, items: { enum: [facebook, instagram, linkedin, x, tiktok, youtube, email, website, blog, paid_search, display] } }
+        callToAction: { type: string }
+        locale: { type: string }
+        constraints: { type: array, items: { type: string } }
+        sourceArtifactIds: { type: array, items: { type: string } }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        approvalRequired: { type: boolean }
+        maxCredits: { type: [number, 'null'] }
+        dueAt: { type: [string, 'null'], format: date-time }
+    ProductBreakoutCreativeContract:
+      type: object
+      additionalProperties: false
+      required: [version, productSourceArtifactId, logoArtifactIds, treatment, initialContainment, breakoutRequirement, approvedClaims, prohibitedClaims, requiredDisclaimers, callToAction, durationSeconds, qualityProfile, candidateCount, creditCeiling, segmentationAvailable]
+      properties:
+        version: { const: product-breakout-v1 }
+        productSourceArtifactId: { type: string }
+        logoArtifactIds: { type: array, items: { type: string } }
+        treatment: { const: social_post_card_frame }
+        initialContainment: { const: product_inside_frame }
+        breakoutRequirement: { const: product_visibly_crosses_frame_boundary }
+        depthTreatment: { type: object }
+        motion: { type: object }
+        preservation: { type: object }
+        brandSafeBackground: { type: string }
+        approvedClaims: { type: array, items: { type: string } }
+        prohibitedClaims: { type: array, items: { type: string } }
+        requiredDisclaimers: { type: array, items: { type: string } }
+        overlayInstructions: { type: array, items: { type: string } }
+        captionInstructions: { type: array, items: { type: string } }
+        safeAreas: { type: object }
+        callToAction: { type: string }
+        durationSeconds: { type: integer }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        candidateCount: { type: integer }
+        creditCeiling: { type: number }
+        segmentationAvailable: { type: boolean }
+        visualLimitation: { type: [string, 'null'] }
+    SocialAdExecutionStatus:
+      type: object
+      description: Durable parent, candidate lineage, measured and model-evaluated quality reports, immutable approvals, assembly pack and final artifact IDs.
+      properties:
+        executionId: { type: string }
+        parentJobId: { type: string }
+        status: { type: string }
+        phase: { type: string }
+        generation: { type: object }
+        quality: { type: object }
+        assembly: { type: object }
+        socialCopy: { type: object }
+        humanApproval: { type: object }
+        finalApproval: { type: object }
+        plan: { type: object }
+    StableError:
+      type: object
+      additionalProperties: true
+      required: [error, code, message]
+      properties:
+        error: { const: true }
+        code: { type: string }
+        message: { type: string }
+    ApprovalDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { enum: [approved, rejected, revision_requested] }
+        notes: { type: string, maxLength: 5000 }
+    Namespace:
+      type: string
+      minLength: 1
+      maxLength: 100
+      pattern: '^[a-zA-Z0-9][a-zA-Z0-9._:-]*$'
+      description: Must be present in the effective grant ragNamespaces, or the grant must include wildcard authority.
+    MemoryWrite:
+      type: object
+      additionalProperties: false
+      required: [namespace, content]
+      properties:
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        content: { type: string, minLength: 1, maxLength: 100000 }
+        key: { type: string, maxLength: 300 }
+        memoryType: { enum: [event, summary, context, learned], default: context }
+        importance: { type: number, minimum: 0, maximum: 1, default: 0.5 }
+        ttlSeconds: { type: integer, minimum: 60, maximum: 31536000 }
+    RagIngest:
+      type: object
+      additionalProperties: false
+      required: [namespace, sourceId, text]
+      properties:
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        sourceId: { type: string, minLength: 1, maxLength: 500 }
+        title: { type: string, minLength: 1, maxLength: 1000 }
+        url: { type: string, format: uri, maxLength: 4000 }
+        text: { type: string, minLength: 1, maxLength: 2000000 }
+        metadata: { type: object }
+        chunkSize: { type: integer, minimum: 200, maximum: 4000, default: 1200 }
+        chunkOverlap: { type: integer, minimum: 0, maximum: 800, default: 200, description: Must be smaller than chunkSize. }
+    RagSearch:
+      type: object
+      additionalProperties: false
+      required: [namespace, query]
+      properties:
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        query: { type: string, minLength: 1, maxLength: 20000 }
+        topK: { type: integer, minimum: 1, maximum: 50, default: 8 }
+        minScore: { type: number, minimum: 0, maximum: 1, default: 0 }
+        rerank: { type: boolean, default: true }
+        answer: { type: boolean, default: true }
+    VoiceAvatarUseScope:
+      type: string
+      enum: [narration, conversational_agent, marketing, education, accessibility, customer_support, avatar_performance, internal_production]
+    ProfileEvidencePurpose:
+      type: string
+      enum:
+        - voice_source_audio
+        - voice_identity_verification
+        - voice_consent
+        - voice_recording_consent
+        - voice_preview
+        - avatar_portrait
+        - avatar_identity_verification
+        - avatar_consent
+        - avatar_creation_evidence
+        - avatar_preview
+    HumanConsentEvidence:
+      type: object
+      additionalProperties: false
+      required: [version, subjectReference, rightsHolderReference, subjectAgeConfirmedAdult, identityVerificationArtifactId, consentArtifactId, permittedUses, commercialUseAllowed, revocable, declaredAt, verifiedAt, verifierReference, jurisdictions]
+      properties:
+        version: { const: 1 }
+        subjectReference: { type: string, minLength: 1, maxLength: 300 }
+        rightsHolderReference: { type: string, minLength: 1, maxLength: 300 }
+        subjectAgeConfirmedAdult: { const: true }
+        identityVerificationArtifactId: { type: string, format: uuid }
+        consentArtifactId: { type: string, format: uuid }
+        sourceRecordingConsentArtifactId: { type: string, format: uuid }
+        permittedUses: { type: array, minItems: 1, items: { $ref: '#/components/schemas/VoiceAvatarUseScope' } }
+        commercialUseAllowed: { type: boolean }
+        syntheticDisclosureRequired: { type: boolean, default: true }
+        revocable: { const: true }
+        declaredAt: { type: string, format: date-time }
+        verifiedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        verifierReference: { type: string, minLength: 1, maxLength: 300 }
+        jurisdictions: { type: array, minItems: 1, maxItems: 50, items: { type: string, minLength: 1 } }
+        notes: { type: string, maxLength: 5000 }
+    VoiceSource:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [sourceType, catalogueVoiceId]
+          properties:
+            sourceType: { const: provider_catalogue }
+            catalogueVoiceId: { type: string, minLength: 1, maxLength: 300 }
+        - type: object
+          additionalProperties: false
+          required: [sourceType, sourceAudioArtifactIds]
+          properties:
+            sourceType: { const: user_recording }
+            sourceAudioArtifactIds: { type: array, minItems: 1, maxItems: 20, items: { type: string, format: uuid } }
+        - type: object
+          additionalProperties: false
+          required: [sourceType, designPrompt]
+          properties:
+            sourceType: { const: synthetic_design }
+            designPrompt: { type: string, minLength: 3, maxLength: 4000 }
+        - type: object
+          additionalProperties: false
+          required: [sourceType, parentVoiceProfileId, remixInstructions]
+          properties:
+            sourceType: { const: voice_remix }
+            parentVoiceProfileId: { type: string, format: uuid }
+            remixInstructions: { type: string, minLength: 3, maxLength: 4000 }
+    VoiceProfileDraft:
+      type: object
+      additionalProperties: false
+      required: [displayName, source, language, permittedUses]
+      description: Creates a server-owned draft. Apps cannot set appSlug, status, rights status, decisions, provider bindings or execution authority.
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        source: { $ref: '#/components/schemas/VoiceSource' }
+        language: { type: string, minLength: 2, maxLength: 20 }
+        locale: { type: string, minLength: 2, maxLength: 30 }
+        styleTags: { type: array, maxItems: 30, items: { type: string, minLength: 1, maxLength: 100 } }
+        permittedUses: { type: array, minItems: 1, items: { $ref: '#/components/schemas/VoiceAvatarUseScope' } }
+        consentEvidence: { $ref: '#/components/schemas/HumanConsentEvidence' }
+        previewArtifactId: { type: string, format: uuid }
+    VoiceProfileUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        source: { $ref: '#/components/schemas/VoiceSource' }
+        language: { type: string, minLength: 2, maxLength: 20 }
+        locale: { type: [string, 'null'], minLength: 2, maxLength: 30 }
+        styleTags: { type: array, maxItems: 30, items: { type: string, minLength: 1, maxLength: 100 } }
+        permittedUses: { type: array, minItems: 1, items: { $ref: '#/components/schemas/VoiceAvatarUseScope' } }
+        consentEvidence: { oneOf: [{ $ref: '#/components/schemas/HumanConsentEvidence' }, { type: 'null' }] }
+        previewArtifactId: { type: [string, 'null'], format: uuid }
+    AvatarSource:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [subjectType, portraitArtifactId, creationEvidenceArtifactId]
+          properties:
+            subjectType: { const: synthetic }
+            portraitArtifactId: { type: string, format: uuid }
+            creationEvidenceArtifactId: { type: string, format: uuid }
+        - type: object
+          additionalProperties: false
+          required: [subjectType, portraitArtifactId, consentEvidence]
+          properties:
+            subjectType: { const: human_likeness }
+            portraitArtifactId: { type: string, format: uuid }
+            consentEvidence: { $ref: '#/components/schemas/HumanConsentEvidence' }
+    AvatarProfileDraft:
+      type: object
+      additionalProperties: false
+      required: [displayName, source, permittedUses]
+      description: Creates a server-owned draft. Verification additionally requires every referenced artifact and default voice to be usable inside the same app.
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        source: { $ref: '#/components/schemas/AvatarSource' }
+        permittedUses: { type: array, minItems: 1, items: { $ref: '#/components/schemas/VoiceAvatarUseScope' } }
+        defaultVoiceProfileId: { type: string, format: uuid }
+        styleTags: { type: array, maxItems: 30, items: { type: string, minLength: 1, maxLength: 100 } }
+        previewArtifactId: { type: string, format: uuid }
+    AvatarProfileUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        source: { $ref: '#/components/schemas/AvatarSource' }
+        permittedUses: { type: array, minItems: 1, items: { $ref: '#/components/schemas/VoiceAvatarUseScope' } }
+        defaultVoiceProfileId: { type: [string, 'null'], format: uuid }
+        styleTags: { type: array, maxItems: 30, items: { type: string, minLength: 1, maxLength: 100 } }
+        previewArtifactId: { type: [string, 'null'], format: uuid }
+    ResearchExecution:
+      type: object
+      additionalProperties: false
+      required: [query]
+      description: Provider-neutral governed research request. Apps cannot choose search engines, browsers, providers, models, routes, executors, endpoints or credentials.
+      properties:
+        query: { type: string, minLength: 3, maxLength: 4000 }
+        mode: { enum: [search, browse, deep], default: deep }
+        seedUrls: { type: array, maxItems: 20, items: { type: string, format: uri, maxLength: 4096 } }
+        allowedDomains: { type: array, maxItems: 50, items: { type: string, minLength: 1, maxLength: 253 } }
+        blockedDomains: { type: array, maxItems: 100, items: { type: string, minLength: 1, maxLength: 253 } }
+        maxSearchResults: { type: integer, minimum: 1, maximum: 25, default: 10 }
+        maxPages: { type: integer, minimum: 1, maximum: 20, default: 8 }
+        maxDepth: { type: integer, minimum: 0, maximum: 3, default: 1 }
+        maxBytesPerPage: { type: integer, minimum: 10000, maximum: 5000000, default: 1500000 }
+        freshnessDays: { type: integer, minimum: 1, maximum: 3650 }
+        language: { type: string, minLength: 2, maxLength: 20, default: en }
+        safeSearch: { enum: [strict, moderate, off], default: strict }
+        answer: { type: boolean, default: true }
+        includeSnapshots: { type: boolean, default: true }
+        metadata: { type: object }
+    SpecialistVisionResult:
+      type: object
+      description: Validated provider-neutral result with downloadable artifact IDs, provenance, usage, output validation, citations or temporal sampling evidence as applicable.
+      additionalProperties: true
+    BrandScrapeRequest:
+      type: object
+      additionalProperties: false
+      required: [url, permittedContentCategories, maxCredits, idempotencyKey]
+      properties:
+        url: { type: string, format: uri, description: HTTPS public target only; localhost, private, link-local and metadata ranges are rejected across redirects and DNS resolution. }
+        crawlDepth: { type: integer, minimum: 0, maximum: 3, default: 1 }
+        permittedContentCategories: { type: array, minItems: 1, items: { enum: [brand, products, services, legal, contact, about, assets] } }
+        campaignId: { type: string }
+        maxPages: { type: integer, minimum: 1, maximum: 20 }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    DocumentIngestRequest:
+      type: object
+      additionalProperties: false
+      required: [sourceArtifactId, documentId, namespace, maxCredits, idempotencyKey]
+      properties:
+        sourceArtifactId: { type: string, format: uuid }
+        documentId: { type: string }
+        namespace: { $ref: '#/components/schemas/Namespace' }
+        title: { type: string }
+        chunkSize: { type: integer, minimum: 200, maximum: 4000 }
+        chunkOverlap: { type: integer, minimum: 0, maximum: 800 }
+        ocrMode: { enum: [automatic, never, always] }
+        maxPages: { type: integer, minimum: 1, maximum: 2000 }
+        maxCredits: { type: number, exclusiveMinimum: 0 }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    CampaignGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [campaignId, brandProfileId, offeringId, objective, audienceIds, channels, startDate, endDate, budgetCredits, approvalRequired, idempotencyKey]
+      properties:
+        campaignId: { type: string }
+        brandProfileId: { type: string }
+        offeringId: { type: string }
+        objective: { type: string }
+        audienceIds: { type: array, minItems: 1, items: { type: string } }
+        channels: { type: array, minItems: 1, items: { enum: [facebook, instagram, linkedin, x, tiktok, youtube, email, website, blog, paid_search, display] } }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        researchExecutionIds: { type: array, items: { type: string } }
+        ragNamespace: { $ref: '#/components/schemas/Namespace' }
+        budgetCredits: { type: number, exclusiveMinimum: 0 }
+        qualityProfile: { enum: [draft, standard, premium, publication] }
+        approvalRequired: { const: true }
+        createChildSocialWorkflows: { type: boolean, default: false }
+        idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+    DurableWorkflowStatus:
+      type: object
+      properties:
+        executionId: { type: string }
+        parentJobId: { type: string }
+        capability: { type: string }
+        status: { enum: [queued, processing, completed, failed, cancelled] }
+        phase: { type: string }
+        progress: { type: integer }
+        artifactId: { type: [string, 'null'] }
+        result: { type: [object, 'null'] }
+        approval: { type: [object, 'null'] }
+        evidence: { type: array, items: { type: object } }
 paths:
-  /api/v1/capabilities: { get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } } }
-  /api/v1/policy: { get: { summary: Read effective app policy, responses: { '200': { description: Policy } } } }
-  /api/v1/jobs: { post: { summary: Submit a durable capability job, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Execute' } } } }, responses: { '201': { description: Queued }, '403': { description: Route or capability not approved } } } }
-  /api/v1/jobs/{id}: { get: { summary: Read job status and route evidence, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Job } } } }
-  /api/v1/jobs/{id}/cancel: { post: { summary: Cancel a cancellable job, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } } }
-  /api/v1/streaming-chat: { post: { summary: Authenticated SSE chat, responses: { '200': { description: SSE stream } } } }
-  /api/v1/usage: { get: { summary: Read usage and budget state, responses: { '200': { description: Usage } } } }
-  /api/v1/artifacts/{id}: { get: { summary: Read authorised artifact metadata, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Artifact metadata }, '404': { description: Not found or not owned by app } } } }
-  /api/v1/artifacts/{id}/file: { get: { summary: Preview or download authorised artifact bytes with Range support, parameters: [{ in: path, name: id, required: true, schema: { type: string } }, { in: query, name: download, schema: { type: string, enum: ['1'] } }, { in: header, name: Range, schema: { type: string } }], responses: { '200': { description: Artifact bytes }, '206': { description: Partial artifact bytes } } } }
+  /api/v1/capabilities:
+    get: { summary: Discover granted capabilities, responses: { '200': { description: Granted capabilities } } }
+  /api/v1/policy:
+    get: { summary: Read effective app policy, responses: { '200': { description: Policy } } }
+  /api/v1/usage:
+    get: { summary: Read usage and budget state, responses: { '200': { description: Usage } } }
+  /api/v1/jobs:
+    post:
+      summary: Submit a durable capability job; Orchestra owns provider and model selection
+      description: depth_estimation, keypoint_detection, mask_generation, zero_shot_object_detection, visual_document_retrieval and video_classification accept authorised artifact IDs and capability-specific provider-neutral inputs. Their results include validated structured evidence and downloadable artifacts. Provider, model, executor, endpoint and API-key overrides are rejected.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Execute' } } } }
+      responses: { '201': { description: Queued }, '403': { description: Capability not approved } }
+  /api/v1/jobs/{id}:
+    get:
+      summary: Read job status and immutable execution evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Job } }
+  /api/v1/jobs/{id}/cancel:
+    post:
+      summary: Cancel a cancellable job
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Cancelled } }
+  /api/v1/streaming-chat:
+    post: { summary: Authenticated SSE chat, responses: { '200': { description: SSE stream } } }
+  /api/v1/brand-profiles:
+    get: { summary: List app-isolated Brand Profiles, responses: { '200': { description: Brand Profiles } } }
+    post:
+      summary: Create an evidence-backed Brand Profile
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandProfile' } } } }
+      responses: { '201': { description: Created }, '409': { description: Profile already exists } }
+  /api/v1/brand-profiles/{id}:
+    get:
+      summary: Read an app-isolated Brand Profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Brand Profile }, '404': { description: Not found } }
+    put:
+      summary: Replace a validated Brand Profile version
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandProfile' } } } }
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: Archive rather than destructively delete a Brand Profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Archived } }
+  /api/v1/marketing-campaigns:
+    get:
+      summary: List same-app persisted marketing campaigns
+      responses: { '200': { description: Campaign list } }
+    post:
+      summary: Persist an authorised campaign brief for social workflow execution
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MarketingCampaignBrief' } } } } }
+      responses:
+        '201': { description: Campaign created }
+        '200': { description: Campaign updated }
+        '400': { description: Invalid campaign, content: { application/json: { schema: { $ref: '#/components/schemas/StableError' } } } }
+        '403': { description: Capability grant required, content: { application/json: { schema: { $ref: '#/components/schemas/StableError' } } } }
+  /api/v1/social-ad-video/plan:
+    post:
+      summary: Build a provider-neutral social-ad execution plan
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SocialAdPlanRequest' } } } }
+      responses: { '200': { description: Validated execution plan }, '403': { description: Required grant missing }, '404': { description: Brand Profile not found }, '409': { description: Workflow requirements rejected } }
+  /api/v1/social-ad-video/executions:
+    post:
+      summary: Create a durable quality-gated social-ad execution
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SocialAdPlanRequest' } } } }
+      responses: { '202': { description: Candidate generation queued }, '403': { description: Required grant missing }, '409': { description: Workflow requirements rejected } }
+  /api/v1/social-ad-video/executions/{id}:
+    get:
+      summary: Poll generation, quality, assembly, copy and approval evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: App-scoped execution status and immutable evidence }, '404': { description: Execution not found or not owned by app } }
+  /api/v1/social-ad-video/executions/{id}/approval:
+    post:
+      summary: Approve or reject the Network-selected creative winner
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Creative decision recorded }, '409': { description: Execution is not ready for creative approval } }
+  /api/v1/social-ad-video/executions/{id}/assemble:
+    post:
+      summary: Idempotently resume approved internal media assembly
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '202': { description: Assembly queued or already active }, '409': { description: Creative approval or quality winner missing } }
+  /api/v1/social-ad-video/executions/{id}/resume:
+    post:
+      summary: Idempotently resume retryable durable children without duplicating completed work
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: No duplicate work was required }, '202': { description: Retryable children requeued within the credit ceiling }, '409': { description: Cancelled or over-budget execution } }
+  /api/v1/social-ad-video/executions/{id}/candidates/{jobId}/retry:
+    post:
+      summary: Retry one failed candidate within retry and credit ceilings
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: path, name: jobId, required: true, schema: { type: string } }
+      responses: { '202': { description: Candidate requeued with immutable retry history }, '404': { description: Candidate not owned by the execution }, '409': { description: Candidate, retry, cancellation or budget state rejects retry } }
+  /api/v1/social-ad-video/executions/{id}/cancel:
+    post:
+      summary: Cancel the parent and unfinished children while protecting against late results
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Cancellation persisted or already complete }, '409': { description: Completed execution cannot be cancelled } }
+  /api/v1/social-ad-video/executions/{id}/regenerate:
+    post:
+      summary: Generate one revision candidate within the six-candidate and credit ceilings
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: { notes: { type: string, maxLength: 2000 } }
+      responses: { '202': { description: Revision candidate queued with lineage evidence }, '409': { description: State, regeneration limit or credit ceiling rejects regeneration } }
+  /api/v1/social-ad-video/executions/{id}/final-approval:
+    post:
+      summary: Approve or reject the complete delivery pack
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Final decision recorded; approval completes the parent }, '409': { description: Delivery pack is not ready } }
+  /api/v1/memory/search:
+    get:
+      summary: Search non-expired memory entries owned by the app and granted namespace
+      parameters:
+        - { in: query, name: namespace, required: true, schema: { $ref: '#/components/schemas/Namespace' } }
+        - { in: query, name: q, schema: { type: string, maxLength: 2000 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+        - { in: query, name: types, schema: { type: string } }
+      responses: { '200': { description: App- and namespace-scoped memory results }, '403': { description: Memory or namespace authority missing } }
+  /api/v1/memory:
+    post:
+      summary: Store a memory entry for the authenticated app and namespace
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MemoryWrite' } } } }
+      responses: { '201': { description: Namespaced memory entry created }, '403': { description: Memory or namespace authority missing } }
+  /api/v1/memory/{id}:
+    delete:
+      summary: Delete a memory entry owned by the app and namespace
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, minimum: 1 } }
+        - { in: query, name: namespace, required: true, schema: { $ref: '#/components/schemas/Namespace' } }
+      responses: { '200': { description: Memory deleted }, '403': { description: Authority missing }, '404': { description: Memory not found } }
+  /api/v1/rag/ingest:
+    post:
+      summary: Persist, chunk, embed and ingest an authorised source into the app namespace
+      description: Requires rag_ingest and embeddings grants before work begins. The Network selects the embedding provider/model and stores an immutable ingestion manifest.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RagIngest' } } } }
+      responses:
+        '202': { description: Durable source-embedding workflow queued }
+        '400': { description: Invalid source or chunking contract }
+        '403': { description: Grant, namespace or artifact-write authority missing }
+        '409': { description: Provider-neutral embedding request invalid }
+  /api/v1/rag/search:
+    post:
+      summary: Run app- and namespace-isolated vector retrieval with optional reranking and cited answer generation
+      description: Requires rag_search and embeddings, plus reranking/question_answering when requested. Every Qdrant query is filtered by authenticated appSlug and granted namespace.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RagSearch' } } } }
+      responses:
+        '202': { description: Durable query-embedding workflow queued }
+        '400': { description: Invalid search contract }
+        '403': { description: Required grant, namespace or artifact authority missing }
+        '409': { description: Provider-neutral embedding request invalid }
+  /api/v1/rag/executions/{id}:
+    get:
+      summary: Poll an app-isolated RAG ingest or search workflow and its immutable route evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Parent status, child evidence and validated result when completed }
+        '404': { description: Execution not found or not owned by the authenticated app }
+  /api/v1/research/executions:
+    post:
+      summary: Run durable governed web research with Network-owned search and controlled browsing
+      description: Requires an enabled research grant and artifact writes. Cited answers additionally require question_answering. SearXNG, Playwright, provider and model selection remain Network-owned. Automatic RAG export is intentionally excluded until separately proven.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ResearchExecution' } } } }
+      responses:
+        '202': { description: Evidence collection queued }
+        '400': { description: Invalid provider-neutral research request }
+        '403': { description: Research, answer or artifact-write authority missing }
+        '409': { description: Automatic RAG export requested before its durable proof exists }
+  /api/v1/research/executions/{id}:
+    get:
+      summary: Poll an app-isolated research workflow and its evidence, answer and report artifacts
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Parent status, internal evidence child, routed answer child and validated cited result }
+        '404': { description: Execution not found or not owned by the authenticated app }
+  /api/v1/profile-artifacts/{purpose}:
+    post:
+      summary: Upload one app-owned voice or avatar evidence file
+      description: Purpose determines the required grant, maximum bytes, accepted detected MIME types and stored artifact subtype. The server derives MIME and artifact type from magic bytes; multipart metadata fields are not accepted.
+      parameters:
+        - { in: path, name: purpose, required: true, schema: { $ref: '#/components/schemas/ProfileEvidencePurpose' } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: Completed app-owned evidence artifact }
+        '400': { description: Invalid purpose, empty upload or multipart shape }
+        '403': { description: Capability grant or artifact-write authority missing }
+        '413': { description: Purpose-specific size limit exceeded }
+        '415': { description: Unknown, disallowed or declared/detected MIME mismatch }
+  /api/v1/voice-profiles:
+    get:
+      summary: List voice profiles owned by the authenticated app
+      responses: { '200': { description: App-owned profiles and invalid-record diagnostics }, '403': { description: Voice profile capability access missing } }
+    post:
+      summary: Create an app-owned voice profile draft
+      description: The Network assigns profile ID, app ownership, draft status and pending rights. Human recordings require same-app evidence and source-recording consent.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VoiceProfileDraft' } } } }
+      responses: { '201': { description: Draft created }, '400': { description: Invalid profile contract }, '403': { description: Grant or artifact-write authority missing }, '409': { description: Referenced evidence or parent profile is unusable } }
+  /api/v1/voice-profiles/{id}:
+    get:
+      summary: Read a voice profile owned by the authenticated app
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Voice profile }, '404': { description: Not found or not owned by app } }
+    put:
+      summary: Edit a voice profile and reset rights to pending
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VoiceProfileUpdate' } } } }
+      responses: { '200': { description: Updated draft }, '400': { description: Invalid update }, '403': { description: Grant missing }, '404': { description: Not found }, '409': { description: Archived or revoked profile, or unusable dependency } }
+    delete:
+      summary: Archive rather than destructively delete a voice profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Archived }, '403': { description: Grant missing }, '404': { description: Not found }, '409': { description: Revoked profile cannot be archived } }
+  /api/v1/avatar-profiles:
+    get:
+      summary: List avatar profiles owned by the authenticated app
+      responses: { '200': { description: App-owned profiles and invalid-record diagnostics }, '403': { description: Avatar profile capability access missing } }
+    post:
+      summary: Create an app-owned avatar profile draft
+      description: Human likenesses require same-app consent evidence. Synthetic avatars require same-app portrait and creation-evidence artifacts. Profile creation does not prove avatar generation execution.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AvatarProfileDraft' } } } }
+      responses: { '201': { description: Draft created }, '400': { description: Invalid profile contract }, '403': { description: Grant or artifact-write authority missing }, '409': { description: Referenced evidence is unusable } }
+  /api/v1/avatar-profiles/{id}:
+    get:
+      summary: Read an avatar profile owned by the authenticated app
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Avatar profile }, '404': { description: Not found or not owned by app } }
+    put:
+      summary: Edit an avatar profile and reset rights to pending
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AvatarProfileUpdate' } } } }
+      responses: { '200': { description: Updated draft }, '400': { description: Invalid update }, '403': { description: Grant missing }, '404': { description: Not found }, '409': { description: Archived or revoked profile, or unusable dependency } }
+    delete:
+      summary: Archive rather than destructively delete an avatar profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Archived }, '403': { description: Grant missing }, '404': { description: Not found }, '409': { description: Revoked profile cannot be archived } }
+  /api/v1/artifacts/{id}:
+    get:
+      summary: Read authorised artifact metadata
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Artifact metadata }, '404': { description: Not found or not owned by app } }
+  /api/v1/artifacts/{id}/file:
+    get:
+      summary: Preview or download authorised artifact bytes with Range support
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: query, name: download, schema: { type: string, enum: ['1'] } }
+        - { in: header, name: Range, schema: { type: string } }
+      responses: { '200': { description: Artifact bytes }, '206': { description: Partial artifact bytes } }
+  /api/v1/source-artifacts:
+    post:
+      summary: Upload and inspect an app-owned image, video or document artifact
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [title, kind, dataBase64], properties: { title: { type: string }, kind: { enum: [image, video, document] }, dataBase64: { type: string, format: byte }, declaredMimeType: { type: string } } } } } }
+      responses: { '201': { description: Inspected source artifact }, '415': { description: Unsupported bytes or declared/detected MIME mismatch } }
+  /api/v1/brand-scrape/executions:
+    post:
+      summary: Start a durable SSRF-protected brand crawl and Brand Profile proposal
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BrandScrapeRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/brand-scrape/executions/{id}:
+    get:
+      summary: Read crawl, extraction, citation and approval evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/brand-scrape/executions/{id}/approval:
+    post:
+      summary: Approve or reject a proposal without silently replacing a verified Brand Profile
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Human decision persisted } }
+  /api/v1/document-ingest/executions:
+    post:
+      summary: Start page-preserving extraction, conditional OCR, embeddings and app-isolated Qdrant ingestion
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DocumentIngestRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/document-ingest/executions/{id}:
+    get:
+      summary: Read extraction, OCR, chunk, embedding and Qdrant evidence
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/campaign-generation/executions:
+    post:
+      summary: Start verified-brand structured campaign plan generation
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CampaignGenerationRequest' } } } }
+      responses: { '202': { description: Durable execution accepted } }
+  /api/v1/campaign-generation/executions/{id}:
+    get:
+      summary: Read structured plan, citations and approval state
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/DurableWorkflowStatus' } } } } }
+  /api/v1/campaign-generation/executions/{id}/approval:
+    post:
+      summary: Activate an approved plan and deduplicate optional child workflow creation
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalDecision' } } } }
+      responses: { '200': { description: Human decision persisted } }
+  /api/v1/brand-scrape/executions/{id}/cancel:
+    post: { summary: Cancel a non-terminal brand scrape and its queued children, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }
+  /api/v1/document-ingest/executions/{id}/cancel:
+    post: { summary: Cancel non-terminal extraction, OCR or embedding work, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }
+  /api/v1/campaign-generation/executions/{id}/cancel:
+    post: { summary: Cancel a non-terminal campaign plan before activation, parameters: [{ in: path, name: id, required: true, schema: { type: string } }], responses: { '200': { description: Cancelled } } }

@@ -22,3 +22,23 @@ export async function GET(request) {
     )
   }
 }
+
+export async function POST(request) {
+  const authorization = request.headers.get('authorization')
+  try {
+    const body = await request.text()
+    const response = await fetch(`${API_BASE}/api/admin/artifacts/source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(authorization ? { Authorization: authorization } : {}) },
+      body,
+      signal: AbortSignal.timeout(30000),
+    })
+    const data = await response.json()
+    return NextResponse.json(data, { status: response.status })
+  } catch {
+    return NextResponse.json(
+      { error: true, message: 'Backend unavailable. Source artifact could not be uploaded.' },
+      { status: 502 },
+    )
+  }
+}

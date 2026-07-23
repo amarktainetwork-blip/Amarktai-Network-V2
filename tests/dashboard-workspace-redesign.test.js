@@ -97,9 +97,9 @@ describe('dashboard creation workspace redesign', () => {
       expect(image).toContain('pollJob')
     })
 
-    it('image page uses Auto mode as default', () => {
+    it('image page uses governed Auto mode by default', () => {
       const image = read('app/dashboard/image/page.js')
-      expect(image).toContain('Auto mode')
+      expect(image).toContain('Governed auto mode')
     })
 
     it('image page does not expose provider/model selectors', () => {
@@ -255,26 +255,6 @@ describe('dashboard creation workspace redesign', () => {
 
     it('login page still exists', () => {
       expect(fs.existsSync(path.join(ROOT, 'app/login/page.js'))).toBe(true)
-    })
-  })
-
-  describe('app-facing provider/model overrides remain blocked', () => {
-    it('no provider/model selectors in studio page', () => {
-      const studio = read('app/dashboard/studio/page.jsx')
-      expect(studio).not.toContain('SelectProvider')
-      expect(studio).not.toContain('SelectModel')
-    })
-
-    it('image page does not expose provider/model selectors', () => {
-      const image = read('app/dashboard/image/page.js')
-      expect(image).not.toContain('SelectProvider')
-      expect(image).not.toContain('SelectModel')
-    })
-
-    it('video page does not expose provider/model selectors', () => {
-      const video = read('app/dashboard/video/page.js')
-      expect(video).not.toContain('SelectProvider')
-      expect(video).not.toContain('SelectModel')
     })
   })
 })

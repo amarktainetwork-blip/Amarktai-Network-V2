@@ -2,15 +2,15 @@ name: release-candidate-checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/production-activation-music-longform]
   push:
-    branches: [feat/production-activation-music-longform]
+    branches: [feat/production-activation-music-longform, feat/batch-b-platform-closure]
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-candidate-${{ github.ref }}
+  group: release-candidate-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -19,10 +19,19 @@ jobs:
     timeout-minutes: 35
     env:
       NODE_ENV: test
+      VALIDATED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Verify exact head checkout
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$VALIDATED_SHA"
+          echo "VALIDATED_HEAD_SHA=$actual_sha"
 
       - uses: actions/setup-node@v4
         with:
@@ -119,9 +128,9 @@ jobs:
 
       - name: Docker Compose and deployment shell syntax
         env:
-          GIT_SHA: ${{ github.sha }}
+          GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BUILD_TIME: '2026-01-01T00:00:00.000Z'
-          FIXTURE_GIT_SHA: ${{ github.sha }}
+          FIXTURE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FIXTURE_BUILD_TIME: '2026-01-01T00:00:00.000Z'
         run: |
           trap 'rm -f .env' EXIT
@@ -132,9 +141,7 @@ jobs:
 
       - name: Production dependency audit
         shell: bash
-        run: |
-          set -o pipefail
-          npm audit --omit=dev 2>&1 | tee production-dependency-audit.log
+        run: bash scripts/audit-production-dependencies.sh
 
       - name: Upload production dependency audit diagnostics
         if: always()
@@ -158,10 +165,19 @@ jobs:
       NODE_ENV: test
       RELEASE_FIXTURE_OUTPUT_DIR: release-fixture-output
       PLAYWRIGHT_HTML_OPEN: never
+      VALIDATED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Verify exact head checkout
+        shell: bash
+        run: |
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$VALIDATED_SHA"
+          echo "VALIDATED_HEAD_SHA=$actual_sha"
 
       - uses: actions/setup-node@v4
         with:
@@ -183,7 +199,7 @@ jobs:
             echo "FIXTURE_DB_PASSWORD=$FIXTURE_DB_PASSWORD"
             echo "FIXTURE_JWT_SECRET=$FIXTURE_JWT_SECRET"
             echo "FIXTURE_ADMIN_PASSWORD=$FIXTURE_ADMIN_PASSWORD"
-            echo "FIXTURE_GIT_SHA=$GITHUB_SHA"
+            echo "FIXTURE_GIT_SHA=$VALIDATED_SHA"
             echo "FIXTURE_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           } >> "$GITHUB_ENV"
 

@@ -23,7 +23,7 @@ export const ARTIFACT_TYPES = [
 
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number]
 
-// ── Artifact Statuses ─────────────────────────────────────────────────────────
+// ── Artifact Statuses ──────────────────────────────────────────────────────────
 
 export const ARTIFACT_STATUSES = [
   'pending',
@@ -89,7 +89,7 @@ export const ARTIFACT_MIME_MAP: Record<ArtifactType, string[]> = {
   code: ['text/plain', 'application/json', 'text/javascript', 'text/typescript', 'text/html', 'text/css'],
   document: ['application/pdf', 'text/plain', 'text/markdown', 'application/json'],
   report: ['application/pdf', 'text/plain', 'text/markdown'],
-  transcript: ['text/plain', 'application/json', 'text/vtt'],
+  transcript: ['text/plain', 'application/json', 'text/vtt', 'application/x-subrip'],
 }
 
 export function isValidMimeForType(type: ArtifactType, mimeType: string): boolean {

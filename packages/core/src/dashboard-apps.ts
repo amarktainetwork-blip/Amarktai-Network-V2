@@ -1,5 +1,6 @@
 import { CAPABILITY_BY_KEY, type CapabilityKey } from './capabilities.js'
 import { EXECUTOR_REGISTRATIONS } from './executor-registry.js'
+import { INTERNAL_EXECUTOR_REGISTRATIONS } from './internal-executor-registry.js'
 import { DURABLE_WORKFLOW_REGISTRATIONS } from './long-form-execution.js'
 
 export interface InternalDashboardAppDefinition {
@@ -9,12 +10,14 @@ export interface InternalDashboardAppDefinition {
 }
 
 /**
- * The release set is a projection over callable executors and durable workflow
- * registrations. Catalogue membership alone can never add a release candidate.
+ * The release set is a projection over callable provider executors, callable
+ * internal runtime executors, and durable workflow registrations. Catalogue
+ * membership alone can never add a release candidate.
  */
 export function getReleaseCandidateCapabilityKeys(): CapabilityKey[] {
   return [...new Set<CapabilityKey>([
     ...EXECUTOR_REGISTRATIONS.map((registration) => registration.capability),
+    ...INTERNAL_EXECUTOR_REGISTRATIONS.map((registration) => registration.capability),
     ...DURABLE_WORKFLOW_REGISTRATIONS.map((registration) => registration.capability),
   ])]
 }
@@ -25,6 +28,7 @@ export function getReleaseCandidateCapabilityKeys(): CapabilityKey[] {
  */
 export function getDashboardAppSlug(capability: CapabilityKey): string {
   const mode = CAPABILITY_BY_KEY[capability].studioMode
+  if (capability === 'social_content_generation' || capability === 'campaign_generation' || capability === 'brand_scrape') return 'dashboard-marketing'
   if (mode === 'longvideo') return 'dashboard-long-form'
   if (mode === 'image') return 'dashboard-image'
   if (mode === 'music' || mode === 'song_generation') return 'dashboard-music'

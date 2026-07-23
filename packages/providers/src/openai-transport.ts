@@ -1,9 +1,21 @@
 import { getProviderDefaultBaseUrl, type ProviderKey } from '@amarktai/core'
 import { CanonicalProviderError, normalizeProviderError, providerHttpError } from './provider-errors.js'
 
+export interface OpenAiTextContentPart {
+  type: 'text'
+  text: string
+}
+
+export interface OpenAiImageContentPart {
+  type: 'image_url'
+  image_url: { url: string }
+}
+
+export type OpenAiTransportContent = string | null | Array<OpenAiTextContentPart | OpenAiImageContentPart>
+
 export interface OpenAiTransportMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string | null
+  content: OpenAiTransportContent
   tool_call_id?: string
   tool_calls?: OpenAiToolCall[]
 }

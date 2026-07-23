@@ -5,6 +5,13 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { proveRagReleaseFixture } from './lib/proof-rag-release-fixture.mjs'
+import { proveResearchReleaseFixture } from './lib/proof-research-release-fixture.mjs'
+import { proveVoiceAvatarProfileReleaseFixture } from './lib/proof-voice-avatar-profile-release-fixture.mjs'
+import { proveVoiceAudioReleaseFixture } from './lib/proof-voice-audio-release-fixture.mjs'
+import { proveSocialAdReleaseFixture } from './lib/proof-social-ad-release-fixture.mjs'
+import { proveSpecialistWorkflowReleaseFixture } from './lib/proof-specialist-workflow-release-fixture.mjs'
+import { proveStoryboardSubtitleReleaseFixture } from './lib/proof-storyboard-subtitle-release-fixture.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const composeFile = join(root, 'docker-compose.release-fixture.yml')
@@ -102,7 +109,7 @@ async function persistFixtureDiagnostics() {
   const report = await readFile(proofReportFile, 'utf8').catch(() => '')
   if (report) await writeFile(join(outputDir, 'proof-report.json'), redact(report), { mode: 0o600 })
   await writeFile(join(outputDir, 'docker-compose-status.log'), capture(docker, [...compose, 'ps', '--all']), { mode: 0o600 })
-  for (const service of ['mariadb', 'redis', 'qdrant', 'migrate', 'api', 'worker', 'dashboard']) {
+  for (const service of ['mariadb', 'redis', 'qdrant', 'searxng', 'migrate', 'api', 'worker', 'dashboard']) {
     const logs = capture(docker, [...compose, 'logs', '--no-color', '--timestamps', service])
     await writeFile(join(outputDir, `${service}.log`), logs, { mode: 0o600 })
   }
@@ -266,8 +273,6 @@ async function proveQueueAndRestartRecovery(token, proofReport) {
 
 let passed = false
 try {
-  // The host-side proof imports the workspace package through its production
-  // export, so a fresh checkout must compile that entrypoint before invocation.
   run(npm, ['run', 'build', '--workspace=@amarktai/core'])
   run(docker, [...compose, 'config', '--quiet'])
   run(docker, [...compose, 'down', '--volumes', '--remove-orphans'])
@@ -280,14 +285,19 @@ try {
   }
   const catalogueToken = await loginFixtureAdmin()
   await seedFixtureModelCatalogue(catalogueToken)
+  await proveRagReleaseFixture({ apiRequest, invariant, delay, run, docker, compose, adminToken: catalogueToken })
+  await proveResearchReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
+  await proveVoiceAvatarProfileReleaseFixture({ apiRequest, invariant, adminToken: catalogueToken })
+  await proveVoiceAudioReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
+  await proveSocialAdReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
+  await proveSpecialistWorkflowReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken, queueControl })
+  await proveStoryboardSubtitleReleaseFixture({ apiRequest, invariant, delay, adminToken: catalogueToken })
   run(tsx, [
     'scripts/proof-production-release-candidate.mjs',
     '--base-url', proofEnv.RELEASE_FIXTURE_BASE_URL,
     '--fixture', '--strict', '--long-form', '--json-output', proofReportFile,
   ], { env: proofEnv })
   const proofReport = JSON.parse(await readFile(proofReportFile, 'utf8'))
-  // Strict proof logs out and increments the admin token version, so queue and
-  // restart recovery must authenticate again instead of reusing bootstrap JWT.
   const recoveryToken = await loginFixtureAdmin()
   await proveQueueAndRestartRecovery(recoveryToken, proofReport)
   run(docker, [...compose, 'up', '--detach', '--wait', '--wait-timeout', '300', 'api', 'worker', 'dashboard'])
@@ -309,4 +319,14 @@ if (!passed) process.exit(1)
 console.log(`FIXTURE_BUILD_SHA=${sha}`)
 console.log('FIXTURE_STACK=PASS')
 console.log('FIXTURE_PROOF=PASS')
+console.log('RAG_RELEASE_FIXTURE=PASS')
+console.log('RESEARCH_RELEASE_FIXTURE=PASS')
+console.log('VOICE_AVATAR_PROFILE_RELEASE_FIXTURE=PASS')
+console.log('VOICE_AUDIO_RELEASE_FIXTURE=PASS')
+console.log('SOCIAL_AD_PRODUCT_BREAKOUT_RELEASE_FIXTURE=PASS')
+console.log('SPECIALIST_VISION_RELEASE_FIXTURE=PASS')
+console.log('BRAND_SCRAPE_RELEASE_FIXTURE=PASS')
+console.log('DOCUMENT_INGEST_RELEASE_FIXTURE=PASS')
+console.log('CAMPAIGN_GENERATION_RELEASE_FIXTURE=PASS')
+console.log('STORYBOARD_SUBTITLE_RELEASE_FIXTURE=PASS')
 console.log('BROWSER_E2E=PASS')

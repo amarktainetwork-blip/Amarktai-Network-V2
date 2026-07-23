@@ -344,11 +344,17 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
 
       // 7. Handle result — must be honest about what happened
       if (result.success) {
+        // Provider executors persist routing, grant, usage, and validation evidence
+        // while they run. Reload the row before the terminal write so those durable
+        // updates are not replaced by the stale metadata snapshot loaded at claim time.
+        const latestJob = await prisma.job.findUnique({ where: { id: jobId } }).catch(() => null)
+        const latestMetadata = safeParseJsonObject(latestJob?.metadataJson ?? job.metadataJson)
         const completedData: {
           status: string
           provider: string | null
           model: string | null
           output: string | null
+          metadataJson: string
           progress: number
           completedAt: Date
           error: null
@@ -358,6 +364,18 @@ export function createJobProcessor(deps: ProcessorDeps = {}) {
           provider: result.provider ?? null,
           model: result.model ?? null,
           output: result.output ?? null,
+          metadataJson: JSON.stringify({
+            ...latestMetadata,
+            executionEvidence: result.metadata ?? {},
+            providerEvidence: {
+              provider: result.provider ?? null,
+              model: result.model ?? null,
+              completedAt: new Date().toISOString(),
+              evidenceSource: result.metadata?.evidenceSource ?? 'provider_executor',
+              liveProviderProof: result.metadata?.liveProviderProof === true,
+            },
+            usageEvidence: result.metadata?.usage ?? null,
+          }),
           progress: 100,
           completedAt: new Date(),
           error: null,

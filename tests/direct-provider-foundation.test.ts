@@ -50,10 +50,11 @@ describe('canonical direct-provider contracts and registrations', () => {
     }
   })
 
-  it('backs each queued direct registration with a callable handler', () => {
+  it('backs each queued direct registration with a callable handler or explicit worker bootstrap', () => {
     const externallyDispatched = new Set([
       'deepinfra.chat',
       'deepinfra.streaming-chat',
+      'deepinfra.vision',
       'together.streaming-chat',
       'genx.streaming-chat',
       'together.image-generation',

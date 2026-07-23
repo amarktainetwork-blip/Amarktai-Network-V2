@@ -19,15 +19,21 @@ import {
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
   TOKEN_COST_MULTIPLIER,
+  SPECIALIST_VISION_CAPABILITIES,
+  ImageUpscaleRequestSchema,
+  durableIdempotencyTrace,
   isValidRoutingMode,
   type JobPayload,
   type CreateJobResponse,
   type JobStatusResponse,
   validateDirectProviderRequest,
 } from '@amarktai/core'
+import {
+  StoryboardGenerationRequestSchema,
+  SubtitleGenerationRequestSchema,
+} from '@amarktai/core/storyboard-subtitle-contracts'
+import { VoiceActivityDetectionRequestSchema } from '@amarktai/core/voice-activity-detection-contracts'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
-
-// ── Auth Helper ───────────────────────────────────────────────────────────────
 
 export async function authenticateAppKey(bearerHeader: string | undefined): Promise<{
   ok: boolean
@@ -40,17 +46,11 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
   connectionId?: string
   webhookUrl?: string
 }> {
-  if (!bearerHeader) {
-    return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
-  }
-
+  if (!bearerHeader) return { ok: false, statusCode: 401, error: 'Missing Authorization header' }
   const token = parseBearerToken(bearerHeader)
-  if (!token) {
-    return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
-  }
+  if (!token) return { ok: false, statusCode: 401, error: 'Invalid Authorization format. Use: Bearer <KEY>' }
 
   const hashedToken = hashAppApiKey(token)
-
   const apiKey = await prisma.appApiKey.findUnique({
     where: { key: hashedToken },
     include: {
@@ -67,33 +67,14 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
       },
     },
   })
-
-  if (!apiKey) {
-    return { ok: false, statusCode: 401, error: 'Invalid API key' }
-  }
-
-  if (!apiKey.active) {
-    return { ok: false, statusCode: 403, error: 'API key is deactivated' }
-  }
-
+  if (!apiKey) return { ok: false, statusCode: 401, error: 'Invalid API key' }
+  if (!apiKey.active) return { ok: false, statusCode: 403, error: 'API key is deactivated' }
   const conn = apiKey.appConnection
-  if (!conn || conn.status !== 'active') {
-    return { ok: false, statusCode: 403, error: 'App connection is not active' }
-  }
+  if (!conn || conn.status !== 'active') return { ok: false, statusCode: 403, error: 'App connection is not active' }
 
-  // Parse allowed capabilities
   let allowedCaps: string[] = []
-  try {
-    allowedCaps = JSON.parse(conn.allowedCapabilities ?? '[]')
-  } catch {
-    allowedCaps = []
-  }
-
-  // Get daily budget
-  const budget = await prisma.appBudgetConfig.findUnique({
-    where: { appSlug: conn.appSlug },
-  })
-
+  try { allowedCaps = JSON.parse(conn.allowedCapabilities ?? '[]') } catch { allowedCaps = [] }
+  const budget = await prisma.appBudgetConfig.findUnique({ where: { appSlug: conn.appSlug } })
   return {
     ok: true,
     statusCode: 200,
@@ -106,10 +87,7 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
   }
 }
 
-// ── Route Registration ────────────────────────────────────────────────────────
-
 export async function jobRoutes(app: FastifyInstance): Promise<void> {
-  // Lazily create queue (only when Redis is available)
   let queue: Queue | null = null
   function getQueue(): Queue {
     if (!queue) {
@@ -119,114 +97,165 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     return queue
   }
 
-  // ── POST /api/v1/jobs ──────────────────────────────────────────────────────
-
   app.post('/api/v1/jobs', async (request, reply) => {
-    // 1. Authenticate
     const auth = await authenticateAppKey(request.headers.authorization)
-    if (!auth.ok) {
-      return reply.status(auth.statusCode).send({ error: true, message: auth.error })
-    }
+    if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
     const body = request.body as Record<string, unknown>
 
-    // 2. COMPLIANCE GATE: Block provider/model overrides
+    // COMPLIANCE GATE: Block provider/model overrides in every app-facing request layer.
     const blockedField = hasBlockedOverrides(body)
       || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
       || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
     if (blockedField) {
-      return reply.status(400).send({
-        error: true,
-        message: `Field '${blockedField}' is not allowed. Provider and model routing decisions are made exclusively by the AmarktAI Network engine.`,
-      })
+      return reply.status(400).send({ error: true, message: `Field '${blockedField}' is not allowed. Provider and model routing decisions are made exclusively by the AmarktAI Network engine.` })
     }
 
-    // 3. Validate request body against single source of truth
     const parsed = CreateJobRequestSchema.safeParse(body)
-    if (!parsed.success) {
-      return reply.status(400).send({
-        error: true,
-        message: 'Invalid request body',
-        details: parsed.error.issues,
-      })
-    }
+    if (!parsed.success) return reply.status(400).send({ error: true, message: 'Invalid request body', details: parsed.error.issues })
 
     const { capability, prompt, input, metadata, callbackUrl, route } = parsed.data
-
     const configuredWebhookUrl = auth.webhookUrl || undefined
     if (callbackUrl && callbackUrl !== configuredWebhookUrl) {
-      return reply.status(400).send({
-        error: true,
-        message: 'callbackUrl must exactly match the app webhook configured by an administrator.',
-      })
+      return reply.status(400).send({ error: true, message: 'callbackUrl must exactly match the app webhook configured by an administrator.' })
     }
     const effectiveCallbackUrl = configuredWebhookUrl
 
-    const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
-    if (!capabilityRequest.success) {
-      return reply.status(400).send({
-        error: true,
-        message: capabilityRequest.error,
-        details: capabilityRequest.issues,
-      })
-    }
-    const validatedInput = capabilityRequest.data ?? input
+    const imageUpscale = capability === 'image_upscale'
+    const storyboardGeneration = capability === 'storyboard_generation'
+    const subtitleGeneration = capability === 'subtitle_generation'
+    const voiceActivityDetection = capability === 'voice_activity_detection'
+    const internalArtifactCapability = imageUpscale || storyboardGeneration || subtitleGeneration
+    let validatedInput: Record<string, unknown>
 
-    // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
-    // allowlist is migration input only and is never consulted by the worker.
-    const allowedCaps = auth.allowedCapabilities ?? []
-    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, allowedCaps)
-    if (!grantResolution || !grantResolution.grant.enabled) {
-      return reply.status(403).send({
-        error: true,
-        message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.`,
+    if (imageUpscale) {
+      const upscaleRequest = ImageUpscaleRequestSchema.safeParse(input)
+      if (!upscaleRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid image_upscale request: ${upscaleRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: upscaleRequest.error.issues,
+        })
+      }
+      validatedInput = upscaleRequest.data
+    } else if (storyboardGeneration) {
+      const storyboardRequest = StoryboardGenerationRequestSchema.safeParse({
+        ...input,
+        brief: typeof input.brief === 'string' && input.brief.trim() ? input.brief : prompt,
       })
+      if (!storyboardRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid storyboard_generation request: ${storyboardRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: storyboardRequest.error.issues,
+        })
+      }
+      validatedInput = storyboardRequest.data
+    } else if (subtitleGeneration) {
+      const subtitleRequest = SubtitleGenerationRequestSchema.safeParse(input)
+      if (!subtitleRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid subtitle_generation request: ${subtitleRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: subtitleRequest.error.issues,
+        })
+      }
+      validatedInput = subtitleRequest.data
+    } else if (voiceActivityDetection) {
+      const vadRequest = VoiceActivityDetectionRequestSchema.safeParse(input)
+      if (!vadRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid voice_activity_detection request: ${vadRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: vadRequest.error.issues,
+        })
+      }
+      validatedInput = vadRequest.data
+    } else {
+      const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
+      if (!capabilityRequest.success) {
+        return reply.status(400).send({ error: true, message: capabilityRequest.error, details: capabilityRequest.issues })
+      }
+      validatedInput = capabilityRequest.data ?? input
+    }
+
+    const specialistVision = (SPECIALIST_VISION_CAPABILITIES as readonly string[]).includes(capability)
+    const sourceReadWriteCapability = specialistVision || imageUpscale
+    const governedSourceArtifact = sourceReadWriteCapability || voiceActivityDetection
+    if (governedSourceArtifact) {
+      const sourceArtifactId = ['sourceImageArtifactId', 'sourceVideoArtifactId', 'sourceDocumentArtifactId', 'sourceAudioArtifactId']
+        .map((field) => validatedInput[field])
+        .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+      if (sourceArtifactId) {
+        const sourceArtifact = await prisma.artifact.findFirst({
+          where: { id: sourceArtifactId, appSlug: auth.app!.slug, status: 'completed' },
+          select: { id: true, type: true, mimeType: true },
+        })
+        if (!sourceArtifact) return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
+        if (imageUpscale && sourceArtifact.type !== 'image' && !sourceArtifact.mimeType.startsWith('image/')) {
+          return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'image_upscale requires a completed image artifact.' })
+        }
+        if (voiceActivityDetection && sourceArtifact.type !== 'audio' && !sourceArtifact.mimeType.startsWith('audio/')) {
+          return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'voice_activity_detection requires a completed audio artifact.' })
+        }
+      }
+    }
+
+    const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, auth.allowedCapabilities ?? [])
+    if (!grantResolution || !grantResolution.grant.enabled) {
+      return reply.status(403).send({ error: true, message: `Capability '${capability}' has no enabled AppCapabilityGrant for this app.` })
     }
     if (capability.startsWith('adult_') && !grantResolution.grant.adultPermission) {
-      return reply.status(403).send({
-        error: true,
-        message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
-      })
+      return reply.status(403).send({ error: true, message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.` })
+    }
+    if (sourceReadWriteCapability && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
+      return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_GRANT_REQUIRED', message: `${capability} requires artifact read and write grants.` })
+    }
+    if (voiceActivityDetection && !grantResolution.grant.artifactRead) {
+      return reply.status(403).send({ error: true, code: 'SOURCE_ARTIFACT_READ_GRANT_REQUIRED', message: 'voice_activity_detection requires artifact read permission.' })
+    }
+    if (internalArtifactCapability && !grantResolution.grant.artifactWrite) {
+      return reply.status(403).send({ error: true, code: 'ARTIFACT_WRITE_GRANT_REQUIRED', message: `${capability} requires artifact write permission.` })
     }
     if (route) {
       const routeKey = `${route.provider}/${route.model}`
-      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist'
-          || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
+      if (grantResolution.grant.routingMode !== 'app_selectable_allowlist' || !grantResolution.grant.selectableAllowlist?.includes(routeKey)) {
         return reply.status(403).send({ error: true, message: `Route '${routeKey}' is not approved for this app and capability.` })
       }
     }
 
-    const grantSnapshotAt = new Date().toISOString()
+    const internalExecution = imageUpscale
+      ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' }
+      : voiceActivityDetection
+        ? { internalSourceArtifactId: validatedInput.sourceAudioArtifactId, internalExecutionEngine: 'ffmpeg' }
+        : storyboardGeneration
+          ? { internalExecutionEngine: 'planner' }
+          : subtitleGeneration
+            ? { internalExecutionEngine: 'formatter' }
+            : {}
+
     const immutableMetadata = {
       ...metadata,
       executionProfile: 'external_app',
       appGrantSnapshot: grantResolution.grant,
       appGrantSnapshotSource: grantResolution.source,
-      appGrantSnapshotAt: grantSnapshotAt,
+      appGrantSnapshotAt: new Date().toISOString(),
       requestedRoute: route ?? null,
+      ...internalExecution,
     }
 
-    // 5. Check daily budget
     if (auth.dailyBudgetCents && auth.dailyBudgetCents > 0) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const usage = await prisma.usageMeter.aggregate({
-        where: {
-          appSlug: auth.app!.slug,
-          date: { gte: today },
-        },
+        where: { appSlug: auth.app!.slug, date: { gte: today } },
         _sum: { costUsdCents: true },
       })
-      const dailySpend = usage._sum.costUsdCents ?? 0
-      if (dailySpend >= auth.dailyBudgetCents) {
-        return reply.status(429).send({
-          error: true,
-          message: 'Daily cost budget limit reached. Try again tomorrow.',
-        })
+      if ((usage._sum.costUsdCents ?? 0) >= auth.dailyBudgetCents) {
+        return reply.status(429).send({ error: true, message: 'Daily cost budget limit reached. Try again tomorrow.' })
       }
     }
 
-    // 6. TOKEN TOLLBOOTH: Check token ledger balance
     const costMultiplier = TOKEN_COST_MULTIPLIER[capability] ?? 1
     if (auth.tokenBalance !== undefined && auth.tokenBalance < costMultiplier) {
       return reply.status(402).send({
@@ -237,8 +266,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // 7. Create Job record in MySQL
-    const traceId = `trace_${randomUUID()}`
+    const idempotencyKey = typeof validatedInput.idempotencyKey === 'string'
+      ? validatedInput.idempotencyKey
+      : null
+    const traceId = idempotencyKey ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey) : `trace_${randomUUID()}`
+    if (idempotencyKey) {
+      const existing = await prisma.job.findFirst({ where: { appSlug: auth.app!.slug, capability, traceId }, orderBy: { createdAt: 'desc' } })
+      if (existing) {
+        return reply.status(200).send({ jobId: existing.id, status: existing.status, capability, createdAt: existing.createdAt.toISOString(), deduplicated: true })
+      }
+    }
+
     const job = await prisma.job.create({
       data: {
         appSlug: auth.app!.slug,
@@ -252,16 +290,10 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       },
     })
 
-    // 8. Deduct tokens from ledger (pre-paid model)
     if (auth.connectionId && costMultiplier > 0) {
-      await prisma.appConnection.update({
-        where: { id: auth.connectionId },
-        data: { tokenBalance: { decrement: costMultiplier } },
-      })
+      await prisma.appConnection.update({ where: { id: auth.connectionId }, data: { tokenBalance: { decrement: costMultiplier } } })
     }
 
-    // 9. Push to BullMQ queue
-    const routingMode = isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced'
     const payload: JobPayload = {
       jobId: job.id,
       appSlug: auth.app!.slug,
@@ -272,62 +304,33 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       metadata: immutableMetadata,
       traceId,
       callbackUrl: effectiveCallbackUrl,
-      routingMode,
+      routingMode: isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced',
       appGrantSnapshot: grantResolution.grant,
     }
 
     try {
-      const q = getQueue()
-      await q.add('process', payload, {
-        ...DEFAULT_JOB_OPTIONS,
-        jobId: job.id,
-      })
+      await getQueue().add('process', payload, { ...DEFAULT_JOB_OPTIONS, jobId: job.id })
     } catch (err) {
-      // If queue push fails, mark job as failed
-      await prisma.job.update({
-        where: { id: job.id },
-        data: { status: 'failed', error: 'Failed to enqueue job' },
-      })
+      await prisma.job.update({ where: { id: job.id }, data: { status: 'failed', error: 'Failed to enqueue job' } })
       app.log.error({ err }, 'Failed to push job to queue')
       return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
     }
 
-    // 10. Return tracking ID
-    const response: CreateJobResponse = {
-      jobId: job.id,
-      status: 'queued',
-      capability,
-      createdAt: job.createdAt.toISOString(),
-    }
-
+    const response: CreateJobResponse = { jobId: job.id, status: 'queued', capability, createdAt: job.createdAt.toISOString() }
     return reply.status(201).send(response)
   })
 
-  // ── GET /api/v1/jobs/:id ───────────────────────────────────────────────────
-
   app.get('/api/v1/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
-
-    // Authenticate
     const auth = await authenticateAppKey(request.headers.authorization)
-    if (!auth.ok) {
-      return reply.status(auth.statusCode).send({ error: true, message: auth.error })
-    }
+    if (!auth.ok) return reply.status(auth.statusCode).send({ error: true, message: auth.error })
 
-    // Fetch job
     const job = await prisma.job.findUnique({ where: { id } })
-    if (!job) {
-      return reply.status(404).send({ error: true, message: 'Job not found' })
-    }
-
-    // Ensure the job belongs to the authenticated app
-    if (job.appSlug !== auth.app!.slug) {
-      return reply.status(404).send({ error: true, message: 'Job not found' })
-    }
+    if (!job || job.appSlug !== auth.app!.slug) return reply.status(404).send({ error: true, message: 'Job not found' })
 
     const jobMetadata = parseJobMetadata(job.metadataJson)
     const routeAttempts = Array.isArray(jobMetadata.orchestraRouteAttempts) ? jobMetadata.orchestraRouteAttempts : []
-
+    const internalEvidence = objectMetadata(jobMetadata.internalExecutionEvidence)
     const response: JobStatusResponse = {
       jobId: job.id,
       executionId: job.executionId || stringMetadata(jobMetadata.orchestraExecutionId),
@@ -342,20 +345,25 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       output: job.output,
       executionEvidence: {
         grantSnapshotSource: stringMetadata(jobMetadata.appGrantSnapshotSource),
-        executorId: stringMetadata(jobMetadata.directProviderExecutorId) || stringMetadata(jobMetadata.orchestraActualExecutorId) || stringMetadata(jobMetadata.orchestraSelectedExecutorId),
-        routeType: stringMetadata(jobMetadata.directProviderRouteType),
+        executorId: stringMetadata(jobMetadata.directProviderExecutorId)
+          || stringMetadata(jobMetadata.orchestraActualExecutorId)
+          || stringMetadata(jobMetadata.orchestraSelectedExecutorId)
+          || stringMetadata(internalEvidence.model),
+        routeType: stringMetadata(jobMetadata.directProviderRouteType)
+          || stringMetadata(internalEvidence.evidenceSource),
         fallbackAttempts: routeAttempts,
         usage: jobMetadata.directProviderUsage ?? null,
         cost: jobMetadata.directProviderCostEvidence ?? null,
-        outputValidation: jobMetadata.directProviderOutputValidation ?? null,
+        outputValidation: jobMetadata.directProviderOutputValidation ?? jobMetadata.outputValidation ?? internalEvidence.outputValidation ?? null,
         errorClassification: jobMetadata.directProviderErrorClassification ?? null,
-        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId),
+        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId)
+          || stringMetadata(jobMetadata.internalSourceArtifactId)
+          || stringMetadata(internalEvidence.sourceArtifactId),
       },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       completedAt: job.completedAt?.toISOString() ?? null,
     }
-
     return reply.send(response)
   })
 }
@@ -367,6 +375,10 @@ function parseJobMetadata(value: string): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function objectMetadata(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
 function stringMetadata(value: unknown): string | null {

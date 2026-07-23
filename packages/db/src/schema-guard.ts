@@ -1,6 +1,6 @@
 import { prisma } from './client.js'
 
-export const REQUIRED_SCHEMA_MIGRATION = '20260720_split_genx_video_contracts'
+export const REQUIRED_SCHEMA_MIGRATION = '20260722_specialist_workflow_closure'
 
 export interface DatabaseSchemaStatus {
   current: boolean

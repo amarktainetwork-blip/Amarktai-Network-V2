@@ -128,13 +128,14 @@ describe('canonical source-of-truth consolidation', () => {
   it('derives support from callable registrations, never capability allowlists', () => {
     expect(getExecutorRegistration('image_generation', 'together')?.id).toBe('together.image-generation')
     expect(getExecutorRegistration('image_edit', 'together')).toBeUndefined()
+    expect(getExecutorRegistration('image_edit', 'deepinfra')?.id).toBe('deepinfra.task-inference')
     expect(getExecutorRegistration('image_to_video', 'genx')?.id).toBe('genx.image-to-video')
     expect(getExecutorRegistration('tts', 'genx')?.id).toBe('genx.tts')
-    expect(getExecutorRegistration('tts', 'deepinfra')).toBeUndefined()
+    expect(getExecutorRegistration('tts', 'deepinfra')?.id).toBe('deepinfra.task-inference')
     expect(getExecutorRegistration('campaign_generation', 'deepinfra')).toBeUndefined()
-    // Executors dispatched externally (streaming, media/async) don't need DIRECT_EXECUTOR_HANDLERS
+    // Executors dispatched externally (streaming, media/async, worker bootstrap) don't need static map entries here.
     const externallyDispatched = new Set([
-      'deepinfra.chat', 'together.image-generation', 'genx.video-generation',
+      'deepinfra.chat', 'deepinfra.vision', 'together.image-generation', 'genx.video-generation',
       'genx.image-to-video', 'genx.video-to-video',
       'genx.music-generation', 'genx.song-generation', 'genx.tts', 'genx.stt',
     ])
@@ -179,7 +180,6 @@ describe('canonical source-of-truth consolidation', () => {
   })
 
   it('fails closed when the exact route model cannot be revalidated', async () => {
-    // Use deepinfra.text-transform (queued mode) for route propagation test
     const original = EXECUTOR_HANDLERS['deepinfra.text-transform']
     const handler = vi.fn(async (_payload, model: string) => ({
       success: true,

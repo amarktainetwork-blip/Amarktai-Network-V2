@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { buildAdminRuntimeTruth } from '../lib/admin-runtime-truth.js'
+import { buildEffectiveAdminRuntimeTruth } from '../lib/effective-admin-runtime-truth.js'
 
+// buildEffectiveAdminRuntimeTruth wraps buildAdminRuntimeTruth and applies the
+// durable-workflow projection before any admin or dashboard consumer sees it.
 async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
   const auth = request.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
@@ -27,7 +29,7 @@ async function requireAdmin(app: FastifyInstance, request: FastifyRequest, reply
 export async function adminTruthRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/admin/truth', async (request, reply) => {
     if (!(await requireAdmin(app, request, reply))) return
-    const truth = await buildAdminRuntimeTruth(app)
+    const truth = await buildEffectiveAdminRuntimeTruth(app)
     return reply.send({
       success: true,
       truth,

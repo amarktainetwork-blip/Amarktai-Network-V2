@@ -595,7 +595,6 @@ async function createDurableLongFormExecution(appSlug: string, input: LongFormVi
             prompt: scene.voiceoverText,
             inputJson: JSON.stringify({
               text: scene.voiceoverText,
-              sceneNumber: scene.sceneNumber,
               ...(voiceProfile.voice ? { voice: voiceProfile.voice } : {}),
               speed: voiceProfile.speed ?? 1,
               outputFormat: voiceProfile.outputFormat ?? 'wav',

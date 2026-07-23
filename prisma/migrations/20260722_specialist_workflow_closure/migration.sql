@@ -1,0 +1,26 @@
+CREATE TABLE `document_ingest_chunks` (
+  `id` VARCHAR(191) NOT NULL,
+  `app_slug` VARCHAR(191) NOT NULL,
+  `document_id` VARCHAR(191) NOT NULL,
+  `artifact_id` VARCHAR(191) NOT NULL,
+  `checksum` VARCHAR(191) NOT NULL,
+  `page` INTEGER NOT NULL,
+  `section` TEXT NULL,
+  `text` LONGTEXT NOT NULL,
+  `coordinates_json` TEXT NOT NULL DEFAULT 'null',
+  `chunk_index` INTEGER NOT NULL,
+  `chunk_hash` VARCHAR(191) NOT NULL,
+  `citation_id` VARCHAR(191) NOT NULL,
+  `embedding_reference` VARCHAR(191) NOT NULL,
+  `parser_evidence` TEXT NOT NULL,
+  `ocr_evidence` TEXT NULL,
+  `ingested_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE INDEX `document_chunk_version_unique` (`app_slug`, `document_id`, `checksum`, `chunk_index`),
+  INDEX `document_ingest_chunks_app_slug_document_id_idx` (`app_slug`, `document_id`),
+  INDEX `document_ingest_chunks_artifact_id_idx` (`artifact_id`),
+  INDEX `document_ingest_chunks_citation_id_idx` (`citation_id`),
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE `app_ai_profiles`
+  MODIFY `enabled_capabilities` LONGTEXT NOT NULL DEFAULT '[]';

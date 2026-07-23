@@ -21,6 +21,8 @@ import {
   type OpenAiTransportMessage,
 } from '@amarktai/providers'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
+import { executeDeepInfraImageTransform } from './deepinfra-image-transform-executor.js'
+import { executeDeepInfraTts } from './deepinfra-tts-executor.js'
 
 type DirectHandler = (payload: WorkerJobData, selectedModel: string) => Promise<ProcessorResult>
 type TextProvider = Extract<ProviderKey, 'deepinfra' | 'together' | 'genx'>
@@ -29,7 +31,11 @@ type RetrievalProvider = Extract<ProviderKey, 'together' | 'deepinfra'>
 export const DIRECT_EXECUTOR_HANDLERS: Partial<Record<ExecutorId, DirectHandler>> = {
   'deepinfra.chat': (payload, model) => executeValidatedTextCapability('deepinfra', payload, model),
   'deepinfra.text-transform': (payload, model) => executeValidatedTextCapability('deepinfra', payload, model),
-  'deepinfra.task-inference': executeDeepInfraTaskCapability,
+  'deepinfra.task-inference': (payload, model) => isImageTransform(payload.capability)
+    ? executeDeepInfraImageTransform(payload, model)
+    : payload.capability === 'tts'
+      ? executeDeepInfraTts(payload, model)
+      : executeDeepInfraTaskCapability(payload, model),
   'deepinfra.embeddings': (payload, model) => executeEmbeddingsCapability('deepinfra', payload, model),
   'deepinfra.reranking': (payload, model) => executeRerankingCapability('deepinfra', payload, model),
   'together.chat': (payload, model) => executeValidatedTextCapability('together', payload, model),
@@ -92,7 +98,7 @@ async function executeValidatedTextCapability(
         schemaValidation = validateJsonSchemaValue(output, plan.schema)
         if (!schemaValidation.valid) throw malformed(provider, `${capability} output schema failed: ${schemaValidation.errors.join('; ')}`)
       } catch (firstError) {
-        const repair = await call(`Repair this invalid ${capability} response. Return only a JSON object matching the required schema.\nInvalid response:\n${result.content}`)
+        const repair = await call(`Repair this invalid ${capability} response. Return only one JSON object matching the required schema.\nInvalid response:\n${result.content}`)
         output = parseJsonObject(repair.content, `${capability} repair returned invalid JSON`)
         schemaValidation = validateJsonSchemaValue(output, plan.schema)
         if (!schemaValidation.valid) throw malformed(provider, `${capability} repaired output schema failed: ${schemaValidation.errors.join('; ')}`)
@@ -446,6 +452,10 @@ function cosineSimilarity(left: number[], right: number[]): number {
   }
   if (leftNorm === 0 || rightNorm === 0) throw new Error('Cannot compare zero-length embedding norm')
   return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm))
+}
+
+function isImageTransform(capability: string): capability is 'image_edit' | 'image_to_image' {
+  return capability === 'image_edit' || capability === 'image_to_image'
 }
 
 function asRecord(value: unknown): Record<string, unknown> { if (!isRecord(value)) throw new Error('Expected an object response'); return value }

@@ -56,4 +56,36 @@ export async function bootstrapReleaseFixtureProviders(): Promise<void> {
       },
     })
   }
+
+  await prisma.voiceLibrary.upsert({
+    where: { voiceId: 'fixture-genx-narrator-v1' },
+    update: {
+      enabled: true,
+      provider: 'genx',
+      model: '',
+      compatibleModels: '[]',
+      sourceType: 'catalogue',
+      consentStatus: 'provider_catalogue',
+      lastVerifiedAt: new Date('2026-07-21T00:00:00.000Z'),
+    },
+    create: {
+      voiceId: 'fixture-genx-narrator-v1',
+      name: 'Fixture GenX Narrator',
+      provider: 'genx',
+      model: '',
+      compatibleModels: '[]',
+      gender: 'neutral',
+      accent: 'south-african',
+      language: 'en',
+      locale: 'en-ZA',
+      style: 'neutral',
+      enabled: true,
+      useCaseTags: JSON.stringify(['narration', 'marketing', 'avatar_performance', 'internal_production']),
+      sourceType: 'catalogue',
+      consentStatus: 'provider_catalogue',
+      ownershipReference: 'deterministic-release-fixture-only',
+      lastVerifiedAt: new Date('2026-07-21T00:00:00.000Z'),
+      metadata: JSON.stringify({ evidenceSource: 'local_fixture', liveProviderProof: false }),
+    },
+  })
 }

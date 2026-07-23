@@ -10,6 +10,22 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./model-family-policy": {
+      "types": "./dist/model-family-policy.d.ts",
+      "import": "./dist/model-family-policy.js"
+    },
+    "./image-upscale-contracts": {
+      "types": "./dist/image-upscale-contracts.d.ts",
+      "import": "./dist/image-upscale-contracts.js"
+    },
+    "./storyboard-subtitle-contracts": {
+      "types": "./dist/storyboard-subtitle-contracts.d.ts",
+      "import": "./dist/storyboard-subtitle-contracts.js"
+    },
     "./premium-media-policy": {
       "types": "./dist/premium-media-policy.d.ts",
       "import": "./dist/premium-media-policy.js"
@@ -21,6 +37,70 @@
     "./premium-advert": {
       "types": "./dist/premium-advert.d.ts",
       "import": "./dist/premium-advert.js"
+    },
+    "./marketing-platform": {
+      "types": "./dist/marketing-platform.d.ts",
+      "import": "./dist/marketing-platform.js"
+    },
+    "./social-ad-video": {
+      "types": "./dist/social-ad-video.d.ts",
+      "import": "./dist/social-ad-video.js"
+    },
+    "./rag-platform": {
+      "types": "./dist/rag-platform.d.ts",
+      "import": "./dist/rag-platform.js"
+    },
+    "./research-platform": {
+      "types": "./dist/research-platform.d.ts",
+      "import": "./dist/research-platform.js"
+    },
+    "./specialist-vision": {
+      "types": "./dist/specialist-vision.d.ts",
+      "import": "./dist/specialist-vision.js"
+    },
+    "./durable-workflows": {
+      "types": "./dist/durable-workflows.d.ts",
+      "import": "./dist/durable-workflows.js"
+    },
+    "./effective-runtime-truth": {
+      "types": "./dist/effective-runtime-truth.d.ts",
+      "import": "./dist/effective-runtime-truth.js"
+    },
+    "./voice-avatar-platform": {
+      "types": "./dist/voice-avatar-platform.d.ts",
+      "import": "./dist/voice-avatar-platform.js"
+    },
+    "./voice-avatar-resources": {
+      "types": "./dist/voice-avatar-resources.d.ts",
+      "import": "./dist/voice-avatar-resources.js"
+    },
+    "./voice-avatar-evidence": {
+      "types": "./dist/voice-avatar-evidence.d.ts",
+      "import": "./dist/voice-avatar-evidence.js"
+    },
+    "./governed-tts": {
+      "types": "./dist/governed-tts.d.ts",
+      "import": "./dist/governed-tts.js"
+    },
+    "./source-audio-validation": {
+      "types": "./dist/source-audio-validation.d.ts",
+      "import": "./dist/source-audio-validation.js"
+    },
+    "./voice-clone-contracts": {
+      "types": "./dist/voice-clone-contracts.d.ts",
+      "import": "./dist/voice-clone-contracts.js"
+    },
+    "./voice-conversion-contracts": {
+      "types": "./dist/voice-conversion-contracts.d.ts",
+      "import": "./dist/voice-conversion-contracts.js"
+    },
+    "./audio-to-audio-contracts": {
+      "types": "./dist/audio-to-audio-contracts.d.ts",
+      "import": "./dist/audio-to-audio-contracts.js"
+    },
+    "./voice-activity-detection-contracts": {
+      "types": "./dist/voice-activity-detection-contracts.d.ts",
+      "import": "./dist/voice-activity-detection-contracts.js"
     }
   },
   "scripts": {

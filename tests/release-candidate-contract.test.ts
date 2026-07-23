@@ -5,6 +5,7 @@ import {
   CAPABILITY_KEYS,
   DURABLE_WORKFLOW_REGISTRATIONS,
   EXECUTOR_REGISTRATIONS,
+  INTERNAL_EXECUTOR_REGISTRATIONS,
   getInternalDashboardApps,
   getReleaseCandidateCapabilityKeys,
   getRuntimeTruth,
@@ -14,14 +15,16 @@ const root = process.cwd()
 const source = (path: string) => readFileSync(`${root}/${path}`, 'utf8')
 
 describe('production release-candidate canonical contract', () => {
-  it('derives release capabilities from callable executors and durable workflows without a fixed count', () => {
+  it('derives release capabilities from callable provider/internal executors and durable workflows without a fixed count', () => {
     const expected = [...new Set([
       ...EXECUTOR_REGISTRATIONS.map((entry) => entry.capability),
+      ...INTERNAL_EXECUTOR_REGISTRATIONS.map((entry) => entry.capability),
       ...DURABLE_WORKFLOW_REGISTRATIONS.map((entry) => entry.capability),
     ])]
     expect(getReleaseCandidateCapabilityKeys()).toEqual(expected)
     expect(expected.length).toBeGreaterThan(0)
     expect(expected).toContain('long_form_video')
+    expect(expected).toContain('audio_to_audio')
     expect(expected).not.toContain('voice_clone')
     expect(expected.some((capability) => capability.startsWith('adult_'))).toBe(false)
   })
@@ -65,7 +68,7 @@ describe('production release-candidate canonical contract', () => {
     expect(route).toContain('getArtifactStream')
     expect(route).toContain(".header('Accept-Ranges', 'bytes')")
     expect(route).toContain(".header('Content-Disposition'")
-    expect(route).toContain("reply.status(416)")
+    expect(route).toContain('reply.status(416)')
     expect(proxy).toContain("request.headers.get('range')")
     expect(proxy).toContain("'content-range'")
     expect(proxy).toContain('response.headers.get(header)')
@@ -74,6 +77,7 @@ describe('production release-candidate canonical contract', () => {
   it('has fail-closed schema guards, recovery, CI, preflight and production proof tooling', () => {
     const workflow = source('.github/workflows/release-candidate-checks.yml')
     const packageJson = source('package.json')
+    const preflight = source('deploy/preflight.sh')
     expect(source('apps/api/src/server.ts')).toContain('assertDatabaseSchemaCurrent')
     expect(source('apps/worker/src/worker.ts')).toContain('assertDatabaseSchemaCurrent')
     expect(source('apps/worker/src/recovery.ts')).toContain('recoverStaleProcessingJobs')
@@ -88,7 +92,10 @@ describe('production release-candidate canonical contract', () => {
     expect(source('docker-compose.release-fixture.yml')).toContain('healthcheck.sh", "--connect", "--innodb_initialized"')
     expect(source('prisma/migrations/20260715_expand_app_connection_capabilities/migration.sql')).toContain('VARCHAR(4096)')
     expect(source('prisma/migrations/20260715_expand_job_prompt/migration.sql')).toContain('TEXT NOT NULL')
-    expect(source('deploy/preflight.sh')).toContain('PRODUCTION_PREFLIGHT=PASS')
+    expect(preflight).toContain('PRODUCTION_PREFLIGHT=PASS')
+    expect(preflight).toContain('feat/batch-b-platform-closure')
+    expect(preflight).toContain('SEARXNG_SECRET')
+    expect(preflight).toContain('SEARXNG_SECRET must be nonempty')
     expect(source('scripts/proof-production-release-candidate.mjs')).toContain('--base-url is required')
   })
 
@@ -100,7 +107,7 @@ describe('production release-candidate canonical contract', () => {
     expect(providerFixture).toContain("process.env.RELEASE_FIXTURE_MODE === 'true'")
     expect(providerFixture).toContain('process.env.RELEASE_FIXTURE_SAFETY_TOKEN === FIXTURE_SAFETY_TOKEN')
     expect(providerFixture).toContain("database.hostname === 'mariadb'")
-    expect(providerFixture).toContain("process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === FIXTURE_SWITCH")
+    expect(providerFixture).toContain('process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === FIXTURE_SWITCH')
     expect(queueFixture).toContain("process.env.NODE_ENV === 'test'")
     expect(queueFixture).toContain("process.env.RELEASE_FIXTURE_MODE === 'true'")
     expect(queueFixture).toContain("process.env.AMARKTAI_TEST_FIXTURE_ADAPTER === 'release-candidate-v1'")

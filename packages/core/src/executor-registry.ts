@@ -8,6 +8,7 @@ export type ExecutorId =
   | 'deepinfra.streaming-chat'
   | 'deepinfra.text-transform'
   | 'deepinfra.task-inference'
+  | 'deepinfra.vision'
   | 'deepinfra.embeddings'
   | 'deepinfra.reranking'
   | 'together.chat'
@@ -80,6 +81,14 @@ const GENERAL_TEXT_CAPABILITIES: readonly CapabilityKey[] = [
   'classification', 'extraction', 'structured_output', 'tool_use',
 ]
 
+const VISION_CAPABILITIES: readonly CapabilityKey[] = [
+  'image_classification',
+  'visual_question_answering',
+  'document_qa',
+  'ocr',
+  'video_understanding',
+]
+
 // Only tasks with a real request builder and validated response normalizer are
 // registered. Other discovered specialist tasks remain visible with the exact
 // provider task metadata, but do not falsely acquire a callable executor.
@@ -93,6 +102,15 @@ const OPENAI_CHAT_PROFILE: ExecutorCompatibilityProfile = {
   transportProfiles: ['openai_chat_sse'],
   endpointFamilies: ['openai_chat'],
   requiredInputModalities: ['text'],
+  outputModality: 'text',
+}
+
+const OPENAI_VISION_PROFILE: ExecutorCompatibilityProfile = {
+  taskTypes: ['vision', 'visual-question-answering', 'image-text-to-text', 'multimodal'],
+  categories: ['vision', 'visual-question-answering', 'image-text-to-text', 'multimodal'],
+  transportProfiles: ['openai_chat_sse'],
+  endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'],
+  requiredInputModalities: ['text', 'image'],
   outputModality: 'text',
 }
 
@@ -144,6 +162,7 @@ function profile(
 }
 
 const DEEPINFRA_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'deepinfra_openai_v1'] }
+const DEEPINFRA_VISION = { ...OPENAI_VISION_PROFILE }
 const TOGETHER_TEXT = { ...OPENAI_CHAT_PROFILE, endpointFamilies: ['openai_chat', 'together_openai_v1'] }
 const GENX_TEXT = { ...OPENAI_CHAT_PROFILE, transportProfiles: ['openai_chat_sse', 'anthropic_messages_sse'], endpointFamilies: ['openai_chat', 'anthropic_messages'] }
 const EMBEDDINGS = profile(
@@ -153,6 +172,22 @@ const EMBEDDINGS = profile(
 )
 const RERANK = profile(['rerank', 'reranker'], ['rerank', 'reranker', 'reranking'], ['native_inference_json'], ['rerank', 'native_inference'], ['text'], 'json')
 const IMAGE = profile(['image', 'text-to-image', 'image-generation'], ['image', 'text-to-image'], ['native_inference_json', 'native_inference_binary'], ['image_generation', 'native_inference'], ['text'], 'image')
+const DEEPINFRA_IMAGE_TRANSFORM = profile(
+  ['image-to-image'],
+  ['image-to-image'],
+  ['openai_images_edits_multipart'],
+  ['images_edits'],
+  ['text', 'image'],
+  'image',
+)
+const DEEPINFRA_TTS = profile(
+  ['text-to-speech'],
+  ['text-to-speech'],
+  ['openai_audio_speech_binary'],
+  ['audio_speech'],
+  ['text'],
+  'audio',
+)
 const TOGETHER_TTS = profile(['text-to-speech', 'tts', 'audio'], ['text-to-speech', 'tts', 'audio'], ['openai_audio_speech_binary'], ['audio_speech'], ['text'], 'audio')
 const TOGETHER_STT = profile(['automatic-speech-recognition', 'transcription', 'stt', 'audio'], ['transcription', 'stt', 'audio'], ['openai_audio_transcription_multipart'], ['audio_transcriptions'], ['audio'], 'text')
 const GENX_ASYNC = (tasks: readonly string[], categories: readonly string[], inputs: readonly string[], output: string) =>
@@ -169,9 +204,15 @@ export const EXECUTOR_REGISTRATIONS: readonly ExecutorRegistration[] = [
   ...GENERAL_TEXT_CAPABILITIES.filter((capability) => capability !== 'chat').map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT),
   ),
+  ...VISION_CAPABILITIES.map((capability) =>
+    registration('deepinfra.vision', 'deepinfra', capability, 'executeDeepInfraVisionCapability', DEEPINFRA_VISION),
+  ),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.task-inference', 'deepinfra', capability, 'executeDeepInfraTaskCapability', NATIVE_TASK_PROFILE),
   ),
+  registration('deepinfra.task-inference', 'deepinfra', 'image_edit', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
+  registration('deepinfra.task-inference', 'deepinfra', 'image_to_image', 'executeDeepInfraTaskCapability', DEEPINFRA_IMAGE_TRANSFORM),
+  registration('deepinfra.task-inference', 'deepinfra', 'tts', 'executeDeepInfraTaskCapability', DEEPINFRA_TTS),
   ...SPECIALIST_CAPABILITIES.map((capability) =>
     registration('deepinfra.text-transform', 'deepinfra', capability, 'executeValidatedTextCapability', DEEPINFRA_TEXT, 'queued', 'semantic_text_fallback'),
   ),

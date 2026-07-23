@@ -167,6 +167,14 @@ export async function adminJobRoutes(app: FastifyInstance): Promise<void> {
       traceId,
     })
   })
+
+  app.post('/api/admin/jobs/:id/cancel', async (request, reply) => {
+    if (!(await requireAdmin(app, request, reply))) return
+    const { id } = request.params as { id: string }
+    const cancelled = await prisma.job.updateMany({ where: { id, status: { in: ['queued', 'processing'] } }, data: { status: 'cancelled', workflowPhase: 'cancelled', error: 'Cancelled by authorised dashboard administrator', completedAt: new Date() } })
+    if (!cancelled.count) return reply.status(409).send({ error: true, message: 'Job is missing or no longer cancellable' })
+    return reply.send({ jobId: id, status: 'cancelled' })
+  })
 }
 
 function safeParseJsonObject(value: unknown): Record<string, unknown> {

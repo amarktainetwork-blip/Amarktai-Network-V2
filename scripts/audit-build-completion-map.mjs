@@ -16,6 +16,7 @@ import { MODEL_CATALOGUE } from '../packages/core/src/model-catalog.ts'
 import { APPROVED_PROVIDER_DEFINITIONS } from '../packages/core/src/providers.ts'
 import { getRuntimeTruth } from '../packages/core/src/runtime-truth.ts'
 import { buildLongFormComponentRuntimeState } from '../apps/api/src/lib/admin-runtime-truth.ts'
+import { DURABLE_WORKFLOW_REGISTRATIONS } from '../packages/core/src/long-form-execution.ts'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -118,6 +119,8 @@ async function checkDashboardPages() {
           content?.includes('/api/v1/jobs') ||
           content?.includes('/api/admin/studio/jobs') ||
           content?.includes('/api/admin/jobs') ||
+          content?.includes('/api/admin/marketing') ||
+          content?.includes('/social-ad-video/') ||
           content?.includes('useStudioStore') ||
           content?.includes('submitJob') ||
           content?.includes('pollJob')
@@ -135,7 +138,12 @@ async function checkDashboardPages() {
           reason = 'Music UI uses the real route/status flow, but execution remains configuration/infrastructure gated.'
         } else if (hasExecution) {
           // Page has real execution paths
-          if (page === 'image') {
+          if (page === 'specialist-vision') {
+            executionReadyCapabilities = []
+            pendingCapabilities = ['depth_estimation', 'keypoint_detection', 'mask_generation', 'zero_shot_object_detection', 'visual_document_retrieval', 'video_classification']
+            status = 'truthfully-blocked'
+            reason = 'The artifact-backed workspace is wired, but production execution stays disabled until Orchestra discovers a compatible real executor; local fixture evidence is not live-provider proof.'
+          } else if (page === 'image') {
             executionReadyCapabilities = ['image_generation']
             pendingCapabilities = ['image_edit', 'upscale', 'variations', 'premium_image_routing']
             status = 'partial_execution'
@@ -163,11 +171,13 @@ async function checkDashboardPages() {
             if (page === 'music') {
               pendingCapabilities = ['music_generation']
             } else if (page === 'research') {
-              pendingCapabilities = ['research', 'rag_search', 'rag_ingest', 'brand_scrape']
+              status = 'design-ready'
+              pendingCapabilities = []
+              reason = 'RAG, research and brand_scrape are registered durable workflows; this legacy page remains design-only.'
             } else if (page === 'long-form') {
               pendingCapabilities = ['long_form_video']
             }
-            reason = 'UI design-ready; backend not wired.'
+            if (!reason) reason = 'UI design-ready; backend not wired.'
           } else {
             status = 'design-ready'
             reason = 'Page contains disabled/pending controls.'
@@ -423,11 +433,11 @@ async function runAudit() {
     
     // Qdrant/RAG - check for actual workflow, not just package installation
     // Need: rag_ingest/rag_search routes, worker executor, qdrant upsert/search
-    const hasRagRoutes = await fileExists('apps/api/src/routes/rag.ts') || 
-                         await fileExists('apps/api/src/routes/rag-ingest.ts') ||
-                         await fileExists('apps/api/src/routes/rag-search.ts')
-    const hasRagWorker = workerExecution.found && 
-                        (workerExecution.executors.ragIngest || workerExecution.executors.ragSearch)
+    const hasRagRoutes = await fileExists('apps/api/src/routes/app-rag.ts')
+      && await fileExists('apps/api/src/routes/app-rag-ingest-route.ts')
+      && await fileExists('apps/api/src/routes/app-rag-search-route.ts')
+    const hasRagWorker = await fileExists('apps/worker/src/rag-ingest-workflow.ts')
+      && await fileExists('apps/worker/src/rag-search-workflow.ts')
     
     if (libs.qdrant && (hasRagRoutes || hasRagWorker)) {
       openSourceWired.push('qdrant-vector-search')
@@ -696,7 +706,7 @@ async function runAudit() {
     appApiKeyAuth: appContract.hasApiKeyHashing,
     blockedOverrides: appContract.hasBlockedOverrides,
     routingModeSupport: appContract.acceptsRoutingMode,
-    brandScrapeWorkflow: openSourceInstalled.includes('crawlee') && openSourceInstalled.includes('playwright'),
+    brandScrapeWorkflow: DURABLE_WORKFLOW_REGISTRATIONS.some((workflow) => workflow.capability === 'brand_scrape'),
     missingParts: []
   }
   
@@ -829,12 +839,6 @@ async function runAudit() {
       effort: 'medium'
     },
     {
-      priority: 3,
-      title: 'feat: wire brand scrape workflow',
-      description: 'Connect crawlee/playwright to brand_scrape capability for Marketing App',
-      effort: 'medium'
-    },
-    {
       priority: 4,
       title: 'fix: improve media quality routing',
       description: 'Ensure premium/balanced/fast/budget modes properly influence model selection for image/video',
@@ -927,6 +931,15 @@ async function runAudit() {
       policyRestrictedCapabilities: capabilityInventory.filter(capability => capability.classification === 'POLICY_RESTRICTED').map(capability => capability.capability),
       blockedCapabilities: capabilityInventory.filter(capability => capability.classification === 'BLOCKED').map(capability => capability.capability),
       missingCapabilities: capabilityInventory.filter(capability => capability.classification === 'MISSING').map(capability => capability.capability),
+      durableWorkflowCounts: {
+        implemented: canonicalRuntimeTruth.durableWorkflows.length,
+        blocked: canonicalRuntimeTruth.durableWorkflowBlockers.length,
+      },
+      durableWorkflows: canonicalRuntimeTruth.durableWorkflows.map(workflow => ({
+        ...workflow,
+        releaseReadiness: canonicalRuntimeTruth.releaseReadiness.find(item => item.capability === workflow.capability) ?? null,
+      })),
+      durableWorkflowBlockers: canonicalRuntimeTruth.durableWorkflowBlockers,
     },
     
     modelCatalogueSummary: {
@@ -1082,6 +1095,16 @@ async function runAudit() {
     }
   }
   console.log(`   Display-only: ${completionMap.dashboardStatus.displayOnlyPages.length}`)
+
+  console.log('\n🔁 DURABLE WORKFLOW TRUTH')
+  console.log(`   Implemented: ${completionMap.canonicalRuntimeTruth.durableWorkflowCounts.implemented}`)
+  for (const workflow of completionMap.canonicalRuntimeTruth.durableWorkflows) {
+    console.log(`     ✓ ${workflow.capability} (${workflow.fixtureProof})`)
+  }
+  console.log(`   Blocked: ${completionMap.canonicalRuntimeTruth.durableWorkflowCounts.blocked}`)
+  for (const workflow of completionMap.canonicalRuntimeTruth.durableWorkflowBlockers) {
+    console.log(`     ✗ ${workflow.capability}: ${workflow.blocker}`)
+  }
   console.log()
   
   console.log('🔧 WORKER EXECUTION')

@@ -287,13 +287,16 @@ describe('Build Completion Audit', () => {
     expect(musicDetail.pendingCapabilities).toContain('music_generation')
   })
 
-  it('research remains design_ready_pending_backend', () => {
-    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).toContain('research')
+  it('research page does not contradict canonical durable RAG and research truth', () => {
+    expect(auditOutput.dashboardStatus.designReadyPendingBackendPages).not.toContain('research')
+    expect(auditOutput.dashboardStatus.designReadyPages).toContain('research')
     const researchDetail = auditOutput.dashboardStatus.pageDetails.find(p => p.route === '/dashboard/research')
     expect(researchDetail).toBeDefined()
-    expect(researchDetail.status).toBe('design_ready_pending_backend')
+    expect(researchDetail.status).toBe('design-ready')
     expect(researchDetail.executionReadyCapabilities).toEqual([])
-    expect(researchDetail.pendingCapabilities.length).toBeGreaterThan(0)
+    expect(researchDetail.pendingCapabilities).toEqual([])
+    expect(researchDetail.reason).toContain('brand_scrape are registered durable workflows')
+    expect(auditOutput.canonicalRuntimeTruth.durableWorkflowBlockers).toEqual([])
   })
 
   it('dashboardStatus includes partialExecutionPages', () => {

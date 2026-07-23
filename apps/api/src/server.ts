@@ -12,6 +12,7 @@ import { API_PORT, API_HOST, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from '@amark
 import { redisPluginDecorated } from './plugins/redis.js'
 import { jwtPluginDecorated } from './plugins/jwt.js'
 import { errorHandlerPlugin } from './plugins/error-handler.js'
+import { governedTtsIngressPlugin } from './plugins/governed-tts-ingress.js'
 import { healthRoutes } from './routes/health.js'
 import { jobRoutes } from './routes/jobs.js'
 import { artifactRoutes } from './routes/artifacts.js'
@@ -32,6 +33,20 @@ import { streamingChatRoutes } from './routes/streaming-chat.js'
 import { adminAppConnectionRoutes } from './routes/admin-app-connections.js'
 import { appGrantRoutes } from './routes/admin-app-grants.js'
 import { appPlatformRoutes } from './routes/app-platform.js'
+import { appBrandProfileRoutes } from './routes/app-brand-profiles.js'
+import { appSocialAdVideoRoutes } from './routes/app-social-ad-video.js'
+import { appSocialAdAssemblyRoutes } from './routes/app-social-ad-assembly.js'
+import { appSocialAdFinalApprovalRoutes } from './routes/app-social-ad-final-approval.js'
+import { adminMarketingWorkspaceRoutes } from './routes/admin-marketing-workspace.js'
+import { appMarketingCampaignRoutes } from './routes/app-marketing-campaigns.js'
+import { appMemoryRoutes } from './routes/app-memory.js'
+import { appRagRoutes } from './routes/app-rag.js'
+import { appResearchRoutes } from './routes/app-research.js'
+import { appDurableWorkflowRoutes } from './routes/app-durable-workflows.js'
+import { appSourceArtifactRoutes } from './routes/app-source-artifacts.js'
+import { appVoiceAvatarProfileRoutes } from './routes/app-voice-avatar-profiles.js'
+import { appVoiceAvatarEvidenceRoutes } from './routes/app-voice-avatar-evidence.js'
+import { registerVoiceAudioRoutes } from './routes/voice-audio.js'
 import { adminVoiceRoutes } from './routes/admin-voices.js'
 import { ensureDefaultAdminExists } from './lib/admin-bootstrap.js'
 import { bootstrapInternalDashboardApps } from './lib/internal-app-bootstrap.js'
@@ -77,6 +92,7 @@ async function main(): Promise<void> {
   await app.register(redisPluginDecorated)
   await app.register(jwtPluginDecorated)
   await app.register(errorHandlerPlugin)
+  await app.register(governedTtsIngressPlugin)
 
   await app.register(healthRoutes)
   await app.register(authRoutes)
@@ -98,6 +114,20 @@ async function main(): Promise<void> {
   await app.register(jobRoutes)
   await app.register(artifactRoutes)
   await app.register(appPlatformRoutes)
+  await app.register(appBrandProfileRoutes)
+  await app.register(appSocialAdVideoRoutes)
+  await app.register(appSocialAdAssemblyRoutes)
+  await app.register(appSocialAdFinalApprovalRoutes)
+  await app.register(adminMarketingWorkspaceRoutes)
+  await app.register(appMarketingCampaignRoutes)
+  await app.register(appMemoryRoutes)
+  await app.register(appRagRoutes)
+  await app.register(appResearchRoutes)
+  await app.register(appSourceArtifactRoutes)
+  await app.register(appDurableWorkflowRoutes)
+  await app.register(appVoiceAvatarProfileRoutes)
+  await app.register(appVoiceAvatarEvidenceRoutes)
+  await app.register(registerVoiceAudioRoutes)
   await app.register(adminVoiceRoutes)
 
   await ensureDefaultAdminExists(app.log)

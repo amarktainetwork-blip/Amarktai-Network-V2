@@ -25,6 +25,7 @@ export const TRANSPORT_PROFILES = [
   'openai_responses_sse',
   'async_job_poll',
   'async_job_webhook',
+  'openai_images_edits_multipart',
   'openai_audio_speech_binary',
   'openai_audio_transcription_multipart',
   'http_audio_stream_sse',

@@ -166,6 +166,13 @@ export {
   type ModelRecord,
 } from './model-catalog.js'
 
+// Runtime model-family policy
+export {
+  getRuntimeModelPolicyBlocker,
+  isRuntimeModelFamilyAllowed,
+  type RuntimeModelPolicyBlocker,
+} from './model-family-policy.js'
+
 // Provider model discovery
 export {
   MODEL_DISCOVERY_SOURCES,
@@ -202,6 +209,16 @@ export {
   type CapabilityMatchMode,
 } from './executor-registry.js'
 
+// Internal runtime executor registrations
+export {
+  INTERNAL_EXECUTOR_REGISTRATIONS,
+  getInternalExecutorRegistration,
+  hasInternalExecutorRegistration,
+  type InternalExecutorRegistration,
+  type InternalExecutionEngine,
+  type InternalEvidenceSource,
+} from './internal-executor-registry.js'
+
 export {
   resolveStructuredOutputContract,
   structuredResponseFormat,
@@ -225,6 +242,51 @@ export {
   type CanonicalProviderUsage,
   type JsonSchemaValidationResult,
 } from './direct-provider-contracts.js'
+
+// Governed internal image upscaling
+export {
+  IMAGE_UPSCALE_FACTORS,
+  IMAGE_UPSCALE_OUTPUT_FORMATS,
+  IMAGE_UPSCALE_EVIDENCE_SOURCES,
+  IMAGE_UPSCALE_MAX_SOURCE_BYTES,
+  IMAGE_UPSCALE_MAX_DIMENSION,
+  IMAGE_UPSCALE_MAX_PIXELS,
+  ImageUpscaleRequestSchema,
+  ImageUpscaleOutputSchema,
+  type ImageUpscaleRequest,
+  type ImageUpscaleOutput,
+} from './image-upscale-contracts.js'
+
+export {
+  SPECIALIST_VISION_CAPABILITIES,
+  SPECIALIST_VISION_REQUEST_SCHEMAS,
+  SPECIALIST_VISION_RESULT_SCHEMAS,
+  DepthEstimationRequestSchema,
+  KeypointDetectionRequestSchema,
+  MaskGenerationRequestSchema,
+  ZeroShotObjectDetectionRequestSchema,
+  VisualDocumentRetrievalRequestSchema,
+  VideoClassificationRequestSchema,
+  inspectImageArtifact,
+  inspectDocumentArtifact,
+  checksumArtifactBytes,
+  validateSpecialistVisionResult,
+  type SpecialistVisionCapability,
+  type InspectedSourceArtifact,
+} from './specialist-vision.js'
+
+export {
+  BrandScrapeRequestSchema,
+  BrandProfileProposalSchema,
+  DocumentIngestRequestSchema,
+  CampaignGenerationRequestSchema,
+  CampaignPlanSchema,
+  WorkflowApprovalSchema,
+  chunkDocumentPages,
+  durableIdempotencyTrace,
+  type DocumentPageText,
+  type DocumentChunk,
+} from './durable-workflows.js'
 
 // Orchestra routing engine
 export {
@@ -271,6 +333,32 @@ export {
   type QualityFloor,
   type BudgetCheckResult,
 } from './budget-policy.js'
+
+// Reusable output quality gates
+export {
+  QUALITY_DIMENSIONS,
+  QUALITY_OUTPUT_TYPES,
+  QUALITY_PROFILES,
+  HUMAN_REVIEW_STATUSES,
+  QUALITY_DECISIONS,
+  QualityDimensionScoreSchema,
+  QualityCandidateEvidenceSchema,
+  QualityPolicySchema,
+  createQualityPolicy,
+  evaluateQualityCandidate,
+  rankQualityCandidates,
+  selectQualityWinner,
+  type QualityDimension,
+  type QualityOutputType,
+  type QualityProfile,
+  type HumanReviewStatus,
+  type QualityDecisionStatus,
+  type QualityDimensionScore,
+  type QualityCandidateEvidence,
+  type QualityPolicy,
+  type QualityEvaluationDecision,
+  type RankedQualityCandidate,
+} from './quality-evaluation.js'
 
 // Canonical runtime truth
 export {
