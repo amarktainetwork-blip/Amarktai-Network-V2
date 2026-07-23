@@ -12,7 +12,7 @@ export interface InternalExecutorRegistration {
   acceptedRequestContract: string
   outputContract: string
   sourceArtifactRequired: boolean
-  artifactOutput: string | null
+  artifactOutput: 'audio' | 'image' | null
   executionMode: 'queued'
   evidenceSource: InternalEvidenceSource
   infrastructure: readonly string[]
@@ -42,6 +42,21 @@ export const INTERNAL_EXECUTOR_REGISTRATIONS = [
     evidenceSource: 'internal_ffmpeg',
     infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
     fixtureProof: 'VOICE_AUDIO_RELEASE_FIXTURE',
+  },
+  {
+    id: 'internal.ffmpeg.image-upscale',
+    capability: 'image_upscale',
+    engine: 'ffmpeg',
+    handlerName: 'handleImageUpscaleJob',
+    dispatchPath: 'executeWithDurableProviderFallback -> handleImageUpscaleJob',
+    acceptedRequestContract: CAPABILITY_BY_KEY.image_upscale.inputContractReference,
+    outputContract: CAPABILITY_BY_KEY.image_upscale.outputContractReference,
+    sourceArtifactRequired: true,
+    artifactOutput: 'image',
+    executionMode: 'queued',
+    evidenceSource: 'internal_ffmpeg',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
+    fixtureProof: 'IMAGE_UPSCALE_RELEASE_FIXTURE',
   },
 ] as const satisfies readonly InternalExecutorRegistration[]
 
