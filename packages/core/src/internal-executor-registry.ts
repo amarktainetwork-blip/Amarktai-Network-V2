@@ -25,7 +25,7 @@ export interface InternalExecutorRegistration {
  * These operations are implemented by the AmarktAI runtime itself and do not
  * use provider credentials, provider models, or Orchestra routing. A capability
  * belongs here only when the API, immutable grant, queue, worker handler,
- * artifact persistence and authoritative fixture all exist.
+ * artifact persistence when applicable, and authoritative fixture all exist.
  */
 export const INTERNAL_EXECUTOR_REGISTRATIONS = [
   {
@@ -42,6 +42,21 @@ export const INTERNAL_EXECUTOR_REGISTRATIONS = [
     evidenceSource: 'internal_ffmpeg',
     infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg'],
     fixtureProof: 'VOICE_AUDIO_RELEASE_FIXTURE',
+  },
+  {
+    id: 'internal.ffmpeg.voice-activity-detection',
+    capability: 'voice_activity_detection',
+    engine: 'ffmpeg',
+    handlerName: 'handleVoiceActivityDetectionJob',
+    dispatchPath: 'executeWithDurableProviderFallback -> handleVoiceActivityDetectionJob',
+    acceptedRequestContract: CAPABILITY_BY_KEY.voice_activity_detection.inputContractReference,
+    outputContract: CAPABILITY_BY_KEY.voice_activity_detection.outputContractReference,
+    sourceArtifactRequired: true,
+    artifactOutput: null,
+    executionMode: 'queued',
+    evidenceSource: 'internal_ffmpeg',
+    infrastructure: ['mariadb', 'redis', 'worker', 'artifact_storage', 'ffmpeg', 'ffprobe'],
+    fixtureProof: 'VOICE_ACTIVITY_DETECTION_RELEASE_FIXTURE',
   },
   {
     id: 'internal.ffmpeg.image-upscale',
