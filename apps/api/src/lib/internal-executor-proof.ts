@@ -48,6 +48,14 @@ function outputArtifactId(output: string | null | undefined): string {
   return typeof parsed.artifactId === 'string' ? parsed.artifactId : ''
 }
 
+function positiveInteger(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) > 0
+}
+
+function positiveNumber(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
 export function validateInternalExecutorProof(
   job: InternalProofJob,
   artifact: InternalProofArtifact | undefined,
@@ -65,19 +73,44 @@ export function validateInternalExecutorProof(
   if (artifact.subType !== registration.capability && !artifact.subType.startsWith(`${registration.capability}_`)) return null
   if (registration.artifactOutput === 'audio' && (artifact.type !== 'audio' || !artifact.mimeType.startsWith('audio/'))) return null
   if (registration.artifactOutput === 'image' && (artifact.type !== 'image' || !artifact.mimeType.startsWith('image/'))) return null
+  if (registration.artifactOutput === 'document' && (artifact.type !== 'document' || artifact.mimeType !== 'application/json')) return null
+  if (registration.artifactOutput === 'transcript' && (artifact.type !== 'transcript' || !['text/vtt', 'application/x-subrip'].includes(artifact.mimeType))) return null
   if (!artifact.storagePath || !artifact.storageUrl || artifact.fileSizeBytes <= 0) return null
 
   const artifactMetadata = parseObject(artifact.metadata)
   if (artifactMetadata.evidenceSource !== registration.evidenceSource) return null
   if (artifactMetadata.liveProviderProof !== false) return null
   if (typeof artifactMetadata.outputChecksum !== 'string' || !artifactMetadata.outputChecksum.trim()) return null
-  if (typeof artifactMetadata.sourceArtifactId !== 'string' || !artifactMetadata.sourceArtifactId.trim()) return null
+  if (registration.sourceArtifactRequired) {
+    if (typeof artifactMetadata.sourceArtifactId !== 'string' || !artifactMetadata.sourceArtifactId.trim()) return null
+  } else if (artifactMetadata.sourceArtifactId !== undefined && artifactMetadata.sourceArtifactId !== null) {
+    return null
+  }
+
   if (registration.capability === 'image_upscale') {
     if (artifactMetadata.outputValidation === null || typeof artifactMetadata.outputValidation !== 'object') return null
     const validation = artifactMetadata.outputValidation as Record<string, unknown>
     if (validation.valid !== true || validation.filter !== 'lanczos') return null
-    if (!Number.isInteger(validation.width) || Number(validation.width) <= 0) return null
-    if (!Number.isInteger(validation.height) || Number(validation.height) <= 0) return null
+    if (!positiveInteger(validation.width) || !positiveInteger(validation.height)) return null
+  }
+
+  if (registration.capability === 'storyboard_generation') {
+    const validation = artifactMetadata.outputValidation
+    if (validation === null || typeof validation !== 'object') return null
+    const record = validation as Record<string, unknown>
+    if (record.valid !== true || record.providerCallsStarted !== false) return null
+    if (!positiveInteger(record.sceneCount) || Number(record.sceneCount) < 2) return null
+    if (!positiveNumber(record.totalDurationSeconds)) return null
+    if (artifactMetadata.providerCallsStarted !== false) return null
+  }
+
+  if (registration.capability === 'subtitle_generation') {
+    const validation = artifactMetadata.outputValidation
+    if (validation === null || typeof validation !== 'object') return null
+    const record = validation as Record<string, unknown>
+    if (record.valid !== true || record.nonOverlapping !== true) return null
+    if (!positiveInteger(record.segmentCount) || !positiveNumber(record.durationSeconds)) return null
+    if (!['explicit_scenes', 'explicit_segments'].includes(String(record.timingSource))) return null
   }
 
   const completedAt = job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt
