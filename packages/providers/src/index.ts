@@ -143,7 +143,7 @@ export {
   type OpenAiChatTransportRequest,
   type OpenAiChatTransportResponse,
   type OpenAiStreamChunk,
-} from './openai-transport.js'
+} from './structured-openai-transport.js'
 export {
   deepinfraTaskInference,
   type DeepInfraTaskRequest,
