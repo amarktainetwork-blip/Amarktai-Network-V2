@@ -54,60 +54,126 @@ function validImageProof() {
   }
 }
 
+function validStoryboardProof() {
+  return {
+    job: {
+      id: 'job-storyboard', appSlug: 'dashboard-video', capability: 'storyboard_generation', status: 'completed',
+      completedAt: '2026-07-22T18:10:00.000Z', artifactId: ARTIFACT_ID, provider: 'internal',
+      model: 'planner-storyboard-v1', output: JSON.stringify({ artifactId: ARTIFACT_ID }), traceId: 'trace-storyboard',
+    },
+    artifact: {
+      id: ARTIFACT_ID, appSlug: 'dashboard-video', type: 'document', subType: 'storyboard_generation_plan',
+      status: 'completed', provider: 'internal', model: 'planner-storyboard-v1', traceId: 'trace-storyboard',
+      mimeType: 'application/json', fileSizeBytes: 4096, storagePath: '/artifacts/storyboard.json', storageUrl: '/api/artifacts/storyboard.json',
+      metadata: JSON.stringify({
+        evidenceSource: 'internal_planner', liveProviderProof: false, outputChecksum: 'sha256:storyboard',
+        providerCallsStarted: false,
+        outputValidation: { valid: true, sceneCount: 6, totalDurationSeconds: 30, providerCallsStarted: false },
+      }),
+    },
+  }
+}
+
+function validSubtitleProof() {
+  return {
+    job: {
+      id: 'job-subtitle', appSlug: 'dashboard-video', capability: 'subtitle_generation', status: 'completed',
+      completedAt: '2026-07-22T18:15:00.000Z', artifactId: ARTIFACT_ID, provider: 'internal',
+      model: 'formatter-subtitle-v1', output: JSON.stringify({ artifactId: ARTIFACT_ID }), traceId: 'trace-subtitle',
+    },
+    artifact: {
+      id: ARTIFACT_ID, appSlug: 'dashboard-video', type: 'transcript', subType: 'subtitle_generation_srt',
+      status: 'completed', provider: 'internal', model: 'formatter-subtitle-v1', traceId: 'trace-subtitle',
+      mimeType: 'application/x-subrip', fileSizeBytes: 512, storagePath: '/artifacts/subtitles.srt', storageUrl: '/api/artifacts/subtitles.srt',
+      metadata: JSON.stringify({
+        evidenceSource: 'internal_formatter', liveProviderProof: false, outputChecksum: 'sha256:subtitles',
+        outputValidation: { valid: true, segmentCount: 2, durationSeconds: 10, timingSource: 'explicit_segments', nonOverlapping: true },
+      }),
+    },
+  }
+}
+
 describe('internal atomic executor truth', () => {
-  it('registers real FFmpeg audio and image transforms in the release set', () => {
-    expect(INTERNAL_EXECUTOR_REGISTRATIONS).toHaveLength(2)
+  it('registers FFmpeg, planner and formatter executors in the release set', () => {
+    expect(INTERNAL_EXECUTOR_REGISTRATIONS).toHaveLength(4)
     expect(getInternalExecutorRegistration('audio_to_audio')).toMatchObject({
-      id: 'internal.ffmpeg.audio-to-audio', handlerName: 'handleAudioToAudioJob', artifactOutput: 'audio', executionMode: 'queued',
+      id: 'internal.ffmpeg.audio-to-audio', handlerName: 'handleAudioToAudioJob', artifactOutput: 'audio',
     })
     expect(getInternalExecutorRegistration('image_upscale')).toMatchObject({
-      id: 'internal.ffmpeg.image-upscale', handlerName: 'handleImageUpscaleJob', artifactOutput: 'image', executionMode: 'queued',
+      id: 'internal.ffmpeg.image-upscale', handlerName: 'handleImageUpscaleJob', artifactOutput: 'image',
     })
-    expect(getReleaseCandidateCapabilityKeys()).toEqual(expect.arrayContaining(['audio_to_audio', 'image_upscale']))
+    expect(getInternalExecutorRegistration('storyboard_generation')).toMatchObject({
+      id: 'internal.planner.storyboard-generation', handlerName: 'handleStoryboardGenerationJob', artifactOutput: 'document', sourceArtifactRequired: false,
+    })
+    expect(getInternalExecutorRegistration('subtitle_generation')).toMatchObject({
+      id: 'internal.formatter.subtitle-generation', handlerName: 'handleSubtitleGenerationJob', artifactOutput: 'transcript', sourceArtifactRequired: false,
+    })
+    expect(getReleaseCandidateCapabilityKeys()).toEqual(expect.arrayContaining([
+      'audio_to_audio', 'image_upscale', 'storyboard_generation', 'subtitle_generation',
+    ]))
     expect(getInternalExecutorRegistration('voice_clone')).toBeUndefined()
     expect(getInternalExecutorRegistration('voice_conversion')).toBeUndefined()
   })
 
-  it.each(['audio_to_audio', 'image_upscale'] as const)('projects %s without fake provider, model, or credential blockers', (capability) => {
-    const appSlug = getDashboardAppSlug(capability)
-    const truth = normalizeEffectiveRuntimeTruth(getRuntimeTruth({
-      capabilities: { [capability]: { infrastructureReady: true, policyAllowed: true, locallyProven: true } },
-      appGrants: { [appSlug]: { [capability]: true } },
-      localStaticEvidence: { [capability]: true },
-    }))
-    const row = truth.capabilities.find((entry) => entry.capability === capability)
-    expect(row).toMatchObject({ classification: 'LOCALLY_PROVEN', implementationReady: true, configured: true, infrastructureReady: true, executableNow: true, locallyProven: true, liveProven: false, eligibleProviders: [], eligibleModels: [] })
-    expect(row?.blockedReasons).not.toContain('credentials_missing')
-    expect(row?.blockedReasons).not.toContain('no_catalogued_model_claim')
-    expect(row?.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')
-    const release = truth.releaseReadiness.find((entry) => entry.capability === capability)
-    expect(release).toMatchObject({ releaseCandidate: true, executorPresent: true, appGrantPresent: true, readyForDashboardExecution: true, locallyProven: true, liveProven: false })
-  })
+  it.each(['audio_to_audio', 'image_upscale', 'storyboard_generation', 'subtitle_generation'] as const)(
+    'projects %s without fake provider, model, or credential blockers',
+    (capability) => {
+      const appSlug = getDashboardAppSlug(capability)
+      const truth = normalizeEffectiveRuntimeTruth(getRuntimeTruth({
+        capabilities: { [capability]: { infrastructureReady: true, policyAllowed: true, locallyProven: true } },
+        appGrants: { [appSlug]: { [capability]: true } },
+        localStaticEvidence: { [capability]: true },
+      }))
+      const row = truth.capabilities.find((entry) => entry.capability === capability)
+      expect(row).toMatchObject({
+        classification: 'LOCALLY_PROVEN', implementationReady: true, configured: true,
+        infrastructureReady: true, executableNow: true, locallyProven: true,
+        liveProven: false, eligibleProviders: [], eligibleModels: [],
+      })
+      expect(row?.blockedReasons).not.toContain('credentials_missing')
+      expect(row?.blockedReasons).not.toContain('no_catalogued_model_claim')
+      expect(row?.blockedReasons).not.toContain('no_executor_compatible_catalogued_model')
+      const release = truth.releaseReadiness.find((entry) => entry.capability === capability)
+      expect(release).toMatchObject({
+        releaseCandidate: true, executorPresent: true, appGrantPresent: true,
+        readyForDashboardExecution: true, locallyProven: true, liveProven: false,
+      })
+    },
+  )
 
-  it('binds both registries to real central worker dispatch and durable status evidence', () => {
+  it('binds all internal executors to central worker dispatch', () => {
     const dispatcher = source('apps/worker/src/providers/durable-provider-fallback.ts')
-    const audioHandler = source('apps/worker/src/handlers/voice-audio-handlers.ts')
-    const imageHandler = source('apps/worker/src/handlers/image-upscale-handler.ts')
-    expect(dispatcher).toContain("payload.capability === 'audio_to_audio'")
-    expect(dispatcher).toContain('return handleAudioToAudioJob(payload)')
-    expect(dispatcher).toContain("payload.capability === 'image_upscale'")
-    expect(dispatcher).toContain('return handleImageUpscaleJob(payload)')
-    expect(audioHandler).toContain("evidenceSource: 'internal_ffmpeg'")
-    expect(imageHandler).toContain("filter: 'lanczos'")
-    expect(imageHandler).toContain("provider: 'internal'")
-    expect(imageHandler).toContain('internalExecutionEvidence')
-    expect(imageHandler).toContain('internalSourceArtifactId')
-    expect(imageHandler).toContain('metadataJson: JSON.stringify')
+    for (const [capability, handler] of [
+      ['audio_to_audio', 'handleAudioToAudioJob'],
+      ['image_upscale', 'handleImageUpscaleJob'],
+      ['storyboard_generation', 'handleStoryboardGenerationJob'],
+      ['subtitle_generation', 'handleSubtitleGenerationJob'],
+    ]) {
+      expect(dispatcher).toContain(`payload.capability === '${capability}'`)
+      expect(dispatcher).toContain(`return ${handler}(payload)`)
+    }
+    const plannerFormatter = source('apps/worker/src/handlers/storyboard-subtitle-handlers.ts')
+    expect(plannerFormatter).toContain("evidenceSource: 'internal_planner'")
+    expect(plannerFormatter).toContain("evidenceSource: 'internal_formatter'")
+    expect(plannerFormatter).toContain('providerCallsStarted: false')
   })
 
-  it('accepts only complete local evidence and rejects false live-provider claims', () => {
-    const audio = validAudioProof()
-    expect(validateInternalExecutorProof(audio.job, audio.artifact)).toEqual({ capability: 'audio_to_audio', completedAt: '2026-07-22T18:00:00.000Z' })
-    const image = validImageProof()
-    expect(validateInternalExecutorProof(image.job, image.artifact)).toEqual({ capability: 'image_upscale', completedAt: '2026-07-22T18:05:00.000Z' })
-    expect(validateInternalExecutorProof(image.job, {
-      ...image.artifact,
-      metadata: JSON.stringify({ evidenceSource: 'internal_ffmpeg', liveProviderProof: true, outputChecksum: 'sha256:image-checksum', sourceArtifactId: 'source-image-id', outputValidation: { valid: true, width: 640, height: 360, filter: 'lanczos' } }),
+  it('accepts complete local evidence for all four operations and rejects false live proof', () => {
+    for (const [proof, capability, completedAt] of [
+      [validAudioProof(), 'audio_to_audio', '2026-07-22T18:00:00.000Z'],
+      [validImageProof(), 'image_upscale', '2026-07-22T18:05:00.000Z'],
+      [validStoryboardProof(), 'storyboard_generation', '2026-07-22T18:10:00.000Z'],
+      [validSubtitleProof(), 'subtitle_generation', '2026-07-22T18:15:00.000Z'],
+    ] as const) {
+      expect(validateInternalExecutorProof(proof.job, proof.artifact)).toEqual({ capability, completedAt })
+    }
+    const subtitle = validSubtitleProof()
+    expect(validateInternalExecutorProof(subtitle.job, {
+      ...subtitle.artifact,
+      metadata: JSON.stringify({
+        evidenceSource: 'internal_formatter', liveProviderProof: true, outputChecksum: 'sha256:subtitles',
+        outputValidation: { valid: true, segmentCount: 2, durationSeconds: 10, timingSource: 'explicit_segments', nonOverlapping: true },
+      }),
     })).toBeNull()
   })
 })
