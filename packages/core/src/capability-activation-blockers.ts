@@ -84,12 +84,6 @@ export const CAPABILITY_ACTIVATION_BLOCKERS = [
     requiredEvidence: ['authenticated_model_list', 'model_access_probe', 'audio_upload_schema', 'classification_response_schema', 'worker_fixture'],
   },
   {
-    capability: 'voice_activity_detection', provider: 'network', stage: 'provider_contract_activation',
-    blockerCode: 'VOICE_ACTIVITY_DETECTION_EXECUTOR_REQUIRED',
-    message: 'A production VAD executor must return timestamped speech segments from authorised audio; generic transcription is not accepted as proof.',
-    requiredEvidence: ['authorised_audio_input', 'timestamped_segment_contract', 'silence_threshold_evidence', 'worker_fixture'],
-  },
-  {
     capability: 'voice_clone', provider: 'genx', stage: 'staging_live_discovery',
     blockerCode: 'GENX_VOICE_CLONE_MODEL_SCHEMA_REQUIRED',
     message: 'Consent and Voice Profile governance are implemented; activation requires the account-visible GenX clone model ID and exact sample/upload/result schema.',
