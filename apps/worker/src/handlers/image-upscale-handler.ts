@@ -29,6 +29,18 @@ function checksum(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex')
 }
 
+function parseMetadata(value: string | null | undefined): Record<string, unknown> {
+  if (!value?.trim()) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
 async function runFfmpeg(args: string[]): Promise<void> {
   const ffmpeg = process.env.FFMPEG_PATH?.trim() || 'ffmpeg'
   await execFileAsync(ffmpeg, args, { timeout: 120_000, windowsHide: true })
@@ -116,6 +128,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
       }
 
       const outputChecksum = checksum(outputBuffer)
+      const outputValidation = { valid: true, width: targetWidth, height: targetHeight, mimeType: expectedMime, filter: 'lanczos' }
       const outputArtifact = await saveArtifact({
         input: {
           appSlug: payload.appSlug,
@@ -137,7 +150,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
             height: targetHeight,
             scaleFactor: request.scaleFactor,
             outputChecksum,
-            outputValidation: { valid: true, width: targetWidth, height: targetHeight, mimeType: expectedMime, filter: 'lanczos' },
+            outputValidation,
             evidenceSource: 'internal_ffmpeg',
             liveProviderProof: false,
           },
@@ -150,6 +163,30 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
         await prisma.artifact.update({ where: { id: outputArtifact.id }, data: { status: 'expired', errorMessage: 'Cancelled during persistence' } }).catch(() => {})
         return { success: false, status: 'failed', error: 'Job was cancelled after image artifact persistence', provider: 'internal', model: ENGINE_MODEL, artifactId: outputArtifact.id }
       }
+
+      const durableJob = await prisma.job.findUnique({ where: { id: payload.jobId }, select: { metadataJson: true } })
+      const durableMetadata = parseMetadata(durableJob?.metadataJson)
+      await prisma.job.update({
+        where: { id: payload.jobId },
+        data: {
+          metadataJson: JSON.stringify({
+            ...durableMetadata,
+            internalSourceArtifactId: request.sourceImageArtifactId,
+            internalExecutionEngine: 'ffmpeg',
+            outputValidation,
+            internalExecutionEvidence: {
+              evidenceSource: 'internal_ffmpeg',
+              liveProviderProof: false,
+              sourceArtifactId: request.sourceImageArtifactId,
+              sourceArtifactAppSlug: sourceRecord.appSlug,
+              sourceChecksum: sourceInspection.checksum,
+              outputArtifactId: outputArtifact.id,
+              outputChecksum,
+              outputValidation,
+            },
+          }),
+        },
+      })
 
       const output = ImageUpscaleOutputSchema.parse({
         artifactId: outputArtifact.id,
@@ -181,7 +218,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
           sourceArtifactAppSlug: sourceRecord.appSlug,
           outputArtifactId: outputArtifact.id,
           outputChecksum,
-          outputValidation: { valid: true, width: targetWidth, height: targetHeight, mimeType: expectedMime, filter: 'lanczos' },
+          outputValidation,
         },
       }
     } finally {
