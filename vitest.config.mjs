@@ -18,6 +18,7 @@ export default defineConfig({
       '@amarktai/core/voice-clone-contracts': fromRoot('./packages/core/src/voice-clone-contracts.ts'),
       '@amarktai/core/voice-conversion-contracts': fromRoot('./packages/core/src/voice-conversion-contracts.ts'),
       '@amarktai/core/audio-to-audio-contracts': fromRoot('./packages/core/src/audio-to-audio-contracts.ts'),
+      '@amarktai/core/voice-activity-detection-contracts': fromRoot('./packages/core/src/voice-activity-detection-contracts.ts'),
       '@amarktai/core/storyboard-subtitle-contracts': fromRoot('./packages/core/src/storyboard-subtitle-contracts.ts'),
       '@amarktai/core/config': fromRoot('./packages/core/src/config.ts'),
       '@amarktai/core': fromRoot('./packages/core/src/index.ts'),
