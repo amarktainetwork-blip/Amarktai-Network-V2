@@ -166,6 +166,13 @@ export {
   type ModelRecord,
 } from './model-catalog.js'
 
+// Runtime model-family policy
+export {
+  getRuntimeModelPolicyBlocker,
+  isRuntimeModelFamilyAllowed,
+  type RuntimeModelPolicyBlocker,
+} from './model-family-policy.js'
+
 // Provider model discovery
 export {
   MODEL_DISCOVERY_SOURCES,
@@ -235,6 +242,20 @@ export {
   type CanonicalProviderUsage,
   type JsonSchemaValidationResult,
 } from './direct-provider-contracts.js'
+
+// Governed internal image upscaling
+export {
+  IMAGE_UPSCALE_FACTORS,
+  IMAGE_UPSCALE_OUTPUT_FORMATS,
+  IMAGE_UPSCALE_EVIDENCE_SOURCES,
+  IMAGE_UPSCALE_MAX_SOURCE_BYTES,
+  IMAGE_UPSCALE_MAX_DIMENSION,
+  IMAGE_UPSCALE_MAX_PIXELS,
+  ImageUpscaleRequestSchema,
+  ImageUpscaleOutputSchema,
+  type ImageUpscaleRequest,
+  type ImageUpscaleOutput,
+} from './image-upscale-contracts.js'
 
 export {
   SPECIALIST_VISION_CAPABILITIES,
@@ -414,7 +435,7 @@ export {
   calculateLongFormProgress,
   getExecutionSummary,
   type SceneExecutionPayload,
-  type SceneExecutionState,
+  type LongFormExecutionState,
   type LongFormExecutionState,
   type LongFormAssemblyHandoff,
 } from './long-form-execution.js'
