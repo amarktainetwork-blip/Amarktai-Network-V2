@@ -27,6 +27,7 @@ import {
   type JobStatusResponse,
   validateDirectProviderRequest,
 } from '@amarktai/core'
+import { ImageUpscaleRequestSchema } from '@amarktai/core/image-upscale-contracts'
 import { resolveAppCapabilityGrantSnapshot } from '../lib/app-grant-loader.js'
 
 // ── Auth Helper ───────────────────────────────────────────────────────────────
@@ -83,7 +84,6 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
     return { ok: false, statusCode: 403, error: 'App connection is not active' }
   }
 
-  // Parse allowed capabilities
   let allowedCaps: string[] = []
   try {
     allowedCaps = JSON.parse(conn.allowedCapabilities ?? '[]')
@@ -91,7 +91,6 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
     allowedCaps = []
   }
 
-  // Get daily budget
   const budget = await prisma.appBudgetConfig.findUnique({
     where: { appSlug: conn.appSlug },
   })
@@ -111,7 +110,6 @@ export async function authenticateAppKey(bearerHeader: string | undefined): Prom
 // ── Route Registration ────────────────────────────────────────────────────────
 
 export async function jobRoutes(app: FastifyInstance): Promise<void> {
-  // Lazily create queue (only when Redis is available)
   let queue: Queue | null = null
   function getQueue(): Queue {
     if (!queue) {
@@ -121,18 +119,13 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     return queue
   }
 
-  // ── POST /api/v1/jobs ──────────────────────────────────────────────────────
-
   app.post('/api/v1/jobs', async (request, reply) => {
-    // 1. Authenticate
     const auth = await authenticateAppKey(request.headers.authorization)
     if (!auth.ok) {
       return reply.status(auth.statusCode).send({ error: true, message: auth.error })
     }
 
     const body = request.body as Record<string, unknown>
-
-    // 2. COMPLIANCE GATE: Block provider/model overrides
     const blockedField = hasBlockedOverrides(body)
       || hasBlockedOverrides((body.input ?? {}) as Record<string, unknown>)
       || hasBlockedOverrides((body.metadata ?? {}) as Record<string, unknown>)
@@ -143,7 +136,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // 3. Validate request body against single source of truth
     const parsed = CreateJobRequestSchema.safeParse(body)
     if (!parsed.success) {
       return reply.status(400).send({
@@ -154,7 +146,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { capability, prompt, input, metadata, callbackUrl, route } = parsed.data
-
     const configuredWebhookUrl = auth.webhookUrl || undefined
     if (callbackUrl && callbackUrl !== configuredWebhookUrl) {
       return reply.status(400).send({
@@ -164,29 +155,50 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     }
     const effectiveCallbackUrl = configuredWebhookUrl
 
-    const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
-    if (!capabilityRequest.success) {
-      return reply.status(400).send({
-        error: true,
-        message: capabilityRequest.error,
-        details: capabilityRequest.issues,
-      })
+    const imageUpscale = capability === 'image_upscale'
+    let validatedInput: Record<string, unknown>
+    if (imageUpscale) {
+      const upscaleRequest = ImageUpscaleRequestSchema.safeParse(input)
+      if (!upscaleRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: `Invalid image_upscale request: ${upscaleRequest.error.issues.map((issue) => `${issue.path.join('.') || 'input'} ${issue.message}`).join('; ')}`,
+          details: upscaleRequest.error.issues,
+        })
+      }
+      validatedInput = upscaleRequest.data
+    } else {
+      const capabilityRequest = validateDirectProviderRequest(capability, prompt, input)
+      if (!capabilityRequest.success) {
+        return reply.status(400).send({
+          error: true,
+          message: capabilityRequest.error,
+          details: capabilityRequest.issues,
+        })
+      }
+      validatedInput = capabilityRequest.data ?? input
     }
-    const validatedInput = capabilityRequest.data ?? input
 
     const specialistVision = (SPECIALIST_VISION_CAPABILITIES as readonly string[]).includes(capability)
-    if (specialistVision) {
+    const governedSourceArtifact = specialistVision || imageUpscale
+    if (governedSourceArtifact) {
       const sourceArtifactId = ['sourceImageArtifactId', 'sourceVideoArtifactId', 'sourceDocumentArtifactId']
         .map((field) => validatedInput[field])
         .find((value): value is string => typeof value === 'string' && Boolean(value.trim()))
       if (sourceArtifactId) {
-        const sourceArtifact = await prisma.artifact.findFirst({ where: { id: sourceArtifactId, appSlug: auth.app!.slug, status: 'completed' } })
-        if (!sourceArtifact) return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
+        const sourceArtifact = await prisma.artifact.findFirst({
+          where: { id: sourceArtifactId, appSlug: auth.app!.slug, status: 'completed' },
+          select: { id: true, type: true, mimeType: true },
+        })
+        if (!sourceArtifact) {
+          return reply.status(404).send({ error: true, code: 'SOURCE_ARTIFACT_NOT_FOUND', message: 'Authorised source artifact was not found.' })
+        }
+        if (imageUpscale && sourceArtifact.type !== 'image' && !sourceArtifact.mimeType.startsWith('image/')) {
+          return reply.status(400).send({ error: true, code: 'INVALID_SOURCE_ARTIFACT_TYPE', message: 'image_upscale requires a completed image artifact.' })
+        }
       }
     }
 
-    // 4. Resolve the one immutable AppCapabilityGrant authority. The legacy
-    // allowlist is migration input only and is never consulted by the worker.
     const allowedCaps = auth.allowedCapabilities ?? []
     const grantResolution = await resolveAppCapabilityGrantSnapshot(auth.app!.slug, capability, allowedCaps)
     if (!grantResolution || !grantResolution.grant.enabled) {
@@ -201,8 +213,12 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         message: `Capability '${capability}' requires an explicit adult AppCapabilityGrant.`,
       })
     }
-    if (specialistVision && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
-      return reply.status(403).send({ error: true, code: 'SPECIALIST_ARTIFACT_GRANT_REQUIRED', message: 'Specialist vision requires artifact read and write grants.' })
+    if (governedSourceArtifact && (!grantResolution.grant.artifactRead || !grantResolution.grant.artifactWrite)) {
+      return reply.status(403).send({
+        error: true,
+        code: 'SOURCE_ARTIFACT_GRANT_REQUIRED',
+        message: `${capability} requires artifact read and write grants.`,
+      })
     }
     if (route) {
       const routeKey = `${route.provider}/${route.model}`
@@ -220,9 +236,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       appGrantSnapshotSource: grantResolution.source,
       appGrantSnapshotAt: grantSnapshotAt,
       requestedRoute: route ?? null,
+      ...(imageUpscale ? { internalSourceArtifactId: validatedInput.sourceImageArtifactId, internalExecutionEngine: 'ffmpeg' } : {}),
     }
 
-    // 5. Check daily budget
     if (auth.dailyBudgetCents && auth.dailyBudgetCents > 0) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -242,7 +258,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // 6. TOKEN TOLLBOOTH: Check token ledger balance
     const costMultiplier = TOKEN_COST_MULTIPLIER[capability] ?? 1
     if (auth.tokenBalance !== undefined && auth.tokenBalance < costMultiplier) {
       return reply.status(402).send({
@@ -253,13 +268,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // 7. Create Job record in MySQL
-    const idempotencyKey = specialistVision && typeof validatedInput.idempotencyKey === 'string' ? validatedInput.idempotencyKey : null
+    const idempotencyKey = governedSourceArtifact && typeof validatedInput.idempotencyKey === 'string'
+      ? validatedInput.idempotencyKey
+      : null
     const traceId = idempotencyKey
       ? durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey)
       : `trace_${randomUUID()}`
     if (idempotencyKey) {
-      const existing = await prisma.job.findFirst({ where: { appSlug: auth.app!.slug, capability, traceId }, orderBy: { createdAt: 'desc' } })
+      const existing = await prisma.job.findFirst({
+        where: { appSlug: auth.app!.slug, capability, traceId },
+        orderBy: { createdAt: 'desc' },
+      })
       if (existing) {
         return reply.status(200).send({
           jobId: existing.id,
@@ -270,6 +289,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         })
       }
     }
+
     const job = await prisma.job.create({
       data: {
         appSlug: auth.app!.slug,
@@ -283,7 +303,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       },
     })
 
-    // 8. Deduct tokens from ledger (pre-paid model)
     if (auth.connectionId && costMultiplier > 0) {
       await prisma.appConnection.update({
         where: { id: auth.connectionId },
@@ -291,7 +310,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       })
     }
 
-    // 9. Push to BullMQ queue
     const routingMode = isValidRoutingMode(metadata?.routingMode) ? metadata.routingMode as string : 'balanced'
     const payload: JobPayload = {
       jobId: job.id,
@@ -314,7 +332,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         jobId: job.id,
       })
     } catch (err) {
-      // If queue push fails, mark job as failed
       await prisma.job.update({
         where: { id: job.id },
         data: { status: 'failed', error: 'Failed to enqueue job' },
@@ -323,7 +340,6 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(500).send({ error: true, message: 'Failed to enqueue job' })
     }
 
-    // 10. Return tracking ID
     const response: CreateJobResponse = {
       jobId: job.id,
       status: 'queued',
@@ -334,24 +350,17 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send(response)
   })
 
-  // ── GET /api/v1/jobs/:id ───────────────────────────────────────────────────
-
   app.get('/api/v1/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string }
-
-    // Authenticate
     const auth = await authenticateAppKey(request.headers.authorization)
     if (!auth.ok) {
       return reply.status(auth.statusCode).send({ error: true, message: auth.error })
     }
 
-    // Fetch job
     const job = await prisma.job.findUnique({ where: { id } })
     if (!job) {
       return reply.status(404).send({ error: true, message: 'Job not found' })
     }
-
-    // Ensure the job belongs to the authenticated app
     if (job.appSlug !== auth.app!.slug) {
       return reply.status(404).send({ error: true, message: 'Job not found' })
     }
@@ -378,9 +387,9 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
         fallbackAttempts: routeAttempts,
         usage: jobMetadata.directProviderUsage ?? null,
         cost: jobMetadata.directProviderCostEvidence ?? null,
-        outputValidation: jobMetadata.directProviderOutputValidation ?? null,
+        outputValidation: jobMetadata.directProviderOutputValidation ?? jobMetadata.outputValidation ?? null,
         errorClassification: jobMetadata.directProviderErrorClassification ?? null,
-        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId),
+        sourceArtifactId: stringMetadata(jobMetadata.directProviderSourceArtifactId) || stringMetadata(jobMetadata.internalSourceArtifactId),
       },
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
