@@ -6,15 +6,15 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { prisma } from '@amarktai/db'
 import { getArtifactFile, getArtifactRecord, saveArtifact } from '@amarktai/artifacts'
-import { canReadSourceArtifactForApp } from '@amarktai/core'
-import { inspectImageArtifact } from '@amarktai/core/specialist-vision'
 import {
+  canReadSourceArtifactForApp,
   IMAGE_UPSCALE_MAX_DIMENSION,
   IMAGE_UPSCALE_MAX_PIXELS,
   IMAGE_UPSCALE_MAX_SOURCE_BYTES,
   ImageUpscaleOutputSchema,
   ImageUpscaleRequestSchema,
-} from '@amarktai/core/image-upscale-contracts'
+} from '@amarktai/core'
+import { inspectImageArtifact } from '@amarktai/core/specialist-vision'
 import type { ProcessorResult, WorkerJobData } from '../processors/job-processor.js'
 
 const execFileAsync = promisify(execFile)
@@ -94,9 +94,7 @@ export async function handleImageUpscaleJob(payload: WorkerJobData): Promise<Pro
       const outputPath = join(dir, `output.${outputExtension}`)
       await writeFile(inputPath, sourceFile.buffer)
 
-      const outputArgs = request.outputFormat === 'jpeg'
-        ? ['-q:v', '2']
-        : ['-compression_level', '6']
+      const outputArgs = request.outputFormat === 'jpeg' ? ['-q:v', '2'] : ['-compression_level', '6']
       await runFfmpeg([
         '-hide_banner', '-loglevel', 'error', '-y', '-i', inputPath,
         '-vf', `scale=${targetWidth}:${targetHeight}:flags=lanczos`,
