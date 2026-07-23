@@ -97,6 +97,10 @@
     "./audio-to-audio-contracts": {
       "types": "./dist/audio-to-audio-contracts.d.ts",
       "import": "./dist/audio-to-audio-contracts.js"
+    },
+    "./voice-activity-detection-contracts": {
+      "types": "./dist/voice-activity-detection-contracts.d.ts",
+      "import": "./dist/voice-activity-detection-contracts.js"
     }
   },
   "scripts": {
