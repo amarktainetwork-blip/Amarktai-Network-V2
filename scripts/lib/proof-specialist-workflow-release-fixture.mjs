@@ -85,7 +85,7 @@ export async function proveSpecialistWorkflowReleaseFixture({ apiRequest, invari
   const otherSlug = `specialist-isolation-${suffix}`
   const specialist = ['depth_estimation', 'keypoint_detection', 'mask_generation', 'zero_shot_object_detection', 'visual_document_retrieval', 'video_classification']
   const existingVision = ['image_classification', 'visual_question_answering', 'document_qa', 'ocr', 'video_understanding']
-  const capabilities = [...specialist, ...existingVision, 'image_generation', 'video_generation', 'brand_scrape', 'document_ingest', 'campaign_generation', 'research', 'structured_output', 'embeddings', 'rag_search', 'social_content_generation']
+  const capabilities = [...specialist, ...existingVision, 'image_generation', 'image_upscale', 'video_generation', 'brand_scrape', 'document_ingest', 'campaign_generation', 'research', 'structured_output', 'embeddings', 'rag_search', 'social_content_generation']
   const appKey = await createApp(apiRequest, invariant, adminToken, appSlug, capabilities)
   const otherKey = await createApp(apiRequest, invariant, adminToken, otherSlug, ['image_generation', 'document_ingest', 'embeddings', 'ocr'])
 
@@ -94,6 +94,21 @@ export async function proveSpecialistWorkflowReleaseFixture({ apiRequest, invari
   const crossAppImageId = await createMedia(apiRequest, invariant, delay, otherKey, 'image_generation', 'cross-app-image')
   const documentArtifactId = await uploadDocument(apiRequest, invariant, appKey, 'Visual fixture document.pdf', createTextPdf('Page one contains cited specialist vision and durable workflow evidence. Brand colours are navy and cyan. The approved offering is inspectable automation.'), 'application/pdf')
   const crossAppDocumentId = await uploadDocument(apiRequest, invariant, otherKey, 'Cross app document.txt', Buffer.from('This document must never be visible to the other app.'), 'text/plain')
+
+  const upscaleInput = { sourceImageArtifactId: imageArtifactId, scaleFactor: 2, outputFormat: 'png', idempotencyKey: `upscale-${suffix}`, maxCredits: 100 }
+  const upscaleSubmitted = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ capability: 'image_upscale', prompt: 'Governed 2x Lanczos upscale', input: upscaleInput }) })
+  invariant(upscaleSubmitted.response.status === 201 && upscaleSubmitted.body.jobId, upscaleSubmitted.body.message || 'image_upscale did not queue')
+  const upscaleJob = await pollJob(apiRequest, invariant, delay, appKey, upscaleSubmitted.body.jobId)
+  invariant(upscaleJob.status === 'completed' && upscaleJob.artifactId, upscaleJob.error || 'image_upscale failed')
+  const upscaleOutput = JSON.parse(upscaleJob.output)
+  invariant(upscaleOutput.width === 640 && upscaleOutput.height === 360 && upscaleOutput.scaleFactor === 2, 'image_upscale dimensions are incorrect')
+  invariant(upscaleOutput.evidence?.evidenceSource === 'internal_ffmpeg' && upscaleOutput.evidence?.liveProviderProof === false && upscaleOutput.evidence?.filter === 'lanczos', 'image_upscale evidence is incorrect')
+  const upscaleDownload = await apiRequest(`/api/v1/artifacts/${encodeURIComponent(upscaleJob.artifactId)}/file?download=1`, appKey)
+  invariant(upscaleDownload.response.ok, 'image_upscale artifact was not downloadable')
+  const crossUpscaleSubmitted = await apiRequest('/api/v1/jobs', appKey, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ capability: 'image_upscale', prompt: 'Cross-App image denial', input: { ...upscaleInput, sourceImageArtifactId: crossAppImageId, idempotencyKey: `upscale-cross-${suffix}` } }) })
+  invariant(crossUpscaleSubmitted.response.status === 201 && crossUpscaleSubmitted.body.jobId, 'Cross-App image_upscale request did not enter the governed worker path')
+  const crossUpscaleJob = await pollJob(apiRequest, invariant, delay, appKey, crossUpscaleSubmitted.body.jobId)
+  invariant(crossUpscaleJob.status === 'failed' && /authorised source image artifact was not found/i.test(crossUpscaleJob.error || ''), 'Cross-App image_upscale did not fail closed')
 
   const requests = {
     depth_estimation: { sourceImageArtifactId: imageArtifactId, outputMode: 'relative', normalize: true, visualization: true, maxCredits: 100, idempotencyKey: `depth-${suffix}` },
@@ -204,9 +219,11 @@ export async function proveSpecialistWorkflowReleaseFixture({ apiRequest, invari
     const workflow = truth.body.truth?.durableWorkflows?.find((item) => item.capability === capability)
     invariant(workflow?.implementationStatus === 'IMPLEMENTED_DURABLE' && workflow.fixtureProof, `Canonical durable workflow evidence omitted ${capability}`)
   }
+  invariant(truth.body.truth?.releaseCandidateCapabilities?.includes('image_upscale'), 'Canonical truth omitted image_upscale')
 
   console.log(`SPECIALIST_FIXTURE_APP=${appSlug}`)
   console.log(`SPECIALIST_ARTIFACT_DOWNLOADS=${specialistArtifactCount}`)
+  console.log('IMAGE_UPSCALE_RELEASE_FIXTURE=PASS')
   console.log('SPECIALIST_VISION_RELEASE_FIXTURE=PASS')
   console.log('BRAND_SCRAPE_RELEASE_FIXTURE=PASS')
   console.log('DOCUMENT_INGEST_RELEASE_FIXTURE=PASS')
