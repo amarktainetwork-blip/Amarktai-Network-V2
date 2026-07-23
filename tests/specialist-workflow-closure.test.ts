@@ -90,6 +90,14 @@ describe('specialist vision and durable workflow closure', () => {
     expect(read('prisma/migrations/20260722_specialist_workflow_closure/migration.sql')).toContain('document_ingest_chunks')
   })
 
+  it('applies canonical idempotency to every validated capability input', () => {
+    const jobs = read('apps/api/src/routes/jobs.ts')
+    expect(jobs).toContain("const idempotencyKey = typeof validatedInput.idempotencyKey === 'string'")
+    expect(jobs).not.toContain("internalArtifactCapability && typeof validatedInput.idempotencyKey === 'string'")
+    expect(jobs).toContain('durableIdempotencyTrace(auth.app!.slug, capability, idempotencyKey)')
+    expect(jobs).toContain("where: { appSlug: auth.app!.slug, capability, traceId }")
+  })
+
   it('wires canonical jobs, artifact downloads, dashboard, SDK, OpenAPI and fixture proof without provider selectors', () => {
     const api = read('apps/api/src/routes/app-durable-workflows.ts')
     const fixture = read('scripts/lib/proof-specialist-workflow-release-fixture.mjs')
