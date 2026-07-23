@@ -74,12 +74,17 @@ function isInternalAudioTransform(payload: WorkerJobData): boolean {
   return payload.capability === 'audio_to_audio'
 }
 
+function isInternalImageUpscale(payload: WorkerJobData): boolean {
+  return payload.capability === 'image_upscale'
+}
+
 function isInternalLocalExecution(payload: WorkerJobData): boolean {
   return isInternalLongFormAssembly(payload)
     || isInternalSocialAdAssembly(payload)
     || isInternalResearchEvidence(payload)
     || isInternalDocumentExtraction(payload)
     || isInternalAudioTransform(payload)
+    || isInternalImageUpscale(payload)
 }
 
 async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> {
@@ -105,6 +110,10 @@ async function executeInitial(payload: WorkerJobData): Promise<ProcessorResult> 
   if (isInternalAudioTransform(payload)) {
     const { handleAudioToAudioJob } = await import('../handlers/voice-audio-handlers.js')
     return handleAudioToAudioJob(payload)
+  }
+  if (isInternalImageUpscale(payload)) {
+    const { handleImageUpscaleJob } = await import('../handlers/image-upscale-handler.js')
+    return handleImageUpscaleJob(payload)
   }
   return executeWithProvider(payload)
 }
